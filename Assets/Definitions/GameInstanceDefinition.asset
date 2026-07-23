@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3ea30c5a6cf9eac4b8fe9f9004d56a62, type: 3}
+  m_Name: GameInstanceDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::GameInstanceDefinition
+  gameDefName: GameDefinition
+  funkClientRef:
+    m_AssetGUID: 287c2924858783c4ea90ae9d96082f59
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  gameModeRef:
+    m_AssetGUID: 73d446f2a6403c24dbdcfbcc1e6adb28
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  GameLocalDataName: LocalGameData

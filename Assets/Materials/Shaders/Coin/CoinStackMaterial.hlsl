@@ -1,0 +1,47 @@
+#ifndef DRAGONLOOT_COIN_STACK_MATERIAL_INCLUDED
+#define DRAGONLOOT_COIN_STACK_MATERIAL_INCLUDED
+
+CBUFFER_START(UnityPerMaterial)
+    float4 _BaseMap_ST;
+    half4 _BaseColor;
+    half _Metallic;
+    half _Smoothness;
+    half _BumpScale;
+    half _ReflectionFloor;
+    half4 _FresnelColor;
+    half _FresnelIntensity;
+    half _FresnelPower;
+    half _TintVariation;
+    half _ValueVariation;
+    half _CoinCount;
+    half _BandContrast;
+    half _GrooveDarkness;
+    half _MeshBoundsMinY;
+    half _MeshBoundsSizeY;
+    half _GrooveWidth;
+    half _RidgeSoftness;
+    half _CapNormalThreshold;
+    half _RidgeAlbedoBoost;
+    half _GrooveSmoothnessScale;
+    half _RidgeSmoothnessScale;
+    half _GrooveMetallicScale;
+    half _SideBumpScale;
+    half _GrooveNormalStrength;
+    half _GrooveNormalBias;
+    half _CoinEdgeBevelWidth;
+    half _CoinEdgeBevelStrength;
+    half _SideFacetStrength;
+    half _SideFacetFrequency;
+    half _SeamSideClip;
+    half _SeamClipWidth;
+    half _SeamClipGrooveOnly;
+    half _SeamWorldOffsetMax;
+    half _SeamViewAlignStart;
+    half _SeamViewAlignEnd;
+    half _SeamNormalStrength;
+    half _SeamSoftAO;
+    half _Cutoff;
+    half _Cull;
+CBUFFER_END
+
+#endif

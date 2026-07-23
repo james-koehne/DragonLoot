@@ -1,0 +1,158 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_GoldPile
+  m_Shader: {fileID: 4800000, guid: 0aae5e577254289489d401a181cc705f, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _HEIGHTMAP_ON
+  m_InvalidKeywords:
+  - _DISABLELOD_ON
+  - _HEIGHTMAPINVERT_ON
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: 29b7c0f66ee2cf047b54664193a950a9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 2800000, guid: e62f85b78251a754d857ef2c01fa19e3, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DeformMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailAlbedoMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _HeightMap:
+        m_Texture: {fileID: 2800000, guid: 9155d22f732fbb2478a147815b51a9c4, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 2800000, guid: 9c0085629b3e4ff41803714f4d52b69e, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 2800000, guid: aa889d6f41627c348bd0a74723fd5b67, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 2800000, guid: 5cb39282449a61d47850474668193a11, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PileNormalMap:
+        m_Texture: {fileID: 2800000, guid: e62f85b78251a754d857ef2c01fa19e3, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlbedoMix: 0
+    - _BrightnessVariation: 0
+    - _BumpScale: 1
+    - _CoinNormalStrength: 0
+    - _CreviceStrength: 0
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DeformEnabled: 0
+    - _DeformScale: 1.5
+    - _DetailAlbedoScale: 1
+    - _DetailEnabled: 0
+    - _DetailNormalScale: 1
+    - _DisableLod: 1
+    - _EdgeDirtStrength: 0.75
+    - _HeightAmount: 0
+    - _HeightMapEnabled: 1
+    - _HeightMapIntensity: 0.208
+    - _HeightMapInvert: 1
+    - _HeightMapPower: 1
+    - _HeightMapTiling: 1
+    - _HeightScale: 0
+    - _HueVariation: 0
+    - _LodFar: 160
+    - _LodNear: 80
+    - _Metallic: 1
+    - _OcclusionStrength: 1
+    - _POMSteps: 16
+    - _Parallax: 0.061
+    - _PileNormalStrength: 0.35
+    - _PomEnabled: 0
+    - _PomFadeEnd: 80
+    - _PomFadeStart: 40
+    - _PomHeightBias: 0
+    - _PomHeightContrast: 1.5
+    - _PomInvertHeight: 0
+    - _PomNormalHeight: 0
+    - _PomSelfShadow: 0.45
+    - _RimIntensity: 0
+    - _RimPower: 3
+    - _RoughnessVariation: 0
+    - _Smoothness: 1
+    - _SparkleCoverage: 0.05
+    - _SparkleDensity: 16
+    - _SparkleEnabled: 0
+    - _SparkleFacingCoverage: 1.5
+    - _SparkleFacingIntensity: 1.25
+    - _SparkleFacingPower: 2
+    - _SparkleFlicker: 1
+    - _SparkleFresnel: 0
+    - _SparkleGlobalDensity: 48
+    - _SparkleGlobalIntensity: 0
+    - _SparkleGlobalSize: 24
+    - _SparkleGlobalSpeed: 1.5
+    - _SparkleIntensity: 16
+    - _SparkleMinPixelWidth: 1.5
+    - _SparkleNearCoverage: 0
+    - _SparkleNearFadeEnd: 12
+    - _SparkleNearFadeStart: 5
+    - _SparkleNearIntensity: 0
+    - _SparkleSize: 50
+    - _SparkleSoftness: 0.65
+    - _SparkleSpeed: 0
+    - _SparkleStability: 1
+    - _SpecRampIntensity: 0
+    - _SpecRampSoftness: 0.08
+    - _SpecRampThreshold: 0.72
+    - _StylizedContrast: 1
+    - _StylizedMetalSoftness: 0
+    - _StylizedSaturation: 1
+    - _StylizedWarmStrength: 0
+    - _Surface: 0
+    - _TriplanarEnabled: 0
+    - _TriplanarSharpness: 8
+    - _WorldTiling: 0.42
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _Color: {r: 1, g: 0.84, b: 0.3, a: 1}
+    - _CreviceColor: {r: 0.45, g: 0.21999997, b: 0.079999976, a: 1}
+    - _RimColor: {r: 1, g: 0.9, b: 0.54999995, a: 1}
+    - _SparkleColor: {r: 23.96863, g: 23.96863, b: 13.906328, a: 1}
+    - _SpecRampColor: {r: 1, g: 0.95, b: 0.7, a: 1}
+    - _StylizedWarmTint: {r: 1, g: 0.85, b: 0.45, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

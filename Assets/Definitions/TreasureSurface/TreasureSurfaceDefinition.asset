@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfe025c4ea4ea6246ba479da7e942108, type: 3}
+  m_Name: TreasureSurfaceDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureSurfaceDefinition
+  worldOrigin: {x: 0, y: 0, z: 0}
+  worldSizeX: 128
+  worldSizeZ: 128
+  chunkSize: 8
+  cellsPerChunk: 64
+  baseHeight: 0
+  minWorldY: -2
+  maxWorldY: 32
+  activeRadius: 24
+  relaxIterations: 2
+  maxDirtyChunksPerFrame: 4
+  stableSlopeThreshold: 0.08
+  steepSlopeThreshold: 0.45
+  sleepSpeedThreshold: 0.05
+  sleepRestTime: 0.25
+  gravity: 18
+  flowAcceleration: 12
+  maxSlideSpeed: 14
+  throwBallisticGravity: 18
+  throwLandingSpeedScale: 0.85
+  throwCoinArcScale: 1.35
+  throwItemArcScale: 1
+  autoStackRadius: 0.36
+  autoStackHeightTolerance: 0.65
+  coinFrictionScale: 0.7
+  coinBounceScale: 0.8
+  coinSpeedScale: 2
+  gemFrictionScale: 0.7
+  gemBounceScale: 1.4
+  gemSpeedScale: 1.35
+  gemWobble: 0.15
+  artifactSettleSpeed: 0.35
+  materials:
+  - material: 0
+    friction: 0.7
+    bounce: 0.1
+    rollSpeedScale: 1
+  - material: 1
+    friction: 0.55
+    bounce: 0.12
+    rollSpeedScale: 1.15
+  - material: 2
+    friction: 0.35
+    bounce: 0.28
+    rollSpeedScale: 1.35
+  - material: 3
+    friction: 0.75
+    bounce: 0.08
+    rollSpeedScale: 0.9
+  - material: 4
+    friction: 0.4
+    bounce: 0.22
+    rollSpeedScale: 1.2
+  - material: 5
+    friction: 1.1
+    bounce: 0.02
+    rollSpeedScale: 0.65

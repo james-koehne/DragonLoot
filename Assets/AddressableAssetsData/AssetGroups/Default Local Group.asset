@@ -1,0 +1,274 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: Default Local Group
+  m_EditorClassIdentifier: 
+  m_GroupName: Default Local Group
+  m_GUID: 55fb90f59465a4740b6794ccaf71392a
+  m_SerializeEntries:
+  - m_GUID: 06edff88c45ba794daed0970af205e82
+    m_Address: Assets/Addressables/Treasure/Artifacts/RuneLedgerVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0eaa497ede230864da009d12dcdc9024
+    m_Address: Assets/Addressables/Treasure/Artifacts/BronzeChaliceVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0f14770d213a7db4d8bef173d215d8eb
+    m_Address: Assets/Addressables/Treasure/Artifacts/EmeraldGobletVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1a2b3c4d5e6f7890abcdef1234567890
+    m_Address: Assets/Definitions/CameraDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 287c2924858783c4ea90ae9d96082f59
+    m_Address: Assets/FunkClient/Addressables/FunkClient.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2940d66c8c5a36a4f920adcca767c087
+    m_Address: Assets/Addressables/Treasure/Artifacts/RubyHeartPendantVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 349ada3a129f93143bdcfad1b7cd05fc
+    m_Address: Assets/Addressables/Treasure/Artifacts/RoyalCoronaVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 397cb9fd433e156418871285f189f9c4
+    m_Address: Assets/Addressables/Treasure/Artifacts/AncientTomeVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3eed013ed278530498129f4dcacc28c3
+    m_Address: Assets/Addressables/GameCamera.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4464bda6d4fe70e48a6bc877a31588bd
+    m_Address: Assets/Definitions/CoinStackVisualDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 48e26d872c8daa0448f6a0d9026f0b88
+    m_Address: Assets/Addressables/Treasure/Artifacts/BrassCandelabrumVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 54b18aea4c0eec147b576328346e822d
+    m_Address: Assets/Addressables/Treasure/Artifacts/RustyShortswordVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 55835319082d5d241b06b36055de0942
+    m_Address: Tables/ArtifactPresentationTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 55e6ddfe1dcd06348ac673fd323aa72d
+    m_Address: Assets/Addressables/Treasure/Artifacts/OrnateCandelabrumVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 564e24a10c51bb043b14e65c08e8f4b2
+    m_Address: Assets/Addressables/Treasure/EmeraldVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5c8e897488cc20f46b258e327d439b8c
+    m_Address: Assets/Addressables/Treasure/Artifacts/ObsidianAmuletVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5f500320ec81bc04eae5ddb82363183d
+    m_Address: Assets/Addressables/PlayerController.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5f5abd3f229d5f445a39d3f9a5d2c933
+    m_Address: Assets/Addressables/Treasure/Artifacts/DragonsteelSwordVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6279f1d03dbc3bd489f53942d2b25767
+    m_Address: Assets/Addressables/Treasure/Artifacts/CrystalCandelabrumVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 73d446f2a6403c24dbdcfbcc1e6adb28
+    m_Address: Assets/Addressables/GameMode.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7f5fa3720a8883148915756329168deb
+    m_Address: Assets/Definitions/DebugDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8e218ffb89412394c9546fd36bc3c9db
+    m_Address: Assets/Addressables/Treasure/Artifacts/SealedCodexVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9d5bce16c68a42c8ae4a696237afaff1
+    m_Address: Assets/Definitions/EnvironmentDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a1b2c3d4e5f60718293a4b5c6d7e8f01
+    m_Address: Assets/Definitions/PlayerControllerDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a3c9e57d0b8d2e06a7e1f564c9d2b803
+    m_Address: Tables/CoinDisplayTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a545b2bc21acde8469fc45b2add35b5c
+    m_Address: Assets/Addressables/Treasure/CopperCoinVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: af0660cc87c621b449fdbb6ca7167227
+    m_Address: Tables/GemConstellation
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b2c3d4e5f60718293a4b5c6d7e8f0123
+    m_Address: Assets/Definitions/PlayerInteractionDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b6c0e81f3d2a5139d0b4c897f2a5e136
+    m_Address: Tables/MixedDisplayTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b7d3e1a20c4f5a8b9e7d6c5a4b3e2f1d
+    m_Address: Assets/Definitions/CarryDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bd87e61f6a7101541a36632d608c13f3
+    m_Address: Assets/Definitions/GameDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: be9a0c7958a4e4149a7066fb5ca63baa
+    m_Address: Assets/Addressables/Treasure/DiamondVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c204d7b500bd9c44b9002972c45ff6c4
+    m_Address: Assets/Addressables/Treasure/Artifacts/JewelledCoronaVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c3d4e5f60718293a4b5c6d7e8f012345
+    m_Address: Assets/Definitions/PlayerPlacementDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c4ac708f7c76e854b80eba0875cbe287
+    m_Address: Assets/Definitions/CoreDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c4af4c00767f380419dded33c2ec2a37
+    m_Address: Assets/Addressables/Treasure/Artifacts/CeremonialBladeVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c57d8f493c2f87543b0d7cb9cacb6e1d
+    m_Address: Assets/Definitions/GameInstanceDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c6a2d0b31e5f4a9c8d7e6f5a4b3c2d1e
+    m_Address: Assets/Addressables/GoldCoinVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c961b6c2ba267fd4997d44603e9141d5
+    m_Address: Assets/Addressables/Treasure/Artifacts/IronCoronaVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ccd186d4657c21442bcfbee8f8ff7f6d
+    m_Address: Assets/Addressables/Treasure/Artifacts/GildedGrimoireVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d2570706d97a2c14ca3e644c66e72d4a
+    m_Address: Assets/Addressables/Treasure/Artifacts/GoldenCoronaVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d5b1c0a42f6e3b8d9c8a7e6f5d4c3b2a
+    m_Address: Assets/Addressables/SapphireVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d7bbc54db16435f48b8fc8d9b59dad62
+    m_Address: Assets/Addressables/GameController.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: df01a7829dee64d48b4cfdff37ca8c82
+    m_Address: Assets/Addressables/Treasure/Artifacts/RoyalWineCupVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f2b8d46c9a7c1d95f6d0e453b8c1a792
+    m_Address: Tables/GemDisplayTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f351d0120e0ba1b459c72168b82bee00
+    m_Address: Assets/Addressables/Interface.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f53eb23ca9b061147804459605c3006d
+    m_Address: Assets/Addressables/Treasure/Artifacts/SapphirePendantVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f9c49dcdcbb799e4883dc88563295f85
+    m_Address: Assets/Addressables/Treasure/SilverCoinVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: 2ff3ecdee64efb048874f0bfaa32ec1a, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: c94f11ef044a4fb4a9473dee56e1685b, type: 2}
+    - {fileID: 11400000, guid: dc2db2ab7fe8f59448ec97349cf2a074, type: 2}

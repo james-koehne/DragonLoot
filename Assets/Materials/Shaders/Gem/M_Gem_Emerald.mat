@@ -1,0 +1,102 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_Gem_Emerald
+  m_Shader: {fileID: 4800000, guid: 6b7e8a54a5214b748b5b4d668baba630, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _EdgeWearMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ScratchMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SparkleMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Absorption: 1.85
+    - _BrightnessVariation: 0
+    - _BumpScale: 1
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DistortionAmount: 0.85
+    - _EdgeWearEnabled: 0
+    - _EdgeWearStrength: 0.35
+    - _FacetScale: 1
+    - _FacetStrength: 0
+    - _FresnelIntensity: 1.05
+    - _FresnelPower: 3.6
+    - _HueVariation: 0
+    - _IOR: 1.58
+    - _InclusionStrength: 0.22
+    - _LightSteps: 6
+    - _Metallic: 0.05
+    - _OcclusionStrength: 1
+    - _ReflectionFloor: 0.07
+    - _RefractionStrength: 0.5
+    - _RefractionVariation: 0.1
+    - _RimIntensity: 0.55
+    - _RimPower: 3
+    - _RoughnessUvAmount: 0.06
+    - _RoughnessUvScale: 48
+    - _SaturationVariation: 0
+    - _ScratchStrength: 0.25
+    - _ScratchesEnabled: 0
+    - _ShadowStrength: 0.3
+    - _ShineIntensity: 1.7
+    - _ShineSize: 32
+    - _ShineThreshold: 0.82
+    - _Smoothness: 0.86
+    - _SparkleDensity: 6.5
+    - _SparkleIntensity: 0.3
+    - _SparkleMapEnabled: 0
+    - _SparkleSharpness: 4
+    - _SparkleVariation: 0
+    - _Surface: 0
+    - _Thickness: 1.15
+    - _Transparency: 0.95
+    m_Colors:
+    - _BaseColor: {r: 0, g: 0.754717, b: 0.32571992, a: 0.88}
+    - _FresnelColor: {r: 0.45, g: 1, b: 0.7, a: 1}
+    - _InternalColor: {r: 0.02, g: 0.28, b: 0.12, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

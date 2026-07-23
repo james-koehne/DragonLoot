@@ -1,0 +1,10 @@
+---
+description: 
+alwaysApply: true
+---
+
+Never use FindObjectOfType
+Never use null propagation
+Where possible spawn GameObjects in using Addressables, not Prefab Instantiation
+Don't generate .meta files, let Unity create them
+Never use UnityEngine.Input

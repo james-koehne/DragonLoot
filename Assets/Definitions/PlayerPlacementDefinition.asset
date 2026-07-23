@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3f4a5b60718293a4b5c6d7e8f901234, type: 3}
+  m_Name: PlayerPlacementDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerPlacementDefinition
+  dropUpBias: 0.05
+  groundStackUpBias: 0.02
+  groundStackReleaseSpeedScale: 0.05
+  groundStackReleaseUpScale: 0.1
+  showGroundStackPreview: 1
+  groundStackSnapRadius: 0.2
+  placementArcHeight: 0.12
+  coinFlipSpeed: 1
+  previewSmoothSpeed: 200

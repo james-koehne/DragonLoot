@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d848b329ddd7684099348d8e5fbc5b0, type: 3}
+  m_Name: GameDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::GameDefinition
+  gameName: Hand of Yeet
+  gameBackendName: hand_of_yeet
+  singleplayer: 1
+  StatsRequireLogin: 0
+  FunkBackendEnabled: 0
+  FunkBotEnabled: 0
+  SteamEnabled: 0
+  SteamAssetRef:
+    m_AssetGUID: 
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  StoveEnabled: 0
+  StoveAssetRef:
+    m_AssetGUID: 
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  StoveEnvironment: live
+  StoveGameId: 
+  StoveApplicationKey: 
+  SteamAppID: 0
+  FunkBackendOverrideClasses: 0
+  FunkBackendAssetRef:
+    m_AssetGUID: 
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  platform: 0
+  platformGameDefinitions: []
+  masterBackendScheme: 
+  masterBackendHost: 
+  masterBackendServerKey: 
+  botUrl: 
+  botApiKey: 
+  discordClientId: 0
+  discordOAuthRedirectURI: 
+  openGameBaseLink: 
+  emailOctopusGameTag: 
+  emailOctopusApiKey: 
+  emailOctopusListId: 
+  authMode: 1
+  autoLogin: 0
+  testEmailLogin: 0
+  testEmailEmail: 
+  testEmailPassword: 

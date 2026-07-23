@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 586c8f828e135f0499fd5c3bd24fc569, type: 3}
+  m_Name: SapphireGem
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureDefinition
+  id: SapphireGem
+  displayName: SapphireGem
+  category: 1
+  variant: Sapphire
+  value: 50
+  weight: 1
+  rigidbodyMass: 0.25
+  drag: 0.6
+  angularDrag: 0.6
+  icon: {fileID: 0}
+  meshOverride: {fileID: 0}
+  materialOverride: {fileID: 0}
+  prefab:
+    m_AssetGUID: d5b1c0a42f6e3b8d9c8a7e6f5d4c3b2a
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  worldScale: {x: 0.4, y: 0.4, z: 0.4}
+  heldScale: {x: 0.4, y: 0.4, z: 0.4}
+  canStack: 0
+  coinThickness: 0.26

@@ -1,0 +1,110 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f99b73591a7b6c459e9c44d1b904580, type: 3}
+  m_Name: TreasurePileLargeDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileDefinition
+  displayName: Treasure Pile
+  contents:
+  - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    count: 2000
+    maxVisible: 500
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 2000
+    maxVisible: 500
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 10000
+    maxVisible: 3000
+  - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
+    count: 100
+    maxVisible: 12
+  - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
+    count: 50
+    maxVisible: 6
+  - treasure: {fileID: 11400000, guid: 5252608b20a5b26478a15dc5c333597f, type: 2}
+    count: 20
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 950345e010709da49a63b1fbdf37dd7a, type: 2}
+    count: 40
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: 24a987b32945df74897fe318bdf5ec63, type: 2}
+    count: 40
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: be8f4835c8bbc2442a00b08bb29ffc22, type: 2}
+    count: 40
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: 05d5d2fd31947fe4ebeed539f39d7807, type: 2}
+    count: 40
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: 9588dd1d013c528408e3b6fb631e0d17, type: 2}
+    count: 35
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: 792b6a35dddfd4f46ba25841600e5188, type: 2}
+    count: 35
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: ba4a35e32aef89647a1af12e0e4943d5, type: 2}
+    count: 35
+    maxVisible: 4
+  - treasure: {fileID: 11400000, guid: 3073ae38ac57d00409a1b67710e99118, type: 2}
+    count: 25
+    maxVisible: 3
+  - treasure: {fileID: 11400000, guid: 02e3d057e3793dd4cbae94217b2a8620, type: 2}
+    count: 25
+    maxVisible: 3
+  - treasure: {fileID: 11400000, guid: 47ad14e2b2115474d81361177437f397, type: 2}
+    count: 25
+    maxVisible: 3
+  - treasure: {fileID: 11400000, guid: 6241500a6033635408a00c4292cca732, type: 2}
+    count: 18
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 9e6564c223ccf604a80295e7e8d81328, type: 2}
+    count: 18
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 5d4d1e4e2999a704b8774dadd64afe64, type: 2}
+    count: 18
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 708909205ca41f6458d828ac46dd70d6, type: 2}
+    count: 12
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 3a43154c7a487c74f8e609fcf994a049, type: 2}
+    count: 12
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 67c51721da18e6347b5216fcf9e0e018, type: 2}
+    count: 12
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: 9f5e72d31aff7904cb448c492e72e20e, type: 2}
+    count: 12
+    maxVisible: 2
+  - treasure: {fileID: 11400000, guid: cd64ade1fb4d5ce48838d9808d5f6c52, type: 2}
+    count: 10
+    maxVisible: 1
+  - treasure: {fileID: 11400000, guid: b257758264e283847bc12dbe26874dc4, type: 2}
+    count: 10
+    maxVisible: 1
+  - treasure: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
+    count: 10
+    maxVisible: 1
+  maxVisibleTotal: 4000
+  defaultPerTypeVisible: 80
+  heightResolution: 256
+  meshResolution: 0
+  worldSize: 64
+  maxHeight: 32
+  carveRadius: 2
+  carveVolumeScale: 0.1
+  pickRadius: 0.45
+  buryDepth: 0.18
+  initialRevealDepth: 0.06
+  placementMinSpacing: 0.18
+  placementJitter: 0.3
+  placementRadiusFraction: 0.88
+  placementScaleJitter: 0.1
+  pileMaterial: {fileID: 0}

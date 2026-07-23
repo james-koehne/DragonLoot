@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1b4fa4084ad5a2418165e383150fc05, type: 3}
+  m_Name: CoreDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::CoreDefinition
+  DebugDefinition: {fileID: 11400000, guid: 7f5fa3720a8883148915756329168deb, type: 2}
+  cameraAssetRef:
+    m_AssetGUID: 3eed013ed278530498129f4dcacc28c3
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  playerControllerAssetRef:
+    m_AssetGUID: 5f500320ec81bc04eae5ddb82363183d
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  interfaceAssetRef:
+    m_AssetGUID: f351d0120e0ba1b459c72168b82bee00
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  gameControllerAssetRef:
+    m_AssetGUID: d7bbc54db16435f48b8fc8d9b59dad62
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0

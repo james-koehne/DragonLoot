@@ -1,0 +1,136 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_GoldPile_Stylized
+  m_Shader: {fileID: 4800000, guid: 5eb431fa2cae1264da94321c78945902, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords:
+  - _DISTANTCOINENABLED_ON
+  - _DISTANTCOINSHINEENABLED_ON
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: 29b7c0f66ee2cf047b54664193a950a9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 2800000, guid: e62f85b78251a754d857ef2c01fa19e3, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DeformMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailAlbedoMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 2800000, guid: aa889d6f41627c348bd0a74723fd5b67, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 2800000, guid: 5cb39282449a61d47850474668193a11, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PileNormalMap:
+        m_Texture: {fileID: 2800000, guid: e62f85b78251a754d857ef2c01fa19e3, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AlbedoMix: 0
+    - _BrightnessVariation: 0
+    - _BumpScale: 1
+    - _CoinNormalStrength: 1
+    - _CreviceStrength: 2
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DeformEnabled: 0
+    - _DeformResolution: 64
+    - _DeformScale: 1.5
+    - _DeformWorldSize: 4
+    - _DetailAlbedoScale: 1
+    - _DetailEnabled: 0
+    - _DetailNormalScale: 1
+    - _DistantCoinAmount0: 0.7
+    - _DistantCoinAmount1: 0.15
+    - _DistantCoinAmount2: 0.15
+    - _DistantCoinAmount3: 0.02
+    - _DistantCoinAmount4: 0.02
+    - _DistantCoinAmount5: 0.02
+    - _DistantCoinAmount6: 0.02
+    - _DistantCoinAmount7: 0.02
+    - _DistantCoinCoverage: 0.32
+    - _DistantCoinDensity: 2
+    - _DistantCoinEnabled: 1
+    - _DistantCoinFadeEnd: 20
+    - _DistantCoinFadeStart: 30
+    - _DistantCoinGrowFar: 180
+    - _DistantCoinGrowNear: 90
+    - _DistantCoinIntensity: 0.8
+    - _DistantCoinMaxPixels: 7
+    - _DistantCoinShineEnabled: 1
+    - _DistantCoinShineIntensity: 6
+    - _DistantCoinShineMetallic: 0.9
+    - _DistantCoinShineNormalStrength: 1
+    - _DistantCoinShineSmoothness: 0.75
+    - _DistantCoinTopMask: 0.7
+    - _EdgeDirtStrength: 1.1
+    - _HueVariation: 0
+    - _Metallic: 0.72
+    - _OcclusionStrength: 1
+    - _PileNormalStrength: 2
+    - _RimIntensity: 0.15
+    - _RimPower: 0.5
+    - _RoughnessVariation: 0
+    - _Smoothness: 0.45
+    - _SpecRampIntensity: 0
+    - _SpecRampSoftness: 0.5
+    - _SpecRampThreshold: 0.95
+    - _StylizedContrast: 1
+    - _StylizedMetalSoftness: 0
+    - _StylizedSaturation: 1
+    - _StylizedWarmStrength: 0.45
+    - _Surface: 0
+    - _WorldTiling: 0.42
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _CreviceColor: {r: 0.42, g: 0.18, b: 0.06, a: 1}
+    - _DistantCoinColor0: {r: 0.78, g: 0.3778882, b: 0.06298136, a: 1}
+    - _DistantCoinColor1: {r: 0.23584908, g: 0.23584908, b: 0.23584908, a: 1}
+    - _DistantCoinColor2: {r: 0.9911022, g: 0.30054384, b: 0.03189604, a: 1}
+    - _DistantCoinColor3: {r: 0.00699541, g: 0.33245158, b: 0.05951124, a: 1}
+    - _DistantCoinColor4: {r: 0.020288562, g: 0.07618539, b: 0.590619, a: 1}
+    - _DistantCoinColor5: {r: 0.822786, g: 0.92158204, b: 0.9734455, a: 1}
+    - _DistantCoinColor6: {r: 0.590619, g: 0.011612245, b: 0.029556843, a: 1}
+    - _DistantCoinColor7: {r: 0.07818743, g: 0.016807375, b: 0.22696589, a: 1}
+    - _RimColor: {r: 1, g: 0.4137931, b: 0, a: 1}
+    - _SpecRampColor: {r: 7.937255, g: 4.274194, b: 0.28235295, a: 1}
+    - _StylizedWarmTint: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: eadffdc8e126ea6438bc2f0819045140
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 308625
+  packageName: Gnome - PBR
+  packageVersion: 1.0.1
+  assetPath: Assets/SnoozyRat/Gnome - PBR/Materials/Hat/GnomeHatMat_Plain 2.mat
+  uploadId: 869934

@@ -1,0 +1,3 @@
+[submodule "Assets/FunkClient"]
+	path = Assets/FunkClient
+	url = git@github.com:FunkGames/FunkClient.git

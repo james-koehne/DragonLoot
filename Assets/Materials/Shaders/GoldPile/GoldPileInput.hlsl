@@ -1,0 +1,133 @@
+#ifndef DRAGONLOOT_GOLDPILE_INPUT_INCLUDED
+#define DRAGONLOOT_GOLDPILE_INPUT_INCLUDED
+
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+
+CBUFFER_START(UnityPerMaterial)
+    float4 _BaseMap_ST;
+    half4 _BaseColor;
+    half _Metallic;
+    half _Smoothness;
+    half _BumpScale;
+    half _OcclusionStrength;
+    half _HeightMapEnabled;
+    half _HeightMapTiling;
+    half _HeightMapIntensity;
+    half _HeightMapPower;
+    half _HeightScale;
+    half _HeightAmount;
+    half _DeformEnabled;
+    half _DeformScale;
+    float _DeformWorldSize;
+    float _DeformResolution;
+    half _HeightMapInvert;
+    half _Parallax;
+    half _POMSteps;
+    half _PomFadeStart;
+    half _PomFadeEnd;
+    half _PomHeightContrast;
+    half _PomHeightBias;
+    half _PomInvertHeight;
+    half _PomNormalHeight;
+    half _PomSelfShadow;
+    half _WorldTiling;
+    half _TriplanarSharpness;
+    half _HueVariation;
+    half _BrightnessVariation;
+    half _RoughnessVariation;
+    half _CoinNormalStrength;
+    half _PileNormalStrength;
+    half _DetailAlbedoScale;
+    half _DetailNormalScale;
+    half _EdgeDirtStrength;
+    half _SparkleEnabled;
+    half4 _SparkleColor;
+    half _SparkleIntensity;
+    half _SparkleDensity;
+    half _SparkleSpeed;
+    half _SparkleSize;
+    half _SparkleCoverage;
+    half _SparkleFresnel;
+    half _SparkleFlicker;
+    half _SparkleNearFadeStart;
+    half _SparkleNearFadeEnd;
+    half _SparkleNearIntensity;
+    half _SparkleNearCoverage;
+    half _SparkleFacingCoverage;
+    half _SparkleFacingIntensity;
+    half _SparkleFacingPower;
+    half _SparkleGlobalIntensity;
+    half _SparkleGlobalDensity;
+    half _SparkleGlobalSize;
+    half _SparkleGlobalSpeed;
+    half _SparkleSoftness;
+    half _SparkleMinPixelWidth;
+    half _SparkleStability;
+    half _DistantCoinEnabled;
+    half4 _DistantCoinColor0;
+    half4 _DistantCoinColor1;
+    half4 _DistantCoinColor2;
+    half4 _DistantCoinColor3;
+    half4 _DistantCoinColor4;
+    half4 _DistantCoinColor5;
+    half4 _DistantCoinColor6;
+    half4 _DistantCoinColor7;
+    half _DistantCoinAmount0;
+    half _DistantCoinAmount1;
+    half _DistantCoinAmount2;
+    half _DistantCoinAmount3;
+    half _DistantCoinAmount4;
+    half _DistantCoinAmount5;
+    half _DistantCoinAmount6;
+    half _DistantCoinAmount7;
+    half _DistantCoinDensity;
+    half _DistantCoinCoverage;
+    half _DistantCoinIntensity;
+    half _DistantCoinMaxPixels;
+    half _DistantCoinGrowFar;
+    half _DistantCoinGrowNear;
+    half _DistantCoinFadeStart;
+    half _DistantCoinFadeEnd;
+    half _DistantCoinTopMask;
+    half _DistantCoinShineEnabled;
+    half _DistantCoinShineIntensity;
+    half _DistantCoinShineMetallic;
+    half _DistantCoinShineSmoothness;
+    half _DistantCoinShineNormalStrength;
+    half _DisableLod;
+    half _LodNear;
+    half _LodFar;
+    half _Cutoff;
+    half _Surface;
+
+    // Stylized A/B path (used when GOLDPILE_STYLIZED is defined).
+    half _StylizedMetalSoftness;
+    half _StylizedContrast;
+    half _StylizedSaturation;
+    half4 _StylizedWarmTint;
+    half _StylizedWarmStrength;
+    half4 _RimColor;
+    half _RimPower;
+    half _RimIntensity;
+    half4 _SpecRampColor;
+    half _SpecRampThreshold;
+    half _SpecRampSoftness;
+    half _SpecRampIntensity;
+    half4 _CreviceColor;
+    half _CreviceStrength;
+    half _AlbedoMix;
+CBUFFER_END
+
+TEXTURE2D(_BaseMap);            SAMPLER(sampler_BaseMap);
+TEXTURE2D(_BumpMap);            SAMPLER(sampler_BumpMap);
+TEXTURE2D(_MetallicGlossMap);   SAMPLER(sampler_MetallicGlossMap);
+TEXTURE2D(_OcclusionMap);       SAMPLER(sampler_OcclusionMap);
+TEXTURE2D(_HeightMap);          SAMPLER(sampler_HeightMap);
+TEXTURE2D(_DeformMap);          SAMPLER(sampler_DeformMap);
+TEXTURE2D(_PileNormalMap);      SAMPLER(sampler_PileNormalMap);
+TEXTURE2D(_DetailAlbedoMap);    SAMPLER(sampler_DetailAlbedoMap);
+TEXTURE2D(_DetailNormalMap);    SAMPLER(sampler_DetailNormalMap);
+TEXTURE2D(_DetailMask);         SAMPLER(sampler_DetailMask);
+
+#endif

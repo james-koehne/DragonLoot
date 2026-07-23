@@ -1,0 +1,218 @@
+using UnityEngine;
+using UnityEngine.AddressableAssets;
+using UnityEngine.Serialization;
+
+[CreateAssetMenu( fileName = "TreasureDefinition", menuName = "Definitions/TreasureDefinition" )]
+public class TreasureDefinition : ScriptableObject
+{
+	[Header( "Identity" )]
+	public string id;
+
+	public string displayName;
+
+	public TreasureCategory category;
+
+	[Tooltip( "Variant within the category, e.g. Gold or Sapphire." )]
+	public string variant;
+
+	[Header( "Stats" )]
+	[Min( 0 )]
+	public int value = 1;
+
+	[Tooltip( "Carry weight. Movement slows linearly with total carried weight; coins/gems typically use 1." )]
+	[Min( 1 )]
+	public int weight = 1;
+
+	[Tooltip( "When true, this treasure cannot be carried with any other items." )]
+	public bool exclusiveCarry = false;
+
+	[Tooltip( "When true, uses heavyThrowForce instead of throwForce." )]
+	public bool usesHeavyThrow = false;
+
+	[Tooltip( "Multiplier on global throw force for this treasure." )]
+	[Min( 0f )]
+	public float throwForceScale = 1f;
+
+	[Tooltip( "Multiplier on global throw up bias for this treasure." )]
+	[Min( 0f )]
+	public float throwUpBiasScale = 1f;
+
+	[Header( "Physics" )]
+	[Min( 0.01f )]
+	public float rigidbodyMass = 0.1f;
+
+	[Min( 0f )]
+	public float drag = 0.5f;
+
+	[Min( 0f )]
+	public float angularDrag = 0.5f;
+
+	[Tooltip( "Rigidbody sleep threshold while in free physics." )]
+	[Min( 0f )]
+	public float sleepThreshold = 0.01f;
+
+	[Tooltip( "Torque strength that tips upright coins toward lying flat." )]
+	[Min( 0f )]
+	public float autoToppleStrength = 2.5f;
+
+	[Tooltip( "Degrees from upright above which auto-topple applies." )]
+	[Range( 0f, 90f )]
+	public float maxUprightAngle = 35f;
+
+	[Tooltip( "Seconds of low motion before forcing sleep / stabilization." )]
+	[Min( 0f )]
+	public float physicsStabilizationDelay = 0.35f;
+
+	[Tooltip( "World radius used for proximity / pile pick helpers." )]
+	[Min( 0.01f )]
+	public float pickupRadius = 0.35f;
+
+	[Header( "Visuals" )]
+	public Sprite icon;
+
+	[Tooltip( "Optional mesh override applied at bind when set." )]
+	public Mesh meshOverride;
+
+	[Tooltip( "Optional material override applied at bind when set." )]
+	public Material materialOverride;
+
+	[Tooltip( "Addressable prefab used for all states (pile, hand, table, floor)." )]
+	public AssetReferenceGameObject prefab;
+
+	[Tooltip( "Scale while in pile / free in the world." )]
+	public Vector3 worldScale = Vector3.one * 0.35f;
+
+	[Tooltip( "Scale while held in the hand stack." )]
+	public Vector3 heldScale = Vector3.one * 0.08f;
+
+	[Tooltip( "Local euler degrees for the Active Item (screen-center held treasure). Identity when zero." )]
+	[FormerlySerializedAs( "heldLocalEuler" )]
+	public Vector3 activeHeldLocalEuler = Vector3.zero;
+
+	[Tooltip( "Local euler degrees for items in the Held Stack (hand pile). Identity when zero." )]
+	public Vector3 heldStackLocalEuler = Vector3.zero;
+
+	[Header( "Stacking" )]
+	[Tooltip( "If false, this treasure cannot be stacked onto other loose treasure, coin stacks, or mixed table slots. Gems never floor-stack regardless." )]
+	public bool canStack = true;
+
+	[Tooltip( "World-space height each stacked item adds (hand, ground, tables, coin stacks). 0 uses a category fallback." )]
+	[Min( 0f )]
+	public float coinThickness = 0.04f;
+
+	public float GetStackThickness()
+	{
+		if ( coinThickness > 0.0001f )
+			return coinThickness;
+
+		float fallback = worldScale.y * 0.12f;
+		return fallback > 0.0001f ? fallback : 0.04f;
+	}
+
+	public PrimitiveType GetFallbackPrimitive()
+	{
+		switch ( category )
+		{
+			case TreasureCategory.Gem:
+				return PrimitiveType.Capsule;
+			case TreasureCategory.Coin:
+				return PrimitiveType.Sphere;
+			default:
+				return PrimitiveType.Cube;
+		}
+	}
+
+	public Vector3 GetFallbackHeldScale()
+	{
+		return heldScale;
+	}
+
+	public Quaternion GetHeldLocalRotation( bool active )
+	{
+		Vector3 euler = active ? activeHeldLocalEuler : heldStackLocalEuler;
+		if ( euler.sqrMagnitude < 0.0001f )
+			return Quaternion.identity;
+
+		return Quaternion.Euler( euler );
+	}
+
+	public Vector3 GetFallbackPlacedScale()
+	{
+		return worldScale;
+	}
+
+	public float GetDefaultMass()
+	{
+		switch ( category )
+		{
+			case TreasureCategory.Gem:
+				return 0.25f;
+			case TreasureCategory.Coin:
+				return 0.08f;
+			default:
+				return 0.15f;
+		}
+	}
+
+	public void EnsurePhysicsDefaults()
+	{
+		if ( worldScale.sqrMagnitude < 0.0001f )
+			worldScale = GetCategoryWorldScale();
+		if ( heldScale.sqrMagnitude < 0.0001f )
+			heldScale = GetCategoryHeldScale();
+		if ( rigidbodyMass <= 0.01f )
+			rigidbodyMass = GetDefaultMass();
+		if ( coinThickness <= 0.0001f )
+			coinThickness = GetStackThickness();
+	}
+
+	void OnValidate()
+	{
+		if ( string.IsNullOrEmpty( id ) && !string.IsNullOrEmpty( name ) )
+			id = name;
+
+		if ( string.IsNullOrEmpty( displayName ) && !string.IsNullOrEmpty( name ) )
+			displayName = name;
+
+		value = Mathf.Max( 0, value );
+		weight = Mathf.Max( 1, weight );
+		throwForceScale = Mathf.Max( 0f, throwForceScale );
+		throwUpBiasScale = Mathf.Max( 0f, throwUpBiasScale );
+		EnsurePhysicsDefaults();
+		rigidbodyMass = Mathf.Max( 0.01f, rigidbodyMass );
+		drag = Mathf.Max( 0f, drag );
+		angularDrag = Mathf.Max( 0f, angularDrag );
+		sleepThreshold = Mathf.Max( 0f, sleepThreshold );
+		autoToppleStrength = Mathf.Max( 0f, autoToppleStrength );
+		maxUprightAngle = Mathf.Clamp( maxUprightAngle, 0f, 90f );
+		physicsStabilizationDelay = Mathf.Max( 0f, physicsStabilizationDelay );
+		pickupRadius = Mathf.Max( 0.01f, pickupRadius );
+		coinThickness = Mathf.Max( 0f, coinThickness );
+	}
+
+	Vector3 GetCategoryWorldScale()
+	{
+		switch ( category )
+		{
+			case TreasureCategory.Gem:
+				return new Vector3( 0.25f, 0.2f, 0.25f );
+			case TreasureCategory.Coin:
+				return Vector3.one * 0.35f;
+			default:
+				return Vector3.one * 0.3f;
+		}
+	}
+
+	Vector3 GetCategoryHeldScale()
+	{
+		switch ( category )
+		{
+			case TreasureCategory.Gem:
+				return new Vector3( 0.08f, 0.06f, 0.08f );
+			case TreasureCategory.Coin:
+				return Vector3.one * 0.08f;
+			default:
+				return Vector3.one * 0.07f;
+		}
+	}
+}

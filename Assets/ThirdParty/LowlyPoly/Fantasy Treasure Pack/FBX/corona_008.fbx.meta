@@ -1,0 +1,161 @@
+fileFormatVersion: 2
+guid: 4bbc7e497bfad5e489e2eaa679f1bbc3
+timeCreated: 1481225415
+licenseType: Store
+ModelImporter:
+  serializedVersion: 19
+  fileIDToRecycleName:
+    100000: //RootNode
+    100002: corona_008
+    100004: corona_0081
+    100006: corona_0082
+    100008: pCube125
+    100010: pPipe186
+    100012: pPipe187
+    100014: pSphere166
+    100016: pSphere167
+    100018: pSphere168
+    100020: pSphere169
+    100022: pSphere170
+    100024: pSphere171
+    100026: pSphere172
+    100028: pSphere173
+    100030: pSphere174
+    100032: pSphere175
+    100034: pSphere176
+    100036: pSphere177
+    100038: pSphere178
+    100040: pSphere179
+    100042: transform77
+    100044: transform78
+    100046: transform79
+    100048: transform80
+    100050: transform81
+    100052: transform82
+    100054: transform83
+    100056: transform84
+    100058: transform85
+    100060: transform86
+    100062: transform87
+    100064: transform88
+    100066: transform89
+    100068: transform90
+    100070: transform91
+    100072: transform92
+    100074: transform93
+    400000: //RootNode
+    400002: corona_008
+    400004: corona_0081
+    400006: corona_0082
+    400008: pCube125
+    400010: pPipe186
+    400012: pPipe187
+    400014: pSphere166
+    400016: pSphere167
+    400018: pSphere168
+    400020: pSphere169
+    400022: pSphere170
+    400024: pSphere171
+    400026: pSphere172
+    400028: pSphere173
+    400030: pSphere174
+    400032: pSphere175
+    400034: pSphere176
+    400036: pSphere177
+    400038: pSphere178
+    400040: pSphere179
+    400042: transform77
+    400044: transform78
+    400046: transform79
+    400048: transform80
+    400050: transform81
+    400052: transform82
+    400054: transform83
+    400056: transform84
+    400058: transform85
+    400060: transform86
+    400062: transform87
+    400064: transform88
+    400066: transform89
+    400068: transform90
+    400070: transform91
+    400072: transform92
+    400074: transform93
+    2300000: corona_0081
+    2300002: corona_0082
+    3300000: corona_0081
+    3300002: corona_0082
+    4300000: corona_0081
+    4300002: corona_0082
+    9500000: //RootNode
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    clipAnimations: []
+    isReadable: 1
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    importBlendShapes: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 80552
+  packageName: Fantasy Treasure Pack
+  packageVersion: 1.0
+  assetPath: Assets/LowlyPoly/Fantasy Treasure Pack/FBX/corona_008.fbx
+  uploadId: 505506

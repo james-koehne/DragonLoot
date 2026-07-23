@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2e3f4a5b60718293a4b5c6d7e8f9012, type: 3}
+  m_Name: PlayerInteractionDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInteractionDefinition
+  interactRange: 8
+  interactMask:
+    serializedVersion: 2
+    m_Bits: 0
+  dropUpBias: 0.05
+  throwForce: 9
+  heavyThrowForce: 3.5
+  throwSpeed: 9
+  throwUpBias: 0.35
+  throwInheritPlanarScale: 1
+  softThrowSpeedScale: 0.25
+  softThrowUpScale: 0.35
+  throwPlaceRepeatInterval: 0.1
