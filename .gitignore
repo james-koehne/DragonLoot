@@ -77,3 +77,5 @@ crashlytics-build.properties
 # Screenshots folder
 /Screenshots/
 .DS_Store
+
+/[Aa]ssets/ThirdParty/*
