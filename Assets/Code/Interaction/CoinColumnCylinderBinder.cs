@@ -4,9 +4,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Drives one or more <see cref="CoinStackCylinderVisual"/> segments for coin columns (hand, ground,
-/// display tables). Contiguous same-type runs of at least <see cref="MinCountForCylinder"/> settled coins
-/// become cylinders; shorter runs stay as individual meshes.
+/// Drives one <see cref="CoinStackCylinderVisual"/> for coin columns (hand, ground,
+/// display tables). Settled coin columns of at least <see cref="MinCountForCylinder"/> become
+/// a single multi-type cylinder; shorter columns stay as individual meshes.
 /// </summary>
 public static class CoinColumnCylinderBinder
 {
@@ -16,14 +16,7 @@ public static class CoinColumnCylinderBinder
 	/// <summary>Fallback minimum settled coins before bulk meshes are replaced by a cylinder.</summary>
 	public const int DefaultMinCountForCylinder = 2;
 
-	struct CoinRunSegment
-	{
-		public int Start;
-		public int Length;
-		public TreasureDefinition Definition;
-	}
-
-	static readonly List<CoinRunSegment> SegmentBuffer = new List<CoinRunSegment>();
+	static readonly List<TreasureDefinition> MultiSlotBuffer = new List<TreasureDefinition>( 64 );
 
 	public static int MinCountForCylinder
 	{
@@ -298,8 +291,8 @@ public static class CoinColumnCylinderBinder
 	}
 
 	/// <summary>
-	/// Cylinder segments for an owned ground stack from logical definitions (no per-coin meshes required).
-	/// Fills <paramref name="cylinderCovered"/> with true for slots represented by a cylinder.
+	/// One multi-type cylinder for an owned ground stack from logical definitions (no per-coin meshes required).
+	/// Fills <paramref name="cylinderCovered"/> with true for slots represented by the cylinder.
 	/// </summary>
 	public static void BindDefinitions(
 		ref CoinStackCylinderVisual primaryVisual,
@@ -321,7 +314,20 @@ public static class CoinColumnCylinderBinder
 			return;
 		}
 
-		CollectDefinitionRunSegments( slots, SegmentBuffer );
+		int coinCount = 0;
+		for ( int i = 0; i < slots.Count; i++ )
+		{
+			if ( !IsCoin( slots[ i ] ) )
+				break;
+			coinCount++;
+		}
+
+		if ( coinCount < MinCountForCylinder )
+		{
+			DestroyContainerOnParent( parent, HostChildName );
+			primaryVisual = null;
+			return;
+		}
 
 		Transform container = EnsureContainer( parent, HostChildName );
 		if ( container == null )
@@ -334,115 +340,45 @@ public static class CoinColumnCylinderBinder
 		container.localRotation = Quaternion.identity;
 		container.localScale = Vector3.one;
 
-		int segmentVisualIndex = 0;
-		primaryVisual = null;
-		float parentSy = Mathf.Abs( parent.lossyScale.y );
-		if ( parentSy < 0.0001f )
-			parentSy = 1f;
-
-		for ( int s = 0; s < SegmentBuffer.Count; s++ )
+		MultiSlotBuffer.Clear();
+		float runHeight = 0f;
+		float maxDiameter = 0f;
+		for ( int i = 0; i < coinCount; i++ )
 		{
-			CoinRunSegment segment = SegmentBuffer[ s ];
-			int end = segment.Start + segment.Length;
-			if ( segment.Length < MinCountForCylinder )
-				continue;
-
-			float baseY = GetDefinitionOffset( slots, segment.Start );
-			float runHeight = SumDefinitionStepHeight( slots, segment.Start, end );
-			float step = TreasureStackSpacing.GetStep( segment.Definition );
-			float runDiameter = ResolveRunDiameter( segment.Definition, -1f, useHeldDiameter: false );
-
-			CoinStackCylinderVisual segmentVisual = EnsureSegmentVisual( container, segmentVisualIndex, ref primaryVisual );
-			if ( segmentVisual == null )
-				continue;
-
-			Transform segmentHost = segmentVisual.transform;
-			segmentHost.localPosition = Vector3.up * ( baseY / parentSy );
-			segmentHost.localRotation = Quaternion.identity;
-			segmentHost.localScale = Vector3.one;
-
-			if ( snap )
-				segmentVisual.SnapToCount( segment.Definition, segment.Length, step, runDiameter, runHeight );
-			else
-				segmentVisual.SetStack( segment.Definition, segment.Length, step, runDiameter, runHeight );
-
-			ApplyCylinderShadowCasting( segmentVisual, heldColumn: false );
-			segmentVisualIndex++;
-
-			if ( cylinderCovered != null )
-			{
-				for ( int i = segment.Start; i < end && i < cylinderCovered.Length; i++ )
-					cylinderCovered[ i ] = true;
-			}
+			TreasureDefinition def = slots[ i ];
+			MultiSlotBuffer.Add( def );
+			runHeight += TreasureStackSpacing.GetStep( def );
+			float d = ResolveRunDiameter( def, -1f, useHeldDiameter: false );
+			if ( d > maxDiameter )
+				maxDiameter = d;
 		}
 
-		DestroyExtraSegmentChildren( container, segmentVisualIndex );
-
-		if ( segmentVisualIndex == 0 )
+		CoinStackCylinderVisual segmentVisual = EnsureSegmentVisual( container, 0, ref primaryVisual );
+		if ( segmentVisual == null )
 		{
 			DestroyGameObject( container.gameObject );
 			primaryVisual = null;
-		}
-	}
-
-	static void CollectDefinitionRunSegments( IList<TreasureDefinition> slots, List<CoinRunSegment> segments )
-	{
-		segments.Clear();
-		if ( slots == null || slots.Count == 0 )
 			return;
-
-		int i = 0;
-		while ( i < slots.Count )
-		{
-			TreasureDefinition runDef = slots[ i ];
-			if ( !IsCoin( runDef ) )
-				break;
-
-			int start = i;
-			i++;
-			while ( i < slots.Count )
-			{
-				TreasureDefinition def = slots[ i ];
-				if ( !IsCoin( def ) || !SameCoinType( runDef, def ) )
-					break;
-				i++;
-			}
-
-			int length = i - start;
-			if ( length > 0 )
-			{
-				segments.Add( new CoinRunSegment
-				{
-					Start = start,
-					Length = length,
-					Definition = runDef
-				} );
-			}
 		}
-	}
 
-	static float GetDefinitionOffset( IList<TreasureDefinition> slots, int index )
-	{
-		float height = 0f;
-		if ( slots == null )
-			return height;
+		Transform segmentHost = segmentVisual.transform;
+		segmentHost.localPosition = Vector3.zero;
+		segmentHost.localRotation = Quaternion.identity;
+		segmentHost.localScale = Vector3.one;
 
-		for ( int i = 0; i < index && i < slots.Count; i++ )
-			height += TreasureStackSpacing.GetStep( slots[ i ] );
+		if ( snap )
+			segmentVisual.SnapToCountMulti( MultiSlotBuffer, maxDiameter, runHeight );
+		else
+			segmentVisual.SetStackMulti( MultiSlotBuffer, snap: false, maxDiameter, runHeight );
 
-		return height;
-	}
+		ApplyCylinderShadowCasting( segmentVisual, heldColumn: false );
+		DestroyExtraSegmentChildren( container, 1 );
 
-	static float SumDefinitionStepHeight( IList<TreasureDefinition> slots, int start, int endExclusive )
-	{
-		float height = 0f;
-		if ( slots == null )
-			return height;
-
-		for ( int i = start; i < endExclusive && i < slots.Count; i++ )
-			height += TreasureStackSpacing.GetStep( slots[ i ] );
-
-		return height;
+		if ( cylinderCovered != null )
+		{
+			for ( int i = 0; i < coinCount && i < cylinderCovered.Length; i++ )
+				cylinderCovered[ i ] = true;
+		}
 	}
 
 	static void BindSegments(
@@ -465,7 +401,14 @@ public static class CoinColumnCylinderBinder
 			return;
 		}
 
-		CollectCoinRunSegments( items, SegmentBuffer );
+		int settledCoinCount = CountSettledCoins( items );
+		if ( settledCoinCount < MinCountForCylinder )
+		{
+			RestoreMeshes( items );
+			DestroyContainerOnParent( parent, hostName );
+			primaryVisual = null;
+			return;
+		}
 
 		Transform container = EnsureContainer( parent, hostName );
 		if ( container == null )
@@ -478,56 +421,76 @@ public static class CoinColumnCylinderBinder
 		container.localRotation = localRotation == default ? Quaternion.identity : localRotation;
 		container.localScale = Vector3.one;
 
-		int segmentVisualIndex = 0;
-		primaryVisual = null;
-
-		for ( int s = 0; s < SegmentBuffer.Count; s++ )
+		MultiSlotBuffer.Clear();
+		float runHeight = 0f;
+		float maxDiameter = diameter;
+		for ( int i = 0; i < items.Count; i++ )
 		{
-			CoinRunSegment segment = SegmentBuffer[ s ];
-			int end = segment.Start + segment.Length;
-			int runTotal = CountItemsInRange( items, segment.Start, end );
-			if ( runTotal < MinCountForCylinder )
+			TreasureItem item = items[ i ];
+			if ( item == null || item.IsInFlight )
 				continue;
 
-			float baseY = GetRunBaseLocalY( items, segment.Start );
-			float runHeight = SumRunStepHeight( items, segment.Start, end );
-			float step = heightStep > 0.0001f
-				? heightStep
-				: TreasureStackSpacing.GetStep( segment.Definition );
-			float runDiameter = ResolveRunDiameter( segment.Definition, diameter, useHeldDiameter );
+			TreasureDefinition def = item.Definition;
+			if ( !IsCoin( def ) )
+				break;
 
-			CoinStackCylinderVisual segmentVisual = EnsureSegmentVisual( container, segmentVisualIndex, ref primaryVisual );
-			if ( segmentVisual == null )
-				continue;
-
-			Transform segmentHost = segmentVisual.transform;
-			// baseY is world-meters of stack spacing; parent treasure scale is not 1, so convert.
-			float parentSy = Mathf.Abs( parent.lossyScale.y );
-			if ( parentSy < 0.0001f )
-				parentSy = 1f;
-			segmentHost.localPosition = Vector3.up * ( baseY / parentSy );
-			segmentHost.localRotation = Quaternion.identity;
-			segmentHost.localScale = Vector3.one;
-
-			if ( snap )
-				segmentVisual.SnapToCount( segment.Definition, runTotal, step, runDiameter, runHeight );
-			else
-				segmentVisual.SetStack( segment.Definition, runTotal, step, runDiameter, runHeight );
-
-			ApplyCylinderShadowCasting( segmentVisual, useHeldDiameter );
-			segmentVisualIndex++;
+			MultiSlotBuffer.Add( def );
+			runHeight += heightStep > 0.0001f ? heightStep : TreasureStackSpacing.GetStep( item );
+			float d = ResolveRunDiameter( def, diameter, useHeldDiameter );
+			if ( d > maxDiameter )
+				maxDiameter = d;
 		}
 
-		SyncCoinColumnMeshVisibility( items, SegmentBuffer );
-
-		DestroyExtraSegmentChildren( container, segmentVisualIndex );
-
-		if ( segmentVisualIndex == 0 )
+		if ( MultiSlotBuffer.Count < MinCountForCylinder )
 		{
 			RestoreMeshes( items );
 			DestroyGameObject( container.gameObject );
 			primaryVisual = null;
+			return;
 		}
+
+		primaryVisual = null;
+		CoinStackCylinderVisual segmentVisual = EnsureSegmentVisual( container, 0, ref primaryVisual );
+		if ( segmentVisual == null )
+		{
+			RestoreMeshes( items );
+			DestroyGameObject( container.gameObject );
+			primaryVisual = null;
+			return;
+		}
+
+		Transform segmentHost = segmentVisual.transform;
+		segmentHost.localPosition = Vector3.zero;
+		segmentHost.localRotation = Quaternion.identity;
+		segmentHost.localScale = Vector3.one;
+
+		if ( snap )
+			segmentVisual.SnapToCountMulti( MultiSlotBuffer, maxDiameter, runHeight );
+		else
+			segmentVisual.SetStackMulti( MultiSlotBuffer, snap: false, maxDiameter, runHeight );
+
+		ApplyCylinderShadowCasting( segmentVisual, useHeldDiameter );
+		DestroyExtraSegmentChildren( container, 1 );
+		SyncCoinColumnMeshVisibilityMulti( items );
+	}
+
+	static int CountSettledCoins( IList<TreasureItem> items )
+	{
+		if ( items == null )
+			return 0;
+
+		int count = 0;
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			TreasureItem item = items[ i ];
+			if ( item == null || item.IsInFlight )
+				continue;
+			if ( !IsCoin( item.Definition ) )
+				break;
+			count++;
+		}
+
+		return count;
 	}
 
 	static void ApplyCylinderShadowCasting( CoinStackCylinderVisual visual, bool heldColumn )
@@ -547,32 +510,10 @@ public static class CoinColumnCylinderBinder
 	/// <summary>
 	/// Shows/hides per-coin meshes without toggling every frame (avoids shadow/light flicker).
 	/// </summary>
-	static void SyncCoinColumnMeshVisibility( IList<TreasureItem> items, List<CoinRunSegment> segments )
+	static void SyncCoinColumnMeshVisibilityMulti( IList<TreasureItem> items )
 	{
 		if ( items == null )
 			return;
-
-		bool[] hidden = null;
-		if ( segments != null && segments.Count > 0 )
-		{
-			hidden = new bool[ items.Count ];
-			for ( int s = 0; s < segments.Count; s++ )
-			{
-				CoinRunSegment segment = segments[ s ];
-				int end = segment.Start + segment.Length;
-				int settledInRun = CountSettledInRange( items, segment.Start, end );
-				int runTotal = CountItemsInRange( items, segment.Start, end );
-				if ( runTotal < MinCountForCylinder )
-					continue;
-
-				for ( int i = segment.Start; i < end && i < items.Count; i++ )
-				{
-					TreasureItem item = items[ i ];
-					if ( item != null && !item.IsInFlight )
-						hidden[ i ] = true;
-				}
-			}
-		}
 
 		for ( int i = 0; i < items.Count; i++ )
 		{
@@ -580,82 +521,8 @@ public static class CoinColumnCylinderBinder
 			if ( item == null )
 				continue;
 
-			bool shouldHide = hidden != null && hidden[ i ];
+			bool shouldHide = !item.IsInFlight && IsCoin( item.Definition );
 			item.SetMeshVisible( !shouldHide );
-		}
-	}
-
-	static float GetRunBaseLocalY( IList<TreasureItem> items, int runStart )
-	{
-		if ( items == null || runStart < 0 || runStart >= items.Count )
-			return 0f;
-
-		// Coin pivots sit on the contact plane (surface / coin below). Cylinder base matches the
-		// run's first pivot — do not shift down by half thickness.
-		return TreasureStackSpacing.GetOffsetForIndex( items, items[ runStart ], runStart );
-	}
-
-	static float SumRunStepHeight( IList<TreasureItem> items, int start, int endExclusive )
-	{
-		float height = 0f;
-		if ( items == null )
-			return height;
-
-		for ( int i = start; i < endExclusive && i < items.Count; i++ )
-		{
-			TreasureItem item = items[ i ];
-			if ( item != null )
-				height += TreasureStackSpacing.GetStep( item );
-		}
-
-		return height;
-	}
-
-	static void CollectCoinRunSegments( IList<TreasureItem> column, List<CoinRunSegment> segments )
-	{
-		segments.Clear();
-		if ( column == null || column.Count == 0 )
-			return;
-
-		int i = 0;
-		while ( i < column.Count )
-		{
-			TreasureItem seed = column[ i ];
-			if ( seed == null )
-			{
-				i++;
-				continue;
-			}
-
-			TreasureDefinition runDef = seed.Definition;
-			if ( !IsCoin( runDef ) )
-				break;
-
-			int start = i;
-			i++;
-			while ( i < column.Count )
-			{
-				TreasureItem item = column[ i ];
-				if ( item == null )
-					break;
-
-				TreasureDefinition def = item.Definition;
-				if ( !IsCoin( def ) || !SameCoinType( runDef, def ) )
-					break;
-
-				i++;
-			}
-
-			int length = i - start;
-			if ( length > 0 )
-			{
-				segments.Add( new CoinRunSegment
-				{
-					Start = start,
-					Length = length,
-					Definition = runDef
-				} );
-			}
 		}
 	}
 
@@ -828,37 +695,6 @@ public static class CoinColumnCylinderBinder
 		}
 
 		return container;
-	}
-
-	static int CountSettledInRange( IList<TreasureItem> items, int start, int endExclusive )
-	{
-		int count = 0;
-		if ( items == null )
-			return count;
-
-		for ( int i = start; i < endExclusive && i < items.Count; i++ )
-		{
-			TreasureItem item = items[ i ];
-			if ( item != null && !item.IsInFlight )
-				count++;
-		}
-
-		return count;
-	}
-
-	static int CountItemsInRange( IList<TreasureItem> items, int start, int endExclusive )
-	{
-		int count = 0;
-		if ( items == null )
-			return count;
-
-		for ( int i = start; i < endExclusive && i < items.Count; i++ )
-		{
-			if ( items[ i ] != null )
-				count++;
-		}
-
-		return count;
 	}
 
 	static void RestoreMeshes( IList<TreasureItem> items )

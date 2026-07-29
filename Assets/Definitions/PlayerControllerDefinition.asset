@@ -48,3 +48,7 @@ MonoBehaviour:
   slideBrakeExitDot: 0.4
   slideBrakeExitSpeed: 2.5
   slideReverseBrakeScale: 5
+  slideExitBoostMaxSpeed: 48
+  slideExitBoostMultiplier: 1
+  slideExitBoostDecay: 35
+  slideExitBoostSteer: 12

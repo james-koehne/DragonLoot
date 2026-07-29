@@ -227,7 +227,7 @@ public class GoldPileEdgeProps : MonoBehaviour
 			float lx = Random.Range( -half, half );
 			float lz = Random.Range( -half, half );
 			float h = _heightfield.SampleNormalized( lx, lz );
-			if ( h < 0.08f )
+			if ( h * _heightfield.MaxHeight < _heightfield.GroundLevel )
 				continue;
 
 			float grad = _heightfield.GradientMagnitude( lx, lz );

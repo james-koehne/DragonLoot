@@ -55,9 +55,22 @@ float3 ApplyProcRuntimeDeform(float3 positionOS, float2 uv)
     if (_DeformEnabled > 0.5 && _DeformScale > 0.0)
     {
         float h = SampleProcDeformHeight(uv);
-        positionOS.y += h * _DeformScale;
+        float worldH = h * _DeformScale;
+        if (worldH < _GroundLevelHeight)
+            positionOS.y = -1000.0;
+        else
+            positionOS.y += worldH;
     }
     return positionOS;
+}
+
+void ProcClipBelowGround(float2 deformUV)
+{
+    if (_DeformEnabled < 0.5 || _DeformScale <= 0.0)
+        return;
+
+    float h = SampleProcDeformHeight(deformUV) * _DeformScale;
+    clip(h - _GroundLevelHeight);
 }
 
 half ProcLodFactor(float dist)

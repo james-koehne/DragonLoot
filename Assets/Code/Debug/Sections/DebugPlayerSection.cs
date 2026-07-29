@@ -17,6 +17,8 @@ public class DebugPlayerSection : DebugOverlaySection
 		GUILayout.Label( $"Ground angle: {player.GroundAngle:0.0}°" );
 		GUILayout.Label( $"Speed: {player.PlanarSpeed:0.00}" );
 		GUILayout.Label( $"Sliding: {player.IsSliding}" );
+		if ( player.IsSlideExitBoostActive )
+			GUILayout.Label( $"Exit boost: {player.SlideExitBoostSpeed:0.00} u/s" );
 		if ( !player.IsSliding && player.SlideEnterChargeProgress > 0f )
 			GUILayout.Label( $"Slide charge: {player.SlideEnterChargeProgress * 100f:0}%" );
 		GUILayout.Label( $"State: {player.MovementState}" );

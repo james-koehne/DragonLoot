@@ -172,7 +172,7 @@ public class GoldPilePhysicsPool : MonoBehaviour
 			lz = Mathf.Clamp( lz, -half, half );
 
 			float h = _heightfield.SampleNormalized( lx, lz );
-			if ( h < 0.08f )
+			if ( h * _heightfield.MaxHeight < _heightfield.GroundLevel )
 				continue;
 
 			Vector3 local = new Vector3( lx, h * _heightfield.MaxHeight + 0.05f, lz );

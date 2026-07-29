@@ -6,50 +6,107 @@ using UnityEngine.Rendering;
 /// <summary>
 /// Reused translucent ghost mesh for placement preview. Rebuilds when the held item
 /// identity changes, and draws every MeshFilter/submesh from the source visual.
+/// Stack-volume previews register an invisible volume mesh for the hover outline renderer feature.
 /// </summary>
 public sealed class PlacementGhost
 {
-	static readonly Color ValidColor = new Color( 0.25f, 0.9f, 0.35f, 0.35f );
-	static readonly Color InvalidColor = new Color( 0.95f, 0.2f, 0.2f, 0.35f );
-	const float StackVolumeOversize = 1.1f;
+	static readonly int BaseColorId = Shader.PropertyToID( "_BaseColor" );
+	static readonly int ColorId = Shader.PropertyToID( "_Color" );
+	static readonly int RimColorId = Shader.PropertyToID( "_RimColor" );
+	static readonly int CoreColorId = Shader.PropertyToID( "_CoreColor" );
+	static readonly int FresnelPowerId = Shader.PropertyToID( "_FresnelPower" );
+	static readonly int FresnelBoostId = Shader.PropertyToID( "_FresnelBoost" );
+	static readonly int RimIntensityId = Shader.PropertyToID( "_RimIntensity" );
+	static readonly int CoreIntensityId = Shader.PropertyToID( "_CoreIntensity" );
+	static readonly int PulseSpeedId = Shader.PropertyToID( "_PulseSpeed" );
+	static readonly int PulseAmountId = Shader.PropertyToID( "_PulseAmount" );
 
 	readonly GameObject _root;
 	readonly Transform _rootTransform;
-	Material _validMaterial;
-	Material _invalidMaterial;
-	Material _activeMaterial;
+	readonly MaterialPropertyBlock _propertyBlock = new MaterialPropertyBlock();
+	Material _material;
 	readonly List<MeshRenderer> _renderers = new List<MeshRenderer>( 4 );
 	TreasureItem _syncedItem;
 	TreasureDefinition _syncedDefinition;
 	bool _visible;
 	bool _stackVolumeMode;
+	bool _lastValid = true;
 	GameObject _volumeChild;
+	MeshRenderer _volumeRenderer;
+
+	Color _validColor = PlacementFeedbackColors.ValidGhost;
+	Color _invalidColor = PlacementFeedbackColors.InvalidGhost;
+	float _fresnelPower = 2.4f;
+	float _fresnelBoost = 0.7f;
+	float _pulseAmount = 0.12f;
+	float _pulseSpeed = 0.85f;
+	float _rimIntensity = 1.15f;
+	float _coreIntensity = 0.28f;
+	float _stackVolumeOversize = 1.1f;
+	HoverOutlineVisualSettings _stackOutlineSettings = HoverOutlineVisualSettings.DefaultStack();
+	Color _validRgb = PlacementFeedbackColors.ValidRgb;
+	Color _invalidRgb = PlacementFeedbackColors.InvalidRgb;
 
 	public PlacementGhost()
 	{
 		_root = new GameObject( "PlacementGhost" );
 		_rootTransform = _root.transform;
-
-		_validMaterial = CreateTintMaterial( ValidColor );
-		_invalidMaterial = CreateTintMaterial( InvalidColor );
-		_activeMaterial = _validMaterial;
-
+		_material = CreateFresnelMaterial();
 		SetVisible( false );
+		ApplyTint( true );
+	}
+
+	public void ConfigureVisuals(
+		Color validColor,
+		Color invalidColor,
+		float fresnelPower,
+		float fresnelBoost,
+		float pulseAmount,
+		float pulseSpeed,
+		float rimIntensity,
+		float coreIntensity,
+		float stackVolumeOversize,
+		HoverOutlineVisualSettings stackOutline )
+	{
+		_validColor = validColor;
+		_invalidColor = invalidColor;
+		_validRgb = new Color( validColor.r, validColor.g, validColor.b, 1f );
+		_invalidRgb = new Color( invalidColor.r, invalidColor.g, invalidColor.b, 1f );
+		_fresnelPower = fresnelPower;
+		_fresnelBoost = fresnelBoost;
+		_pulseAmount = pulseAmount;
+		_pulseSpeed = pulseSpeed;
+		_rimIntensity = rimIntensity;
+		_coreIntensity = coreIntensity;
+		_stackVolumeOversize = stackVolumeOversize;
+		_stackOutlineSettings = stackOutline != null ? stackOutline.Clone() : HoverOutlineVisualSettings.DefaultStack();
+		_stackOutlineSettings.Validate();
+		ApplyTint( _lastValid );
+	}
+
+	public bool TryGetStackVolumeOutline( bool valid, out Renderer renderer, out HoverOutlineVisualSettings settings )
+	{
+		renderer = _volumeRenderer;
+		settings = null;
+		if ( !_stackVolumeMode || _volumeRenderer == null )
+			return false;
+
+		Color tintRgb = valid ? _validRgb : _invalidRgb;
+		settings = _stackOutlineSettings.WithRgbTint( tintRgb );
+		return true;
 	}
 
 	public void Destroy()
 	{
-		if ( _validMaterial != null )
-			Object.Destroy( _validMaterial );
-		if ( _invalidMaterial != null )
-			Object.Destroy( _invalidMaterial );
-		_validMaterial = null;
-		_invalidMaterial = null;
+		if ( _material != null )
+			Object.Destroy( _material );
+		_material = null;
 
 		if ( _root != null )
 			Object.Destroy( _root );
 
 		_renderers.Clear();
+		_volumeRenderer = null;
 	}
 
 	public void SetVisible( bool visible )
@@ -69,18 +126,9 @@ public sealed class PlacementGhost
 
 		_rootTransform.SetPositionAndRotation( preview.Position, preview.Rotation );
 		_rootTransform.localScale = preview.Scale;
-
-		Material next = preview.IsValid ? _validMaterial : _invalidMaterial;
-		if ( next == _activeMaterial )
-			return;
-
-		_activeMaterial = next;
-		ApplyActiveMaterialToAllSlots();
+		ApplyTint( preview.IsValid );
 	}
 
-	/// <summary>
-	/// Ghost as a slightly oversized vertical volume covering the whole stack plus next slot.
-	/// </summary>
 	public void UpdateStackVolume( Vector3 contactPosition, Quaternion rotation, float height, float diameter, bool valid )
 	{
 		if ( !_visible || _rootTransform == null )
@@ -90,8 +138,8 @@ public sealed class PlacementGhost
 		_stackVolumeMode = true;
 		ClearItemChildren();
 
-		float safeHeight = Mathf.Max( 0.02f, height ) * StackVolumeOversize;
-		float safeDiameter = Mathf.Max( 0.05f, diameter ) * StackVolumeOversize;
+		float safeHeight = Mathf.Max( 0.02f, height );
+		float safeDiameter = Mathf.Max( 0.05f, diameter ) * _stackVolumeOversize;
 
 		_rootTransform.SetPositionAndRotation( contactPosition, rotation );
 		_rootTransform.localScale = Vector3.one;
@@ -104,14 +152,7 @@ public sealed class PlacementGhost
 			_volumeChild.transform.localScale = new Vector3( safeDiameter, safeHeight * 0.5f, safeDiameter );
 		}
 
-		Material next = valid ? _validMaterial : _invalidMaterial;
-		if ( next != _activeMaterial )
-		{
-			_activeMaterial = next;
-			ApplyActiveMaterialToAllSlots();
-		}
-		else
-			ApplyActiveMaterialToAllSlots();
+		_lastValid = valid;
 	}
 
 	public void ClearStackVolumeMode()
@@ -151,12 +192,14 @@ public sealed class PlacementGhost
 		Object.Destroy( _volumeChild.GetComponent<Collider>() );
 		_volumeChild.transform.SetParent( _rootTransform, false );
 
-		MeshRenderer renderer = _volumeChild.GetComponent<MeshRenderer>();
-		if ( renderer != null )
+		_volumeRenderer = _volumeChild.GetComponent<MeshRenderer>();
+		if ( _volumeRenderer != null )
 		{
-			renderer.shadowCastingMode = ShadowCastingMode.Off;
-			renderer.receiveShadows = false;
-			_renderers.Add( renderer );
+			_volumeRenderer.shadowCastingMode = ShadowCastingMode.Off;
+			_volumeRenderer.receiveShadows = false;
+			_volumeRenderer.sharedMaterial = CreateInvisibleMaterial();
+			_volumeRenderer.enabled = true;
+			_renderers.Add( _volumeRenderer );
 		}
 	}
 
@@ -175,12 +218,8 @@ public sealed class PlacementGhost
 		}
 
 		_renderers.Clear();
-		if ( _volumeChild != null )
-		{
-			MeshRenderer volumeRenderer = _volumeChild.GetComponent<MeshRenderer>();
-			if ( volumeRenderer != null )
-				_renderers.Add( volumeRenderer );
-		}
+		if ( _volumeRenderer != null )
+			_renderers.Add( _volumeRenderer );
 	}
 
 	void RebuildFromItem( TreasureItem item )
@@ -254,7 +293,7 @@ public sealed class PlacementGhost
 				1 );
 		}
 
-		ApplyActiveMaterialToAllSlots();
+		ApplyTint( _lastValid );
 	}
 
 	void AddChildVisual(
@@ -280,16 +319,48 @@ public sealed class PlacementGhost
 		int slots = Mathf.Max( 1, materialSlotCount );
 		Material[] mats = new Material[ slots ];
 		for ( int i = 0; i < slots; i++ )
-			mats[ i ] = _activeMaterial != null ? _activeMaterial : _validMaterial;
+			mats[ i ] = _material;
 		renderer.sharedMaterials = mats;
 		_renderers.Add( renderer );
 	}
 
-	void ApplyActiveMaterialToAllSlots()
+	void ApplyTint( bool valid )
 	{
-		if ( _activeMaterial == null )
+		_lastValid = valid;
+		if ( _stackVolumeMode )
 			return;
 
+		ApplyFresnelTint( valid );
+	}
+
+	void ApplyFresnelTint( bool valid )
+	{
+		if ( _material == null )
+			return;
+
+		Color tint = valid ? _validColor : _invalidColor;
+		Color rim = Color.Lerp( tint, Color.white, 0.35f );
+		rim.a = 1f;
+		Color core = tint * 0.35f;
+		core.a = 1f;
+
+		_propertyBlock.Clear();
+		_propertyBlock.SetColor( BaseColorId, tint );
+		_propertyBlock.SetColor( ColorId, tint );
+		_propertyBlock.SetColor( RimColorId, rim );
+		_propertyBlock.SetColor( CoreColorId, core );
+		_propertyBlock.SetFloat( FresnelPowerId, _fresnelPower );
+		_propertyBlock.SetFloat( FresnelBoostId, _fresnelBoost );
+		_propertyBlock.SetFloat( RimIntensityId, _rimIntensity );
+		_propertyBlock.SetFloat( CoreIntensityId, _coreIntensity );
+		_propertyBlock.SetFloat( PulseSpeedId, _pulseSpeed );
+		_propertyBlock.SetFloat( PulseAmountId, _pulseAmount );
+
+		ApplyPropertyBlockToRenderers();
+	}
+
+	void ApplyPropertyBlockToRenderers()
+	{
 		for ( int r = 0; r < _renderers.Count; r++ )
 		{
 			MeshRenderer renderer = _renderers[ r ];
@@ -298,10 +369,8 @@ public sealed class PlacementGhost
 
 			int count = renderer.sharedMaterials != null ? renderer.sharedMaterials.Length : 1;
 			count = Mathf.Max( 1, count );
-			Material[] mats = new Material[ count ];
-			for ( int i = 0; i < count; i++ )
-				mats[ i ] = _activeMaterial;
-			renderer.sharedMaterials = mats;
+			for ( int m = 0; m < count; m++ )
+				renderer.SetPropertyBlock( _propertyBlock, m );
 		}
 	}
 
@@ -309,6 +378,7 @@ public sealed class PlacementGhost
 	{
 		ClearStackVolumeMode();
 		_renderers.Clear();
+		_volumeRenderer = null;
 		if ( _rootTransform == null )
 			return;
 
@@ -340,7 +410,31 @@ public sealed class PlacementGhost
 		return _builtinCube;
 	}
 
-	static Material CreateTintMaterial( Color color )
+	static Material _invisibleMaterial;
+
+	static Material CreateInvisibleMaterial()
+	{
+		if ( _invisibleMaterial != null )
+			return _invisibleMaterial;
+
+		Shader shader = Shader.Find( "Universal Render Pipeline/Unlit" );
+		if ( shader == null )
+			shader = Shader.Find( "Sprites/Default" );
+
+		_invisibleMaterial = new Material( shader );
+		if ( _invisibleMaterial.HasProperty( "_BaseColor" ) )
+			_invisibleMaterial.SetColor( "_BaseColor", Color.clear );
+		if ( _invisibleMaterial.HasProperty( "_Color" ) )
+			_invisibleMaterial.SetColor( "_Color", Color.clear );
+		if ( _invisibleMaterial.HasProperty( "_Surface" ) )
+			_invisibleMaterial.SetFloat( "_Surface", 1f );
+		if ( _invisibleMaterial.HasProperty( "_ZWrite" ) )
+			_invisibleMaterial.SetFloat( "_ZWrite", 0f );
+		_invisibleMaterial.renderQueue = (int)RenderQueue.Transparent;
+		return _invisibleMaterial;
+	}
+
+	static Material CreateFresnelMaterial()
 	{
 		Shader shader = Shader.Find( "DragonLoot/Placement Ghost" );
 		if ( shader == null )
@@ -353,6 +447,7 @@ public sealed class PlacementGhost
 			shader = Shader.Find( "Standard" );
 
 		Material mat = new Material( shader );
+		Color color = PlacementFeedbackColors.ValidGhost;
 		mat.color = color;
 
 		if ( mat.HasProperty( "_BaseColor" ) )

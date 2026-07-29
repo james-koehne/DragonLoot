@@ -25,6 +25,7 @@ Shader "DragonLoot/Gold Pile Stylized"
         _DeformScale("Deform Height Scale", Range(0, 8)) = 1.5
         [HideInInspector] _DeformWorldSize("Deform World Size", Float) = 4
         [HideInInspector] _DeformResolution("Deform Resolution", Float) = 64
+        [HideInInspector] _GroundLevelHeight("Ground Level Height", Float) = 0.01
 
         _WorldTiling("World Tiling", Float) = 0.35
 

@@ -11,7 +11,11 @@ public class PlayerInteractionDefinition : ScriptableObject
 	public LayerMask interactMask;
 
 	[Header( "Pickup Input" )]
-	[Tooltip( "Seconds between repeated pickup/interact while primary interact is held. Tap still picks up once immediately." )]
+	[Tooltip( "Seconds between the first pickup/interact and the second while primary interact is held. Tap still picks up once immediately." )]
+	[Min( 0f )]
+	public float pickupHoldInitialDelay = 0.2f;
+
+	[Tooltip( "Seconds between repeated pickup/interact after the initial hold delay. Tap still picks up once immediately." )]
 	[Min( 0.05f )]
 	public float pickupRepeatInterval = 0.25f;
 
@@ -33,7 +37,7 @@ public class PlayerInteractionDefinition : ScriptableObject
 	[Min( 0f )]
 	public float throwUpBias = 0.35f;
 
-	[Tooltip( "Fraction of player planar velocity added to thrown treasure." )]
+	[Tooltip( "Fraction of player velocity added to thrown treasure (planar always; vertical while airborne)." )]
 	[Range( 0f, 1f )]
 	public float throwInheritPlanarScale = 1f;
 
@@ -47,13 +51,21 @@ public class PlayerInteractionDefinition : ScriptableObject
 	public float softThrowUpScale = 0.35f;
 
 	[Header( "Throw / Place Input" )]
-	[Tooltip( "Seconds between repeated throw/place while secondary interact is held. Tap still releases once immediately." )]
+	[Tooltip( "Seconds between the first throw/place and the second while secondary interact is held. Tap still releases once immediately." )]
+	[Min( 0f )]
+	public float throwPlaceHoldInitialDelay = 0.2f;
+
+	[Tooltip( "Seconds between repeated throw/place after the initial hold delay. Tap still releases once immediately." )]
 	[Min( 0.05f )]
 	public float throwPlaceRepeatInterval = 0.25f;
+
+	[Header( "Pickable Focus Outline" )]
+	public HoverOutlineVisualSettings pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
 	void OnValidate()
 	{
 		interactRange = Mathf.Max( 0.1f, interactRange );
+		pickupHoldInitialDelay = Mathf.Max( 0f, pickupHoldInitialDelay );
 		pickupRepeatInterval = Mathf.Max( 0.05f, pickupRepeatInterval );
 		dropUpBias = Mathf.Max( 0f, dropUpBias );
 		throwForce = Mathf.Max( 0f, throwForce );
@@ -67,6 +79,11 @@ public class PlayerInteractionDefinition : ScriptableObject
 		throwInheritPlanarScale = Mathf.Clamp01( throwInheritPlanarScale );
 		softThrowSpeedScale = Mathf.Clamp01( softThrowSpeedScale );
 		softThrowUpScale = Mathf.Clamp01( softThrowUpScale );
+		throwPlaceHoldInitialDelay = Mathf.Max( 0f, throwPlaceHoldInitialDelay );
 		throwPlaceRepeatInterval = Mathf.Max( 0.05f, throwPlaceRepeatInterval );
+		if ( pickableOutline == null )
+			pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
+		else
+			pickableOutline.Validate();
 	}
 }

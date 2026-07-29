@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Ensures Player and Collectable never physically collide (CharacterController / Rigidbody).
 /// Raycasts still hit Collectable via interact masks.
+/// CharacterController ignores IgnoreLayerCollision, so collectables are also excluded on the controller.
 /// </summary>
 public static class PhysicsLayers
 {
@@ -40,5 +41,20 @@ public static class PhysicsLayers
 
 		if ( root.layer != player )
 			root.layer = player;
+	}
+
+	/// <summary>
+	/// CharacterController does not honor Physics.IgnoreLayerCollision — exclude Collectable explicitly.
+	/// </summary>
+	public static void EnsureCharacterControllerIgnoresCollectables( CharacterController controller )
+	{
+		if ( controller == null )
+			return;
+
+		int collectable = LayerMask.NameToLayer( CollectableLayerName );
+		if ( collectable < 0 )
+			return;
+
+		controller.excludeLayers |= 1 << collectable;
 	}
 }

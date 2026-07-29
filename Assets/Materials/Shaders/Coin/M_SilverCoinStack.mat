@@ -45,9 +45,9 @@ Material:
     - _CoinEdgeBevelWidth: 0.12
     - _Cull: 2
     - _Cutoff: 0.5
-    - _FresnelIntensity: 0.3
+    - _FresnelIntensity: 0.35
     - _FresnelPower: 4
-    - _GrooveDarkness: 0.5
+    - _GrooveDarkness: 0.35
     - _GrooveMetallicScale: 0.92
     - _GrooveNormalBias: 1
     - _GrooveNormalStrength: 0.65
@@ -61,21 +61,32 @@ Material:
     - _RidgeSmoothnessScale: 1
     - _RidgeSoftness: 0.02
     - _SeamClipGrooveOnly: 0
-    - _SeamClipWidth: 0.02
-    - _SeamNormalStrength: 2
-    - _SeamSideClip: 1
-    - _SeamSoftAO: 0
+    - _SeamClipWidth: 0.12
+    - _SeamNormalStrength: 0.55
+    - _SeamSideClip: 0
+    - _SeamSoftAO: 0.4
     - _SeamViewAlignEnd: 0.92
     - _SeamViewAlignStart: 0.7
     - _SeamWorldOffsetMax: 0.012
+    - _ShineBoost: 0.35
     - _SideBumpScale: 0.35
     - _SideFacetFrequency: 12
     - _SideFacetStrength: 0.04
     - _Smoothness: 0.75
+    - _SparkleCoverage: 0.3
+    - _SparkleDensity: 14
+    - _SparkleEnabled: 1
+    - _SparkleFlicker: 0.45
+    - _SparkleIntensity: 1.5
+    - _SparkleSharpness: 48
+    - _SparkleSpeed: 2
+    - _SpecularIntensity: 0.75
+    - _SpecularPower: 64
     - _TintVariation: 0.03
     - _ValueVariation: 0.03
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _FresnelColor: {r: 0.85, g: 0.9, b: 1, a: 1}
+    - _SparkleColor: {r: 0.92, g: 0.95, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

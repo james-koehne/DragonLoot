@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: CarryDefinition
   m_EditorClassIdentifier: Assembly-CSharp::CarryDefinition
   maxCarryWeight: 100
-  minBurdenedMoveSpeedScale: 0.08
+  minBurdenedMoveSpeedScale: 1
   holdLocalOffset: {x: -0.5, y: -0.2, z: 0.45}
   holdLocalEuler: {x: 0, y: 0, z: 0}
   activeItemOffset: {x: 0.4, y: -0.2, z: 0.45}
@@ -39,5 +39,5 @@ MonoBehaviour:
   strafeSway: 0.04
   moveSway: 0.03
   handMotionSmoothSpeed: 12
-  uprightPitchFavor: 0.65
+  uprightPitchFavor: 0.6
   uprightSmoothSpeed: 10

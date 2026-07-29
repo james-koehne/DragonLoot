@@ -124,10 +124,28 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( !TryResolveStackPoint( item, out Vector3 placePos, out Quaternion placeRot ) )
 			return false;
 
+		Vector3 scale = item.GetWorldScale();
+		TreasureItem bottom = TreasureSupportStack.FindColumnBottom( _baseItem );
+		if ( bottom == null )
+			bottom = _baseItem;
+
+		float columnHeight = 0f;
+		TreasureSupportStack.CollectColumn( bottom, SupportBuffer );
+		for ( int i = 0; i < SupportBuffer.Count; i++ )
+			columnHeight += TreasureStackSpacing.GetStep( SupportBuffer[ i ] );
+		SupportBuffer.Clear();
+
+		columnHeight = Mathf.Max( TreasureStackSpacing.FallbackStep, columnHeight );
+		float diameter = Mathf.Max( scale.x, scale.z );
+		Vector3 contact = bottom != null ? bottom.transform.position : placePos;
+		preview.SetStackVolume(
+			contact,
+			placeRot,
+			scale,
+			columnHeight,
+			diameter,
+			CanPlace( item, in query ) );
 		preview.Position = placePos;
-		preview.Rotation = placeRot;
-		preview.Scale = item.GetWorldScale();
-		preview.IsValid = CanPlace( item, in query );
 		return true;
 	}
 
@@ -270,7 +288,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 				continue;
 
 			ends[ i ] = anchorDropPos + Vector3.up * stackedY;
-			rots[ i ] = FlattenUpright( anchorRot );
+			rots[ i ] = TreasureOrientation.FlattenUpright( anchorRot );
 			stackedY += TreasureStackSpacing.GetStep( member );
 		}
 	}
@@ -300,7 +318,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		Vector3 bottomPos = bottom.transform.position;
 		// Next center = bottom center + one step per settled coin + in-flight reservations.
 		placePos = new Vector3( bottomPos.x, bottomPos.y + settledHeight + pending, bottomPos.z );
-		placeRot = FlattenUpright( bottom.transform.rotation );
+		placeRot = TreasureOrientation.FlattenUpright( bottom.transform.rotation );
 		SupportBuffer.Clear();
 		return true;
 	}
@@ -399,35 +417,6 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		return true;
 	}
 
-	static Quaternion FlattenUpright( Quaternion source )
-	{
-		Vector3 flatForward = Vector3.ProjectOnPlane( source * Vector3.forward, Vector3.up );
-		if ( flatForward.sqrMagnitude < 0.0001f )
-			flatForward = Vector3.ProjectOnPlane( source * Vector3.right, Vector3.up );
-		if ( flatForward.sqrMagnitude < 0.0001f )
-			flatForward = Vector3.forward;
-		return Quaternion.LookRotation( flatForward.normalized, Vector3.up );
-	}
-
-	static void ReleaseClusterOntoPoint( List<TreasureItem> cluster, Vector3 anchorDropPos, Quaternion anchorRot )
-	{
-		if ( cluster == null || cluster.Count == 0 )
-			return;
-
-		float stackedY = 0f;
-		for ( int i = 0; i < cluster.Count; i++ )
-		{
-			TreasureItem member = cluster[ i ];
-			if ( member == null )
-				continue;
-
-			Vector3 pos = anchorDropPos + Vector3.up * stackedY;
-			Quaternion rot = FlattenUpright( anchorRot );
-			member.EnterSettledPhysics( pos, rot );
-			stackedY += TreasureStackSpacing.GetStep( member );
-		}
-	}
-
 	static void SettleSupportColumn( TreasureItem baseItem )
 	{
 		RestackColumnByThickness( baseItem );
@@ -456,7 +445,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 			return;
 
 		Vector3 basePos = bottom.transform.position;
-		Quaternion baseRot = FlattenUpright( bottom.transform.rotation );
+		Quaternion baseRot = TreasureOrientation.FlattenUpright( bottom.transform.rotation );
 		float stackedY = 0f;
 
 		for ( int i = 0; i < column.Count; i++ )
@@ -468,7 +457,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 			member.ApplyWorldScale();
 
 			Vector3 pos = basePos + Vector3.up * stackedY;
-			Quaternion rot = FlattenUpright( member.transform.rotation );
+			Quaternion rot = TreasureOrientation.FlattenUpright( member.transform.rotation );
 			if ( i == 0 )
 				rot = baseRot;
 

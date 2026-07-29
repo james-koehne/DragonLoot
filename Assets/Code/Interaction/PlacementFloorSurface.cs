@@ -6,6 +6,9 @@ using UnityEngine;
 /// </summary>
 public static class PlacementFloorSurface
 {
+	/// <summary>Minimum upright alignment for a surface to count as placeable floor (vs wall/ceiling).</summary>
+	public const float MinFloorUpDot = 0.35f;
+
 	public static bool IsFloorCollider( Collider collider )
 	{
 		if ( collider == null )
@@ -31,6 +34,21 @@ public static class PlacementFloorSurface
 		}
 
 		return true;
+	}
+
+	/// <summary>Floor collider with a walkable (mostly upward) surface normal.</summary>
+	public static bool IsWalkableFloorHit( in RaycastHit hit )
+	{
+		if ( hit.collider == null )
+			return false;
+
+		if ( !IsFloorCollider( hit.collider ) )
+			return false;
+
+		Vector3 normal = hit.normal.sqrMagnitude > 0.0001f
+			? hit.normal.normalized
+			: Vector3.up;
+		return Vector3.Dot( normal, Vector3.up ) >= MinFloorUpDot;
 	}
 
 	/// <summary>

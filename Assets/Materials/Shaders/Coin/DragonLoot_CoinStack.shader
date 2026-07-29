@@ -14,12 +14,27 @@ Shader "DragonLoot/Coin Stack"
         _SideBumpScale("Side Normal Scale", Range(0, 2)) = 0.35
 
         [Header(Reflection)]
-        _ReflectionFloor("Reflection Floor", Range(0, 0.5)) = 0.12
+        _ReflectionFloor("Reflection Floor", Range(0, 1)) = 0.12
 
         [Header(Fresnel)]
         [HDR] _FresnelColor("Fresnel Color", Color) = (1, 0.82, 0.45, 1)
-        _FresnelIntensity("Fresnel Intensity", Range(0, 2)) = 0.25
+        _FresnelIntensity("Fresnel Intensity", Range(0, 4)) = 0.25
         _FresnelPower("Fresnel Power", Range(1, 8)) = 4
+
+        [Header(Shine)]
+        _ShineBoost("Shine Boost", Range(0, 2)) = 0.35
+        _SpecularIntensity("Specular Intensity", Range(0, 4)) = 0.75
+        _SpecularPower("Specular Power", Range(8, 256)) = 64
+
+        [Header(Sparkles)]
+        [Toggle] _SparkleEnabled("Sparkles", Float) = 1
+        [HDR] _SparkleColor("Sparkle Color", Color) = (1, 0.92, 0.65, 1)
+        _SparkleIntensity("Sparkle Intensity", Range(0, 8)) = 1.5
+        _SparkleDensity("Sparkle Density", Range(1, 64)) = 14
+        _SparkleSharpness("Sparkle Sharpness", Range(4, 128)) = 48
+        _SparkleSpeed("Sparkle Speed", Range(0, 10)) = 2
+        _SparkleCoverage("Sparkle Coverage", Range(0.05, 1)) = 0.3
+        _SparkleFlicker("Sparkle Flicker", Range(0, 1)) = 0.45
 
         [Header(Instance Variation)]
         _TintVariation("Tint Variation", Range(0, 0.2)) = 0.04

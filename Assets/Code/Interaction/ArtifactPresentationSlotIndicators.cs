@@ -22,8 +22,6 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 	static readonly int TintColorId = Shader.PropertyToID( "_TintColor" );
 	static readonly Color CyanTint = new Color( 0.35f, 0.95f, 1.4f, 0.55f );
 	static readonly Color DimCyanTint = new Color( 0.35f, 0.95f, 1.4f, 0.28f );
-	static readonly Color GreenTint = new Color( 0.25f, 0.9f, 0.35f, 0.6f );
-	static readonly Color RedTint = new Color( 0.95f, 0.25f, 0.2f, 0.65f );
 
 	[SerializeField]
 	Material indicatorMaterial;
@@ -171,6 +169,15 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			return;
 
 		UpdateSlotVisualState( slotIndex );
+	}
+
+	public void RefreshAimFeedback()
+	{
+		if ( _slotVisuals == null )
+			return;
+
+		for ( int i = 0; i < _slotVisuals.Length; i++ )
+			UpdateSlotVisualState( i );
 	}
 
 	void RebuildVisuals()
@@ -477,7 +484,7 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 		if ( Application.isPlaying && _table.IsAimFeedbackFresh )
 		{
 			if ( _table.AimedSlotIndex == slotIndex )
-				tint = _table.AimedSlotValid ? GreenTint : RedTint;
+				tint = _table.AimedSlotValid ? PlacementFeedbackColors.ValidIndicator : PlacementFeedbackColors.InvalidIndicator;
 			else if ( _table.AimedSlotIndex >= 0 )
 				tint = DimCyanTint;
 		}

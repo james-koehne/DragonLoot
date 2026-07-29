@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfe025c4ea4ea6246ba479da7e942108, type: 3}
   m_Name: TreasureSurfaceDefinition
   m_EditorClassIdentifier: Assembly-CSharp::TreasureSurfaceDefinition
-  worldOrigin: {x: 0, y: 0, z: 0}
-  worldSizeX: 128
-  worldSizeZ: 128
+  worldOrigin: {x: 0, y: 0, z: 128}
+  worldSizeX: 256
+  worldSizeZ: 384
   chunkSize: 8
   cellsPerChunk: 64
   baseHeight: 0
@@ -28,22 +28,39 @@ MonoBehaviour:
   sleepSpeedThreshold: 0.05
   sleepRestTime: 0.25
   gravity: 18
-  flowAcceleration: 12
-  maxSlideSpeed: 14
+  flowAcceleration: 6
+  maxSlideSpeed: 8
   throwBallisticGravity: 18
   throwLandingSpeedScale: 0.85
   throwCoinArcScale: 1.35
   throwItemArcScale: 1
   autoStackRadius: 0.36
   autoStackHeightTolerance: 0.65
-  coinFrictionScale: 0.7
+  coinFrictionScale: 0.8
   coinBounceScale: 0.8
-  coinSpeedScale: 2
-  gemFrictionScale: 0.7
+  coinSpeedScale: 1
+  gemFrictionScale: 0.8
   gemBounceScale: 1.4
   gemSpeedScale: 1.35
   gemWobble: 0.15
+  artifactFrictionScale: 2.5
+  artifactSpeedScale: 0.35
   artifactSettleSpeed: 0.35
+  flowUphillResistance: 5
+  coinMaxBounces: 1
+  coinBounceRestitution: 0.55
+  coinPostBounceFlipSpins: 14
+  hopImpactSpeedThreshold: 0.35
+  gemMaxBounces: 2
+  gemBounceRestitution: 0.45
+  artifactMaxBounces: 1
+  artifactBounceRestitution: 0.18
+  gemRollAngularScale: 6
+  gemAngularDamping: 2.5
+  gemPushRadius: 0.18
+  gemPushStrength: 8
+  gemVsCoinPushRadiusScale: 1.15
+  gemSeatUsesBottomOffset: 1
   materials:
   - material: 0
     friction: 0.7

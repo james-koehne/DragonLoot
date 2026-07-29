@@ -18,9 +18,19 @@ MonoBehaviour:
   variant: Silver
   value: 2
   weight: 1
+  exclusiveCarry: 0
+  usesHeavyThrow: 0
+  throwForceScale: 1
+  throwUpBiasScale: 1
   rigidbodyMass: 0.07
   drag: 0.5
   angularDrag: 0.5
+  sleepThreshold: 0.01
+  autoToppleStrength: 2.5
+  maxUprightAngle: 35
+  physicsStabilizationDelay: 0.35
+  pickupRadius: 0.35
+  collideWithPlayerOnPile: 0
   icon: {fileID: 0}
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
@@ -32,5 +42,7 @@ MonoBehaviour:
     m_EditorAssetChanged: 0
   worldScale: {x: 0.2, y: 0.2, z: 0.2}
   heldScale: {x: 0.2, y: 0.2, z: 0.2}
+  activeHeldLocalEuler: {x: 0, y: 0, z: 0}
+  heldStackLocalEuler: {x: 0, y: 0, z: 0}
   canStack: 1
   coinThickness: 0.041

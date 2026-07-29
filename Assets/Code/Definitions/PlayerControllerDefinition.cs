@@ -141,6 +141,22 @@ public class PlayerControllerDefinition : ScriptableObject
 	[Min( 0f )]
 	public float slideReverseBrakeScale = 2f;
 
+	[Tooltip( "Max planar speed granted by the post-slide exit boost." )]
+	[Min( 0f )]
+	public float slideExitBoostMaxSpeed = 24f;
+
+	[Tooltip( "Multiplier applied to slide speed when exiting onto flatter ground." )]
+	[Min( 0f )]
+	public float slideExitBoostMultiplier = 1f;
+
+	[Tooltip( "Deceleration from boosted exit speed back toward walk/sprint speed." )]
+	[Min( 0f )]
+	public float slideExitBoostDecay = 70f;
+
+	[Tooltip( "How quickly exit boost direction blends toward move input." )]
+	[Min( 0f )]
+	public float slideExitBoostSteer = 25f;
+
 	void OnValidate()
 	{
 		walkSpeed = Mathf.Max( 0f, walkSpeed );
@@ -175,5 +191,9 @@ public class PlayerControllerDefinition : ScriptableObject
 		slideBrakeExitDot = Mathf.Clamp01( slideBrakeExitDot );
 		slideBrakeExitSpeed = Mathf.Max( 0f, slideBrakeExitSpeed );
 		slideReverseBrakeScale = Mathf.Max( 0f, slideReverseBrakeScale );
+		slideExitBoostMaxSpeed = Mathf.Max( 0f, slideExitBoostMaxSpeed );
+		slideExitBoostMultiplier = Mathf.Max( 0f, slideExitBoostMultiplier );
+		slideExitBoostDecay = Mathf.Max( 0f, slideExitBoostDecay );
+		slideExitBoostSteer = Mathf.Max( 0f, slideExitBoostSteer );
 	}
 }

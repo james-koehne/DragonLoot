@@ -11,6 +11,17 @@ CBUFFER_START(UnityPerMaterial)
     half4 _FresnelColor;
     half _FresnelIntensity;
     half _FresnelPower;
+    half _ShineBoost;
+    half _SpecularIntensity;
+    half _SpecularPower;
+    half _SparkleEnabled;
+    half4 _SparkleColor;
+    half _SparkleIntensity;
+    half _SparkleDensity;
+    half _SparkleSharpness;
+    half _SparkleSpeed;
+    half _SparkleCoverage;
+    half _SparkleFlicker;
     half _TintVariation;
     half _ValueVariation;
     half _CoinCount;

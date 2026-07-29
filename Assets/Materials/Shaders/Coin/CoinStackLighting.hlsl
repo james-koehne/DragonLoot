@@ -5,10 +5,15 @@
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 #include "CoinStackBand.hlsl"
 #include "CoinStackSeamClip.hlsl"
+#include "CoinStackSparkle.hlsl"
 
+#if defined(_COIN_STACK_MULTI)
+#include "CoinStackMulti.hlsl"
+#else
 TEXTURE2D(_BaseMap);            SAMPLER(sampler_BaseMap);
 TEXTURE2D(_BumpMap);            SAMPLER(sampler_BumpMap);
 TEXTURE2D(_MetallicGlossMap);   SAMPLER(sampler_MetallicGlossMap);
+#endif
 
 half CoinStackSchlickFresnel(half ndotv, half power)
 {
@@ -116,8 +121,16 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
         bandShade = lerp(1.0h, 0.92h, (half)smoothstep(0.75, 1.0, rim));
     }
 
+#if defined(_COIN_STACK_MULTI)
+    int typeId = CoinStackResolveTypeId(input.stackY01, coinCount, isCap, input.normalOS);
+    half4 albedoSample = CoinStackSampleAlbedoMulti(sampleUv, typeId);
+    half4 maskSample = CoinStackSampleMaskMulti(sampleUv, typeId);
+    half3 fresnelRgb = CoinStackTypeFresnelRgb(typeId);
+#else
     half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, sampleUv) * _BaseColor;
     half4 maskSample = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, sampleUv);
+    half3 fresnelRgb = _FresnelColor.rgb;
+#endif
 
     half seamAO = CoinStackSeamSoftAO(seam);
     half3 albedo = albedoSample.rgb * tint * value * bandShade * seamAO;
@@ -126,6 +139,8 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
 
     half metallic = saturate(maskSample.r * _Metallic);
     half smoothness = saturate(maskSample.a * _Smoothness);
+    // Push toward polished metal without forcing a hard 1.0 clamp look.
+    smoothness = saturate(lerp(smoothness, 1.0h, saturate(_ShineBoost) * 0.55h));
 
     if (!isCap)
     {
@@ -135,7 +150,11 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     }
 
     half bumpScale = isCap ? _BumpScale : _SideBumpScale;
+#if defined(_COIN_STACK_MULTI)
+    half3 normalTS = CoinStackSampleNormalTSMulti(sampleUv, typeId, bumpScale);
+#else
     half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, sampleUv), bumpScale);
+#endif
     float sgn = input.tangentWS.w;
     float3 bitangent = sgn * cross(input.normalWS.xyz, input.tangentWS.xyz);
     half3x3 tangentToWorld = half3x3(input.tangentWS.xyz, bitangent, input.normalWS.xyz);
@@ -184,10 +203,26 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
     color.rgb = max(color.rgb, ambientFloor * metallic);
 
+    Light mainLight = GetMainLight();
+    half3 lightDirWS = mainLight.direction;
+    half3 halfDir = SafeNormalize(lightDirWS + inputData.viewDirectionWS);
+    half ndoth = saturate(dot(inputData.normalWS, halfDir));
+    half specularPeek = pow(ndoth, max(_SpecularPower, 8.0h));
+    half shineMul = 1.0h + saturate(_ShineBoost);
+    color.rgb += albedo * specularPeek * _SpecularIntensity * metallic * shineMul * mainLight.color * mainLight.distanceAttenuation;
+
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));
     half fresnel = CoinStackSchlickFresnel(ndotv, _FresnelPower);
     half litGate = saturate(Luminance(color.rgb) * 2.0h + _ReflectionFloor);
-    color.rgb += _FresnelColor.rgb * fresnel * _FresnelIntensity * metallic * litGate;
+    half fresnelAmt = _FresnelIntensity * shineMul;
+    color.rgb += fresnelRgb * fresnel * fresnelAmt * metallic * litGate;
+
+    color.rgb += CoinStackSparkle(
+        input.positionWS,
+        inputData.normalWS,
+        inputData.viewDirectionWS,
+        lightDirWS,
+        metallic);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
     return color;

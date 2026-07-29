@@ -105,7 +105,72 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	public float gemSpeedScale = 1.35f;
 	public float gemWobble = 0.08f;
 
+	[Tooltip( "Friction multiplier for crowns/artifacts while settling on the surface." )]
+	[Min( 0.1f )]
+	public float artifactFrictionScale = 2.5f;
+
+	[Tooltip( "Max slide speed multiplier for crowns/artifacts." )]
+	[Min( 0.05f )]
+	public float artifactSpeedScale = 0.35f;
+
+	[Tooltip( "Legacy settle rate; kept for inspector continuity. Artifact decel uses artifactFrictionScale." )]
 	public float artifactSettleSpeed = 0.35f;
+
+	[Tooltip( "Extra gravity-scaled deceleration when sliding against painted flow (uphill)." )]
+	[Min( 0f )]
+	public float flowUphillResistance = 5f;
+
+	[Header( "Hop / Bounce" )]
+	[Tooltip( "How many vertical hops a coin gets after first surface contact (then slides)." )]
+	[Min( 0 )]
+	public int coinMaxBounces = 1;
+
+	[Range( 0f, 1.5f )]
+	public float coinBounceRestitution = 0.55f;
+
+	[Tooltip( "Flip angular speed (rad/s) applied on the coin's first bounce." )]
+	[Min( 0f )]
+	public float coinPostBounceFlipSpins = 14f;
+
+	[Tooltip( "Min horizontal impact speed that triggers the first hop." )]
+	[Min( 0f )]
+	public float hopImpactSpeedThreshold = 0.35f;
+
+	[Min( 0 )]
+	public int gemMaxBounces = 2;
+
+	[Range( 0f, 1.5f )]
+	public float gemBounceRestitution = 0.45f;
+
+	[Tooltip( "How many low hops crowns/artifacts get after a throw landing." )]
+	[Min( 0 )]
+	public int artifactMaxBounces = 1;
+
+	[Tooltip( "Heavy bounce damping for crowns/artifacts (much lower than coins/gems)." )]
+	[Range( 0f, 1.5f )]
+	public float artifactBounceRestitution = 0.18f;
+
+	[Tooltip( "Converts horizontal speed into gem roll angular velocity." )]
+	[Min( 0f )]
+	public float gemRollAngularScale = 6f;
+
+	[Min( 0f )]
+	public float gemAngularDamping = 2.5f;
+
+	[Header( "Gem Push" )]
+	[Min( 0.01f )]
+	public float gemPushRadius = 0.18f;
+
+	[Min( 0f )]
+	public float gemPushStrength = 8f;
+
+	[Tooltip( "Scales push radius when separating gems from coins / coin stacks." )]
+	[Min( 0.1f )]
+	public float gemVsCoinPushRadiusScale = 1.15f;
+
+	[Header( "Seating" )]
+	[Tooltip( "Seat gems/artifacts using mesh bottom offset instead of pivot-on-plane." )]
+	public bool gemSeatUsesBottomOffset = true;
 
 	[Header( "Materials" )]
 	public TreasureSurfaceMaterialParams[] materials;

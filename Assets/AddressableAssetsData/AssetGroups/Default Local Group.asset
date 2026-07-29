@@ -128,6 +128,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9b148b7ec87286a4ca086c9608bbf586
+    m_Address: Assets/Addressables/Treasure/Gems/TopazVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9d5bce16c68a42c8ae4a696237afaff1
     m_Address: Assets/Definitions/EnvironmentDefinition.asset
     m_ReadOnly: 0
@@ -226,6 +231,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cf67fff312cfb7d4991e61db64ad079f
+    m_Address: Assets/Addressables/Treasure/Gems/RubyVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d2570706d97a2c14ca3e644c66e72d4a
     m_Address: Assets/Addressables/Treasure/Artifacts/GoldenCoronaVisual.prefab
     m_ReadOnly: 0
@@ -243,6 +253,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: df01a7829dee64d48b4cfdff37ca8c82
     m_Address: Assets/Addressables/Treasure/Artifacts/RoyalWineCupVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: eedfcfef417e10c4eb34affe9b184e7c
+    m_Address: Assets/Addressables/Treasure/Gems/AmethystVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

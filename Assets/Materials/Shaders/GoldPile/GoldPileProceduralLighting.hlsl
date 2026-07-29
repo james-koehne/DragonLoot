@@ -113,6 +113,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
 {
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+    ProcClipBelowGround(input.deformUV);
 
     float3 positionWS = input.positionWS;
     float3 geomNormalWS = normalize(input.normalWS);

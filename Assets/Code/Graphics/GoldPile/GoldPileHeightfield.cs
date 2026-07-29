@@ -77,6 +77,7 @@ public sealed class GoldPileHeightfield
 	const float BlurKernelCenter = 4f;
 	const float BlurKernelSum = 16f;
 	const float DirtyRectFullUploadThreshold = 0.25f;
+	const int MaxCarveBlurPadCells = 4;
 
 	float[] _heights;
 	float[] _blurScratch;
@@ -92,20 +93,28 @@ public sealed class GoldPileHeightfield
 	int _resolution;
 	float _worldSize;
 	float _maxHeight;
+	float _groundLevel = 0.01f;
 	float _initialVolume;
 
 	public int Resolution => _resolution;
 	public float WorldSize => _worldSize;
 	public float MaxHeight => _maxHeight;
+	public float GroundLevel => _groundLevel;
 	public Texture2D Texture => _texture;
 	public bool IsDirty => _dirty;
 	public bool IsInitialized => _heights != null && _texture != null;
 
 	public void Initialize( int res, float size, float height )
 	{
+		Initialize( res, size, height, groundLevel: 0.01f );
+	}
+
+	public void Initialize( int res, float size, float height, float groundLevel )
+	{
 		_resolution = Mathf.Max( 8, res );
 		_worldSize = Mathf.Max( 0.1f, size );
 		_maxHeight = Mathf.Max( 0.01f, height );
+		_groundLevel = Mathf.Max( 0f, groundLevel );
 
 		int count = _resolution * _resolution;
 		_heights = new float[ count ];
@@ -131,6 +140,39 @@ public sealed class GoldPileHeightfield
 		};
 
 		MarkDirtyFull();
+	}
+
+	public void SetGroundLevel( float groundLevel )
+	{
+		float next = Mathf.Max( 0f, groundLevel );
+		if ( Mathf.Abs( next - _groundLevel ) < 0.0001f )
+			return;
+
+		_groundLevel = next;
+		if ( _heights != null )
+			MarkDirtyFull();
+	}
+
+	/// <summary>True when the heightfield surface at this local XZ is at or above ground level.</summary>
+	public bool ExistsAtLocal( float localX, float localZ )
+	{
+		if ( _heights == null )
+			return false;
+		return SampleNormalized( localX, localZ ) * _maxHeight >= _groundLevel;
+	}
+
+	/// <summary>True when the heightfield surface under this world point is at or above ground level.</summary>
+	public bool ExistsAtWorld( Vector3 worldPos, Transform pileRoot )
+	{
+		if ( pileRoot == null || _heights == null )
+			return false;
+
+		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
+		float half = _worldSize * 0.5f;
+		if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+			return false;
+
+		return ExistsAtLocal( local.x, local.z );
 	}
 
 	public void Release()
@@ -1344,7 +1386,7 @@ public sealed class GoldPileHeightfield
 		Vector3 prevP = origin + direction * prevT;
 		float prevSurface = SampleNormalized( prevP.x, prevP.z ) * _maxHeight;
 		float prevSign = prevP.y - prevSurface;
-		bool havePrev = IsInsideFootprint( prevP.x, prevP.z, half );
+		bool havePrev = IsInsideFootprint( prevP.x, prevP.z, half ) && prevSurface >= _groundLevel;
 
 		for ( int i = 1; i <= CoarseSteps; i++ )
 		{
@@ -1359,12 +1401,29 @@ public sealed class GoldPileHeightfield
 			}
 
 			float surface = SampleNormalized( p.x, p.z ) * _maxHeight;
+			if ( surface < _groundLevel )
+			{
+				havePrev = false;
+				prevT = t;
+				prevP = p;
+				continue;
+			}
+
 			float sign = p.y - surface;
 			if ( havePrev && prevSign > 0f && sign <= 0f )
 			{
 				float tHit = RefineSurfaceCrossing( origin, direction, prevT, t, half );
 				Vector3 localHit = origin + direction * tHit;
 				float h = SampleNormalized( localHit.x, localHit.z ) * _maxHeight;
+				if ( h < _groundLevel )
+				{
+					havePrev = true;
+					prevSign = sign;
+					prevT = t;
+					prevP = p;
+					continue;
+				}
+
 				localHit.y = h;
 				worldHit = pileRoot.TransformPoint( localHit );
 				worldNormal = SampleWorldNormal( worldHit, pileRoot );
@@ -1473,6 +1532,9 @@ public sealed class GoldPileHeightfield
 		if ( _heights == null || volumeToRemove <= 0f )
 			return;
 
+		GoldPileEditTiming.Begin( "GoldPile.CarveBrush" );
+		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
+
 		radius = Mathf.Max( 0.05f, radius );
 		float radiusSq = radius * radius;
 		float half = _worldSize * 0.5f;
@@ -1501,7 +1563,10 @@ public sealed class GoldPileHeightfield
 		}
 
 		if ( weightSum < 1e-6f )
+		{
+			GoldPileEditTiming.End();
 			return;
+		}
 
 		float invWeight = volumeToRemove / weightSum;
 		for ( int z = minZ; z <= maxZ; z++ )
@@ -1522,8 +1587,18 @@ public sealed class GoldPileHeightfield
 			}
 		}
 
-		int pad = Mathf.Max( 2, Mathf.CeilToInt( radius / cell ) );
+		// Cap blur pad so large carve radii do not expand work to ~brush diameter.
+		int pad = Mathf.Min( MaxCarveBlurPadCells, Mathf.Max( 2, Mathf.CeilToInt( radius / cell ) ) );
 		BlurRegion( minX, maxX, minZ, maxZ, pad );
+
+		if ( sw != null )
+		{
+			sw.Stop();
+			GoldPileEditTiming.LogIfEnabled(
+				$"[GoldPileEdit] carve brush={sw.Elapsed.TotalMilliseconds:F2}ms pad={pad} cells=({maxX - minX + 1}x{maxZ - minZ + 1})" );
+		}
+
+		GoldPileEditTiming.End();
 	}
 
 	static float SoftFalloff( float distSq, float radiusSq )
@@ -1602,7 +1677,7 @@ public sealed class GoldPileHeightfield
 			}
 		}
 
-		int pad = Mathf.Max( 2, Mathf.CeilToInt( radius / cell ) );
+		int pad = Mathf.Min( MaxCarveBlurPadCells, Mathf.Max( 2, Mathf.CeilToInt( radius / cell ) ) );
 		BlurRegion( minX, maxX, minZ, maxZ, pad );
 	}
 
@@ -1693,6 +1768,9 @@ public sealed class GoldPileHeightfield
 		if ( !_dirty || _texture == null || _heights == null || _rawPixels == null )
 			return false;
 
+		GoldPileEditTiming.Begin( "GoldPile.UploadDeform" );
+		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
+
 		int total = _heights.Length;
 		int dirtyW = _dirtyMaxX - _dirtyMinX + 1;
 		int dirtyCount = dirtyW * ( _dirtyMaxZ - _dirtyMinZ + 1 );
@@ -1701,7 +1779,7 @@ public sealed class GoldPileHeightfield
 		if ( useFull )
 		{
 			for ( int i = 0; i < total; i++ )
-				_rawPixels[ i ] = HeightToUShort( _heights[ i ] );
+				_rawPixels[ i ] = HeightToUShort( HeightForGpu( _heights[ i ] ) );
 		}
 		else
 		{
@@ -1709,13 +1787,22 @@ public sealed class GoldPileHeightfield
 			{
 				int row = Index( _dirtyMinX, z );
 				for ( int x = 0; x < dirtyW; x++ )
-					_rawPixels[ row + x ] = HeightToUShort( _heights[ row + x ] );
+					_rawPixels[ row + x ] = HeightToUShort( HeightForGpu( _heights[ row + x ] ) );
 			}
 		}
 
 		_texture.SetPixelData( _rawPixels, 0 );
 		_texture.Apply( false, false );
 		ClearDirtyRect();
+
+		if ( sw != null )
+		{
+			sw.Stop();
+			GoldPileEditTiming.LogIfEnabled(
+				$"[GoldPileEdit] deform upload={sw.Elapsed.TotalMilliseconds:F2}ms full={useFull} dirtyCells={dirtyCount}" );
+		}
+
+		GoldPileEditTiming.End();
 		return true;
 	}
 
@@ -1775,6 +1862,17 @@ public sealed class GoldPileHeightfield
 			_dirtyMaxZ = maxZ;
 	}
 
+	/// <summary>
+	/// GPU deform tex treats below-ground cells as empty so the mesh does not displace there.
+	/// CPU buffer keeps authored values for sculpt / volume math.
+	/// </summary>
+	float HeightForGpu( float normalizedHeight )
+	{
+		if ( normalizedHeight * _maxHeight < _groundLevel )
+			return 0f;
+		return normalizedHeight;
+	}
+
 	static ushort HeightToUShort( float h )
 	{
 		return ( ushort )Mathf.Clamp( Mathf.RoundToInt( h * 65535f ), 0, 65535 );
@@ -1787,9 +1885,34 @@ public sealed class GoldPileHeightfield
 }
 
 /// <summary>
-/// Dev toggle for gold-pile edit timing logs (upload / loot / collider).
+/// Dev toggle + Profiler markers for gold-pile edit timing (brush / upload / collider / stamp / loot).
 /// </summary>
 public static class GoldPileEditTiming
 {
 	public static bool Enabled;
+
+	public static void Begin( string name )
+	{
+		UnityEngine.Profiling.Profiler.BeginSample( name );
+	}
+
+	public static void End()
+	{
+		UnityEngine.Profiling.Profiler.EndSample();
+	}
+
+	public static System.Diagnostics.Stopwatch StartWatchIfEnabled()
+	{
+		return Enabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+	}
+
+	public static void LogIfEnabled( string message, UnityEngine.Object context = null )
+	{
+		if ( !Enabled )
+			return;
+		if ( context != null )
+			UnityEngine.Debug.Log( message, context );
+		else
+			UnityEngine.Debug.Log( message );
+	}
 }

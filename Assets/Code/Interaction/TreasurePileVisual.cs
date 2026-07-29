@@ -27,6 +27,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 	[SerializeField]
 	Material pileMaterial;
 
+	[Header( "Loot Layout" )]
+	[Tooltip( "Authored per-pile layout seed mixed with CoreDefinition.lootWorldSeed. 0 = derive from hierarchy path." )]
+	[SerializeField]
+	int lootLayoutSeed;
+
+	public int LootLayoutSeed => lootLayoutSeed;
+
 	[Header( "Authored Height (level)" )]
 	[SerializeField]
 	[HideInInspector]
@@ -97,6 +104,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		if ( _heightfield == null || !_heightfield.IsInitialized )
 			return false;
 
+		if ( !_heightfield.ExistsAtWorld( worldPos, transform ) )
+			return false;
+
 		float surface = _heightfield.SampleWorldHeight( worldPos, transform );
 		Vector3 local = transform.InverseTransformPoint( worldPos );
 		float half = _heightfield.WorldSize * 0.5f;
@@ -111,9 +121,15 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		if ( _heightfield == null || !_heightfield.IsInitialized )
 			return false;
 
-		Vector3 local = transform.InverseTransformPoint( worldPos );
-		float half = _heightfield.WorldSize * 0.5f;
-		return Mathf.Abs( local.x ) <= half && Mathf.Abs( local.z ) <= half;
+		return _heightfield.ExistsAtWorld( worldPos, transform );
+	}
+
+	/// <summary>True when the pile surface exists at this world point (above ground level).</summary>
+	public bool HasPileSurfaceAt( Vector3 worldPos )
+	{
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+			return false;
+		return _heightfield.ExistsAtWorld( worldPos, transform );
 	}
 
 	/// <summary>
@@ -174,6 +190,10 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 	{
 		if ( item == null )
 			return false;
+
+		// Real pile props use outside-fraction pickability — not center-point burial.
+		if ( artifactProps != null && artifactProps.Contains( item ) )
+			return !artifactProps.IsPickable( item );
 
 		return IsPointBuried( item.transform.position, surfaceClearance );
 	}
@@ -340,7 +360,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		}
 
 		if ( lootInstances != null && _definition != null && _heightfield != null )
-			await lootInstances.BindAsync( _definition, _heightfield, transform );
+			await lootInstances.BindAsync( _definition, _heightfield, transform, lootLayoutSeed );
 
 		// Bind may destroy/recreate during Addressables await (domain reload / scene unload).
 		if ( this == null )
@@ -349,7 +369,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		if ( artifactProps != null && _definition != null && _heightfield != null )
 		{
 			GoldPileLootStreamSettings stream = lootInstances != null ? lootInstances.StreamSettings : null;
-			artifactProps.Bind( this, _definition, _heightfield, transform, lootInstances, stream );
+			artifactProps.Bind( this, _definition, _heightfield, transform, lootInstances, stream, lootLayoutSeed );
 		}
 
 		TreasurePileSurfaceBridge bridge = GetComponent<TreasurePileSurfaceBridge>();
@@ -711,7 +731,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 			_heightfield.Release();
 
 		_heightfield = new GoldPileHeightfield();
-		_heightfield.Initialize( res, size, height );
+		TreasurePileDefinition def = ResolveDefinition();
+		float groundLevel = def != null ? def.groundLevelHeight : 0.01f;
+		_heightfield.Initialize( res, size, height, groundLevel );
 
 		if ( HasAuthoredHeight && authoredRes == res )
 			_heightfield.CopyFromNormalizedU16( authoredHeights );
@@ -903,7 +925,14 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 			if ( _heightfield != null )
 				_heightfield.Release();
 			_heightfield = new GoldPileHeightfield();
-			_heightfield.Initialize( res, size, height );
+			TreasurePileDefinition def = ResolveDefinition();
+			float groundLevel = def != null ? def.groundLevelHeight : 0.01f;
+			_heightfield.Initialize( res, size, height, groundLevel );
+		}
+		else if ( _heightfield != null )
+		{
+			TreasurePileDefinition def = ResolveDefinition();
+			_heightfield.SetGroundLevel( def != null ? def.groundLevelHeight : 0.01f );
 		}
 
 		if ( HasAuthoredHeight && authoredRes == res )
@@ -1097,35 +1126,39 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 	void RefreshVisuals( Vector3 worldCenter )
 	{
-		bool time = GoldPileEditTiming.Enabled;
-		System.Diagnostics.Stopwatch sw = null;
-		long brushDone = 0;
-		if ( time )
-			sw = System.Diagnostics.Stopwatch.StartNew();
+		GoldPileEditTiming.Begin( "GoldPile.RefreshVisuals" );
+		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
+		long terrainTicks = 0;
 
 		if ( terrainMesh != null )
 		{
 			terrainMesh.RefreshFromHeightfield();
-			if ( time )
-				brushDone = sw.ElapsedTicks;
+			if ( sw != null )
+				terrainTicks = sw.ElapsedTicks;
 		}
 
+		float lootRadius = _carveRadius * 4f;
 		if ( lootInstances != null )
-			lootInstances.RefreshAfterCarve( worldCenter, _carveRadius * 4f );
+			lootInstances.RefreshAfterCarve( worldCenter, lootRadius );
 
-		if ( artifactProps != null )
-			artifactProps.RepositionAll();
+		if ( artifactProps != null
+			&& artifactProps.MightRevealNear( worldCenter, lootRadius ) )
+		{
+			artifactProps.RefreshAfterCarve();
+		}
 
-		if ( time && sw != null )
+		if ( sw != null )
 		{
 			sw.Stop();
 			double tickMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-			double uploadMs = brushDone * tickMs;
-			double lootMs = ( sw.ElapsedTicks - brushDone ) * tickMs;
-			Debug.Log(
-				$"[GoldPileEdit] upload+mpb={uploadMs:F2}ms loot={lootMs:F2}ms total={sw.Elapsed.TotalMilliseconds:F2}ms (collider deferred)",
+			double terrainMs = terrainTicks * tickMs;
+			double lootMs = ( sw.ElapsedTicks - terrainTicks ) * tickMs;
+			GoldPileEditTiming.LogIfEnabled(
+				$"[GoldPileEdit] refresh queue={terrainMs:F2}ms loot+artifacts={lootMs:F2}ms total={sw.Elapsed.TotalMilliseconds:F2}ms (densify+stamp deferred)",
 				this );
 		}
+
+		GoldPileEditTiming.End();
 	}
 
 	bool TryGetLastInteractPoint( out Vector3 point )

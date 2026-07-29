@@ -10,9 +10,9 @@ public class CarryDefinition : ScriptableObject
 	[FormerlySerializedAs( "maxCapacity" )]
 	public int maxCarryWeight = 10;
 
-	[Tooltip( "Walk/sprint speed multiplier at full burden (always able to move, but very slow)." )]
+	[Tooltip( "Walk/sprint speed multiplier at full burden. Set to 1 to disable weight move penalty." )]
 	[Range( 0.02f, 1f )]
-	public float minBurdenedMoveSpeedScale = 0.08f;
+	public float minBurdenedMoveSpeedScale = 1f;
 
 	[Header( "Hold Root Pose" )]
 	[Tooltip( "Local offset of HoldRoot under the camera (held stack / hand position)." )]

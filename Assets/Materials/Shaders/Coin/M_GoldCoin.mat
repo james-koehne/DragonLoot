@@ -70,8 +70,9 @@ Material:
     - _Surface: 0
     - _TintVariation: 0.05
     - _ValueVariation: 0.05
+    - _VariationSeed: 0
     m_Colors:
-    - _BaseColor: {r: 1, g: 0.9, b: 0.45, a: 1}
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _FresnelColor: {r: 1, g: 0.82, b: 0.45, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

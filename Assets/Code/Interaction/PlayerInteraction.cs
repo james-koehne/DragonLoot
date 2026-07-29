@@ -26,8 +26,13 @@ public class PlayerInteraction : MonoBehaviour
 	float _softThrowSpeedScale = -1f;
 	float _throwPlaceRepeatInterval = -1f;
 	float _pickupRepeatInterval = -1f;
+	float _throwPlaceHoldInitialDelay = -1f;
+	float _pickupHoldInitialDelay = -1f;
 	float _secondaryRepeatTimer;
 	float _primaryRepeatTimer;
+	bool _primaryPastInitialDelay;
+	bool _secondaryPastInitialDelay;
+	HoverOutlineVisualSettings _cachedPickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
 	public IInteractable Current => _current;
 	public bool HasInteractableFocus => _current != null;
@@ -38,6 +43,15 @@ public class PlayerInteraction : MonoBehaviour
 		{
 			EnsureInteractRangeInitialized();
 			return _interactRange;
+		}
+	}
+
+	public LayerMask InteractMask
+	{
+		get
+		{
+			EnsureInteractMask();
+			return _resolvedMask;
 		}
 	}
 
@@ -86,16 +100,34 @@ public class PlayerInteraction : MonoBehaviour
 		}
 	}
 
+	public float ThrowPlaceHoldInitialDelay
+	{
+		get
+		{
+			EnsureThrowPlaceHoldInitialDelayInitialized();
+			return _throwPlaceHoldInitialDelay;
+		}
+	}
+
+	public float PickupHoldInitialDelay
+	{
+		get
+		{
+			EnsurePickupHoldInitialDelayInitialized();
+			return _pickupHoldInitialDelay;
+		}
+	}
+
 	/// <summary>0–1 progress toward the next repeated throw/place while secondary interact is held.</summary>
 	public float SecondaryThrowPlaceRepeatProgress
 	{
 		get
 		{
-			float interval = ThrowPlaceRepeatInterval;
-			if ( interval <= 0f )
+			float wait = GetSecondaryHoldWait();
+			if ( wait <= 0f )
 				return 0f;
 
-			return Mathf.Clamp01( _secondaryRepeatTimer / interval );
+			return Mathf.Clamp01( _secondaryRepeatTimer / wait );
 		}
 	}
 
@@ -104,11 +136,11 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		get
 		{
-			float interval = PickupRepeatInterval;
-			if ( interval <= 0f )
+			float wait = GetPrimaryHoldWait();
+			if ( wait <= 0f )
 				return 0f;
 
-			return Mathf.Clamp01( _primaryRepeatTimer / interval );
+			return Mathf.Clamp01( _primaryRepeatTimer / wait );
 		}
 	}
 
@@ -140,6 +172,18 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		EnsurePickupRepeatIntervalInitialized();
 		_pickupRepeatInterval = Mathf.Max( 0.05f, value );
+	}
+
+	public void SetThrowPlaceHoldInitialDelay( float value )
+	{
+		EnsureThrowPlaceHoldInitialDelayInitialized();
+		_throwPlaceHoldInitialDelay = Mathf.Max( 0f, value );
+	}
+
+	public void SetPickupHoldInitialDelay( float value )
+	{
+		EnsurePickupHoldInitialDelayInitialized();
+		_pickupHoldInitialDelay = Mathf.Max( 0f, value );
 	}
 
 	void EnsureInteractRangeInitialized()
@@ -180,6 +224,20 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _pickupRepeatInterval >= 0f )
 			return;
 		_pickupRepeatInterval = RuntimeDefinition.Get( Definition, d => d.pickupRepeatInterval, 0.25f );
+	}
+
+	void EnsureThrowPlaceHoldInitialDelayInitialized()
+	{
+		if ( _throwPlaceHoldInitialDelay >= 0f )
+			return;
+		_throwPlaceHoldInitialDelay = RuntimeDefinition.Get( Definition, d => d.throwPlaceHoldInitialDelay, 0.2f );
+	}
+
+	void EnsurePickupHoldInitialDelayInitialized()
+	{
+		if ( _pickupHoldInitialDelay >= 0f )
+			return;
+		_pickupHoldInitialDelay = RuntimeDefinition.Get( Definition, d => d.pickupHoldInitialDelay, 0.2f );
 	}
 
 	/// <summary>Legacy alias used by placement targets.</summary>
@@ -266,6 +324,22 @@ public class PlayerInteraction : MonoBehaviour
 		else
 			aim.Normalize();
 
+		// Looking straight up/down has no planar component — keep a body-forward bias so the
+		// throw still travels in facing direction instead of dropping straight down/up.
+		Vector3 flatAim = Vector3.ProjectOnPlane( aim, Vector3.up );
+		if ( flatAim.sqrMagnitude < 0.0001f )
+		{
+			Vector3 bodyForward = _player != null ? _player.transform.forward : Vector3.forward;
+			flatAim = Vector3.ProjectOnPlane( bodyForward, Vector3.up );
+			if ( flatAim.sqrMagnitude < 0.0001f )
+				flatAim = Vector3.forward;
+			else
+				flatAim.Normalize();
+
+			float pitchSign = aim.y >= 0f ? 1f : -1f;
+			aim = ( flatAim + Vector3.up * pitchSign ).normalized;
+		}
+
 		float speed = ( heavy ? HeavyThrowForce : ThrowForce ) * Mathf.Max( 0f, forceScale ) * speedScale;
 		float upBias = ThrowUpBias * Mathf.Max( 0f, upBiasScale ) * upScale;
 		Vector3 velocity = aim * speed + Vector3.up * upBias;
@@ -274,7 +348,7 @@ public class PlayerInteraction : MonoBehaviour
 		{
 			float inherit = ThrowInheritPlanarScale;
 			if ( inherit > 0.0001f )
-				velocity += _player.PlanarVelocity * inherit;
+				velocity += _player.ThrowInheritVelocity * inherit;
 		}
 
 		return velocity;
@@ -294,6 +368,16 @@ public class PlayerInteraction : MonoBehaviour
 			_placement = player.GetComponent<PlayerPlacement>();
 		_maskInitialized = false;
 		EnsureInteractMask();
+		EnsurePickableOutlineSettings();
+	}
+
+	void EnsurePickableOutlineSettings()
+	{
+		PlayerInteractionDefinition def = Definition;
+		_cachedPickableOutline = def != null && def.pickableOutline != null
+			? def.pickableOutline.Clone()
+			: HoverOutlineVisualSettings.DefaultPickable();
+		_cachedPickableOutline.Validate();
 	}
 
 	void EnsureInteractMask()
@@ -321,6 +405,7 @@ public class PlayerInteraction : MonoBehaviour
 			_current = null;
 			ResetSecondaryRepeatState();
 			ResetPrimaryRepeatState();
+			ClearPickableIndicator();
 		}
 	}
 
@@ -331,10 +416,12 @@ public class PlayerInteraction : MonoBehaviour
 			_current = null;
 			_hasLastHit = false;
 			_hasSurfaceHit = false;
+			ClearPickableIndicator();
 			return;
 		}
 
 		UpdateFocus();
+		UpdatePickableIndicator();
 		TryInteractInput();
 	}
 
@@ -485,11 +572,6 @@ public class PlayerInteraction : MonoBehaviour
 		}
 	}
 
-	static bool IsFloorSurfaceHit( Collider collider )
-	{
-		return PlacementFloorSurface.IsFloorCollider( collider );
-	}
-
 	static bool IsBuriedOrOccludedTreasure(
 		TreasureItem treasure,
 		RaycastHit itemHit,
@@ -549,15 +631,17 @@ public class PlayerInteraction : MonoBehaviour
 		{
 			TryInteractWithFocus();
 			_primaryRepeatTimer = 0f;
+			_primaryPastInitialDelay = false;
 			return;
 		}
 
-		float interval = PickupRepeatInterval;
+		float wait = GetPrimaryHoldWait();
 		_primaryRepeatTimer += Time.deltaTime;
-		if ( _primaryRepeatTimer < interval )
+		if ( _primaryRepeatTimer < wait )
 			return;
 
-		_primaryRepeatTimer -= interval;
+		_primaryRepeatTimer -= wait;
+		_primaryPastInitialDelay = true;
 		TryInteractWithFocus();
 	}
 
@@ -573,6 +657,8 @@ public class PlayerInteraction : MonoBehaviour
 		}
 
 		_current.Interact( _player );
+		if ( _player != null )
+			_player.CancelSlideVelocity();
 	}
 
 	static InteractableBase ResolveInteractableFromHit( Collider collider )
@@ -590,6 +676,7 @@ public class PlayerInteraction : MonoBehaviour
 	void ResetPrimaryRepeatState()
 	{
 		_primaryRepeatTimer = 0f;
+		_primaryPastInitialDelay = false;
 	}
 
 	void TrySecondaryRepeatInput( GameInput input, bool holding )
@@ -605,23 +692,52 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( input.SecondaryInteract.WasPressedThisFrame() )
 		{
-			_placement.TrySecondaryPlace();
+			if ( _placement.TrySecondaryPlace() && _player != null )
+				_player.CancelSlideVelocity();
 			_secondaryRepeatTimer = 0f;
+			_secondaryPastInitialDelay = false;
 			return;
 		}
 
-		float interval = ThrowPlaceRepeatInterval;
+		float wait = GetSecondaryHoldWait();
 		_secondaryRepeatTimer += Time.deltaTime;
-		if ( _secondaryRepeatTimer < interval )
+		if ( _secondaryRepeatTimer < wait )
 			return;
 
-		_secondaryRepeatTimer -= interval;
-		_placement.TrySecondaryPlace();
+		_secondaryRepeatTimer -= wait;
+		_secondaryPastInitialDelay = true;
+		if ( _placement.TrySecondaryPlace() && _player != null )
+			_player.CancelSlideVelocity();
 	}
 
 	void ResetSecondaryRepeatState()
 	{
 		_secondaryRepeatTimer = 0f;
+		_secondaryPastInitialDelay = false;
+	}
+
+	float GetPrimaryHoldWait()
+	{
+		if ( !_primaryPastInitialDelay )
+		{
+			float initial = PickupHoldInitialDelay;
+			if ( initial > 0f )
+				return initial;
+		}
+
+		return PickupRepeatInterval;
+	}
+
+	float GetSecondaryHoldWait()
+	{
+		if ( !_secondaryPastInitialDelay )
+		{
+			float initial = ThrowPlaceHoldInitialDelay;
+			if ( initial > 0f )
+				return initial;
+		}
+
+		return ThrowPlaceRepeatInterval;
 	}
 
 	static bool IsPlayerOwnedHit( Collider collider, Transform playerRoot )
@@ -631,6 +747,33 @@ public class PlayerInteraction : MonoBehaviour
 
 		Transform hitTransform = collider.transform;
 		return hitTransform == playerRoot || hitTransform.IsChildOf( playerRoot );
+	}
+
+	void UpdatePickableIndicator()
+	{
+		EnsurePickableOutlineSettings();
+
+		if ( _placement != null && _placement.HasActiveStackVolumePreview )
+		{
+			return;
+		}
+
+		TreasureItemInteractable focused = _current as TreasureItemInteractable;
+		TreasureItem item = focused != null ? focused.Item : null;
+		if ( item == null || !HoverOutlineTargetUtility.ShouldHighlight( item ) )
+		{
+			HoverOutlineRegistrar.Clear();
+			return;
+		}
+
+		HoverOutlineRegistrar.SetTarget(
+			HoverOutlineTargetUtility.CollectRenderers( item ),
+			_cachedPickableOutline );
+	}
+
+	void ClearPickableIndicator()
+	{
+		HoverOutlineRegistrar.Clear();
 	}
 
 	static GameInput GetGameInput()

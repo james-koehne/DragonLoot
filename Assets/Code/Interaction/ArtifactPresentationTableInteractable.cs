@@ -127,7 +127,9 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		TreasureItem selected,
 		List<TreasureItem> results,
 		Ray aimRay,
-		bool hasAimRay )
+		bool hasAimRay,
+		bool hasHitWorldY = false,
+		float hitWorldY = 0f )
 	{
 		if ( results != null )
 			results.Clear();
@@ -152,7 +154,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( item == null || !IsAvailable )
 			return false;
 
-		return TryResolveAimedSlot( item, in query, out _, out bool valid ) && valid;
+		return TryResolvePlacementSlot( item, in query, out _, out bool valid ) && valid;
 	}
 
 	public bool TryGetPlacementPreview( TreasureItem item, in PlacementQuery query, out PlacementPreview preview )
@@ -163,24 +165,35 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( item == null )
 			return false;
 
-		if ( !TryResolveAimedSlot( item, in query, out int slotIndex, out bool valid ) )
+		Vector3 scale = item.GetWorldScale();
+
+		bool hasHoveredSlot = TryResolveAimedSlotIndex( in query, out int hoveredSlot );
+		bool hasPlacement = TryResolvePlacementSlot( item, in query, out int placementSlot, out bool placementValid );
+
+		if ( !hasPlacement && !hasHoveredSlot )
 		{
-			preview.Position = transform.position;
-			preview.Rotation = transform.rotation;
-			preview.Scale = item.GetWorldScale();
-			preview.IsValid = false;
+			preview.SetSuppressed( transform.position, transform.rotation, scale, false );
 			return true;
 		}
 
-		GetSlotWorldPose( slotIndex, out Vector3 pos, out Quaternion rot );
-		preview.Position = pos;
-		preview.Rotation = rot;
-		preview.Scale = item.GetWorldScale();
-		preview.IsValid = valid;
+		int previewSlot = hasPlacement ? placementSlot : hoveredSlot;
+		GetSlotWorldPose( previewSlot, out Vector3 pos, out Quaternion rot );
+		preview.SetSuppressed( pos, rot, scale, hasPlacement && placementValid );
 
-		_aimedSlotIndex = slotIndex;
-		_aimedSlotValid = valid;
+		if ( hasHoveredSlot )
+		{
+			_aimedSlotIndex = hoveredSlot;
+			_aimedSlotValid = EvaluateSlotForItem( hoveredSlot, item );
+		}
+		else if ( hasPlacement )
+		{
+			_aimedSlotIndex = placementSlot;
+			_aimedSlotValid = placementValid;
+		}
+
 		_aimFeedbackFrame = Time.frameCount;
+		if ( slotIndicators != null )
+			slotIndicators.RefreshAimFeedback();
 		return true;
 	}
 
@@ -195,7 +208,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( item == null )
 			return false;
 
-		if ( !TryResolveAimedSlot( item, in query, out int slotIndex, out bool valid ) || !valid )
+		if ( !TryResolvePlacementSlot( item, in query, out int slotIndex, out bool valid ) || !valid )
 			return false;
 
 		PlayerController player = query.Player;
@@ -308,29 +321,34 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		return false;
 	}
 
-	bool TryResolveAimedSlot( TreasureItem item, in PlacementQuery query, out int slotIndex, out bool valid )
+	bool EvaluateSlotForItem( int slotIndex, TreasureItem item )
+	{
+		return !IsSlotOccupied( slotIndex ) && AcceptsForSlot( slotIndex, item != null ? item.Definition : null );
+	}
+
+	bool TryResolvePlacementSlot( TreasureItem item, in PlacementQuery query, out int slotIndex, out bool valid )
 	{
 		slotIndex = -1;
 		valid = false;
 		if ( item == null || _occupants == null || slots == null )
 			return false;
 
-		if ( !TryResolveAimedSlotIndex( in query, out slotIndex ) )
+		// Prefer the aimed slot when it accepts the held artifact; otherwise fall back to any
+		// empty matching slot so hovering the table shows valid placement when one exists.
+		if ( TryResolveAimedSlotIndex( in query, out slotIndex ) )
 		{
-			if ( !query.AutoFindValidSlot || !TryFindNearestValidSlot( item, in query, out slotIndex ) )
-				return false;
-
-			valid = true;
-			return true;
+			valid = EvaluateSlotForItem( slotIndex, item );
+			if ( valid )
+				return true;
 		}
 
-		valid = !IsSlotOccupied( slotIndex ) && AcceptsForSlot( slotIndex, item.Definition );
-		if ( valid || !query.AutoFindValidSlot )
-			return true;
+		if ( !TryFindNearestValidSlot( item, in query, out int validSlotIndex ) )
+		{
+			// Keep aimed slot (if any) so the ghost/indicator can show invalid feedback.
+			return slotIndex >= 0;
+		}
 
-		if ( !TryFindNearestValidSlot( item, in query, out slotIndex ) )
-			return true;
-
+		slotIndex = validSlotIndex;
 		valid = true;
 		return true;
 	}

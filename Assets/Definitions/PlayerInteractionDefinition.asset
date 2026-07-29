@@ -16,6 +16,8 @@ MonoBehaviour:
   interactMask:
     serializedVersion: 2
     m_Bits: 0
+  pickupHoldInitialDelay: 0.2
+  pickupRepeatInterval: 0.1
   dropUpBias: 0.05
   throwForce: 9
   heavyThrowForce: 3.5
@@ -24,4 +26,18 @@ MonoBehaviour:
   throwInheritPlanarScale: 1
   softThrowSpeedScale: 0.25
   softThrowUpScale: 0.35
+  throwPlaceHoldInitialDelay: 0.2
   throwPlaceRepeatInterval: 0.1
+  pickableOutline:
+    outlineColor: {r: 1.2, g: 1.02, b: 0.35, a: 1}
+    outlineIntensity: 1
+    hdrBoost: 1.5
+    scalePixels: 3
+    maskDilatePixels: 2
+    depthThreshold: 1.5
+    normalThreshold: 0.4
+    depthNormalThreshold: 0.5
+    depthNormalThresholdScale: 7
+    normalEdgeWeight: 1
+    pulseSpeed: 1.1
+    pulseAmount: 0.1

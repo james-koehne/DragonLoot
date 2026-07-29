@@ -11,7 +11,10 @@ public class GoldPileTerrainMesh : MonoBehaviour
 	const string DeformScaleProp = "_DeformScale";
 	const string DeformWorldSizeProp = "_DeformWorldSize";
 	const string DeformResolutionProp = "_DeformResolution";
+	const string GroundLevelProp = "_GroundLevelHeight";
 	const int MinColliderResolution = 16;
+	/// <summary>Minimum seconds between MeshCollider cooks (verts still update every dirty LateUpdate).</summary>
+	const float ColliderCookMinInterval = 0.05f;
 
 	[SerializeField]
 	[Min( 8 )]
@@ -45,6 +48,10 @@ public class GoldPileTerrainMesh : MonoBehaviour
 	int _colliderDirtyMaxZ;
 	int _colliderResolution;
 	int _visualResolution = 64;
+	bool _uploadPending;
+	bool _mpbPending;
+	bool _colliderCookPending;
+	float _lastColliderCookTime = -1000f;
 
 	public MeshRenderer PileRenderer => _renderer;
 	public MeshCollider PileCollider => _collider;
@@ -75,6 +82,10 @@ public class GoldPileTerrainMesh : MonoBehaviour
 		_heightfield = heightfield;
 		EnsureComponents();
 		BuildTopology();
+		_uploadPending = false;
+		_mpbPending = false;
+		if ( _heightfield != null && _heightfield.IsDirty )
+			_heightfield.UploadIfDirty();
 		ApplyMaterialAndDeform();
 		if ( syncCollider )
 		{
@@ -87,7 +98,8 @@ public class GoldPileTerrainMesh : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Uploads deform texture and queues a deferred low-res collider sync.
+	/// Queues deform upload + deferred low-res collider sync (coalesced in LateUpdate).
+	/// In edit mode, flushes immediately so sculpt preview stays responsive.
 	/// </summary>
 	public void RefreshFromHeightfield()
 	{
@@ -100,18 +112,35 @@ public class GoldPileTerrainMesh : MonoBehaviour
 			QueueColliderDirty( minX, maxX, minZ, maxZ, full );
 		}
 
-		_heightfield.UploadIfDirty();
-		ApplyMaterialAndDeform();
+		// Coalesce multiple carves in one frame into a single Apply + MPB write.
+		_uploadPending = true;
+		_mpbPending = true;
+
+		if ( !Application.isPlaying )
+		{
+			FlushPendingUpload();
+			if ( _colliderDirty )
+			{
+				SyncCollider( forceCook: true );
+				_colliderDirty = false;
+				_colliderDirtyFull = false;
+				_colliderCookPending = false;
+			}
+		}
 	}
 
 	/// <summary>Forces collider sync this frame (bind / init).</summary>
 	public void SyncColliderImmediate()
 	{
+		FlushPendingUpload();
 		_colliderDirtyFull = true;
 		_colliderDirty = true;
-		SyncCollider();
+		_colliderCookPending = true;
+		SyncCollider( forceCook: true );
 		_colliderDirty = false;
 		_colliderDirtyFull = false;
+		_colliderCookPending = false;
+		_lastColliderCookTime = Time.unscaledTime;
 	}
 
 	public void SetVisible( bool visible )
@@ -124,24 +153,65 @@ public class GoldPileTerrainMesh : MonoBehaviour
 
 	void LateUpdate()
 	{
-		if ( !_colliderDirty )
+		FlushPendingUpload();
+
+		if ( !_colliderDirty && !_colliderCookPending )
 			return;
 
 		System.Diagnostics.Stopwatch sw = null;
 		if ( GoldPileEditTiming.Enabled )
 			sw = System.Diagnostics.Stopwatch.StartNew();
 
-		SyncCollider();
-		_colliderDirty = false;
-		_colliderDirtyFull = false;
+		bool forceCook = _colliderCookPending
+			&& ( Time.unscaledTime - _lastColliderCookTime ) >= ColliderCookMinInterval;
+
+		if ( _colliderDirty )
+		{
+			// New height edits: refresh verts. Defer PhysX cook unless interval allows.
+			bool cookNow = forceCook
+				|| ( Time.unscaledTime - _lastColliderCookTime ) >= ColliderCookMinInterval;
+			SyncCollider( cookNow );
+			_colliderDirty = false;
+			_colliderDirtyFull = false;
+			if ( cookNow )
+			{
+				_colliderCookPending = false;
+				_lastColliderCookTime = Time.unscaledTime;
+			}
+			else
+				_colliderCookPending = true;
+		}
+		else if ( forceCook )
+		{
+			// Verts already current; only reassign sharedMesh for PhysX.
+			CookColliderMesh( force: false );
+			_colliderCookPending = false;
+			_lastColliderCookTime = Time.unscaledTime;
+		}
 
 		if ( sw != null )
 		{
 			sw.Stop();
-			Debug.Log(
-				$"[GoldPileEdit] collider sync={sw.Elapsed.TotalMilliseconds:F2}ms res={_colliderResolution}",
+			GoldPileEditTiming.LogIfEnabled(
+				$"[GoldPileEdit] collider sync={sw.Elapsed.TotalMilliseconds:F2}ms cookPending={_colliderCookPending} res={_colliderResolution}",
 				this );
 		}
+	}
+
+	void FlushPendingUpload()
+	{
+		if ( !_uploadPending && !_mpbPending )
+			return;
+
+		GoldPileEditTiming.Begin( "GoldPile.FlushDeform" );
+		if ( _uploadPending && _heightfield != null )
+			_heightfield.UploadIfDirty();
+		_uploadPending = false;
+
+		if ( _mpbPending )
+			ApplyMaterialAndDeform();
+		_mpbPending = false;
+		GoldPileEditTiming.End();
 	}
 
 	void OnDestroy()
@@ -200,9 +270,8 @@ public class GoldPileTerrainMesh : MonoBehaviour
 		if ( _collider == null )
 			_collider = root.gameObject.AddComponent<MeshCollider>();
 
-		_collider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation
-			| MeshColliderCookingOptions.EnableMeshCleaning
-			| MeshColliderCookingOptions.WeldColocatedVertices;
+		// Avoid Weld/Clean on dynamic cooks — they dominate SyncCollider cost.
+		_collider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation;
 
 		if ( root.GetComponent<GoldPileQualityBinder>() == null )
 			root.gameObject.AddComponent<GoldPileQualityBinder>();
@@ -268,10 +337,12 @@ public class GoldPileTerrainMesh : MonoBehaviour
 		_visualMesh.uv = _uvs;
 		_visualMesh.triangles = _tris;
 		_visualMesh.RecalculateNormals();
-		ExpandVisualBounds( size, _heightfield != null ? _heightfield.MaxHeight : 1.75f );
+		_visualMesh.RecalculateBounds();
+		ExpandVisualBounds( size, _heightfield != null ? _heightfield.MaxHeight : 2f );
+
+		_filter.sharedMesh = _visualMesh;
 
 		BuildColliderTopology( size );
-		_filter.sharedMesh = _visualMesh;
 		_built = true;
 	}
 
@@ -326,8 +397,7 @@ public class GoldPileTerrainMesh : MonoBehaviour
 		_colliderMesh.triangles = _colliderTris;
 		_colliderMesh.RecalculateBounds();
 
-		_collider.sharedMesh = null;
-		_collider.sharedMesh = _colliderMesh;
+		CookColliderMesh( force: true );
 	}
 
 	void ApplyMaterialAndDeform()
@@ -350,6 +420,7 @@ public class GoldPileTerrainMesh : MonoBehaviour
 		_mpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
 		_mpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
 		_mpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_mpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
 		_renderer.SetPropertyBlock( _mpb );
 
 		// Shader displacement is not reflected in vertex buffers; keep culling bounds tall enough.
@@ -402,10 +473,14 @@ public class GoldPileTerrainMesh : MonoBehaviour
 			_colliderDirtyMaxZ = maxZ;
 	}
 
-	void SyncCollider()
+	void SyncCollider( bool forceCook )
 	{
+		GoldPileEditTiming.Begin( "GoldPile.SyncCollider" );
 		if ( !_built || _heightfield == null || _displacedVerts == null || _colliderMesh == null )
+		{
+			GoldPileEditTiming.End();
 			return;
+		}
 
 		int res = _colliderResolution;
 		float maxH = _heightfield.MaxHeight;
@@ -435,6 +510,9 @@ public class GoldPileTerrainMesh : MonoBehaviour
 				int i = z * res + x;
 				float u = res <= 1 ? 0.5f : ( float )x / ( res - 1 );
 				float h = _heightfield.SampleNormalizedUV( u, v ) * maxH;
+				// Sink below-ground cells so room floor / other colliders win raycasts.
+				if ( h < _heightfield.GroundLevel )
+					h = -1f;
 				Vector3 b = _colliderBaseVerts[ i ];
 				_displacedVerts[ i ] = new Vector3( b.x, h, b.z );
 			}
@@ -442,7 +520,34 @@ public class GoldPileTerrainMesh : MonoBehaviour
 
 		_colliderMesh.vertices = _displacedVerts;
 		_colliderMesh.RecalculateBounds();
-		_collider.sharedMesh = null;
-		_collider.sharedMesh = _colliderMesh;
+
+		if ( forceCook )
+			CookColliderMesh( force: false );
+
+		GoldPileEditTiming.End();
+	}
+
+	/// <summary>
+	/// Reassigns the MeshCollider without the null-swap cook. Unity 6 updates from MarkDynamic meshes
+	/// when sharedMesh is set to the same instance again; null/reassign was forcing a full recook.
+	/// </summary>
+	void CookColliderMesh( bool force )
+	{
+		if ( _collider == null || _colliderMesh == null )
+			return;
+
+		GoldPileEditTiming.Begin( "GoldPile.CookCollider" );
+		if ( _collider.sharedMesh != _colliderMesh || force )
+			_collider.sharedMesh = _colliderMesh;
+		else
+		{
+			// Same mesh instance: toggle enables PhysX to pick up vertex changes without nulling.
+			bool wasEnabled = _collider.enabled;
+			_collider.enabled = false;
+			_collider.sharedMesh = _colliderMesh;
+			_collider.enabled = wasEnabled;
+		}
+
+		GoldPileEditTiming.End();
 	}
 }

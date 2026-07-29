@@ -60,7 +60,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public float SettledHeight => MeasureSlotsHeight( _slots.Count );
 	public float TotalHeight => SettledHeight;
 
-	public const float DefaultJoinRadius = 0.42f;
+	/// <summary>XZ footprint radius used for gem push-apart and merge queries.</summary>
+	public float FootprintRadius => ResolveDiameter() * 0.5f;
+
+	public const float DefaultJoinRadius = 0.25f;
 
 	public static GroundCoinStack FindStackForLooseCoin( TreasureItem coin, float radius = DefaultJoinRadius )
 	{
@@ -90,7 +93,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public static GroundCoinStack CreateAt( Vector3 contactPosition, Quaternion rotation )
 	{
 		GameObject go = new GameObject( "GroundCoinStack" );
-		go.transform.SetPositionAndRotation( contactPosition, FlattenUpright( rotation ) );
+		go.transform.SetPositionAndRotation( contactPosition, TreasureOrientation.FlattenUpright( rotation ) );
 		int layer = LayerMask.NameToLayer( "Collectable" );
 		if ( layer >= 0 )
 			go.layer = layer;
@@ -114,7 +117,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return null;
 
 		Vector3 contact = baseCoin.transform.position;
-		Quaternion rot = FlattenUpright( baseCoin.transform.rotation );
+		Quaternion rot = TreasureOrientation.FlattenUpright( baseCoin.transform.rotation );
 		GroundCoinStack stack = CreateAt( contact, rot );
 		stack.AbsorbSettledImmediate( baseCoin );
 		if ( animateIncoming )
@@ -260,10 +263,18 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( item == null )
 			return false;
 
+		Vector3 scale = item.GetWorldScale();
+		float height = Mathf.Max( TreasureStackSpacing.FallbackStep, TotalHeight );
+		float diameter = Mathf.Max( FootprintRadius * 2f, Mathf.Max( scale.x, scale.z ) );
+		preview.SetStackVolume(
+			ContactPosition,
+			transform.rotation,
+			scale,
+			height,
+			diameter,
+			CanPlace( item, in query ) );
+		// Keep slot tip as Position for event/debug consumers; volume uses VolumeContact.
 		preview.Position = GetSlotWorldPosition( Count );
-		preview.Rotation = transform.rotation;
-		preview.Scale = item.GetWorldScale();
-		preview.IsValid = CanPlace( item, in query );
 		return true;
 	}
 
@@ -543,6 +554,64 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshCollider();
 	}
 
+	/// <summary>
+	/// Debug-only: fill an empty stack with <paramref name="count"/> copies of one definition
+	/// without spawning live items first (cylinders / individuals come from RefreshVisuals).
+	/// </summary>
+	public bool DebugFillHomogeneous( TreasureDefinition definition, int count )
+	{
+		if ( !IsGroundStackableCoin( definition ) || _destroying || Count > 0 )
+			return false;
+
+		int clamped = Mathf.Clamp( count, 1, MaxHeight );
+		_slots.Capacity = Mathf.Max( _slots.Capacity, clamped );
+		_settledLive.Capacity = Mathf.Max( _settledLive.Capacity, clamped );
+		for ( int i = 0; i < clamped; i++ )
+		{
+			_slots.Add( definition );
+			_settledLive.Add( null );
+		}
+
+		RefreshVisuals( snap: true );
+		RefreshCollider();
+		return true;
+	}
+
+	/// <summary>
+	/// Debug-only: fill an empty stack from an ordered definition list (mixed stacks).
+	/// Live meshes are spawned only for slots not covered by cylinders.
+	/// </summary>
+	public bool DebugFillSlots( IReadOnlyList<TreasureDefinition> definitions )
+	{
+		if ( definitions == null || definitions.Count == 0 || _destroying || Count > 0 )
+			return false;
+
+		int clamped = Mathf.Min( definitions.Count, MaxHeight );
+		for ( int i = 0; i < clamped; i++ )
+		{
+			if ( !IsGroundStackableCoin( definitions[ i ] ) )
+				return false;
+		}
+
+		_slots.Capacity = Mathf.Max( _slots.Capacity, clamped );
+		_settledLive.Capacity = Mathf.Max( _settledLive.Capacity, clamped );
+		for ( int i = 0; i < clamped; i++ )
+		{
+			_slots.Add( definitions[ i ] );
+			_settledLive.Add( null );
+		}
+
+		RefreshVisuals( snap: true );
+		RefreshCollider();
+		return true;
+	}
+
+	/// <summary>Debug-only: destroy this stack and clear visuals.</summary>
+	public void DebugDespawn()
+	{
+		DestroyStack();
+	}
+
 	public override bool CanInteract( PlayerController player )
 	{
 		if ( !IsAvailable || player == null || _taking || HasInFlight || Count <= 0 )
@@ -562,39 +631,62 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	int ResolvePickupStartIndex( PlayerController player )
 	{
-		if ( IsHomogeneous )
-			return 0;
-
-		if ( player == null || player.Interaction == null || !player.Interaction.TryGetAimRay( out Ray ray ) )
-			return Mathf.Max( 0, SettledCount - 1 );
-
 		if ( SettledCount <= 0 )
 			return 0;
 
+		if ( player == null || player.Interaction == null )
+			return Mathf.Max( 0, SettledCount - 1 );
+
 		float bottomY = transform.position.y;
 		float topY = bottomY + SettledHeight;
-		float aimY = ray.origin.y;
-		Vector3 dir = ray.direction;
-		float a = dir.x * dir.x + dir.z * dir.z;
-		if ( a >= 0.0001f )
+		float aimY = transform.position.y;
+		bool haveAimY = false;
+
+		// Prefer the raycast surface hit on this stack. Closest-approach-to-axis reads low when
+		// looking down at a thick capsule, which picks one coin below the crosshair.
+		if ( player.Interaction.TryGetLastHit( out RaycastHit hit ) && hit.collider != null )
 		{
-			float dx = transform.position.x - ray.origin.x;
-			float dz = transform.position.z - ray.origin.z;
-			float t = ( dx * dir.x + dz * dir.z ) / a;
-			if ( t < 0f )
-				t = 0f;
-			aimY = ( ray.origin + dir * t ).y;
-			if ( topY > bottomY + 0.0001f )
-				aimY = Mathf.Clamp( aimY, bottomY, topY );
+			GroundCoinStack hitStack = hit.collider.GetComponentInParent<GroundCoinStack>();
+			if ( hitStack == this )
+			{
+				aimY = hit.point.y;
+				haveAimY = true;
+			}
 		}
 
+		if ( !haveAimY )
+		{
+			if ( !player.Interaction.TryGetAimRay( out Ray ray ) )
+				return Mathf.Max( 0, SettledCount - 1 );
+
+			aimY = ray.origin.y;
+			Vector3 dir = ray.direction;
+			float a = dir.x * dir.x + dir.z * dir.z;
+			if ( a >= 0.0001f )
+			{
+				float dx = transform.position.x - ray.origin.x;
+				float dz = transform.position.z - ray.origin.z;
+				float t = ( dx * dir.x + dz * dir.z ) / a;
+				if ( t < 0f )
+					t = 0f;
+				aimY = ( ray.origin + dir * t ).y;
+			}
+		}
+
+		if ( topY > bottomY + 0.0001f )
+			aimY = Mathf.Clamp( aimY, bottomY, topY );
+
 		float stacked = 0f;
+		int last = _slots.Count - 1;
 		for ( int i = 0; i < _slots.Count; i++ )
 		{
 			float step = TreasureStackSpacing.GetStep( _slots[ i ] );
-			float yMin = transform.position.y + stacked;
+			float yMin = bottomY + stacked;
 			float yMax = yMin + step;
-			if ( aimY >= yMin && aimY <= yMax )
+			bool inside = i == last
+				? aimY >= yMin && aimY <= yMax
+				: aimY >= yMin && aimY < yMax;
+			if ( inside )
 				return i;
 			stacked += step;
 		}
@@ -1091,21 +1183,11 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 				orphan.EndFlight();
 				Vector3 pos = orphan.transform.position;
-				Quaternion rot = FlattenUpright( orphan.transform.rotation );
+				Quaternion rot = TreasureOrientation.FlattenUpright( orphan.transform.rotation );
 				orphan.EnterSettledPhysics( pos, rot );
 			}
 		}
 
 		Destroy( gameObject );
-	}
-
-	static Quaternion FlattenUpright( Quaternion source )
-	{
-		Vector3 flatForward = Vector3.ProjectOnPlane( source * Vector3.forward, Vector3.up );
-		if ( flatForward.sqrMagnitude < 0.0001f )
-			flatForward = Vector3.ProjectOnPlane( source * Vector3.right, Vector3.up );
-		if ( flatForward.sqrMagnitude < 0.0001f )
-			flatForward = Vector3.forward;
-		return Quaternion.LookRotation( flatForward.normalized, Vector3.up );
 	}
 }

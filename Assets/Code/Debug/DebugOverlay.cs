@@ -68,6 +68,7 @@ public class DebugOverlay : MonoBehaviour
 		_sections.Add( new DebugCameraSection() );
 		_sections.Add( new DebugPlayerSection() );
 		_sections.Add( new DebugCarrySection() );
+		_sections.Add( new DebugGroundCoinStackSection() );
 		_sections.Add( new DebugInteractionSection() );
 		_sections.Add( new DebugGoldPileSection() );
 		_sections.Add( new DebugTreasureSurfaceSection() );

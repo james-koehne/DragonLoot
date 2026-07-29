@@ -102,8 +102,9 @@ Material:
     - _FresnelPower: 4
     - _GapMetallic: 0.85
     - _GapSmoothness: 0.35
+    - _GroundLevelHeight: 0.01
     - _HueVariation: 0
-    - _LodFar: 128
+    - _LodFar: 256
     - _LodMid: 64
     - _LodNear: 32
     - _LodNoiseFade: 1

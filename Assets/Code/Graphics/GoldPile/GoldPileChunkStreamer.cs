@@ -94,8 +94,9 @@ public sealed class GoldPileChunkStreamer
 		for ( int i = 0; i < chunks.Count; i++ )
 		{
 			GoldPileChunk chunk = chunks[ i ];
-			Vector3 center = chunk.WorldBounds.center;
-			float dist = Vector3.Distance( center, playerPos );
+			// Planar distance to the chunk volume (0 when the player is inside),
+			// never distance to the pile root / chunk AABB center alone.
+			float dist = PlanarDistanceToBounds( playerPos, chunk.WorldBounds );
 
 			LoadedCount++;
 			chunk.State = GoldPileChunkStreamState.Loaded;
@@ -147,5 +148,14 @@ public sealed class GoldPileChunkStreamer
 				chunk.Dirty = true;
 			chunk.Lod = desiredLod;
 		}
+	}
+
+	/// <summary>XZ distance from <paramref name="worldPos"/> to the closest point on <paramref name="bounds"/>.</summary>
+	static float PlanarDistanceToBounds( Vector3 worldPos, Bounds bounds )
+	{
+		Vector3 closest = bounds.ClosestPoint( worldPos );
+		float dx = closest.x - worldPos.x;
+		float dz = closest.z - worldPos.z;
+		return Mathf.Sqrt( dx * dx + dz * dz );
 	}
 }

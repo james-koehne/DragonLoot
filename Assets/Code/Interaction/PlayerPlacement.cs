@@ -26,6 +26,8 @@ public class PlayerPlacement : MonoBehaviour
 
 	public ITreasurePlacementTarget ActiveTarget => _activeTarget;
 	public bool HasValidPlacement => _hasPreview && _activePreview.IsValid && _activeTarget != null;
+	public bool HasActiveStackVolumePreview =>
+		_hasPreview && _activePreview.GhostStyle == PlacementGhostStyle.StackVolume;
 	public FloorPlacementTarget FloorTarget => _floorTarget;
 	public float PlacementArcHeight => RuntimeDefinition.Get( Definition, d => d.placementArcHeight, 0.12f );
 	public float CoinFlipSpeed => RuntimeDefinition.Get( Definition, d => d.coinFlipSpeed, 1f );
@@ -100,6 +102,15 @@ public class PlayerPlacement : MonoBehaviour
 		GroundTreasureStackTarget.ClearPreviewReservation();
 		PlacementQuery query = BuildQuery();
 		ITreasurePlacementTarget target = ResolveTarget( in query );
+		if ( target is GemConstellationInteractable
+			&& item.Definition != null
+			&& item.Definition.category != TreasureCategory.Gem )
+		{
+			// Non-gems throw through the constellation — no invalid placement ghost.
+			ClearPreview();
+			return;
+		}
+
 		if ( target == null )
 		{
 			PlacementQuery floorQuery = BuildFloorQuery();
@@ -173,49 +184,84 @@ public class PlayerPlacement : MonoBehaviour
 		_activePreview = preview;
 		_hasPreview = true;
 
+		if ( preview.GhostStyle == PlacementGhostStyle.Suppressed )
+		{
+			HoverOutlineRegistrar.Clear();
+			if ( _ghost != null )
+				_ghost.SetVisible( false );
+			return;
+		}
+
 		EnsureGhost();
+		ConfigureGhostVisuals();
 		_ghost.SetVisible( true );
 
-		GroundCoinStack volumeStack = target as GroundCoinStack;
-		if ( volumeStack != null )
+		if ( preview.GhostStyle == PlacementGhostStyle.StackVolume )
 		{
-			float height = volumeStack.TotalHeight + TreasureStackSpacing.GetStep( item );
-			float diameter = Mathf.Max( item.GetWorldScale().x, item.GetWorldScale().z );
 			_ghost.UpdateStackVolume(
-				volumeStack.ContactPosition,
-				volumeStack.transform.rotation,
-				height,
-				diameter,
+				preview.VolumeContact,
+				preview.Rotation,
+				preview.VolumeHeight,
+				preview.VolumeDiameter,
 				preview.IsValid );
-		}
-		else if ( target == _groundStackTarget && _groundStackTarget.BaseItem != null )
-		{
-			TreasureItem bottom = TreasureSupportStack.FindColumnBottom( _groundStackTarget.BaseItem );
-			float columnHeight = 0f;
-			if ( bottom != null )
-			{
-				TreasureSupportStack.CollectColumn( bottom, StackSnapColumnBuffer );
-				for ( int i = 0; i < StackSnapColumnBuffer.Count; i++ )
-					columnHeight += TreasureStackSpacing.GetStep( StackSnapColumnBuffer[ i ] );
-				StackSnapColumnBuffer.Clear();
-			}
-
-			columnHeight += TreasureStackSpacing.GetStep( item );
-			float diameter = Mathf.Max( item.GetWorldScale().x, item.GetWorldScale().z );
-			Vector3 contact = bottom != null ? bottom.transform.position : preview.Position;
-			_ghost.UpdateStackVolume( contact, preview.Rotation, columnHeight, diameter, preview.IsValid );
-		}
-		else if ( target == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
-		{
-			float height = TreasureStackSpacing.GetStep( item );
-			float diameter = Mathf.Max( item.GetWorldScale().x, item.GetWorldScale().z );
-			_ghost.UpdateStackVolume( preview.Position, preview.Rotation, height, diameter, preview.IsValid );
+			UpdateStackHoverOutline( preview.IsValid );
 		}
 		else
 		{
 			_ghost.SyncFromItem( item );
 			_ghost.UpdatePose( in preview );
 		}
+	}
+
+	void UpdateStackHoverOutline( bool valid )
+	{
+		if ( _ghost == null )
+		{
+			HoverOutlineRegistrar.Clear();
+			return;
+		}
+
+		Renderer renderer;
+		HoverOutlineVisualSettings settings;
+		if ( !_ghost.TryGetStackVolumeOutline( valid, out renderer, out settings ) )
+		{
+			HoverOutlineRegistrar.Clear();
+			return;
+		}
+
+		HoverOutlineRegistrar.SetTarget( new[] { renderer }, settings );
+	}
+
+	void ConfigureGhostVisuals()
+	{
+		if ( _ghost == null )
+			return;
+
+		PlayerPlacementDefinition def = Definition;
+		Color valid = def != null ? def.validGhostColor : PlacementFeedbackColors.ValidGhost;
+		Color invalid = def != null ? def.invalidGhostColor : PlacementFeedbackColors.InvalidGhost;
+		float fresnelPower = def != null ? def.ghostFresnelPower : 2.4f;
+		float fresnelBoost = def != null ? def.ghostFresnelBoost : 0.7f;
+		float pulseAmount = def != null ? def.ghostPulseAmount : 0.12f;
+		float pulseSpeed = def != null ? def.ghostPulseSpeed : 0.85f;
+		float rimIntensity = def != null ? def.ghostRimIntensity : 1.15f;
+		float coreIntensity = def != null ? def.ghostCoreIntensity : 0.28f;
+		float stackVolumeOversize = def != null ? def.stackVolumeOversize : 1.1f;
+		HoverOutlineVisualSettings stackOutline = def != null && def.stackOutline != null
+			? def.stackOutline
+			: HoverOutlineVisualSettings.DefaultStack();
+
+		_ghost.ConfigureVisuals(
+			valid,
+			invalid,
+			fresnelPower,
+			fresnelBoost,
+			pulseAmount,
+			pulseSpeed,
+			rimIntensity,
+			coreIntensity,
+			stackVolumeOversize,
+			stackOutline );
 	}
 
 	PlacementPreview SmoothPreview( in PlacementPreview preview )
@@ -225,22 +271,38 @@ public class PlayerPlacement : MonoBehaviour
 		float dt = Time.deltaTime;
 		if ( !_hasSmoothedPreview || speed <= 0.01f )
 		{
-			_smoothedPreviewPos = preview.Position;
+			_smoothedPreviewPos = preview.GhostStyle == PlacementGhostStyle.StackVolume
+				? preview.VolumeContact
+				: preview.Position;
 			_smoothedPreviewRot = preview.Rotation;
 			_hasSmoothedPreview = true;
+			if ( preview.GhostStyle == PlacementGhostStyle.StackVolume )
+			{
+				smoothed.VolumeContact = _smoothedPreviewPos;
+				smoothed.Position = preview.Position;
+			}
 			return smoothed;
 		}
 
 		float t = 1f - Mathf.Exp( -speed * dt );
-		_smoothedPreviewPos = Vector3.Lerp( _smoothedPreviewPos, preview.Position, t );
+		Vector3 targetPos = preview.GhostStyle == PlacementGhostStyle.StackVolume
+			? preview.VolumeContact
+			: preview.Position;
+		_smoothedPreviewPos = Vector3.Lerp( _smoothedPreviewPos, targetPos, t );
 		_smoothedPreviewRot = Quaternion.Slerp( _smoothedPreviewRot, preview.Rotation, t );
-		smoothed.Position = _smoothedPreviewPos;
+		if ( preview.GhostStyle == PlacementGhostStyle.StackVolume )
+		{
+			smoothed.VolumeContact = _smoothedPreviewPos;
+			smoothed.Position = preview.Position;
+		}
+		else
+			smoothed.Position = _smoothedPreviewPos;
 		smoothed.Rotation = _smoothedPreviewRot;
 		return smoothed;
 	}
 
 	/// <summary>
-	/// Attempts placement on the current aim target when valid.
+	/// Attempts placement using the current LateUpdate ghost preview when valid.
 	/// </summary>
 	public bool TryPlaceAtAim()
 	{
@@ -255,23 +317,19 @@ public class PlayerPlacement : MonoBehaviour
 		}
 
 		RefreshGroundStackTuning();
-		PlacementQuery query = BuildQuery();
-		ITreasurePlacementTarget target = ResolveTarget( in query, allowGroundStack: false );
-		if ( target == null )
-			return false;
+		UpdatePreview();
+		if ( HasValidPlacement )
+			return TryPlaceFromActivePreview( item );
 
-		if ( target == _floorTarget )
-			query = BuildFloorQuery();
+		if ( TryPlaceWithAutoFindValidSlot( _activeTarget, item ) )
+			return true;
 
-		if ( !target.CanPlace( item, in query ) )
-			return false;
-
-		return ExecutePlace( target, item, in query );
+		return false;
 	}
 
 	/// <summary>
 	/// Right-click: place on aimed surface when valid; throw into empty space.
-	/// Aiming any surface never throws — invalid placement does nothing.
+	/// Invalid constellation aim with a non-gem throws normally. Other invalid surfaces do nothing.
 	/// </summary>
 	public bool TrySecondaryPlace()
 	{
@@ -293,8 +351,20 @@ public class PlayerPlacement : MonoBehaviour
 			return TryThrowActive();
 
 		// Honor the LateUpdate ghost — preview and place must use the same target.
-		if ( TryPlaceOnActiveGroundStackPreview( item, in query ) )
-			return true;
+		if ( _hasPreview )
+		{
+			if ( _activePreview.IsValid )
+				return TryPlaceFromActivePreview( item );
+
+			if ( ShouldThrowAtRejectedConstellation( _activeTarget, item ) )
+				return TryThrowActive();
+
+			if ( TryPlaceWithAutoFindValidSlot( _activeTarget, item ) )
+				return true;
+
+			// Invalid surface aim: never throw.
+			return false;
+		}
 
 		if ( TryPlaceLooseVerticalStack( item, in query ) )
 			return true;
@@ -306,7 +376,11 @@ public class PlayerPlacement : MonoBehaviour
 		{
 			query.AutoFindValidSlot = true;
 			if ( !aimTarget.CanPlace( item, in query ) )
+			{
+				if ( ShouldThrowAtRejectedConstellation( aimTarget, item ) )
+					return TryThrowActive();
 				return false;
+			}
 
 			return ExecutePlace( aimTarget, item, in query );
 		}
@@ -327,12 +401,51 @@ public class PlayerPlacement : MonoBehaviour
 		return false;
 	}
 
-	bool TryPlaceOnActiveGroundStackPreview( TreasureItem item, in PlacementQuery query )
+	static bool ShouldThrowAtRejectedConstellation( ITreasurePlacementTarget target, TreasureItem item )
 	{
-		if ( !_hasPreview || !_activePreview.IsValid || _activeTarget == null || item == null )
+		if ( !( target is GemConstellationInteractable ) || item == null || item.Definition == null )
 			return false;
 
-		GroundCoinStack previewStack = _activeTarget as GroundCoinStack;
+		return item.Definition.category != TreasureCategory.Gem;
+	}
+
+	/// <summary>
+	/// Slot-grid display tables keep the preview on the aimed pile (valid or not), but placement
+	/// should snap to the nearest open slot when the hovered one is full or mismatched.
+	/// </summary>
+	static bool SupportsAutoFindValidSlot( ITreasurePlacementTarget target )
+	{
+		return target is TypedDisplayTableInteractable || target is MixedDisplayTableInteractable;
+	}
+
+	bool TryPlaceWithAutoFindValidSlot( ITreasurePlacementTarget target, TreasureItem item )
+	{
+		if ( !SupportsAutoFindValidSlot( target ) || item == null )
+			return false;
+
+		PlacementQuery query = BuildQuery();
+		query.AutoFindValidSlot = true;
+		if ( !target.CanPlace( item, in query ) )
+			return false;
+
+		return ExecutePlace( target, item, in query );
+	}
+
+	bool TryPlaceFromActivePreview( TreasureItem item )
+	{
+		if ( !HasValidPlacement || item == null )
+			return false;
+
+		ITreasurePlacementTarget target = _activeTarget;
+
+		// Floor volume ghost for coins means create/join GroundCoinStack, not FloorPlacementTarget.
+		if ( target == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
+			return TryPlaceOnFloor();
+
+		PlacementQuery query = target == _floorTarget ? BuildFloorQuery() : BuildQuery();
+		query.AutoFindValidSlot = true;
+
+		GroundCoinStack previewStack = target as GroundCoinStack;
 		if ( previewStack != null )
 		{
 			if ( previewStack.IsFull || !previewStack.CanPlace( item, in query ) )
@@ -341,14 +454,18 @@ public class PlayerPlacement : MonoBehaviour
 			return ExecutePlace( previewStack, item, in query );
 		}
 
-		if ( _activeTarget == _groundStackTarget && _groundStackTarget.CanPlace( item, in query ) )
+		if ( target == _groundStackTarget )
+		{
+			if ( !_groundStackTarget.CanPlace( item, in query ) )
+				return false;
+
 			return ExecutePlace( _groundStackTarget, item, in query );
+		}
 
-		// Floor volume ghost for coins means create/join GroundCoinStack, not FloorPlacementTarget.
-		if ( _activeTarget == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
-			return TryPlaceOnFloor();
+		if ( !target.CanPlace( item, in query ) )
+			return false;
 
-		return false;
+		return ExecutePlace( target, item, in query );
 	}
 
 	bool IsAimingFloorSurface( in PlacementQuery query )
@@ -400,13 +517,13 @@ public class PlayerPlacement : MonoBehaviour
 
 		TreasureSurfaceWorld world = TreasureSurfaceWorld.EnsureExists();
 		TreasureSurfaceDefinition surfaceDef = world.Definition;
-
-		TreasureItem anchor = cluster[ 0 ];
-		Vector3 anchorStart = anchor != null ? anchor.transform.position : item.transform.position;
+		float gravity = surfaceDef != null ? surfaceDef.throwBallisticGravity : 18f;
+		float landScale = surfaceDef != null ? surfaceDef.throwLandingSpeedScale : 0.85f;
 
 		Vector3[] ends = new Vector3[ cluster.Count ];
 		Quaternion[] rots = new Quaternion[ cluster.Count ];
 		Vector3[] landVels = new Vector3[ cluster.Count ];
+		float[] flightTimes = new float[ cluster.Count ];
 
 		for ( int i = 0; i < cluster.Count; i++ )
 		{
@@ -417,17 +534,29 @@ public class PlayerPlacement : MonoBehaviour
 			Vector3 start = member.transform.position;
 			Vector3 memberVelocity = throwVelocity;
 
-			if ( !TreasureSurfaceThrow.TryPredictLanding( world, start, memberVelocity, out Vector3 landPos, out Vector3 landVel ) )
+			if ( !TreasureSurfaceThrow.TryPredictLanding(
+				world,
+				start,
+				memberVelocity,
+				out Vector3 landPos,
+				out Vector3 landVel,
+				out float flightTime ) )
 			{
-				landPos = start + new Vector3( throwVelocity.x, 0f, throwVelocity.z ).normalized * 2f;
+				Vector3 planarThrow = new Vector3( throwVelocity.x, 0f, throwVelocity.z );
+				Vector3 flatDir = planarThrow.sqrMagnitude > 0.0001f
+					? planarThrow.normalized
+					: Vector3.forward;
+
+				landPos = start + flatDir * 2f;
 				landPos.y = surfaceDef != null ? surfaceDef.baseHeight : start.y;
-				landVel = new Vector3( throwVelocity.x, 0f, throwVelocity.z )
-					* ( surfaceDef != null ? surfaceDef.throwLandingSpeedScale : 0.85f );
+				landVel = planarThrow * landScale;
+				flightTime = 0.35f;
 			}
 
 			ends[ i ] = landPos;
-			rots[ i ] = FlattenUpright( member.transform.rotation );
+			rots[ i ] = TreasureOrientation.FlattenUpright( member.transform.rotation );
 			landVels[ i ] = landVel;
+			flightTimes[ i ] = flightTime;
 			member.BeginFlight();
 		}
 
@@ -442,24 +571,18 @@ public class PlayerPlacement : MonoBehaviour
 			stackedY += TreasureStackSpacing.GetStep( cluster[ i ] );
 		}
 
-		TreasureSurfaceThrow.ResolveFlightTuning(
-			item,
-			surfaceDef,
-			Vector3.Distance( anchorStart, ends[ 0 ] ),
-			out float duration,
-			out float arcHeight,
-			out float spins );
-
-		duration /= Mathf.Max( 0.1f, CoinFlipSpeed );
+		TreasureSurfaceThrow.ResolveFlightSpins( item, out float spins );
 
 		TreasureMotionHost.Run( TreasureSurfaceThrow.AnimateThrowCluster(
 			cluster,
+			throwVelocity,
+			gravity,
 			ends,
 			rots,
 			landVels,
-			duration,
-			arcHeight,
-			spins ) );
+			flightTimes,
+			spins,
+			CoinFlipSpeed ) );
 
 		EventBus.Publish( new PlacementCompletedEvent
 		{
@@ -468,16 +591,6 @@ public class PlayerPlacement : MonoBehaviour
 			Definition = item.Definition
 		} );
 		return true;
-	}
-
-	static Quaternion FlattenUpright( Quaternion source )
-	{
-		Vector3 flatForward = Vector3.ProjectOnPlane( source * Vector3.forward, Vector3.up );
-		if ( flatForward.sqrMagnitude < 0.0001f )
-			flatForward = Vector3.ProjectOnPlane( source * Vector3.right, Vector3.up );
-		if ( flatForward.sqrMagnitude < 0.0001f )
-			flatForward = Vector3.forward;
-		return Quaternion.LookRotation( flatForward.normalized, Vector3.up );
 	}
 
 	/// <summary>
@@ -544,16 +657,10 @@ public class PlayerPlacement : MonoBehaviour
 
 	bool CanPlaceCoinOnFloorSurface( TreasureItem item, in PlacementQuery query )
 	{
-		if ( item == null || !query.HasHit || query.Hit.collider == null )
+		if ( item == null || !query.HasHit )
 			return false;
 
-		if ( !PlacementFloorSurface.IsFloorCollider( query.Hit.collider ) )
-			return false;
-
-		Vector3 normal = query.Hit.normal.sqrMagnitude > 0.0001f
-			? query.Hit.normal.normalized
-			: Vector3.up;
-		return Vector3.Dot( normal, Vector3.up ) >= 0.35f;
+		return PlacementFloorSurface.IsWalkableFloorHit( in query.Hit );
 	}
 
 	bool TryPlaceCreatingGroundCoinStackOnFloor( TreasureItem item, in PlacementQuery query )
@@ -944,6 +1051,7 @@ public class PlayerPlacement : MonoBehaviour
 			return null;
 
 		float range = query.InteractRange > 0.01f ? query.InteractRange : _interaction.InteractRange;
+		LayerMask mask = _interaction != null ? _interaction.InteractMask : (LayerMask)Physics.DefaultRaycastLayers;
 		StackSnapColumnIds.Clear();
 
 		TreasureItem best = null;
@@ -957,7 +1065,7 @@ public class PlayerPlacement : MonoBehaviour
 				aimRay.direction,
 				StackSnapSphereCastHits,
 				range,
-				Physics.DefaultRaycastLayers,
+				mask,
 				QueryTriggerInteraction.Ignore );
 
 			for ( int i = 0; i < castCount; i++ )
@@ -977,7 +1085,7 @@ public class PlayerPlacement : MonoBehaviour
 				center,
 				radius,
 				StackSnapOverlap,
-				Physics.DefaultRaycastLayers,
+				mask,
 				QueryTriggerInteraction.Ignore );
 
 			for ( int i = 0; i < overlapCount; i++ )
@@ -1161,6 +1269,7 @@ public class PlayerPlacement : MonoBehaviour
 		_hasPreview = false;
 		_activePreview = default;
 		_hasSmoothedPreview = false;
+		HoverOutlineRegistrar.Clear();
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
 	}

@@ -123,7 +123,9 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		TreasureItem selected,
 		List<TreasureItem> results,
 		Ray aimRay,
-		bool hasAimRay )
+		bool hasAimRay,
+		bool hasHitWorldY = false,
+		float hitWorldY = 0f )
 	{
 		if ( results == null )
 			return false;
@@ -141,7 +143,11 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 			if ( hasAimRay && slot.Items.Count > 0 )
 			{
-				int aimIndex = CoinColumnPickup.ResolveIndexFromAimRay( slot.Items, aimRay );
+				int aimIndex = CoinColumnPickup.ResolveIndexFromAimRay(
+					slot.Items,
+					aimRay,
+					hasHitWorldY,
+					hitWorldY );
 				selectedIndex = Mathf.Clamp( aimIndex, 0, slot.Items.Count - 1 );
 			}
 

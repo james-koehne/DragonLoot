@@ -4,8 +4,8 @@ using UnityEngine;
 
 /// <summary>
 /// Raycast pickup for a physical <see cref="TreasureItem"/> (pile, physics, or displayed).
-/// Homogeneous loose coin stacks take the whole column (capacity-limited). Mixed loose columns
-/// and display stacks take from the aimed coin upward. Capacity leaves lower coins in place.
+/// Loose coin columns and display stacks take from the aimed coin upward (capacity-limited).
+/// Capacity leaves lower coins in place. Aimed coin becomes Active; coins above insert bottom-up.
 /// </summary>
 [RequireComponent( typeof( TreasureItem ) )]
 public class TreasureItemInteractable : InteractableBase
@@ -179,8 +179,19 @@ public class TreasureItemInteractable : InteractableBase
 
 		bool hasAimRay = false;
 		Ray aimRay = default;
-		if ( player != null && player.Interaction != null && player.Interaction.TryGetAimRay( out aimRay ) )
-			hasAimRay = true;
+		bool hasHitWorldY = false;
+		float hitWorldY = 0f;
+		if ( player != null && player.Interaction != null )
+		{
+			if ( player.Interaction.TryGetAimRay( out aimRay ) )
+				hasAimRay = true;
+
+			if ( player.Interaction.TryGetLastHit( out RaycastHit hit ) )
+			{
+				hasHitWorldY = true;
+				hitWorldY = hit.point.y;
+			}
+		}
 
 		if ( selected.IsWorldLoose )
 		{
@@ -193,19 +204,14 @@ public class TreasureItemInteractable : InteractableBase
 				return true;
 			}
 
-			if ( CoinColumnCylinderBinder.TryGetHomogeneousCoinDefinition( ColumnBuffer, out _, out _ ) )
-			{
-				// Non-mixed loose coin stacks: always take the whole column.
-				for ( int i = 0; i < ColumnBuffer.Count; i++ )
-					results.Add( ColumnBuffer[ i ] );
-				ColumnBuffer.Clear();
-				return results.Count > 0;
-			}
-
 			int startIndex = 0;
 			if ( hasAimRay )
 			{
-				startIndex = CoinColumnPickup.ResolveIndexFromAimRay( ColumnBuffer, aimRay );
+				startIndex = CoinColumnPickup.ResolveIndexFromAimRay(
+					ColumnBuffer,
+					aimRay,
+					hasHitWorldY,
+					hitWorldY );
 				startIndex = Mathf.Clamp( startIndex, 0, ColumnBuffer.Count - 1 );
 			}
 			else
@@ -229,7 +235,15 @@ public class TreasureItemInteractable : InteractableBase
 
 		ITreasureDisplayStackOwner stackOwner = selected.Owner as ITreasureDisplayStackOwner;
 		if ( stackOwner != null )
-			return stackOwner.TryCollectPickupColumn( selected, results, aimRay, hasAimRay );
+		{
+			return stackOwner.TryCollectPickupColumn(
+				selected,
+				results,
+				aimRay,
+				hasAimRay,
+				hasHitWorldY,
+				hitWorldY );
+		}
 
 		results.Add( selected );
 		return true;

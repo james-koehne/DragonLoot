@@ -18,6 +18,10 @@ public class PlayerController : MonoBehaviour
 	[Header( "View" )]
 	public Transform cameraMount;
 
+	[Header( "Debug" )]
+	[SerializeField] bool drawMovementGizmos;
+	[SerializeField] [Min( 0.1f )] float movementGizmoScale = 2f;
+
 	PlayerControllerDefinition _definition;
 	FirstPersonCameraController _cameraLook;
 	PlayerInteraction _interaction;
@@ -36,12 +40,22 @@ public class PlayerController : MonoBehaviour
 	float _groundDistance;
 	bool _isSliding;
 	float _slideEnterCharge;
+	bool _slideExitBoostActive;
+	float _slideExitBoostSpeed;
+	Vector3 _slideExitBoostDirection;
 	bool _wantsSprint;
 	bool _jumpAvailable = true;
 	bool _doubleJumpAvailable = true;
 	bool _isGliding;
 	bool _ignoreGrounding;
 	float _coyoteTimer;
+	Vector3 _lastSlideTravelDirection;
+
+	// Cached for optional movement gizmos (updated each move tick).
+	Vector3 _debugFlatMoveIntent;
+	Vector3 _debugGroundMoveIntent;
+	Vector3 _debugMoveVelocity;
+	Vector3 _debugFlatForward;
 
 	PlayerControllerDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
@@ -110,6 +124,10 @@ public class PlayerController : MonoBehaviour
 	float SlideBrakeExitDot => RuntimeDefinition.Get( Definition, d => d.slideBrakeExitDot, 0.4f );
 	float SlideBrakeExitSpeed => RuntimeDefinition.Get( Definition, d => d.slideBrakeExitSpeed, 2.5f );
 	float SlideReverseBrakeScale => RuntimeDefinition.Get( Definition, d => d.slideReverseBrakeScale, 2f );
+	float SlideExitBoostMaxSpeed => RuntimeDefinition.Get( Definition, d => d.slideExitBoostMaxSpeed, 24f );
+	float SlideExitBoostMultiplier => RuntimeDefinition.Get( Definition, d => d.slideExitBoostMultiplier, 1f );
+	float SlideExitBoostDecay => RuntimeDefinition.Get( Definition, d => d.slideExitBoostDecay, 70f );
+	float SlideExitBoostSteer => RuntimeDefinition.Get( Definition, d => d.slideExitBoostSteer, 25f );
 
 	public Transform CameraMount => cameraMount;
 	public PlayerInteraction Interaction => _interaction;
@@ -122,9 +140,40 @@ public class PlayerController : MonoBehaviour
 	public Vector3 PlanarVelocity => _planarVelocity;
 	public float PlanarSpeed => _planarVelocity.magnitude;
 	public Vector3 LocalPlanarVelocity => _localPlanarVelocity;
+
+	/// <summary>
+	/// Velocity baked into thrown treasure: full planar motion, plus vertical only while airborne
+	/// (skips grounded stick velocity so throws aren't yanked into the floor).
+	/// </summary>
+	public Vector3 ThrowInheritVelocity
+	{
+		get
+		{
+			Vector3 v = _planarVelocity;
+			v.y = 0f;
+			if ( !IsGrounded )
+				v.y = _verticalVelocity;
+			return v;
+		}
+	}
 	public bool IsSliding => _isSliding;
+	public bool IsSlideExitBoostActive => _slideExitBoostActive;
+	public float SlideExitBoostSpeed => _slideExitBoostSpeed;
 	public bool IsGliding => _isGliding;
 	public float GroundAngle => _groundAngle;
+
+	/// <summary>
+	/// Ends an active slide and kills residual slide/coast planar velocity.
+	/// Call from interact / place / throw so those actions plant the player.
+	/// </summary>
+	public void CancelSlideVelocity()
+	{
+		_isSliding = false;
+		_slideEnterCharge = 0f;
+		ClearSlideExitBoost();
+		_planarVelocity = Vector3.zero;
+		UpdateMovementState();
+	}
 
 	/// <summary>0–1 progress toward committed slide while entry conditions are held.</summary>
 	public float SlideEnterChargeProgress
@@ -208,6 +257,7 @@ public class PlayerController : MonoBehaviour
 	{
 		_characterController = GetComponent<CharacterController>();
 		PhysicsLayers.EnsurePlayerLayer( gameObject );
+		PhysicsLayers.EnsureCharacterControllerIgnoresCollectables( _characterController );
 		EnsureInteraction();
 		EnsureCarry();
 		EnsurePlacement();
@@ -348,55 +398,16 @@ public class PlayerController : MonoBehaviour
 
 	void Update()
 	{
-		UpdateGroundedState();
 		ApplyGravityAndMove();
 	}
 
-	void UpdateGroundedState()
-	{
-		bool grounded = ProbeGround();
-		WasLandingThisFrame = grounded && !_wasGrounded;
-		IsGrounded = grounded;
-
-		if ( !grounded )
-			_isSliding = false;
-
-		if ( WasLandingThisFrame )
-		{
-			_jumpAvailable = true;
-			_doubleJumpAvailable = true;
-			_isGliding = false;
-			_coyoteTimer = 0f;
-		}
-		else if ( _wasGrounded && !grounded )
-		{
-			// Walked off an edge — allow a brief jump window. Jump takeoff clears
-			// _wasGrounded itself so it does not start coyote after a real jump.
-			_coyoteTimer = _jumpAvailable ? CoyoteTime : 0f;
-		}
-		else if ( !grounded && _coyoteTimer > 0f )
-		{
-			_coyoteTimer -= Time.deltaTime;
-			if ( _coyoteTimer < 0f )
-				_coyoteTimer = 0f;
-		}
-		else if ( grounded )
-		{
-			_coyoteTimer = 0f;
-		}
-
-		UpdateMovementState();
-		_wasGrounded = grounded;
-	}
-
-	bool ProbeGround()
+	bool ProbeGround( Vector3 flatMoveIntent, Vector3 priorGroundNormal, bool hadPriorGround )
 	{
 		_hasGroundHit = false;
 		_groundNormal = Vector3.up;
 		_groundAngle = 0f;
 		_groundDistance = float.MaxValue;
 
-		// After jump, ignore stick/snap/probe until falling (or a real floor collision clears this).
 		if ( _ignoreGrounding )
 			return false;
 
@@ -428,10 +439,14 @@ public class PlayerController : MonoBehaviour
 		if ( castHit && hit.distance <= checkDistance )
 			return true;
 
-		// Snap onto descending slopes / uneven piles to avoid micro-airborne frames.
+		bool suppressSnap = hadPriorGround
+			&& _wasGrounded
+			&& HasSteepUphillFlatIntent( flatMoveIntent, priorGroundNormal );
+
 		bool wantsSnap = castHit
 			&& hit.distance <= snapDistance
-			&& ( _verticalVelocity <= 0f || _wasGrounded );
+			&& ( _verticalVelocity <= 0f || _wasGrounded )
+			&& !suppressSnap;
 
 		if ( wantsSnap )
 		{
@@ -473,7 +488,44 @@ public class PlayerController : MonoBehaviour
 				_wantsSprint = input.Sprint.IsPressed();
 				jumpHeld = input.Jump.IsPressed();
 				jumpPressed = input.Jump.WasPressedThisFrame();
+			}
+		}
 
+		GetFlatAxes( out Vector3 flatForward, out Vector3 flatRight );
+		Vector3 flatMoveIntent = flatForward * moveInput.y + flatRight * moveInput.x;
+
+		Vector3 priorGroundNormal = _groundNormal;
+		bool hadPriorGround = _hasGroundHit;
+		bool grounded = ProbeGround( flatMoveIntent, priorGroundNormal, hadPriorGround );
+		WasLandingThisFrame = grounded && !_wasGrounded;
+		IsGrounded = grounded;
+
+		if ( !grounded && _isSliding )
+			ExitSlide( retainMomentum: true );
+
+		if ( WasLandingThisFrame )
+		{
+			_jumpAvailable = true;
+			_doubleJumpAvailable = true;
+			_isGliding = false;
+			_coyoteTimer = 0f;
+		}
+		else if ( _wasGrounded && !grounded )
+			_coyoteTimer = _jumpAvailable ? CoyoteTime : 0f;
+		else if ( !grounded && _coyoteTimer > 0f )
+		{
+			_coyoteTimer -= Time.deltaTime;
+			if ( _coyoteTimer < 0f )
+				_coyoteTimer = 0f;
+		}
+		else if ( grounded )
+			_coyoteTimer = 0f;
+
+		if ( gameplayInputEnabled )
+		{
+			GameInput input = GetGameInput();
+			if ( input != null )
+			{
 				bool canCoyoteJump = _coyoteTimer > 0f;
 				if ( _jumpAvailable
 				     && !_isSliding
@@ -487,7 +539,15 @@ public class PlayerController : MonoBehaviour
 					IsGrounded = false;
 					_wasGrounded = false;
 					_isSliding = false;
+					ClearSlideExitBoost();
 					_hasGroundHit = false;
+				}
+				else if ( _isGliding
+				          && !IsGrounded
+				          && !_isSliding
+				          && jumpPressed )
+				{
+					_isGliding = false;
 				}
 				else if ( _doubleJumpAvailable
 				          && !_jumpAvailable
@@ -500,6 +560,7 @@ public class PlayerController : MonoBehaviour
 					_isGliding = true;
 					_ignoreGrounding = true;
 					_isSliding = false;
+					ClearSlideExitBoost();
 					_hasGroundHit = false;
 				}
 			}
@@ -508,21 +569,26 @@ public class PlayerController : MonoBehaviour
 		if ( _isGliding && GlideRequiresJumpHeld && !jumpHeld )
 			_isGliding = false;
 
-		GetFlatAxes( out Vector3 flatForward, out Vector3 flatRight );
-		Vector3 moveIntent = flatForward * moveInput.y + flatRight * moveInput.x;
+		Vector3 moveIntent = flatMoveIntent;
+		if ( IsGrounded && _hasGroundHit && flatMoveIntent.sqrMagnitude > 0.0001f )
+			moveIntent = AlignMoveIntentToGround( flatMoveIntent );
+
+		_debugFlatForward = flatForward;
+		_debugFlatMoveIntent = flatMoveIntent;
+		_debugGroundMoveIntent = moveIntent;
 
 		if ( IsGrounded && _verticalVelocity < 0f )
 			_verticalVelocity = GroundStickVelocity;
 
 		if ( IsGrounded )
-			UpdateSlideState( moveIntent, moveInput.y );
+			UpdateSlideState( flatMoveIntent, moveInput.y );
 		else
 			_slideEnterCharge = 0f;
 
 		Vector3 velocity;
 		if ( _isSliding && IsGrounded )
 		{
-			ApplySlideMovement( moveIntent, flatRight, Time.deltaTime );
+			ApplySlideMovement( flatMoveIntent, flatRight, Time.deltaTime );
 			velocity = _planarVelocity;
 			if ( _verticalVelocity < 0f )
 				velocity += Vector3.up * _verticalVelocity;
@@ -539,21 +605,19 @@ public class PlayerController : MonoBehaviour
 			else
 				_verticalVelocity += Gravity * Time.deltaTime;
 
-			Vector3 horizontal = _planarVelocity;
 			if ( IsGrounded && _hasGroundHit )
-			{
-				horizontal = Vector3.ProjectOnPlane( _planarVelocity, _groundNormal );
-				if ( horizontal.sqrMagnitude > 0.0001f && _planarVelocity.sqrMagnitude > 0.0001f )
-					horizontal = horizontal.normalized * _planarVelocity.magnitude;
-			}
-
-			velocity = horizontal + Vector3.up * _verticalVelocity;
+				velocity = ComposeGroundedMoveVelocity( _planarVelocity, moveIntent );
+			else
+				velocity = new Vector3( _planarVelocity.x, _verticalVelocity, _planarVelocity.z );
 		}
+
+		_debugMoveVelocity = velocity;
 
 		CollisionFlags collisionFlags = _characterController.Move( velocity * Time.deltaTime );
 		ResolveJumpGroundingSuppress( collisionFlags );
 
 		UpdateLocalPlanarVelocity( flatForward, flatRight );
+		_wasGrounded = grounded;
 		UpdateMovementState();
 	}
 
@@ -581,15 +645,21 @@ public class PlayerController : MonoBehaviour
 
 	void ApplyStandardPlanarMovement( Vector3 moveIntent, float dt )
 	{
-		// Keep planar velocity horizontal outside of slope projection used only for Move.
-		_planarVelocity.y = 0f;
+		bool climbingSteep = HasSteepUphillMoveIntent( moveIntent );
+
+		if ( IsGrounded && _hasGroundHit && !climbingSteep )
+			_planarVelocity = Vector3.ProjectOnPlane( _planarVelocity, _groundNormal );
+		else if ( !IsGrounded )
+			_planarVelocity.y = 0f;
 
 		bool sprinting = _wantsSprint && moveIntent.sqrMagnitude > 0.0001f;
 		float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
 		float targetSpeed = ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale;
 		if ( _slideEnterCharge > 0f && !_isSliding )
 			targetSpeed *= SlideEnterMoveSpeedScale;
-		Vector3 desired = moveIntent * targetSpeed;
+		Vector3 desired = moveIntent.sqrMagnitude > 0.0001f
+			? moveIntent.normalized * targetSpeed
+			: Vector3.zero;
 		float accel;
 		float decel;
 
@@ -618,7 +688,82 @@ public class PlayerController : MonoBehaviour
 		if ( desired.sqrMagnitude < 0.0001f )
 			rate = decel;
 
+		if ( _slideExitBoostActive )
+		{
+			ApplySlideExitBoost( moveIntent, targetSpeed, dt );
+			return;
+		}
+
 		_planarVelocity = Vector3.MoveTowards( _planarVelocity, desired, rate * dt );
+	}
+
+	void BeginSlideExitBoost( float slideSpeed, Vector3 exitDirection )
+	{
+		if ( slideSpeed <= 0.01f )
+		{
+			ClearSlideExitBoost();
+			return;
+		}
+
+		Vector3 direction = exitDirection;
+		direction.y = 0f;
+		if ( direction.sqrMagnitude < 0.0001f )
+		{
+			ClearSlideExitBoost();
+			return;
+		}
+
+		direction.Normalize();
+		float boostedSpeed = slideSpeed * SlideExitBoostMultiplier;
+		_slideExitBoostSpeed = Mathf.Min( boostedSpeed, SlideExitBoostMaxSpeed );
+		_slideExitBoostDirection = direction;
+		_slideExitBoostActive = true;
+		_planarVelocity = direction * _slideExitBoostSpeed;
+	}
+
+	void ClearSlideExitBoost()
+	{
+		_slideExitBoostActive = false;
+		_slideExitBoostSpeed = 0f;
+		_slideExitBoostDirection = Vector3.zero;
+	}
+
+	void ExitSlide( bool retainMomentum )
+	{
+		_isSliding = false;
+		_slideEnterCharge = 0f;
+		if ( !retainMomentum )
+		{
+			_planarVelocity.y = 0f;
+			ClearSlideExitBoost();
+			return;
+		}
+
+		float slideSpeed = _planarVelocity.magnitude;
+		Vector3 exitDirection = ResolveSlideExitDirection();
+		BeginSlideExitBoost( slideSpeed, exitDirection );
+	}
+
+	void ApplySlideExitBoost( Vector3 moveIntent, float targetWalkSpeed, float dt )
+	{
+		if ( moveIntent.sqrMagnitude > 0.0001f )
+		{
+			Vector3 flatIntent = moveIntent;
+			flatIntent.y = 0f;
+			if ( flatIntent.sqrMagnitude > 0.0001f )
+			{
+				float steerT = Mathf.Clamp01( SlideExitBoostSteer * dt );
+				_slideExitBoostDirection = Vector3.Slerp(
+					_slideExitBoostDirection, flatIntent.normalized, steerT ).normalized;
+			}
+		}
+
+		_slideExitBoostSpeed = Mathf.MoveTowards(
+			_slideExitBoostSpeed, targetWalkSpeed, SlideExitBoostDecay * dt );
+		_planarVelocity = _slideExitBoostDirection * _slideExitBoostSpeed;
+
+		if ( Mathf.Abs( _slideExitBoostSpeed - targetWalkSpeed ) <= 0.05f )
+			ClearSlideExitBoost();
 	}
 
 	void UpdateSlideState( Vector3 moveIntent, float forwardInput )
@@ -635,9 +780,7 @@ public class PlayerController : MonoBehaviour
 			float exitAngle = Mathf.Max( 0f, SlideAngle - SlideExitHysteresis );
 			if ( !IsGrounded || _groundAngle < exitAngle )
 			{
-				_isSliding = false;
-				_planarVelocity.y = 0f;
-				_slideEnterCharge = 0f;
+				ExitSlide( retainMomentum: true );
 				return;
 			}
 
@@ -648,9 +791,7 @@ public class PlayerController : MonoBehaviour
 				if ( climbDot >= SlideExitDot
 				     && ( climbDot > 0.85f || _planarVelocity.magnitude <= SlideExitSpeedThreshold ) )
 				{
-					_isSliding = false;
-					_planarVelocity.y = 0f;
-					_slideEnterCharge = 0f;
+					ExitSlide( retainMomentum: true );
 				}
 			}
 
@@ -687,6 +828,7 @@ public class PlayerController : MonoBehaviour
 			{
 				_isSliding = true;
 				_slideEnterCharge = 0f;
+				ClearSlideExitBoost();
 			}
 		}
 		else
@@ -698,7 +840,7 @@ public class PlayerController : MonoBehaviour
 		Vector3 downhill = GetDownhillDirection();
 		if ( downhill.sqrMagnitude <= MinDownhillSqr )
 		{
-			_isSliding = false;
+			ExitSlide( retainMomentum: true );
 			ApplyStandardPlanarMovement( moveIntent, dt );
 			return;
 		}
@@ -736,6 +878,8 @@ public class PlayerController : MonoBehaviour
 		if ( _hasGroundHit )
 			_planarVelocity = Vector3.ProjectOnPlane( _planarVelocity, _groundNormal );
 
+		UpdateLastSlideTravelDirection( downhill );
+
 		if ( _isSliding && _planarVelocity.sqrMagnitude <= SlideBrakeExitSpeed * SlideBrakeExitSpeed
 		     && moveIntent.sqrMagnitude > 0.0001f )
 		{
@@ -745,7 +889,7 @@ public class PlayerController : MonoBehaviour
 			float alongVelocity = Vector3.Dot( moveIntent.normalized, velDir );
 			if ( alongVelocity < -SlideBrakeExitDot )
 			{
-				_isSliding = false;
+				ExitSlide( retainMomentum: false );
 				_planarVelocity = Vector3.zero;
 			}
 		}
@@ -765,6 +909,82 @@ public class PlayerController : MonoBehaviour
 			return Vector3.zero;
 
 		return downhill.normalized;
+	}
+
+	void UpdateLastSlideTravelDirection( Vector3 downhill )
+	{
+		Vector3 flatVelocity = _planarVelocity;
+		flatVelocity.y = 0f;
+		if ( flatVelocity.sqrMagnitude > 0.25f )
+		{
+			_lastSlideTravelDirection = flatVelocity.normalized;
+			return;
+		}
+
+		Vector3 flatDownhill = GetFlatDirection( downhill );
+		if ( flatDownhill.sqrMagnitude > MinDownhillSqr )
+			_lastSlideTravelDirection = flatDownhill;
+	}
+
+	Vector3 ResolveSlideExitDirection()
+	{
+		Vector3 horizontal = _planarVelocity;
+		horizontal.y = 0f;
+		if ( horizontal.sqrMagnitude > 0.0001f )
+			return horizontal.normalized;
+
+		if ( _lastSlideTravelDirection.sqrMagnitude > MinDownhillSqr )
+			return _lastSlideTravelDirection;
+
+		GetFlatAxes( out Vector3 flatForward, out Vector3 flatRight );
+		return flatForward;
+	}
+
+	bool HasSteepUphillFlatIntent( Vector3 flatMoveIntent, Vector3 groundNormal )
+	{
+		if ( groundNormal.sqrMagnitude < 0.0001f || flatMoveIntent.sqrMagnitude < 0.0001f )
+			return false;
+
+		float angle = Vector3.Angle( groundNormal, Vector3.up );
+		if ( angle < SlideAngle )
+			return false;
+
+		Vector3 downhill = Vector3.ProjectOnPlane( Vector3.down, groundNormal );
+		Vector3 flatDownhill = GetFlatDirection( downhill );
+		if ( flatDownhill.sqrMagnitude <= MinDownhillSqr )
+			return false;
+
+		return Vector3.Dot( flatMoveIntent.normalized, -flatDownhill ) >= SlideExitDot;
+	}
+
+	bool HasSteepUphillMoveIntent( Vector3 moveIntent )
+	{
+		if ( !_hasGroundHit || _groundAngle < SlideAngle )
+			return false;
+
+		if ( moveIntent.sqrMagnitude < 0.0001f )
+			return false;
+
+		Vector3 downhill = GetDownhillDirection();
+		Vector3 flatDownhill = GetFlatDirection( downhill );
+		if ( flatDownhill.sqrMagnitude <= MinDownhillSqr )
+			return false;
+
+		Vector3 flatIntent = moveIntent;
+		flatIntent.y = 0f;
+		if ( flatIntent.sqrMagnitude < 0.0001f )
+			return false;
+
+		return Vector3.Dot( flatIntent.normalized, -flatDownhill ) >= SlideExitDot;
+	}
+
+	Vector3 ComposeGroundedMoveVelocity( Vector3 slopeVelocity, Vector3 moveIntent )
+	{
+		if ( HasSteepUphillMoveIntent( moveIntent ) )
+			return slopeVelocity;
+
+		Vector3 alongSurface = Vector3.ProjectOnPlane( slopeVelocity, _groundNormal );
+		return alongSurface + Vector3.up * GroundStickVelocity;
 	}
 
 	/// <summary>Horizontal (XZ) unit direction for comparing against flat move intent.</summary>
@@ -792,6 +1012,86 @@ public class PlayerController : MonoBehaviour
 			flatRight.Normalize();
 		else
 			flatRight = Vector3.right;
+	}
+
+	/// <summary>
+	/// Maps horizontal move intent onto the ground plane while preserving XZ heading.
+	/// Intersection of the ground with the vertical plane of the intent — slope adds
+	/// climb/descend only; a sideways-tilted normal cannot veer travel left/right.
+	/// </summary>
+	Vector3 AlignMoveIntentToGround( Vector3 flatIntent )
+	{
+		float magnitude = flatIntent.magnitude;
+		if ( magnitude < 0.0001f )
+			return Vector3.zero;
+
+		Vector3 flatDir = flatIntent / magnitude;
+		Vector3 verticalPlaneNormal = Vector3.Cross( flatDir, Vector3.up );
+		if ( verticalPlaneNormal.sqrMagnitude < 0.0001f )
+			return Vector3.zero;
+
+		Vector3 alongSurface = Vector3.Cross( _groundNormal, verticalPlaneNormal );
+		if ( alongSurface.sqrMagnitude < 0.0001f )
+		{
+			alongSurface = Vector3.ProjectOnPlane( flatDir, _groundNormal );
+			if ( alongSurface.sqrMagnitude < 0.0001f )
+				return Vector3.zero;
+		}
+
+		alongSurface.Normalize();
+		if ( Vector3.Dot( alongSurface, flatDir ) < 0f )
+			alongSurface = -alongSurface;
+
+		return alongSurface * magnitude;
+	}
+
+	void OnDrawGizmos()
+	{
+		if ( !drawMovementGizmos || !Application.isPlaying )
+			return;
+
+		Vector3 origin = transform.position + Vector3.up * 0.15f;
+		float scale = movementGizmoScale;
+
+		if ( _hasGroundHit )
+		{
+			Gizmos.color = Color.cyan;
+			Gizmos.DrawRay( origin, _groundNormal * scale );
+
+			Vector3 downhill = GetDownhillDirection();
+			if ( downhill.sqrMagnitude > 0.0001f )
+			{
+				Gizmos.color = new Color( 1f, 0.35f, 0.1f, 1f );
+				Gizmos.DrawRay( origin, downhill * scale );
+			}
+		}
+
+		Gizmos.color = Color.white;
+		Gizmos.DrawRay( origin, _debugFlatForward * scale );
+
+		if ( _debugFlatMoveIntent.sqrMagnitude > 0.0001f )
+		{
+			Gizmos.color = Color.yellow;
+			Gizmos.DrawRay( origin, _debugFlatMoveIntent.normalized * scale );
+		}
+
+		if ( _debugGroundMoveIntent.sqrMagnitude > 0.0001f )
+		{
+			Gizmos.color = Color.green;
+			Gizmos.DrawRay( origin, _debugGroundMoveIntent.normalized * scale );
+		}
+
+		if ( _planarVelocity.sqrMagnitude > 0.0001f )
+		{
+			Gizmos.color = Color.magenta;
+			Gizmos.DrawRay( origin, _planarVelocity.normalized * scale );
+		}
+
+		if ( _debugMoveVelocity.sqrMagnitude > 0.0001f )
+		{
+			Gizmos.color = new Color( 0.2f, 0.85f, 1f, 1f );
+			Gizmos.DrawRay( origin + Vector3.up * 0.05f, _debugMoveVelocity.normalized * scale );
+		}
 	}
 
 	void UpdateLocalPlanarVelocity( Vector3 flatForward, Vector3 flatRight )
@@ -834,12 +1134,14 @@ public class PlayerController : MonoBehaviour
 		_localPlanarVelocity = Vector3.zero;
 		_isSliding = false;
 		_slideEnterCharge = 0f;
+		ClearSlideExitBoost();
 		_wantsSprint = false;
 		_jumpAvailable = true;
 		_doubleJumpAvailable = true;
 		_isGliding = false;
 		_ignoreGrounding = false;
 		_coyoteTimer = 0f;
+		_lastSlideTravelDirection = Vector3.zero;
 		_groundNormal = Vector3.up;
 		_groundAngle = 0f;
 		_hasGroundHit = false;
@@ -863,12 +1165,14 @@ public class PlayerController : MonoBehaviour
 		_localPlanarVelocity = Vector3.zero;
 		_isSliding = false;
 		_slideEnterCharge = 0f;
+		ClearSlideExitBoost();
 		_wantsSprint = false;
 		_jumpAvailable = true;
 		_doubleJumpAvailable = true;
 		_isGliding = false;
 		_ignoreGrounding = false;
 		_coyoteTimer = 0f;
+		_lastSlideTravelDirection = Vector3.zero;
 		_groundNormal = Vector3.up;
 		_groundAngle = 0f;
 		_hasGroundHit = false;

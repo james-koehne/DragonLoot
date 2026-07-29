@@ -41,6 +41,35 @@ public class PlayerPlacementDefinition : ScriptableObject
 	[Min( 0.1f )]
 	public float previewSmoothSpeed = 18f;
 
+	[Header( "Placement Ghost Visual" )]
+	public Color validGhostColor = new Color( 0.25f, 0.9f, 0.35f, 0.35f );
+	public Color invalidGhostColor = new Color( 0.95f, 0.2f, 0.2f, 0.35f );
+
+	[Range( 0.5f, 8f )]
+	public float ghostFresnelPower = 2.4f;
+
+	[Range( 0f, 2f )]
+	public float ghostFresnelBoost = 0.7f;
+
+	[Range( 0f, 1f )]
+	public float ghostPulseAmount = 0.12f;
+
+	[Min( 0f )]
+	public float ghostPulseSpeed = 0.85f;
+
+	[Range( 0f, 2f )]
+	public float ghostRimIntensity = 1.15f;
+
+	[Range( 0f, 1f )]
+	public float ghostCoreIntensity = 0.28f;
+
+	[Header( "Stack Volume Outline" )]
+	[Tooltip( "Diameter scale for coin-stack placement preview volume." )]
+	[Range( 1f, 1.5f )]
+	public float stackVolumeOversize = 1.1f;
+
+	public HoverOutlineVisualSettings stackOutline = HoverOutlineVisualSettings.DefaultStack();
+
 	void OnValidate()
 	{
 		dropUpBias = Mathf.Max( 0f, dropUpBias );
@@ -51,5 +80,16 @@ public class PlayerPlacementDefinition : ScriptableObject
 		placementArcHeight = Mathf.Max( 0f, placementArcHeight );
 		coinFlipSpeed = Mathf.Max( 0.1f, coinFlipSpeed );
 		previewSmoothSpeed = Mathf.Max( 0.1f, previewSmoothSpeed );
+		ghostFresnelPower = Mathf.Clamp( ghostFresnelPower, 0.5f, 8f );
+		ghostFresnelBoost = Mathf.Clamp( ghostFresnelBoost, 0f, 2f );
+		ghostPulseAmount = Mathf.Clamp01( ghostPulseAmount );
+		ghostPulseSpeed = Mathf.Max( 0f, ghostPulseSpeed );
+		ghostRimIntensity = Mathf.Clamp( ghostRimIntensity, 0f, 2f );
+		ghostCoreIntensity = Mathf.Clamp01( ghostCoreIntensity );
+		stackVolumeOversize = Mathf.Clamp( stackVolumeOversize, 1f, 1.5f );
+		if ( stackOutline == null )
+			stackOutline = HoverOutlineVisualSettings.DefaultStack();
+		else
+			stackOutline.Validate();
 	}
 }

@@ -147,8 +147,15 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		bool hasHit = interaction != null && interaction.TryGetLastHit( out hit );
 		if ( hasHit )
 		{
-			pileVisual.SetLastInteractPoint( hit.point );
-			digPoint = hit.point;
+			if ( pileVisual.HasPileSurfaceAt( hit.point ) )
+			{
+				pileVisual.SetLastInteractPoint( hit.point );
+				digPoint = hit.point;
+			}
+			else
+			{
+				hasHit = false;
+			}
 		}
 
 		PlayerCarry carry = player.Carry;
@@ -338,17 +345,9 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 
 	public bool CanPlace( TreasureItem item, in PlacementQuery query )
 	{
-		if ( item == null || item.Definition == null || pileVisual == null )
-			return false;
-
-		if ( !query.HasHit || query.Hit.collider == null )
-			return false;
-
-		if ( query.Hit.collider.GetComponentInParent<TreasurePileInteractable>() != this )
-			return false;
-
-		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
-		return carry != null && carry.HasActive && carry.ContainsItem( item );
+		// Placing/throwing back into a gold pile is disabled — items use surface physics
+		// and flow down the stamped mound instead.
+		return false;
 	}
 
 	public bool TryGetPlacementPreview( TreasureItem item, in PlacementQuery query, out PlacementPreview preview )
@@ -369,6 +368,7 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		preview.Rotation = Quaternion.identity;
 		preview.Scale = item.GetWorldScale();
 		preview.IsValid = CanPlace( item, in query );
+		preview.GhostStyle = PlacementGhostStyle.Suppressed;
 		return true;
 	}
 

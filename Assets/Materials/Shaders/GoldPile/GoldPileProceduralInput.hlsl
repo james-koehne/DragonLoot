@@ -21,6 +21,7 @@ CBUFFER_START(UnityPerMaterial)
     half _DeformSampleBlur;
     float _DeformWorldSize;
     float _DeformResolution;
+    half _GroundLevelHeight;
 
     float _CoinDiameter;
     float _CoinDensity;

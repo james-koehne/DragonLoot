@@ -64,7 +64,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		get
 		{
 			CarryDefinition def = Definition;
-			float floor = def != null ? def.minBurdenedMoveSpeedScale : 0.08f;
+			float floor = def != null ? def.minBurdenedMoveSpeedScale : 1f;
 			return Mathf.Lerp( 1f, floor, CarryBurden01 );
 		}
 	}
@@ -600,7 +600,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	}
 
 	/// <summary>
-	/// Adds a support stack (bottom-to-top). Newest (top) becomes Active; older items demote into held.
+	/// Adds a support stack (bottom-to-top). The aimed/bottom coin becomes Active; coins above it
+	/// demote into held in bottom-up order; previous holdings are pushed behind the new batch.
 	/// </summary>
 	public bool TryAddSupportStack( IReadOnlyList<TreasureItem> orderedBottomToTop )
 	{
@@ -610,12 +611,14 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( _holdRoot == null || _activeRoot == null )
 			return false;
 
+		// Insert top→bottom so InsertAsActive leaves orderedBottomToTop[0] as Active
+		// with the rest held as [next_up, …, top, previous…].
 		bool any = false;
-		for ( int i = 0; i < orderedBottomToTop.Count; i++ )
+		for ( int i = orderedBottomToTop.Count - 1; i >= 0; i-- )
 		{
 			TreasureItem item = orderedBottomToTop[ i ];
 			if ( item == null )
-				break;
+				continue;
 
 			if ( !TryAddExisting( item ) )
 				break;

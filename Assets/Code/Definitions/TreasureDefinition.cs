@@ -67,6 +67,9 @@ public class TreasureDefinition : ScriptableObject
 	[Min( 0.01f )]
 	public float pickupRadius = 0.35f;
 
+	[Tooltip( "When seated on a gold pile, solid-collide with the player. Leave off for small props you can walk through; enable for large obstacles." )]
+	public bool collideWithPlayerOnPile = false;
+
 	[Header( "Visuals" )]
 	public Sprite icon;
 

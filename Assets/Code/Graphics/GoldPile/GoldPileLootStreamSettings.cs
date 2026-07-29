@@ -14,7 +14,7 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	[Tooltip( "When enabled: coins only at LOD0, gems through LOD1, crowns/artifacts/etc. at any distance while in frustum." )]
 	public bool useCategoryDistanceCulling = true;
 
-	[Header( "LOD distances (meters to chunk center)" )]
+	[Header( "LOD distances (meters to chunk bounds, XZ)" )]
 	[Min( 0.1f )]
 	public float lod0End = 14f;
 

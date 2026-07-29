@@ -1,12 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// Shared visuals for homogeneous coin columns (owned stacks, hand, ground, tables).
+/// Shared visuals for coin columns (owned stacks, hand, ground, tables).
 /// Asset name must be <c>CoinStackVisualDefinition</c> for <see cref="GameInstance.GetDefinition{T}"/>.
 /// </summary>
 [CreateAssetMenu( fileName = "CoinStackVisualDefinition", menuName = "Definitions/CoinStackVisualDefinition" )]
 public class CoinStackVisualDefinition : ScriptableObject
 {
+	public const int MaxTypeSlots = 8;
+
 	[Header( "Mesh" )]
 	[Tooltip( "Single-coin mesh stretched into a stack (e.g. CopperCoin.fbx shared by all metals)." )]
 	public Mesh stackMesh;
@@ -23,6 +25,24 @@ public class CoinStackVisualDefinition : ScriptableObject
 	public Material goldStackMaterial;
 	public Material silverStackMaterial;
 	public Material copperStackMaterial;
+
+	[Tooltip( "Multi-type cylinder material (Texture2DArrays + per-band type map)." )]
+	public Material multiStackMaterial;
+
+	[Header( "Multi Type Indices" )]
+	[Tooltip( "Ordered type slice indices: Gold=0, Silver=1, Copper=2 by default." )]
+	[Range( 0, MaxTypeSlots - 1 )]
+	public int goldTypeIndex = 0;
+
+	[Range( 0, MaxTypeSlots - 1 )]
+	public int silverTypeIndex = 1;
+
+	[Range( 0, MaxTypeSlots - 1 )]
+	public int copperTypeIndex = 2;
+
+	[Tooltip( "How many type slices are filled in the Texture2DArrays." )]
+	[Range( 1, MaxTypeSlots )]
+	public int typeCount = 3;
 
 	[Header( "Layout" )]
 	[Min( 0.01f )]
@@ -58,6 +78,28 @@ public class CoinStackVisualDefinition : ScriptableObject
 		if ( silverStackMaterial != null )
 			return silverStackMaterial;
 		return copperStackMaterial;
+	}
+
+	/// <summary>
+	/// Texture2DArray slice index for <paramref name="treasure"/>. Unknown variants fall back to gold.
+	/// </summary>
+	public int ResolveTypeIndex( TreasureDefinition treasure )
+	{
+		int count = typeCount > 0 ? typeCount : 3;
+		int maxIndex = Mathf.Max( 0, Mathf.Min( count, MaxTypeSlots ) - 1 );
+		string variant = treasure != null ? treasure.variant : null;
+		int index = goldTypeIndex;
+		if ( !string.IsNullOrEmpty( variant ) )
+		{
+			if ( variant.IndexOf( "silver", System.StringComparison.OrdinalIgnoreCase ) >= 0 )
+				index = silverTypeIndex;
+			else if ( variant.IndexOf( "copper", System.StringComparison.OrdinalIgnoreCase ) >= 0 )
+				index = copperTypeIndex;
+			else if ( variant.IndexOf( "gold", System.StringComparison.OrdinalIgnoreCase ) >= 0 )
+				index = goldTypeIndex;
+		}
+
+		return Mathf.Clamp( index, 0, maxIndex );
 	}
 
 	public void GetMeshReferenceSize( out float diameter, out float height )

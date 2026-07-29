@@ -178,7 +178,9 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		TreasureItem selected,
 		List<TreasureItem> results,
 		Ray aimRay,
-		bool hasAimRay )
+		bool hasAimRay,
+		bool hasHitWorldY = false,
+		float hitWorldY = 0f )
 	{
 		if ( results == null )
 			return false;

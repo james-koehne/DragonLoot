@@ -1,8 +1,10 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 /// <summary>
-/// Single stretched coin mesh for a homogeneous tower. Height and side banding follow coin count;
-/// materials and mesh come from <see cref="CoinStackVisualDefinition"/>.
+/// Stretched coin mesh for a stack cylinder. Homogeneous stacks use per-metal materials;
+/// mixed stacks use the multi-type material with a per-band type lookup texture.
 /// </summary>
 [DisallowMultipleComponent]
 public class CoinStackCylinderVisual : MonoBehaviour
@@ -10,6 +12,11 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	const string CoinCountProp = "_CoinCount";
 	const string MeshBoundsMinYProp = "_MeshBoundsMinY";
 	const string MeshBoundsSizeYProp = "_MeshBoundsSizeY";
+	const string CoinTypeMapProp = "_CoinTypeMap";
+	const string TypeCountProp = "_TypeCount";
+	const string TypeFresnelProp = "_TypeFresnelColor";
+
+	static readonly Vector4[] TypeFresnelScratch = new Vector4[CoinStackVisualDefinition.MaxTypeSlots];
 
 	[SerializeField]
 	CoinStackVisualDefinition visualDefinition;
@@ -34,6 +41,8 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	float _meshBoundsMinY;
 	float _meshBoundsSizeY = 0.1f;
 	float _diameterScale = 1f;
+	Texture2D _typeMap;
+	Color[] _typeMapPixels;
 
 	public int DisplayedCount => _targetCount;
 
@@ -71,6 +80,18 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	{
 		EnsureVisual();
 		ApplyDefinitionSettings();
+	}
+
+	void OnDestroy()
+	{
+		if ( _typeMap != null )
+		{
+			if ( Application.isPlaying )
+				Destroy( _typeMap );
+			else
+				DestroyImmediate( _typeMap );
+			_typeMap = null;
+		}
 	}
 
 	public void SetStack( TreasureDefinition definition, int count )
@@ -115,6 +136,59 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		ApplyTransform( visible ? _targetHeight : 0f );
 	}
 
+	/// <summary>
+	/// Multi-type cylinder: one mesh covering every slot, band materials from type LUT.
+	/// </summary>
+	public void SetStackMulti(
+		IList<TreasureDefinition> slots,
+		bool snap,
+		float diameter = -1f,
+		float totalStackHeight = -1f )
+	{
+		EnsureVisual();
+		ApplyDefinitionSettings();
+
+		int count = slots != null ? slots.Count : 0;
+		_treasure = count > 0 ? slots[ 0 ] : null;
+		_targetCount = Mathf.Max( 0, count );
+
+		float height = 0f;
+		float maxDiameter = 0f;
+		CoinStackVisualDefinition def = Definition;
+		for ( int i = 0; i < count; i++ )
+		{
+			TreasureDefinition slot = slots[ i ];
+			height += TreasureStackSpacing.GetStep( slot );
+			float d = ResolveDiameter( slot );
+			if ( d > maxDiameter )
+				maxDiameter = d;
+		}
+
+		_targetHeight = totalStackHeight > 0.0001f ? totalStackHeight : height;
+		_targetDiameter = diameter > 0.0001f ? diameter : ( maxDiameter > 0.0001f ? maxDiameter : 0.2f );
+
+		ApplyMesh();
+		Material multiMat = def != null ? def.multiStackMaterial : null;
+		ApplyMultiMaterial();
+		bool usingMulti = multiMat != null && meshRenderer != null && meshRenderer.sharedMaterial == multiMat;
+		if ( usingMulti )
+		{
+			UploadTypeMap( slots, def );
+			ApplyMpbMulti( _targetCount, def );
+		}
+		else
+		{
+			ApplyMpb( _targetCount );
+		}
+
+		bool visible = _targetCount > 0;
+		if ( meshRenderer != null )
+			meshRenderer.enabled = visible;
+
+		ApplyTransform( visible ? _targetHeight : 0f );
+		_ = snap;
+	}
+
 	public void SnapToCount( TreasureDefinition definition, int count )
 	{
 		SnapToCount( definition, count, heightStep: -1f, diameter: -1f );
@@ -133,6 +207,11 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		float totalStackHeight )
 	{
 		SetStack( definition, count, heightStep, diameter, totalStackHeight );
+	}
+
+	public void SnapToCountMulti( IList<TreasureDefinition> slots, float diameter = -1f, float totalStackHeight = -1f )
+	{
+		SetStackMulti( slots, snap: true, diameter, totalStackHeight );
 	}
 
 	void ApplyDefinitionSettings()
@@ -213,6 +292,72 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			meshRenderer.sharedMaterial = mat;
 	}
 
+	void ApplyMultiMaterial()
+	{
+		if ( meshRenderer == null )
+			return;
+
+		CoinStackVisualDefinition def = Definition;
+		Material mat = def != null ? def.multiStackMaterial : null;
+		if ( mat == null )
+		{
+			// Fallback: homogeneous material from first slot type.
+			ApplyMaterial( _treasure );
+			return;
+		}
+
+		if ( meshRenderer.sharedMaterial != mat )
+			meshRenderer.sharedMaterial = mat;
+	}
+
+	void UploadTypeMap( IList<TreasureDefinition> slots, CoinStackVisualDefinition def )
+	{
+		int count = Mathf.Max( 1, slots != null ? slots.Count : 0 );
+		EnsureTypeMapCapacity( count );
+
+		for ( int i = 0; i < count; i++ )
+		{
+			int typeIndex = 0;
+			if ( slots != null && i < slots.Count && def != null )
+				typeIndex = def.ResolveTypeIndex( slots[ i ] );
+			_typeMapPixels[ i ] = new Color( typeIndex, 0f, 0f, 1f );
+		}
+
+		for ( int i = count; i < _typeMapPixels.Length; i++ )
+			_typeMapPixels[ i ] = _typeMapPixels[ count - 1 ];
+
+		_typeMap.SetPixels( _typeMapPixels );
+		_typeMap.Apply( false, false );
+	}
+
+	void EnsureTypeMapCapacity( int count )
+	{
+		int width = Mathf.NextPowerOfTwo( Mathf.Max( 1, count ) );
+		if ( _typeMap != null && _typeMap.width >= width )
+		{
+			if ( _typeMapPixels == null || _typeMapPixels.Length != _typeMap.width )
+				_typeMapPixels = new Color[ _typeMap.width ];
+			return;
+		}
+
+		if ( _typeMap != null )
+		{
+			if ( Application.isPlaying )
+				Destroy( _typeMap );
+			else
+				DestroyImmediate( _typeMap );
+		}
+
+		_typeMap = new Texture2D( width, 1, TextureFormat.RFloat, false, true )
+		{
+			name = "CoinStackTypeMap",
+			filterMode = FilterMode.Point,
+			wrapMode = TextureWrapMode.Clamp,
+			anisoLevel = 0
+		};
+		_typeMapPixels = new Color[ width ];
+	}
+
 	void ApplyMpb( int count )
 	{
 		if ( meshRenderer == null )
@@ -226,6 +371,56 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
 		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
 		meshRenderer.SetPropertyBlock( _mpb );
+	}
+
+	void ApplyMpbMulti( int count, CoinStackVisualDefinition def )
+	{
+		if ( meshRenderer == null )
+			return;
+
+		if ( _mpb == null )
+			_mpb = new MaterialPropertyBlock();
+
+		meshRenderer.GetPropertyBlock( _mpb );
+		_mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
+		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
+		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
+
+		if ( _typeMap != null )
+			_mpb.SetTexture( CoinTypeMapProp, _typeMap );
+
+		int typeCount = 3;
+		if ( def != null )
+			typeCount = def.typeCount > 0
+				? Mathf.Clamp( def.typeCount, 1, CoinStackVisualDefinition.MaxTypeSlots )
+				: 3;
+		_mpb.SetFloat( TypeCountProp, typeCount );
+
+		FillTypeFresnelArray( def, typeCount );
+		_mpb.SetVectorArray( TypeFresnelProp, TypeFresnelScratch );
+
+		meshRenderer.SetPropertyBlock( _mpb );
+	}
+
+	static void FillTypeFresnelArray( CoinStackVisualDefinition def, int typeCount )
+	{
+		for ( int i = 0; i < TypeFresnelScratch.Length; i++ )
+			TypeFresnelScratch[ i ] = new Vector4( 1f, 0.82f, 0.45f, 1f );
+
+		if ( def == null )
+			return;
+
+		if ( def.goldStackMaterial != null && def.goldStackMaterial.HasProperty( "_FresnelColor" ) )
+			TypeFresnelScratch[ Mathf.Clamp( def.goldTypeIndex, 0, TypeFresnelScratch.Length - 1 ) ] =
+				def.goldStackMaterial.GetColor( "_FresnelColor" );
+		if ( def.silverStackMaterial != null && def.silverStackMaterial.HasProperty( "_FresnelColor" ) )
+			TypeFresnelScratch[ Mathf.Clamp( def.silverTypeIndex, 0, TypeFresnelScratch.Length - 1 ) ] =
+				def.silverStackMaterial.GetColor( "_FresnelColor" );
+		if ( def.copperStackMaterial != null && def.copperStackMaterial.HasProperty( "_FresnelColor" ) )
+			TypeFresnelScratch[ Mathf.Clamp( def.copperTypeIndex, 0, TypeFresnelScratch.Length - 1 ) ] =
+				def.copperStackMaterial.GetColor( "_FresnelColor" );
+
+		_ = typeCount;
 	}
 
 	void ApplyTransform( float height )

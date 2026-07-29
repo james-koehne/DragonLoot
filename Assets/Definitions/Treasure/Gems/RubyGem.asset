@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 586c8f828e135f0499fd5c3bd24fc569, type: 3}
+  m_Name: RubyGem
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureDefinition
+  id: RubyGem
+  displayName: RubyGem
+  category: 1
+  variant: Ruby
+  value: 75
+  weight: 1
+  rigidbodyMass: 0.27
+  drag: 0.6
+  angularDrag: 0.6
+  icon: {fileID: 0}
+  meshOverride: {fileID: 0}
+  materialOverride: {fileID: 0}
+  prefab:
+    m_AssetGUID: cf67fff312cfb7d4991e61db64ad079f
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  worldScale: {x: 0.4, y: 0.4, z: 0.4}
+  heldScale: {x: 0.4, y: 0.4, z: 0.4}
+  canStack: 0
+  coinThickness: 0.26

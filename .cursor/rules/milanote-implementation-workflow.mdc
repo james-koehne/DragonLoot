@@ -1,0 +1,77 @@
+---
+description: 
+alwaysApply: true
+---
+
+# Milanote → Cursor Implementation Workflow
+
+Milanote is the source of truth for task completion. Feature markdown under `.cursor/milanote/` is the implementation brief.
+
+## Milanote authoring
+
+Todo items must use keyword prefixes (indentation is ignored for markdown export; **API sync uses Milanote `parentId`** to nest Feature under Category and tasks under Feature):
+
+- `Category: Name` — opens a category
+- `Feature: Name` — opens a feature under the current category
+- Other items under a Feature — tasks of that feature (see section tags below)
+- Other items under a Category but not a Feature — Category **Bugs** feature
+- Other items with no Category — overall **Bugs / Bugs**
+
+Only Milanote todo lists whose title contains **Current Phase** are imported (API and markdown export).
+
+### Section tags (inside a Feature)
+
+- `Requirement:` — `## Requirements`
+- `Note:` — `## Notes`
+- `AI:` — `## AI Context`
+- `Bug: text` — that item is a `## Bugs` entry; only its Milanote child tasks are also Bugs
+- `Bugs` / `Bugs:` — Bugs list root (empty body omitted); only child tasks become `## Bugs` entries
+- `Review: text` — that item is a `## Review` entry; only its Milanote child tasks are also Review
+- `Review` / `Review:` — Review list root; includes itself when named `Review`, plus child tasks only
+- Unprefixed items (not under a Bug/Review parent) go to `## Tasks`
+
+Bug/Review membership uses Milanote `parentId` (API sync), not document order — siblings after a Bug/Review item stay Tasks unless they are children of that item.
+
+`## Review` is **developer-only**. The agent must not implement, tick, or rewrite Review items. Treat Review as playtest / verification notes for the human developer.
+
+## Ownership
+
+Importer-owned (regenerated on sync — do not treat as editable source of truth for tasks):
+
+- Title, Category, Status
+- Requirements / Tasks / Notes / Bugs / Review / AI Context
+- Metadata (Milanote ID, Last Sync)
+
+Cursor-owned (append-only for the agent; preserved across syncs):
+
+- `## Cursor Implementation`
+- `## Files Modified`
+- `## Testing Instructions`
+- `## Cursor Notes`
+
+Developer-owned (never edit):
+
+- `## Developer Verification`
+- `## Review` (importer-owned content, developer completes in Milanote / playtest)
+
+## After implementing a feature
+
+1. Update `## Cursor Implementation` — what changed, assumptions, architecture decisions, limitations. Keep it concise.
+2. Update `## Files Modified` — list every file touched (paths relative to the project).
+3. Update `## Testing Instructions` — numbered, deterministic, observable steps plus expected results.
+4. Optionally update `## Cursor Notes` — performance, follow-ups, known gaps for future sessions.
+
+## Hard rules
+
+- Never tick generated task checkboxes or rewrite Milanote task lists to mark work done.
+- Never mark Features complete / change Status / move files to `_complete`.
+- Never edit `## Developer Verification` or treat `## Review` as agent work.
+- Never sync completion back to Milanote; the developer marks Milanote tasks after playtest.
+- Prefer reading `.cursor/milanote/CURRENT.md` first for active priorities.
+
+## Playtest loop
+
+```text
+Sync Milanote → Cursor implements → Cursor documents → Developer playtests
+→ Developer verifies → Developer marks Milanote complete → Sync again
+```

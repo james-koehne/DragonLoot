@@ -21,3 +21,25 @@ MonoBehaviour:
   placementArcHeight: 0.12
   coinFlipSpeed: 1
   previewSmoothSpeed: 200
+  validGhostColor: {r: 0.25, g: 0.9, b: 0.35, a: 0.35}
+  invalidGhostColor: {r: 0.95, g: 0.2, b: 0.2, a: 0.35}
+  ghostFresnelPower: 2.4
+  ghostFresnelBoost: 0.7
+  ghostPulseAmount: 0.12
+  ghostPulseSpeed: 0.85
+  ghostRimIntensity: 1.15
+  ghostCoreIntensity: 0.28
+  stackVolumeOversize: 1.1
+  stackOutline:
+    outlineColor: {r: 0.3, g: 1.035, b: 0.42, a: 1}
+    outlineIntensity: 1
+    hdrBoost: 1.35
+    scalePixels: 4
+    maskDilatePixels: 3
+    depthThreshold: 1.5
+    normalThreshold: 0.4
+    depthNormalThreshold: 0.5
+    depthNormalThresholdScale: 7
+    normalEdgeWeight: 1
+    pulseSpeed: 0.85
+    pulseAmount: 0.12

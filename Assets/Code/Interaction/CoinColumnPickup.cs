@@ -5,15 +5,24 @@ using UnityEngine;
 /// <summary>
 /// Resolves which coin in a vertical column the player is aiming at (ray vs. stack axis),
 /// so pickup can take from that coin upward instead of always using the top or raycast collider.
+/// Coin transforms are seated at the bottom of each slot; selection bands match that layout
+/// and the cylinder band shader (<c>floor(stackY01 * count)</c>).
 /// </summary>
 public static class CoinColumnPickup
 {
 	const float MinHorizontalDir = 0.0001f;
 
 	/// <summary>
-	/// Index into <paramref name="columnBottomToTop"/> whose height best matches the aim ray.
+	/// Index into <paramref name="columnBottomToTop"/> whose height best matches the aim.
+	/// When <paramref name="hasHitWorldY"/> is set (raycast hit on the column), that Y is
+	/// preferred over closest-approach-to-axis — looking down at a thick stack otherwise
+	/// resolves one slot too low.
 	/// </summary>
-	public static int ResolveIndexFromAimRay( IReadOnlyList<TreasureItem> columnBottomToTop, Ray aimRay )
+	public static int ResolveIndexFromAimRay(
+		IReadOnlyList<TreasureItem> columnBottomToTop,
+		Ray aimRay,
+		bool hasHitWorldY = false,
+		float hitWorldY = 0f )
 	{
 		if ( columnBottomToTop == null || columnBottomToTop.Count == 0 )
 			return 0;
@@ -24,6 +33,13 @@ public static class CoinColumnPickup
 
 		Vector3 axis = bottom.transform.position;
 		float aimY;
+		if ( hasHitWorldY )
+		{
+			aimY = hitWorldY;
+			ClampAimYToColumn( columnBottomToTop, ref aimY );
+			return ResolveIndexFromWorldY( columnBottomToTop, aimY );
+		}
+
 		if ( TryGetAimHeightOnColumnAxis( aimRay, axis.x, axis.z, columnBottomToTop, out aimY ) )
 			return ResolveIndexFromWorldY( columnBottomToTop, aimY );
 
@@ -31,13 +47,15 @@ public static class CoinColumnPickup
 	}
 
 	/// <summary>
-	/// Coin slot index for a homogeneous <see cref="CoinStackInteractable"/> tower from an aim ray.
+	/// Coin slot index for a homogeneous tower from an aim ray / optional surface hit Y.
 	/// </summary>
 	public static int ResolveCoinStackIndexFromAimRay(
 		Ray aimRay,
 		Transform stackRoot,
 		float coinStep,
-		int coinCount )
+		int coinCount,
+		bool hasHitWorldY = false,
+		float hitWorldY = 0f )
 	{
 		if ( stackRoot == null || coinCount <= 0 || coinStep <= 0.0001f )
 			return 0;
@@ -47,15 +65,27 @@ public static class CoinColumnPickup
 		float topY = bottomY + coinStep * coinCount;
 		float aimY;
 
-		if ( TryGetAimHeightOnVerticalAxis( aimRay, axis.x, axis.z, bottomY, topY, out aimY ) )
+		if ( hasHitWorldY )
 		{
-			int index = Mathf.FloorToInt( ( aimY - bottomY ) / coinStep );
-			return Mathf.Clamp( index, 0, coinCount - 1 );
+			aimY = hitWorldY;
+			if ( topY > bottomY + 0.0001f )
+				aimY = Mathf.Clamp( aimY, bottomY, topY );
+		}
+		else if ( !TryGetAimHeightOnVerticalAxis( aimRay, axis.x, axis.z, bottomY, topY, out aimY ) )
+		{
+			return coinCount - 1;
 		}
 
-		return coinCount - 1;
+		int index = Mathf.FloorToInt( ( aimY - bottomY ) / coinStep );
+		if ( index >= coinCount )
+			index = coinCount - 1;
+		return Mathf.Clamp( index, 0, coinCount - 1 );
 	}
 
+	/// <summary>
+	/// Picks the slot whose bottom-aligned band best contains <paramref name="worldY"/>.
+	/// Slot <c>i</c> occupies <c>[pos.y, pos.y + step)</c> (last slot includes the top).
+	/// </summary>
 	public static int ResolveIndexFromWorldY( IReadOnlyList<TreasureItem> columnBottomToTop, float worldY )
 	{
 		if ( columnBottomToTop == null || columnBottomToTop.Count == 0 )
@@ -63,6 +93,7 @@ public static class CoinColumnPickup
 
 		int bestIndex = 0;
 		float bestScore = float.MaxValue;
+		int last = columnBottomToTop.Count - 1;
 
 		for ( int i = 0; i < columnBottomToTop.Count; i++ )
 		{
@@ -70,18 +101,19 @@ public static class CoinColumnPickup
 			if ( item == null )
 				continue;
 
-			float half = TreasureStackSpacing.GetHalfStep( item );
-			float centerY = item.transform.position.y;
-			float yMin = centerY - half;
-			float yMax = centerY + half;
+			float step = TreasureStackSpacing.GetStep( item );
+			float yMin = item.transform.position.y;
+			float yMax = yMin + step;
+			float centerY = yMin + step * 0.5f;
 
 			float score;
-			if ( worldY >= yMin && worldY <= yMax )
+			bool inside = i == last
+				? worldY >= yMin && worldY <= yMax
+				: worldY >= yMin && worldY < yMax;
+			if ( inside )
 				score = 0f;
-			else if ( worldY < yMin )
-				score = yMin - worldY;
 			else
-				score = worldY - yMax;
+				score = Mathf.Abs( worldY - centerY );
 
 			if ( score < bestScore - 0.0001f || ( Mathf.Abs( score - bestScore ) <= 0.0001f && i > bestIndex ) )
 			{
@@ -91,6 +123,29 @@ public static class CoinColumnPickup
 		}
 
 		return bestIndex;
+	}
+
+	static void ClampAimYToColumn( IReadOnlyList<TreasureItem> columnBottomToTop, ref float aimY )
+	{
+		if ( columnBottomToTop == null || columnBottomToTop.Count == 0 )
+			return;
+
+		float bottomY = float.MaxValue;
+		float topY = float.MinValue;
+		for ( int i = 0; i < columnBottomToTop.Count; i++ )
+		{
+			TreasureItem item = columnBottomToTop[ i ];
+			if ( item == null )
+				continue;
+
+			float yMin = item.transform.position.y;
+			float yMax = yMin + TreasureStackSpacing.GetStep( item );
+			bottomY = Mathf.Min( bottomY, yMin );
+			topY = Mathf.Max( topY, yMax );
+		}
+
+		if ( topY > bottomY + 0.0001f )
+			aimY = Mathf.Clamp( aimY, bottomY, topY );
 	}
 
 	static bool TryGetAimHeightOnColumnAxis(
@@ -104,19 +159,22 @@ public static class CoinColumnPickup
 		if ( columnBottomToTop == null || columnBottomToTop.Count == 0 )
 			return false;
 
-		float bottomY = columnBottomToTop[ 0 ].transform.position.y;
-		float topY = bottomY;
+		float bottomY = float.MaxValue;
+		float topY = float.MinValue;
 		for ( int i = 0; i < columnBottomToTop.Count; i++ )
 		{
 			TreasureItem item = columnBottomToTop[ i ];
 			if ( item == null )
 				continue;
 
-			float centerY = item.transform.position.y;
-			float half = TreasureStackSpacing.GetHalfStep( item );
-			topY = Mathf.Max( topY, centerY + half );
-			bottomY = Mathf.Min( bottomY, centerY - half );
+			float yMin = item.transform.position.y;
+			float yMax = yMin + TreasureStackSpacing.GetStep( item );
+			bottomY = Mathf.Min( bottomY, yMin );
+			topY = Mathf.Max( topY, yMax );
 		}
+
+		if ( topY < bottomY )
+			return false;
 
 		return TryGetAimHeightOnVerticalAxis( aimRay, axisX, axisZ, bottomY, topY, out aimY );
 	}

@@ -46,6 +46,10 @@ public class TreasurePileDefinition : ScriptableObject
 	[Min( 0.1f )]
 	public float maxHeight = 1.75f;
 
+	[Tooltip( "Local height below which the pile does not exist (no render, collider, or interaction)." )]
+	[Min( 0f )]
+	public float groundLevelHeight = 0.01f;
+
 	[Header( "Interaction" )]
 	[Tooltip( "World-space radius of the soft carve brush. Prefer ~5-10% of worldSize." )]
 	[Min( 0.05f )]
@@ -71,6 +75,9 @@ public class TreasurePileDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float placementMinSpacing = 0.35f;
 
+	[Tooltip( "When off, RebuildVisibility skips IsTooCloseToDrawn (A/B perf vs density)." )]
+	public bool enforcePlacementSpacing = true;
+
 	[Tooltip( "Random offset within each placement cell as a fraction of cell size (0 = rigid grid)." )]
 	[Range( 0f, 0.49f )]
 	public float placementJitter = 0.3f;
@@ -82,6 +89,30 @@ public class TreasurePileDefinition : ScriptableObject
 	[Tooltip( "Random scale variation around treasure worldScale (0.1 = ±10%)." )]
 	[Range( 0f, 0.5f )]
 	public float placementScaleJitter = 0.1f;
+
+	[Tooltip( "Min relative surface height (0-1 of maxHeight) for coin instance placement. Higher pulls coins off the thin skirt." )]
+	[Range( 0f, 0.5f )]
+	public float coinSurfaceHeightFraction = 0.12f;
+
+	[Tooltip( "Coin surface radial power. 0.5 ≈ area-uniform (base-heavy), 1 ≈ even height base→tip, >1 pulls toward the tip." )]
+	[Range( 0.25f, 3f )]
+	public float coinRadialPower = 1f;
+
+	[Tooltip( "Max coin visuals to reseat or pull onto the carve site per dig (shared budget). Skipped when the dig neighborhood is already dense." )]
+	[Min( 0 )]
+	public int coinPullToCarveCount = 2;
+
+	[Tooltip( "Gem/artifact volume radial power. 0.5 ≈ base-heavy, 1 ≈ even height, >1 pulls toward the tip." )]
+	[Range( 0.25f, 3f )]
+	public float treasureRadialPower = 1.25f;
+
+	[Tooltip( "Extra weight toward the upper portion of each column for gems/artifacts (0 = uniform in column height)." )]
+	[Range( 0f, 3f )]
+	public float treasureHeightBias = 0.75f;
+
+	[Tooltip( "Legacy GPU-loot pick threshold. Large props (gems/artifacts) are pickable as soon as any of their probe is outside the mound." )]
+	[Range( 0.05f, 0.95f )]
+	public float treasurePickupOutsideFraction = 0.4f;
 
 	[Header( "Visuals" )]
 	public Material pileMaterial;

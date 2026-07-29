@@ -47,9 +47,23 @@ float3 ApplyGoldPileRuntimeDeform(float3 positionOS, float2 uv)
     if (_DeformEnabled > 0.5 && _DeformScale > 0.0)
     {
         float h = SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv, 0).r;
-        positionOS.y += h * _DeformScale;
+        float worldH = h * _DeformScale;
+        if (worldH < _GroundLevelHeight)
+            positionOS.y = -1000.0;
+        else
+            positionOS.y += worldH;
     }
     return positionOS;
+}
+
+// Discards fragments where the runtime heightfield is below ground level (empty floor).
+void GoldPileClipBelowGround(float2 deformUV)
+{
+    if (_DeformEnabled < 0.5 || _DeformScale <= 0.0)
+        return;
+
+    float h = SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, deformUV, 0).r * _DeformScale;
+    clip(h - _GroundLevelHeight);
 }
 
 float3 ApplyGoldPileVertexDisplacement(float3 positionOS, float2 uv)

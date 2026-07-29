@@ -169,7 +169,7 @@ public class TreasureItem : MonoBehaviour
 		if ( pileVisual != null )
 			_originPile = pileVisual;
 
-		ApplyCollectableLayer();
+		ApplyPileCollisionLayer();
 		ApplyWorldScale();
 		ClearRigidbodyConstraints();
 		SetPhysicsMode( kinematic: true, detectCollisions: true, collidersEnabled: true );
@@ -295,8 +295,10 @@ public class TreasureItem : MonoBehaviour
 
 		if ( world.Sampler != null && world.Sampler.TrySample( worldPosition, out TreasureSurfaceSample sample ) )
 		{
-			// Pivot sits on the contact plane (same as surface rolling). Pull near-ground
-			// placements down so drop bias / mesh offsets cannot leave coins floating.
+			// Use stable lift for gems so rolling doesn't fight a rotation-dependent seat height.
+			float contactY = definition != null && definition.category == TreasureCategory.Gem
+				? sample.Height + TreasureSurfaceSeat.GetStableContactLift( this )
+				: TreasureSurfaceSeat.GetContactY( this, sample, worldRotation );
 			float seatTolerance = 0.12f;
 			if ( definition != null )
 			{
@@ -305,10 +307,11 @@ public class TreasureItem : MonoBehaviour
 					TreasureStackSpacing.GetStep( definition ) + 0.06f );
 			}
 
-			if ( worldPosition.y <= sample.Height + seatTolerance )
+			float lift = Mathf.Max( 0f, contactY - sample.Height );
+			if ( worldPosition.y <= contactY + seatTolerance + lift * 0.25f )
 			{
 				Vector3 seated = worldPosition;
-				seated.y = sample.Height;
+				seated.y = contactY;
 				transform.position = seated;
 				SyncRigidbodyToTransform();
 			}
@@ -637,7 +640,9 @@ public class TreasureItem : MonoBehaviour
 			_body = gameObject.AddComponent<Rigidbody>();
 
 		RefreshColliderCache();
-		if ( _colliders == null || _colliders.Length == 0 )
+		if ( definition != null && definition.category == TreasureCategory.Gem )
+			EnsureGemSphereCollider();
+		else if ( _colliders == null || _colliders.Length == 0 )
 		{
 			SphereCollider sphere = gameObject.AddComponent<SphereCollider>();
 			sphere.radius = 0.5f;
@@ -651,6 +656,45 @@ public class TreasureItem : MonoBehaviour
 		if ( definition != null )
 			_body.sleepThreshold = Mathf.Max( 0.001f, definition.sleepThreshold );
 		ApplyCollectableLayer();
+	}
+
+	/// <summary>
+	/// Gems use a single sphere for accurate aim picking (replaces mesh/capsule colliders).
+	/// </summary>
+	public void EnsureGemSphereCollider()
+	{
+		RefreshColliderCache();
+		float radius = definition != null ? Mathf.Max( 0.05f, definition.pickupRadius ) : 0.35f;
+
+		SphereCollider sphere = null;
+		if ( _colliders != null )
+		{
+			for ( int i = 0; i < _colliders.Length; i++ )
+			{
+				Collider col = _colliders[ i ];
+				if ( col == null )
+					continue;
+
+				SphereCollider asSphere = col as SphereCollider;
+				if ( asSphere != null && col.gameObject == gameObject )
+				{
+					sphere = asSphere;
+					continue;
+				}
+
+				if ( Application.isPlaying )
+					Object.Destroy( col );
+				else
+					Object.DestroyImmediate( col );
+			}
+		}
+
+		if ( sphere == null )
+			sphere = gameObject.AddComponent<SphereCollider>();
+
+		sphere.radius = radius;
+		sphere.center = Vector3.zero;
+		RefreshColliderCache();
 	}
 
 	void LeavePreviousOwner()
@@ -745,6 +789,21 @@ public class TreasureItem : MonoBehaviour
 			return;
 
 		SetLayerRecursive( gameObject, layer );
+	}
+
+	/// <summary>
+	/// Pile props stay on Collectable (player walks through) unless the definition opts into
+	/// solid player collision for large obstacles (Default layer).
+	/// </summary>
+	void ApplyPileCollisionLayer()
+	{
+		if ( definition != null && definition.collideWithPlayerOnPile )
+		{
+			SetLayerRecursive( gameObject, 0 );
+			return;
+		}
+
+		ApplyCollectableLayer();
 	}
 
 	static void SetLayerRecursive( GameObject go, int layer )

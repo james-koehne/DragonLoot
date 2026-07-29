@@ -126,6 +126,7 @@ half4 GoldPileLitFrag(Varyings input) : SV_Target
 {
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+    GoldPileClipBelowGround(input.deformUV);
 
     float3 positionWS = input.positionWS;
     float3 normalWS = normalize(input.normalWS);

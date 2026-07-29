@@ -43,11 +43,23 @@ public class DebugInteractionSection : DebugOverlaySection
 		if ( !Mathf.Approximately( nextRepeat, repeatInterval ) )
 			interaction.SetThrowPlaceRepeatInterval( nextRepeat );
 
+		float throwInitial = interaction.ThrowPlaceHoldInitialDelay;
+		GUILayout.Label( $"Throw/Place Initial Delay: {throwInitial:0.00}s" );
+		float nextThrowInitial = GUILayout.HorizontalSlider( throwInitial, 0f, 2f );
+		if ( !Mathf.Approximately( nextThrowInitial, throwInitial ) )
+			interaction.SetThrowPlaceHoldInitialDelay( nextThrowInitial );
+
 		float pickupRepeat = interaction.PickupRepeatInterval;
 		GUILayout.Label( $"Pickup Repeat: {pickupRepeat:0.00}s" );
 		float nextPickupRepeat = GUILayout.HorizontalSlider( pickupRepeat, 0.05f, 2f );
 		if ( !Mathf.Approximately( nextPickupRepeat, pickupRepeat ) )
 			interaction.SetPickupRepeatInterval( nextPickupRepeat );
+
+		float pickupInitial = interaction.PickupHoldInitialDelay;
+		GUILayout.Label( $"Pickup Initial Delay: {pickupInitial:0.00}s" );
+		float nextPickupInitial = GUILayout.HorizontalSlider( pickupInitial, 0f, 2f );
+		if ( !Mathf.Approximately( nextPickupInitial, pickupInitial ) )
+			interaction.SetPickupHoldInitialDelay( nextPickupInitial );
 
 		PlayerCarry carry = player != null ? player.Carry : null;
 		if ( carry != null && carry.TryPeekActive( out TreasureItem held ) && held != null )

@@ -21,6 +21,7 @@ CBUFFER_START(UnityPerMaterial)
     half _DeformScale;
     float _DeformWorldSize;
     float _DeformResolution;
+    half _GroundLevelHeight;
     half _HeightMapInvert;
     half _Parallax;
     half _POMSteps;
