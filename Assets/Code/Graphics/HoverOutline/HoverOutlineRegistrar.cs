@@ -4,28 +4,45 @@ using UnityEngine;
 
 /// <summary>
 /// Per-frame registration of hover-outline targets for the URP renderer feature.
+/// Pickable hover and stack-volume placement share one active target set.
+/// Ownership tags prevent placement ClearPreview from wiping pickable outlines.
 /// </summary>
 public static class HoverOutlineRegistrar
 {
+	public enum Owner
+	{
+		None = 0,
+		Pickable = 1,
+		StackVolume = 2
+	}
+
 	static readonly List<Renderer> ActiveRenderers = new List<Renderer>( 8 );
 
 	static HoverOutlineVisualSettings _settings;
-	static bool _hasTarget;
+	static Owner _owner;
 
-	public static bool HasTarget => _hasTarget;
+	public static bool HasTarget => _owner != Owner.None && ActiveRenderers.Count > 0 && _settings != null;
 
 	public static IReadOnlyList<Renderer> Renderers => ActiveRenderers;
 
 	public static HoverOutlineVisualSettings Settings => _settings;
 
+	public static Owner CurrentOwner => _owner;
+
 	public static void Clear()
 	{
 		ActiveRenderers.Clear();
 		_settings = null;
-		_hasTarget = false;
+		_owner = Owner.None;
 	}
 
-	public static void SetTarget( IReadOnlyList<Renderer> renderers, HoverOutlineVisualSettings settings )
+	public static void ClearIfOwner( Owner owner )
+	{
+		if ( _owner == owner )
+			Clear();
+	}
+
+	public static void SetTarget( Owner owner, IReadOnlyList<Renderer> renderers, HoverOutlineVisualSettings settings )
 	{
 		ActiveRenderers.Clear();
 		if ( renderers != null )
@@ -33,15 +50,26 @@ public static class HoverOutlineRegistrar
 			for ( int i = 0; i < renderers.Count; i++ )
 			{
 				Renderer renderer = renderers[ i ];
-				if ( renderer == null || !renderer.gameObject.activeInHierarchy )
+				if ( renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy )
 					continue;
 
 				ActiveRenderers.Add( renderer );
 			}
 		}
 
-		_settings = settings != null ? settings.Clone() : null;
-		_settings.Validate();
-		_hasTarget = ActiveRenderers.Count > 0 && _settings != null;
+		if ( settings != null )
+		{
+			_settings = settings.Clone();
+			_settings.Validate();
+		}
+		else
+			_settings = null;
+
+		_owner = ActiveRenderers.Count > 0 && _settings != null ? owner : Owner.None;
+		if ( _owner == Owner.None )
+		{
+			ActiveRenderers.Clear();
+			_settings = null;
+		}
 	}
 }

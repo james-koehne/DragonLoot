@@ -12,6 +12,10 @@ using UnityEngine.UIElements;
 
 public sealed class ProjectTasksWindow : EditorWindow
 {
+	static readonly Color TintGreen = new Color( 0.18f, 0.32f, 0.18f, 1f );
+	static readonly Color TintAmber = new Color( 0.38f, 0.30f, 0.12f, 1f );
+	static readonly Color TintHighlight = new Color( 0.28f, 0.28f, 0.15f, 1f );
+
 	enum FeatureSortColumn
 	{
 		Name,
@@ -22,12 +26,22 @@ public sealed class ProjectTasksWindow : EditorWindow
 		Verification
 	}
 
+	enum CompactPane
+	{
+		Categories,
+		Features,
+		Details
+	}
+
+	const float CompactWidthBreakpoint = 900f;
+
 	ProjectTasksCatalog _catalog;
 	ProjectTasksLocalStore _localStore;
 	string _outputRoot;
 
 	List<ImportedCategory> _visibleCategories = new List<ImportedCategory>();
 	List<ImportedFeature> _visibleFeatures = new List<ImportedFeature>();
+	List<PendingMilanoteItem> _pendingQueue = new List<PendingMilanoteItem>();
 
 	ImportedCategory _selectedCategory;
 	ImportedFeature _selectedFeature;
@@ -38,8 +52,13 @@ public sealed class ProjectTasksWindow : EditorWindow
 	string _filterPriority = "All";
 	string _filterAssignee = "All";
 	string _filterVerification = "All";
+	string _filterLocal = "All";
 	FeatureSortColumn _sortColumn = FeatureSortColumn.Name;
 	bool _sortAscending = true;
+	bool _showingQueue;
+	bool _compactMode;
+	CompactPane _compactPane = CompactPane.Categories;
+	float _lastLayoutWidth = -1f;
 
 	bool _busy;
 	string _statusText = "Ready.";
@@ -50,6 +69,29 @@ public sealed class ProjectTasksWindow : EditorWindow
 	ScrollView _detailsScroll;
 	Label _statusLabel;
 	Label _syncInfoLabel;
+	Button _queueButton;
+	VisualElement _toolbar;
+	VisualElement _filterBar;
+	readonly List<ToolbarAction> _toolbarActions = new List<ToolbarAction>();
+	VisualElement _contentHost;
+	VisualElement _categoriesPanel;
+	VisualElement _featuresPanel;
+	VisualElement _detailsPanel;
+	VisualElement _compactNavBar;
+	Label _compactContextLabel;
+	Button _compactBackButton;
+	Button _compactCategoriesButton;
+	Button _compactFeaturesButton;
+	Button _compactDetailsButton;
+	VisualElement _queuePanel;
+	ListView _queueList;
+
+	sealed class ToolbarAction
+	{
+		public Button Button;
+		public string WideLabel;
+		public string CompactLabel;
+	}
 
 	TextField _globalSearchField;
 	TextField _categorySearchField;
@@ -57,13 +99,14 @@ public sealed class ProjectTasksWindow : EditorWindow
 	DropdownField _priorityFilter;
 	DropdownField _assigneeFilter;
 	DropdownField _verificationFilter;
+	DropdownField _localFilter;
 
-	[MenuItem( "Tools/Project Tasks" )]
+	[MenuItem( "Tools/MilanoteSync/Tasks" )]
 	public static void Open()
 	{
 		ProjectTasksWindow window = GetWindow<ProjectTasksWindow>();
 		window.titleContent = new GUIContent( "Project Tasks" );
-		window.minSize = new Vector2( 960f, 560f );
+		window.minSize = new Vector2( 380f, 480f );
 		window.Show();
 	}
 
@@ -85,6 +128,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 			window.RefreshAllLists();
 			window.RebuildDetails();
 			window.UpdateSyncInfoLabel();
+			window.UpdateQueueButton();
 			window.SetStatus( "Refreshed after Milanote sync." );
 			window.Repaint();
 		}
@@ -105,21 +149,24 @@ public sealed class ProjectTasksWindow : EditorWindow
 	{
 		rootVisualElement.Clear();
 		rootVisualElement.style.flexGrow = 1;
+		rootVisualElement.UnregisterCallback<GeometryChangedEvent>( OnRootGeometryChanged );
+		rootVisualElement.RegisterCallback<GeometryChangedEvent>( OnRootGeometryChanged );
 
 		rootVisualElement.Add( BuildToolbar() );
 		rootVisualElement.Add( BuildFilterBar() );
 
-		var splits = new TwoPaneSplitView( 0, 220f, TwoPaneSplitViewOrientation.Horizontal );
-		splits.style.flexGrow = 1;
+		_categoriesPanel = BuildCategoriesPanel();
+		_featuresPanel = BuildFeatureListPanel();
+		_detailsPanel = BuildDetailsPanel();
+		_compactNavBar = BuildCompactNavBar();
 
-		var left = BuildCategoriesPanel();
-		var rightSplit = new TwoPaneSplitView( 0, 340f, TwoPaneSplitViewOrientation.Horizontal );
-		rightSplit.Add( BuildFeatureListPanel() );
-		rightSplit.Add( BuildDetailsPanel() );
+		_contentHost = new VisualElement();
+		_contentHost.style.flexGrow = 1;
+		rootVisualElement.Add( _contentHost );
 
-		splits.Add( left );
-		splits.Add( rightSplit );
-		rootVisualElement.Add( splits );
+		_queuePanel = BuildQueuePanel();
+		_queuePanel.style.display = DisplayStyle.None;
+		rootVisualElement.Add( _queuePanel );
 
 		_statusLabel = new Label( _statusText );
 		_statusLabel.style.paddingLeft = 8;
@@ -127,99 +174,242 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_statusLabel.style.paddingTop = 4;
 		_statusLabel.style.paddingBottom = 4;
 		_statusLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+		_statusLabel.style.flexShrink = 0;
 		rootVisualElement.Add( _statusLabel );
+
+		float width = position.width > 1f ? position.width : CompactWidthBreakpoint;
+		_compactMode = width < CompactWidthBreakpoint;
+		_lastLayoutWidth = width;
+		ApplyChromeDensity();
+		RebuildContentLayout();
 
 		RefreshAllLists();
 		RebuildDetails();
+		UpdateQueueButton();
+		ApplyContentMode();
+	}
+
+	void OnRootGeometryChanged( GeometryChangedEvent evt )
+	{
+		float width = evt.newRect.width;
+		if ( width <= 1f )
+			return;
+		if ( Mathf.Abs( width - _lastLayoutWidth ) < 0.5f )
+			return;
+
+		_lastLayoutWidth = width;
+		bool wantCompact = width < CompactWidthBreakpoint;
+		if ( wantCompact == _compactMode )
+			return;
+
+		_compactMode = wantCompact;
+		if ( !_compactMode )
+			_compactPane = CompactPane.Categories;
+		ApplyChromeDensity();
+		RebuildContentLayout();
+		ApplyContentMode();
 	}
 
 	VisualElement BuildToolbar()
 	{
-		var bar = new VisualElement();
-		bar.style.flexDirection = FlexDirection.Row;
-		bar.style.paddingLeft = 6;
-		bar.style.paddingRight = 6;
-		bar.style.paddingTop = 4;
-		bar.style.paddingBottom = 4;
-		bar.style.borderBottomWidth = 1;
-		bar.style.borderBottomColor = new Color( 0.2f, 0.2f, 0.2f );
+		_toolbarActions.Clear();
+		_toolbar = new VisualElement();
+		_toolbar.style.flexDirection = FlexDirection.Row;
+		_toolbar.style.flexWrap = Wrap.Wrap;
+		_toolbar.style.flexShrink = 0;
+		_toolbar.style.alignItems = Align.Center;
+		_toolbar.style.paddingLeft = 6;
+		_toolbar.style.paddingRight = 6;
+		_toolbar.style.paddingTop = 4;
+		_toolbar.style.paddingBottom = 4;
+		_toolbar.style.borderBottomWidth = 1;
+		_toolbar.style.borderBottomColor = new Color( 0.2f, 0.2f, 0.2f );
 
-		bar.Add( MakeToolbarButton( "Sync Milanote", () => StartSync() ) );
-		bar.Add( MakeToolbarButton( "Import Latest Export", () => ImportLatestExport() ) );
-		bar.Add( MakeToolbarButton( "Refresh", () =>
+		AddToolbarAction( _toolbar, "Sync Milanote", "Sync", () => StartSync() );
+		AddToolbarAction( _toolbar, "Import Latest Export", "Import", () => ImportLatestExport() );
+		AddToolbarAction( _toolbar, "Refresh", "Refresh", () =>
 		{
 			PersistLocalStore();
 			ReloadFromDisk();
 			RefreshAllLists();
 			RebuildDetails();
+			UpdateQueueButton();
 			SetStatus( "Refreshed from disk." );
-		} ) );
-		bar.Add( MakeToolbarButton( "Clear Generated Data…", () => ClearGeneratedData() ) );
-		bar.Add( MakeToolbarButton( "Open Cursor Folder", () =>
+		} );
+		AddToolbarAction( _toolbar, "Clear Generated Data…", "Clear…", () => ClearGeneratedData() );
+		AddToolbarAction( _toolbar, "Open Cursor Folder", "Folder", () =>
 		{
 			EnsureOutputExists();
 			EditorUtility.RevealInFinder( _outputRoot );
-		} ) );
-		bar.Add( MakeToolbarButton( "Open CURRENT.md", () => OpenPath( Path.Combine( _outputRoot, "CURRENT.md" ) ) ) );
-		bar.Add( MakeToolbarButton( "Settings", () => MilanoteSyncWindow.Open() ) );
+		} );
+		AddToolbarAction( _toolbar, "Open CURRENT.md", "CURRENT", () => OpenPath( Path.Combine( _outputRoot, "CURRENT.md" ) ) );
+		AddToolbarAction( _toolbar, "Settings", "Settings", () => MilanoteSyncWindow.Open() );
+
+		_queueButton = AddToolbarAction( _toolbar, "Milanote Queue (0)", "Queue (0)", () => ToggleQueueView() );
 
 		_syncInfoLabel = new Label();
 		_syncInfoLabel.style.flexGrow = 1;
+		_syncInfoLabel.style.minWidth = 80;
 		_syncInfoLabel.style.unityTextAlign = TextAnchor.MiddleRight;
 		_syncInfoLabel.style.paddingRight = 8;
+		_syncInfoLabel.style.overflow = Overflow.Hidden;
+		_syncInfoLabel.style.textOverflow = TextOverflow.Ellipsis;
+		_syncInfoLabel.style.whiteSpace = WhiteSpace.NoWrap;
 		UpdateSyncInfoLabel();
-		bar.Add( _syncInfoLabel );
+		_toolbar.Add( _syncInfoLabel );
 
-		return bar;
+		return _toolbar;
+	}
+
+	Button AddToolbarAction( VisualElement bar, string wideLabel, string compactLabel, Action onClick )
+	{
+		Button button = MakeToolbarButton( wideLabel, onClick );
+		_toolbarActions.Add( new ToolbarAction
+		{
+			Button = button,
+			WideLabel = wideLabel,
+			CompactLabel = compactLabel
+		} );
+		bar.Add( button );
+		return button;
+	}
+
+	void ApplyChromeDensity()
+	{
+		bool compact = _compactMode;
+
+		for ( int i = 0; i < _toolbarActions.Count; i++ )
+		{
+			ToolbarAction action = _toolbarActions[i];
+			if ( action.Button == null )
+				continue;
+			if ( action.Button == _queueButton )
+				continue;
+			action.Button.text = compact ? action.CompactLabel : action.WideLabel;
+		}
+
+		UpdateQueueButton();
+
+		if ( _syncInfoLabel != null )
+			_syncInfoLabel.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
+
+		if ( _globalSearchField != null )
+		{
+			_globalSearchField.style.minWidth = compact ? 120 : 180;
+			_globalSearchField.style.width = compact ? 140 : 220;
+		}
+
+		if ( _filterBar != null )
+			_filterBar.style.display = DisplayStyle.Flex;
 	}
 
 	VisualElement BuildFilterBar()
 	{
-		var bar = new VisualElement();
-		bar.style.flexDirection = FlexDirection.Row;
-		bar.style.flexWrap = Wrap.Wrap;
-		bar.style.paddingLeft = 6;
-		bar.style.paddingRight = 6;
-		bar.style.paddingTop = 4;
-		bar.style.paddingBottom = 4;
+		_filterBar = new VisualElement();
+		_filterBar.style.flexDirection = FlexDirection.Row;
+		_filterBar.style.flexWrap = Wrap.Wrap;
+		_filterBar.style.flexShrink = 0;
+		_filterBar.style.alignItems = Align.Center;
+		_filterBar.style.paddingLeft = 6;
+		_filterBar.style.paddingRight = 6;
+		_filterBar.style.paddingTop = 4;
+		_filterBar.style.paddingBottom = 4;
+		_filterBar.style.borderBottomWidth = 1;
+		_filterBar.style.borderBottomColor = new Color( 0.2f, 0.2f, 0.2f );
 
-		_globalSearchField = new TextField( "Search" );
-		_globalSearchField.value = _globalSearch;
-		_globalSearchField.style.minWidth = 220;
-		_globalSearchField.style.flexGrow = 1;
+		// BaseField labels detach under flex-wrap; keep caption + control as separate siblings.
+		var searchCell = MakeFilterCell( "Search" );
+		_globalSearchField = new TextField { value = _globalSearch };
+		_globalSearchField.style.minWidth = 180;
+		_globalSearchField.style.width = 220;
 		_globalSearchField.RegisterValueChangedCallback( evt =>
 		{
 			_globalSearch = evt.newValue ?? string.Empty;
 			ApplyFilters();
 		} );
-		bar.Add( _globalSearchField );
+		searchCell.Add( _globalSearchField );
+		_filterBar.Add( searchCell );
 
-		_statusFilter = MakeFilterDropdown( "Status", new[] { "All", "Ready", "In Progress", "Complete" }, _filterStatus,
+		_statusFilter = AddFilterDropdown(
+			_filterBar,
+			"Status",
+			new[] { "All", "Ready", "In Progress", "Complete" },
+			_filterStatus,
 			v => { _filterStatus = v; ApplyFilters(); } );
-		bar.Add( _statusFilter );
 
-		_priorityFilter = MakeFilterDropdown( "Priority", BuildPriorityChoices(), _filterPriority,
+		_priorityFilter = AddFilterDropdown(
+			_filterBar,
+			"Priority",
+			BuildPriorityChoices(),
+			_filterPriority,
 			v => { _filterPriority = v; ApplyFilters(); } );
-		bar.Add( _priorityFilter );
 
-		_assigneeFilter = MakeFilterDropdown( "Assignee", BuildAssigneeChoices(), _filterAssignee,
+		_assigneeFilter = AddFilterDropdown(
+			_filterBar,
+			"Assignee",
+			BuildAssigneeChoices(),
+			_filterAssignee,
 			v => { _filterAssignee = v; ApplyFilters(); } );
-		bar.Add( _assigneeFilter );
 
-		_verificationFilter = MakeFilterDropdown(
+		_verificationFilter = AddFilterDropdown(
+			_filterBar,
 			"Verification",
 			new[] { "All", "Not Tested", "Testing", "Verified", "Failed" },
 			_filterVerification,
 			v => { _filterVerification = v; ApplyFilters(); } );
-		bar.Add( _verificationFilter );
 
-		return bar;
+		_localFilter = AddFilterDropdown(
+			_filterBar,
+			"Local",
+			new[] { "All", "Pending Milanote", "Blocked", "Needs Review", "Has Highlights" },
+			_filterLocal,
+			v => { _filterLocal = v; ApplyFilters(); } );
+
+		return _filterBar;
+	}
+
+	static VisualElement MakeFilterCell( string caption )
+	{
+		var cell = new VisualElement();
+		cell.style.flexDirection = FlexDirection.Row;
+		cell.style.alignItems = Align.Center;
+		cell.style.flexShrink = 0;
+		cell.style.marginRight = 10;
+		cell.style.marginTop = 2;
+		cell.style.marginBottom = 2;
+
+		var label = new Label( caption );
+		label.style.marginRight = 4;
+		label.style.unityTextAlign = TextAnchor.MiddleLeft;
+		cell.Add( label );
+		return cell;
+	}
+
+	DropdownField AddFilterDropdown(
+		VisualElement bar,
+		string caption,
+		IEnumerable<string> choicesSource,
+		string current,
+		Action<string> onChanged )
+	{
+		var choices = new List<string>( choicesSource );
+		if ( !choices.Contains( current ) )
+			choices.Insert( 0, current );
+
+		var cell = MakeFilterCell( caption );
+		var field = new DropdownField( choices, Mathf.Max( 0, choices.IndexOf( current ) ) );
+		field.style.minWidth = 110;
+		field.RegisterValueChangedCallback( evt => onChanged( evt.newValue ) );
+		cell.Add( field );
+		bar.Add( cell );
+		return field;
 	}
 
 	VisualElement BuildCategoriesPanel()
 	{
 		var panel = new VisualElement();
 		panel.style.minWidth = 160;
+		panel.style.flexGrow = 1;
 
 		var header = new Label( "Categories" );
 		header.style.unityFontStyleAndWeight = FontStyle.Bold;
@@ -240,14 +430,21 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_categoryList = new ListView();
 		_categoryList.style.flexGrow = 1;
 		_categoryList.selectionType = SelectionType.Single;
-		_categoryList.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+		_categoryList.fixedItemHeight = 28;
 		_categoryList.makeItem = () =>
 		{
-			var row = new Label();
-			row.style.paddingLeft = 8;
-			row.style.paddingTop = 4;
-			row.style.paddingBottom = 4;
-			return row;
+			var label = new Label();
+			label.style.paddingLeft = 8;
+			label.style.paddingRight = 8;
+			label.style.paddingTop = 4;
+			label.style.paddingBottom = 4;
+			label.style.overflow = Overflow.Hidden;
+			label.style.textOverflow = TextOverflow.Ellipsis;
+			label.style.whiteSpace = WhiteSpace.NoWrap;
+			label.style.unityTextAlign = TextAnchor.MiddleLeft;
+			label.style.borderLeftWidth = 4;
+			label.style.borderLeftColor = Color.clear;
+			return label;
 		};
 		_categoryList.bindItem = ( element, index ) =>
 		{
@@ -255,11 +452,16 @@ public sealed class ProjectTasksWindow : EditorWindow
 			if ( index < 0 || index >= _visibleCategories.Count )
 			{
 				label.text = string.Empty;
+				ApplyTintBorder( label, ProjectTasksTint.None );
 				return;
 			}
 
 			ImportedCategory category = _visibleCategories[index];
-			label.text = category.Name + " (" + category.ActiveCount + "/" + category.Features.Count + ")";
+			ImportedCategory tintSource = ResolveCatalogCategory( category.Name ) ?? category;
+			int pending = CountPendingInCategory( tintSource );
+			string pendingSuffix = pending > 0 ? " ↑" + pending : string.Empty;
+			label.text = category.Name + " (" + category.ActiveCount + "/" + category.Features.Count + ")" + pendingSuffix;
+			ApplyTintBorder( label, _localStore.GetCategoryTint( tintSource ) );
 		};
 		_categoryList.selectedIndicesChanged += indices =>
 		{
@@ -274,27 +476,34 @@ public sealed class ProjectTasksWindow : EditorWindow
 			}
 
 			_selectedCategory = selected;
+			_selectedFeature = null;
 			RebuildFeatureList();
-			if ( _visibleFeatures.Count > 0 )
+			if ( !_compactMode && _visibleFeatures.Count > 0 )
 			{
-				_featureList.SetSelection( 0 );
 				_selectedFeature = _visibleFeatures[0];
+				_featureList.SetSelectionWithoutNotify( new[] { 0 } );
 			}
-			else
+			else if ( _featureList != null )
 			{
-				_selectedFeature = null;
+				_featureList.ClearSelection();
 			}
 
 			RebuildDetails();
+			if ( _compactMode && selected != null )
+				ShowCompactPane( CompactPane.Features );
+			else
+				UpdateCompactNav();
 		};
 		panel.Add( _categoryList );
+		panel.style.flexGrow = 1;
 		return panel;
 	}
 
 	VisualElement BuildFeatureListPanel()
 	{
 		var panel = new VisualElement();
-		panel.style.minWidth = 240;
+		panel.style.minWidth = 160;
+		panel.style.flexGrow = 1;
 
 		var headerRow = new VisualElement();
 		headerRow.style.flexDirection = FlexDirection.Row;
@@ -319,12 +528,21 @@ public sealed class ProjectTasksWindow : EditorWindow
 			root.style.paddingTop = 4;
 			root.style.paddingBottom = 4;
 			root.style.justifyContent = Justify.Center;
+			root.style.overflow = Overflow.Hidden;
+			root.style.borderLeftWidth = 4;
+			root.style.borderLeftColor = Color.clear;
 
 			var name = new Label { name = "name" };
 			name.style.unityFontStyleAndWeight = FontStyle.Bold;
+			name.style.overflow = Overflow.Hidden;
+			name.style.textOverflow = TextOverflow.Ellipsis;
+			name.style.whiteSpace = WhiteSpace.NoWrap;
 			var meta = new Label { name = "meta" };
 			meta.style.fontSize = 10;
 			meta.style.color = new Color( 0.7f, 0.7f, 0.7f );
+			meta.style.overflow = Overflow.Hidden;
+			meta.style.textOverflow = TextOverflow.Ellipsis;
+			meta.style.whiteSpace = WhiteSpace.NoWrap;
 			root.Add( name );
 			root.Add( meta );
 			return root;
@@ -336,13 +554,19 @@ public sealed class ProjectTasksWindow : EditorWindow
 
 			ImportedFeature feature = _visibleFeatures[index];
 			LocalFeatureMetadata local = _localStore.GetOrCreate( feature.FeatureId );
+			int pending = _localStore.CountPendingMilanote( feature );
+			int localProgress = _localStore.CountLocalProgress( feature );
 			var name = element.Q<Label>( "name" );
 			var meta = element.Q<Label>( "meta" );
-			name.text = feature.Name + "  (" + feature.TaskProgressLabel + ")";
+			string pendingBadge = pending > 0 ? "  ↑" + pending : string.Empty;
+			name.text = feature.Name + pendingBadge;
 			meta.text = feature.Status
+				+ " · " + feature.MilanoteProgressLabel
+				+ " · L:" + localProgress + "/" + feature.TotalTaskCount
 				+ " · " + ( string.IsNullOrEmpty( local.Priority ) ? "-" : local.Priority )
 				+ " · " + FormatVerification( local.VerificationStatus )
 				+ ( string.IsNullOrEmpty( local.AssignedDeveloper ) ? "" : " · " + local.AssignedDeveloper );
+			ApplyTintBorder( element, _localStore.GetFeatureTint( feature ) );
 		};
 		_featureList.selectedIndicesChanged += indices =>
 		{
@@ -358,15 +582,20 @@ public sealed class ProjectTasksWindow : EditorWindow
 
 			_selectedFeature = selected;
 			RebuildDetails();
+			if ( _compactMode && selected != null )
+				ShowCompactPane( CompactPane.Details );
+			else
+				UpdateCompactNav();
 		};
 		panel.Add( _featureList );
+		panel.style.flexGrow = 1;
 		return panel;
 	}
 
 	VisualElement BuildDetailsPanel()
 	{
 		var panel = new VisualElement();
-		panel.style.minWidth = 320;
+		panel.style.minWidth = 160;
 		panel.style.flexGrow = 1;
 
 		var header = new Label( "Feature Details" );
@@ -378,6 +607,93 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_detailsScroll = new ScrollView( ScrollViewMode.Vertical );
 		_detailsScroll.style.flexGrow = 1;
 		panel.Add( _detailsScroll );
+		return panel;
+	}
+
+	VisualElement BuildQueuePanel()
+	{
+		var panel = new VisualElement();
+		panel.style.flexGrow = 1;
+		panel.style.paddingLeft = 8;
+		panel.style.paddingRight = 8;
+		panel.style.paddingTop = 6;
+
+		var headerRow = new VisualElement();
+		headerRow.style.flexDirection = FlexDirection.Row;
+		headerRow.style.marginBottom = 6;
+
+		var title = new Label( "Milanote Queue — locally done, not yet ticked in Milanote" );
+		title.style.unityFontStyleAndWeight = FontStyle.Bold;
+		title.style.flexGrow = 1;
+		headerRow.Add( title );
+
+		headerRow.Add( MakeToolbarButton( "Copy Checklist", () => CopyMilanoteQueueChecklist() ) );
+		headerRow.Add( MakeToolbarButton( "Back to Features", () =>
+		{
+			_showingQueue = false;
+			ApplyContentMode();
+		} ) );
+		panel.Add( headerRow );
+
+		_queueList = new ListView();
+		_queueList.style.flexGrow = 1;
+		_queueList.selectionType = SelectionType.Single;
+		_queueList.fixedItemHeight = 52;
+		_queueList.makeItem = () =>
+		{
+			var root = new VisualElement();
+			root.style.paddingLeft = 8;
+			root.style.paddingRight = 8;
+			root.style.paddingTop = 4;
+			root.style.paddingBottom = 4;
+			root.style.justifyContent = Justify.Center;
+			root.style.backgroundColor = TintAmber;
+
+			var line = new Label { name = "line" };
+			line.style.unityFontStyleAndWeight = FontStyle.Bold;
+			line.style.whiteSpace = WhiteSpace.Normal;
+			var comment = new Label { name = "comment" };
+			comment.style.fontSize = 10;
+			comment.style.color = new Color( 0.75f, 0.75f, 0.75f );
+			root.Add( line );
+			root.Add( comment );
+			return root;
+		};
+		_queueList.bindItem = ( element, index ) =>
+		{
+			if ( index < 0 || index >= _pendingQueue.Count )
+				return;
+
+			PendingMilanoteItem item = _pendingQueue[index];
+			var line = element.Q<Label>( "line" );
+			var comment = element.Q<Label>( "comment" );
+			line.text = item.Feature.Category + " · " + item.Feature.Name
+				+ " · [" + item.Task.Section + "] " + item.Task.Text;
+			string note = item.TaskMeta != null ? item.TaskMeta.Comment : string.Empty;
+			comment.text = string.IsNullOrWhiteSpace( note ) ? "" : note;
+			comment.style.display = string.IsNullOrWhiteSpace( note ) ? DisplayStyle.None : DisplayStyle.Flex;
+		};
+		_queueList.selectedIndicesChanged += indices =>
+		{
+			PendingMilanoteItem selected = null;
+			foreach ( int index in indices )
+			{
+				if ( index >= 0 && index < _pendingQueue.Count )
+				{
+					selected = _pendingQueue[index];
+					break;
+				}
+			}
+
+			if ( selected == null || selected.Feature == null )
+				return;
+
+			SelectFeature( selected.Feature );
+			_showingQueue = false;
+			ApplyContentMode();
+			RebuildDetails();
+		};
+		panel.Add( _queueList );
 		return panel;
 	}
 
@@ -405,10 +721,14 @@ public sealed class ProjectTasksWindow : EditorWindow
 
 		_detailsScroll.Add( new Label( "Category: " + feature.Category ) );
 		_detailsScroll.Add( new Label( "Status: " + feature.Status + ( feature.IsCompleteFolder ? " (in _complete)" : "" ) ) );
-		_detailsScroll.Add( new Label( "Progress: " + feature.TaskProgressLabel + " Milanote tasks complete" ) );
+		_detailsScroll.Add( new Label(
+			"Progress: " + feature.MilanoteProgressLabel
+			+ " · L:" + _localStore.CountLocalProgress( feature ) + "/" + feature.TotalTaskCount
+			+ " · Pending Milanote: " + _localStore.CountPendingMilanote( feature ) ) );
 		_detailsScroll.Add( new Label( "Last Sync: " + ( feature.LastSync ?? "-" ) ) );
 		_detailsScroll.Add( new Label( "ID: " + feature.FeatureId ) );
 
+		_detailsScroll.Add( BuildPlanningEditors( local ) );
 		_detailsScroll.Add( BuildActionRow( feature ) );
 
 		AddTasksFoldout( feature, local );
@@ -423,6 +743,38 @@ public sealed class ProjectTasksWindow : EditorWindow
 		AddTextFoldout( "Cursor Notes", feature.CursorNotes );
 		_detailsScroll.Add( BuildVerificationEditors( feature, local ) );
 		AddTextFoldout( "Developer Verification (from Markdown)", feature.DeveloperVerificationMarkdown );
+	}
+
+	VisualElement BuildPlanningEditors( LocalFeatureMetadata local )
+	{
+		var box = new VisualElement();
+		box.style.flexDirection = FlexDirection.Row;
+		box.style.flexWrap = Wrap.Wrap;
+		box.style.paddingLeft = 4;
+		box.style.paddingTop = 4;
+		box.style.paddingBottom = 4;
+
+		var priority = new TextField( "Priority" ) { value = local.Priority ?? string.Empty };
+		priority.style.minWidth = 160;
+		priority.RegisterValueChangedCallback( evt =>
+		{
+			local.Priority = evt.newValue ?? string.Empty;
+			PersistLocalStore();
+			RebuildFeatureList();
+		} );
+		box.Add( priority );
+
+		var assignee = new TextField( "Assignee" ) { value = local.AssignedDeveloper ?? string.Empty };
+		assignee.style.minWidth = 160;
+		assignee.RegisterValueChangedCallback( evt =>
+		{
+			local.AssignedDeveloper = evt.newValue ?? string.Empty;
+			PersistLocalStore();
+			RebuildFeatureList();
+		} );
+		box.Add( assignee );
+
+		return box;
 	}
 
 	VisualElement BuildActionRow( ImportedFeature feature )
@@ -559,25 +911,49 @@ public sealed class ProjectTasksWindow : EditorWindow
 			card.style.paddingBottom = 4;
 			card.style.borderBottomWidth = 1;
 			card.style.borderBottomColor = new Color( 0.25f, 0.25f, 0.25f );
-			if ( taskMeta.Highlighted )
-				card.style.backgroundColor = new Color( 0.28f, 0.28f, 0.15f );
+			ApplyTaskCardTint( card, task, taskMeta );
 
 			string mark = task.IsComplete ? "[x]" : "[ ]";
 			var title = new Label( mark + " [" + task.Section + "] " + task.Text );
-			if ( task.IsComplete )
-				title.style.color = new Color( 0.55f, 0.75f, 0.55f );
+			title.style.whiteSpace = WhiteSpace.Normal;
 			card.Add( title );
 
 			var milanoteComplete = new Toggle( "Milanote complete" ) { value = task.IsComplete };
 			milanoteComplete.SetEnabled( false );
 			card.Add( milanoteComplete );
 
-			var status = new EnumField( "Local Status", taskMeta.WorkStatus );
 			LocalTaskMetadata capturedMeta = taskMeta;
+			ImportedTask capturedTask = task;
+			bool locallyDone = capturedMeta.WorkStatus == LocalTaskWorkStatus.Implemented || capturedTask.IsComplete;
+			var locallyDoneToggle = new Toggle( "Locally done" ) { value = locallyDone };
+			if ( capturedTask.IsComplete )
+				locallyDoneToggle.SetEnabled( false );
+
+			var status = new EnumField( "Local Status", capturedMeta.WorkStatus );
+
+			locallyDoneToggle.RegisterValueChangedCallback( evt =>
+			{
+				if ( capturedTask.IsComplete )
+					return;
+
+				if ( evt.newValue )
+					capturedMeta.WorkStatus = LocalTaskWorkStatus.Implemented;
+				else if ( capturedMeta.WorkStatus == LocalTaskWorkStatus.Implemented )
+					capturedMeta.WorkStatus = LocalTaskWorkStatus.None;
+
+				status.SetValueWithoutNotify( capturedMeta.WorkStatus );
+				PersistLocalStore();
+				OnLocalTaskChanged();
+			} );
+			card.Add( locallyDoneToggle );
+
 			status.RegisterValueChangedCallback( evt =>
 			{
 				capturedMeta.WorkStatus = (LocalTaskWorkStatus)evt.newValue;
+				bool done = capturedMeta.WorkStatus == LocalTaskWorkStatus.Implemented || capturedTask.IsComplete;
+				locallyDoneToggle.SetValueWithoutNotify( done );
 				PersistLocalStore();
+				OnLocalTaskChanged();
 			} );
 			card.Add( status );
 
@@ -604,6 +980,60 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_detailsScroll.Add( foldout );
 	}
 
+	void OnLocalTaskChanged()
+	{
+		UpdateQueueButton();
+		RebuildCategoryList();
+		RebuildFeatureList();
+		RebuildDetails();
+		if ( _showingQueue )
+			RebuildQueueList();
+	}
+
+	void ApplyTaskCardTint( VisualElement card, ImportedTask task, LocalTaskMetadata taskMeta )
+	{
+		if ( taskMeta != null && taskMeta.Highlighted && !task.IsComplete
+		     && !ProjectTasksLocalStore.IsLocallyDonePendingMilanote( task, taskMeta ) )
+		{
+			card.style.backgroundColor = TintHighlight;
+			return;
+		}
+
+		if ( task.IsComplete )
+		{
+			card.style.backgroundColor = TintGreen;
+			return;
+		}
+
+		if ( ProjectTasksLocalStore.IsLocallyDonePendingMilanote( task, taskMeta ) )
+		{
+			card.style.backgroundColor = TintAmber;
+			return;
+		}
+
+		card.style.backgroundColor = StyleKeyword.Null;
+	}
+
+	static void ApplyTintBorder( VisualElement element, ProjectTasksTint tint )
+	{
+		if ( element == null )
+			return;
+
+		element.style.borderLeftWidth = 4;
+		switch ( tint )
+		{
+			case ProjectTasksTint.Green:
+				element.style.borderLeftColor = TintGreen;
+				break;
+			case ProjectTasksTint.Amber:
+				element.style.borderLeftColor = TintAmber;
+				break;
+			default:
+				element.style.borderLeftColor = Color.clear;
+				break;
+		}
+	}
+
 	void ReloadFromDisk()
 	{
 		_outputRoot = MilanoteSyncService.ResolveOutputRoot();
@@ -613,6 +1043,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 			PersistLocalStore();
 		ApplyFilters( refreshUi: false );
 		UpdateSyncInfoLabel();
+		UpdateQueueButton();
 
 		for ( int i = 0; i < _catalog.LoadWarnings.Count; i++ )
 			Debug.LogWarning( "[Project Tasks] " + _catalog.LoadWarnings[i] );
@@ -628,6 +1059,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 	void RefreshAllLists()
 	{
 		ApplyFilters();
+		UpdateQueueButton();
 	}
 
 	void ApplyFilters( bool refreshUi = true )
@@ -671,6 +1103,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 		{
 			RebuildCategoryList();
 			RebuildFeatureList();
+			UpdateCompactNav();
 		}
 	}
 
@@ -714,6 +1147,9 @@ public sealed class ProjectTasksWindow : EditorWindow
 			if ( !string.Equals( FormatVerification( local.VerificationStatus ), _filterVerification, StringComparison.OrdinalIgnoreCase ) )
 				return false;
 		}
+
+		if ( !_localStore.FeatureMatchesLocalFilter( feature, _filterLocal ) )
+			return false;
 
 		if ( string.IsNullOrWhiteSpace( _globalSearch ) )
 			return true;
@@ -771,9 +1207,12 @@ public sealed class ProjectTasksWindow : EditorWindow
 
 		if ( _selectedCategory != null )
 		{
-			int index = _visibleCategories.IndexOf( _selectedCategory );
+			int index = IndexOfCategoryByName( _selectedCategory.Name );
 			if ( index >= 0 )
-				_categoryList.SetSelection( index );
+			{
+				_selectedCategory = _visibleCategories[index];
+				_categoryList.SetSelectionWithoutNotify( new[] { index } );
+			}
 		}
 	}
 
@@ -809,10 +1248,24 @@ public sealed class ProjectTasksWindow : EditorWindow
 			}
 
 			if ( index >= 0 )
-				_featureList.SetSelection( index );
+				_featureList.SetSelectionWithoutNotify( new[] { index } );
 			else
 				_selectedFeature = null;
 		}
+	}
+
+	int IndexOfCategoryByName( string name )
+	{
+		if ( string.IsNullOrEmpty( name ) )
+			return -1;
+
+		for ( int i = 0; i < _visibleCategories.Count; i++ )
+		{
+			if ( string.Equals( _visibleCategories[i].Name, name, StringComparison.OrdinalIgnoreCase ) )
+				return i;
+		}
+
+		return -1;
 	}
 
 	void SortFeatures( List<ImportedFeature> features )
@@ -875,22 +1328,6 @@ public sealed class ProjectTasksWindow : EditorWindow
 		return button;
 	}
 
-	DropdownField MakeFilterDropdown( string label, List<string> choices, string current, Action<string> onChanged )
-	{
-		if ( !choices.Contains( current ) )
-			choices.Insert( 0, current );
-
-		var field = new DropdownField( label, choices, Mathf.Max( 0, choices.IndexOf( current ) ) );
-		field.style.minWidth = 140;
-		field.RegisterValueChangedCallback( evt => onChanged( evt.newValue ) );
-		return field;
-	}
-
-	DropdownField MakeFilterDropdown( string label, string[] choices, string current, Action<string> onChanged )
-	{
-		return MakeFilterDropdown( label, new List<string>( choices ), current, onChanged );
-	}
-
 	List<string> BuildPriorityChoices()
 	{
 		var set = new HashSet<string>( StringComparer.OrdinalIgnoreCase ) { "All" };
@@ -935,17 +1372,350 @@ public sealed class ProjectTasksWindow : EditorWindow
 		return list;
 	}
 
-	void RefreshFilterChoices()
-	{
-		// RecreateGUI is heavy; values still work with free text fields for priority/assignee.
-	}
-
 	Button MakeToolbarButton( string text, Action onClick )
 	{
 		var button = new Button( onClick ) { text = text };
 		button.style.marginRight = 4;
+		button.style.flexShrink = 0;
 		button.SetEnabled( !_busy );
 		return button;
+	}
+
+	void ToggleQueueView()
+	{
+		_showingQueue = !_showingQueue;
+		ApplyContentMode();
+	}
+
+	void ApplyContentMode()
+	{
+		if ( _contentHost == null || _queuePanel == null )
+			return;
+
+		if ( _showingQueue )
+		{
+			RebuildQueueList();
+			_contentHost.style.display = DisplayStyle.None;
+			_queuePanel.style.display = DisplayStyle.Flex;
+		}
+		else
+		{
+			_queuePanel.style.display = DisplayStyle.None;
+			_contentHost.style.display = DisplayStyle.Flex;
+			if ( _contentHost.childCount == 0 )
+				RebuildContentLayout();
+		}
+	}
+
+	VisualElement BuildCompactNavBar()
+	{
+		var bar = new VisualElement();
+		bar.style.flexDirection = FlexDirection.Row;
+		bar.style.flexWrap = Wrap.Wrap;
+		bar.style.flexShrink = 0;
+		bar.style.alignItems = Align.Center;
+		bar.style.paddingLeft = 6;
+		bar.style.paddingRight = 6;
+		bar.style.paddingTop = 4;
+		bar.style.paddingBottom = 4;
+		bar.style.borderBottomWidth = 1;
+		bar.style.borderBottomColor = new Color( 0.2f, 0.2f, 0.2f );
+
+		_compactBackButton = MakeToolbarButton( "Back", () => CompactGoBack() );
+		bar.Add( _compactBackButton );
+
+		_compactCategoriesButton = MakeToolbarButton( "Categories", () => ShowCompactPane( CompactPane.Categories ) );
+		bar.Add( _compactCategoriesButton );
+		_compactFeaturesButton = MakeToolbarButton( "Features", () => ShowCompactPane( CompactPane.Features ) );
+		bar.Add( _compactFeaturesButton );
+		_compactDetailsButton = MakeToolbarButton( "Details", () => ShowCompactPane( CompactPane.Details ) );
+		bar.Add( _compactDetailsButton );
+
+		_compactContextLabel = new Label();
+		_compactContextLabel.style.flexGrow = 1;
+		_compactContextLabel.style.unityTextAlign = TextAnchor.MiddleRight;
+		_compactContextLabel.style.paddingLeft = 8;
+		_compactContextLabel.style.paddingRight = 4;
+		_compactContextLabel.style.overflow = Overflow.Hidden;
+		_compactContextLabel.style.textOverflow = TextOverflow.Ellipsis;
+		_compactContextLabel.style.whiteSpace = WhiteSpace.NoWrap;
+		bar.Add( _compactContextLabel );
+
+		return bar;
+	}
+
+	void RebuildContentLayout()
+	{
+		if ( _contentHost == null || _categoriesPanel == null || _featuresPanel == null || _detailsPanel == null )
+			return;
+
+		_contentHost.Clear();
+
+		if ( _compactMode )
+		{
+			if ( _compactNavBar != null )
+				_contentHost.Add( _compactNavBar );
+			ApplyCompactPane();
+		}
+		else
+		{
+			var mainSplits = new TwoPaneSplitView( 0, 220f, TwoPaneSplitViewOrientation.Horizontal );
+			mainSplits.style.flexGrow = 1;
+
+			var rightSplit = new TwoPaneSplitView( 0, 340f, TwoPaneSplitViewOrientation.Horizontal );
+			rightSplit.Add( _featuresPanel );
+			rightSplit.Add( _detailsPanel );
+
+			mainSplits.Add( _categoriesPanel );
+			mainSplits.Add( rightSplit );
+			_contentHost.Add( mainSplits );
+
+			_categoriesPanel.style.display = DisplayStyle.Flex;
+			_featuresPanel.style.display = DisplayStyle.Flex;
+			_detailsPanel.style.display = DisplayStyle.Flex;
+
+			RefreshListViewsAfterReparent();
+		}
+	}
+
+	void ShowCompactPane( CompactPane pane )
+	{
+		if ( pane == CompactPane.Details && _selectedFeature == null )
+			pane = _selectedCategory != null ? CompactPane.Features : CompactPane.Categories;
+		else if ( pane == CompactPane.Features && _selectedCategory == null )
+			pane = CompactPane.Categories;
+
+		_compactPane = pane;
+		if ( _compactMode )
+			ApplyCompactPane();
+		else
+			UpdateCompactNav();
+	}
+
+	void CompactGoBack()
+	{
+		if ( _compactPane == CompactPane.Details )
+			ShowCompactPane( CompactPane.Features );
+		else if ( _compactPane == CompactPane.Features )
+			ShowCompactPane( CompactPane.Categories );
+	}
+
+	void ApplyCompactPane()
+	{
+		if ( _contentHost == null || !_compactMode )
+			return;
+
+		if ( _compactNavBar != null && _compactNavBar.parent != _contentHost )
+		{
+			_contentHost.Clear();
+			_contentHost.Add( _compactNavBar );
+		}
+
+		_categoriesPanel.RemoveFromHierarchy();
+		_featuresPanel.RemoveFromHierarchy();
+		_detailsPanel.RemoveFromHierarchy();
+
+		VisualElement active = _categoriesPanel;
+		switch ( _compactPane )
+		{
+			case CompactPane.Features:
+				active = _featuresPanel;
+				break;
+			case CompactPane.Details:
+				active = _detailsPanel;
+				break;
+		}
+
+		active.style.display = DisplayStyle.Flex;
+		active.style.flexGrow = 1;
+		_contentHost.Add( active );
+
+		UpdateCompactNav();
+		RefreshListViewsAfterReparent();
+	}
+
+	void UpdateCompactNav()
+	{
+		if ( _compactBackButton == null )
+			return;
+
+		_compactBackButton.SetEnabled( _compactPane != CompactPane.Categories );
+		_compactFeaturesButton.SetEnabled( _selectedCategory != null );
+		_compactDetailsButton.SetEnabled( _selectedFeature != null );
+
+		SetCompactSegmentStyle( _compactCategoriesButton, _compactPane == CompactPane.Categories );
+		SetCompactSegmentStyle( _compactFeaturesButton, _compactPane == CompactPane.Features );
+		SetCompactSegmentStyle( _compactDetailsButton, _compactPane == CompactPane.Details );
+
+		if ( _compactPane == CompactPane.Details && _selectedFeature != null )
+			_compactContextLabel.text = _selectedFeature.Name;
+		else if ( _compactPane == CompactPane.Features && _selectedCategory != null )
+			_compactContextLabel.text = _selectedCategory.Name;
+		else
+			_compactContextLabel.text = string.Empty;
+	}
+
+	static void SetCompactSegmentStyle( Button button, bool active )
+	{
+		if ( button == null )
+			return;
+		button.style.unityFontStyleAndWeight = active ? FontStyle.Bold : FontStyle.Normal;
+	}
+
+	void RefreshListViewsAfterReparent()
+	{
+		if ( _categoryList != null )
+			_categoryList.RefreshItems();
+		if ( _featureList != null )
+			_featureList.RefreshItems();
+	}
+
+	void RebuildQueueList()
+	{
+		_pendingQueue = _localStore != null
+			? _localStore.CollectPendingMilanote( _catalog )
+			: new List<PendingMilanoteItem>();
+
+		if ( _queueList == null )
+			return;
+
+		_queueList.itemsSource = _pendingQueue;
+		_queueList.RefreshItems();
+	}
+
+	void UpdateQueueButton()
+	{
+		if ( _queueButton == null || _localStore == null )
+			return;
+
+		int count = _localStore.CountPendingMilanoteAll( _catalog );
+		_queueButton.text = _compactMode
+			? "Queue (" + count + ")"
+			: "Milanote Queue (" + count + ")";
+	}
+
+	void CopyMilanoteQueueChecklist()
+	{
+		List<PendingMilanoteItem> items = _localStore.CollectPendingMilanote( _catalog );
+		if ( items.Count == 0 )
+		{
+			EditorGUIUtility.systemCopyBuffer = "(No pending Milanote tasks)";
+			SetStatus( "Milanote queue is empty." );
+			return;
+		}
+
+		var sb = new StringBuilder();
+		sb.AppendLine( "# Milanote Queue" );
+		sb.AppendLine( "Locally done — tick these in Milanote, then Sync." );
+		sb.AppendLine();
+
+		string lastFeatureId = null;
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			PendingMilanoteItem item = items[i];
+			if ( !string.Equals( lastFeatureId, item.Feature.FeatureId, StringComparison.Ordinal ) )
+			{
+				lastFeatureId = item.Feature.FeatureId;
+				sb.AppendLine( "## " + item.Feature.Category + " / " + item.Feature.Name );
+			}
+
+			sb.AppendLine( "- [ ] [" + item.Task.Section + "] " + item.Task.Text );
+			if ( item.TaskMeta != null && !string.IsNullOrWhiteSpace( item.TaskMeta.Comment ) )
+				sb.AppendLine( "  - note: " + item.TaskMeta.Comment );
+		}
+
+		EditorGUIUtility.systemCopyBuffer = sb.ToString();
+		SetStatus( "Copied " + items.Count + " pending Milanote task(s) to clipboard." );
+	}
+
+	int CountPendingInCategory( ImportedCategory category )
+	{
+		if ( category == null )
+			return 0;
+
+		int count = 0;
+		for ( int i = 0; i < category.Features.Count; i++ )
+			count += _localStore.CountPendingMilanote( category.Features[i] );
+		return count;
+	}
+
+	ImportedCategory ResolveCatalogCategory( string name )
+	{
+		if ( _catalog == null || string.IsNullOrEmpty( name ) )
+			return null;
+
+		for ( int i = 0; i < _catalog.Categories.Count; i++ )
+		{
+			if ( string.Equals( _catalog.Categories[i].Name, name, StringComparison.OrdinalIgnoreCase ) )
+				return _catalog.Categories[i];
+		}
+
+		return null;
+	}
+
+	void SelectFeature( ImportedFeature feature )
+	{
+		if ( feature == null || _catalog == null )
+			return;
+
+		ImportedCategory category = null;
+		for ( int i = 0; i < _catalog.Categories.Count; i++ )
+		{
+			if ( string.Equals( _catalog.Categories[i].Name, feature.Category, StringComparison.OrdinalIgnoreCase ) )
+			{
+				category = _catalog.Categories[i];
+				break;
+			}
+		}
+
+		ApplyFilters( refreshUi: false );
+
+		ImportedCategory visibleCategory = null;
+		if ( category != null )
+		{
+			for ( int i = 0; i < _visibleCategories.Count; i++ )
+			{
+				if ( string.Equals( _visibleCategories[i].Name, category.Name, StringComparison.OrdinalIgnoreCase ) )
+				{
+					visibleCategory = _visibleCategories[i];
+					break;
+				}
+			}
+		}
+
+		if ( visibleCategory == null )
+		{
+			_filterLocal = "All";
+			_filterStatus = "All";
+			_globalSearch = string.Empty;
+			ApplyFilters( refreshUi: false );
+			for ( int i = 0; i < _visibleCategories.Count; i++ )
+			{
+				if ( string.Equals( _visibleCategories[i].Name, feature.Category, StringComparison.OrdinalIgnoreCase ) )
+				{
+					visibleCategory = _visibleCategories[i];
+					break;
+				}
+			}
+		}
+
+		_selectedCategory = visibleCategory;
+		RebuildCategoryList();
+		RebuildFeatureList();
+
+		_selectedFeature = null;
+		for ( int i = 0; i < _visibleFeatures.Count; i++ )
+		{
+			if ( string.Equals( _visibleFeatures[i].FeatureId, feature.FeatureId, StringComparison.Ordinal ) )
+			{
+				_selectedFeature = _visibleFeatures[i];
+				_featureList.SetSelectionWithoutNotify( new[] { i } );
+				break;
+			}
+		}
+
+		if ( _selectedFeature == null )
+			_selectedFeature = feature;
 	}
 
 	void StartSync()
@@ -975,6 +1745,9 @@ public sealed class ProjectTasksWindow : EditorWindow
 				RefreshAllLists();
 				RebuildDetails();
 				UpdateSyncInfoLabel();
+				UpdateQueueButton();
+				if ( _showingQueue )
+					RebuildQueueList();
 				SetStatus( result.Message + " (" + result.Duration.TotalSeconds.ToString( "0.0" ) + "s)" );
 			};
 		} );
@@ -1003,6 +1776,9 @@ public sealed class ProjectTasksWindow : EditorWindow
 				RefreshAllLists();
 				RebuildDetails();
 				UpdateSyncInfoLabel();
+				UpdateQueueButton();
+				if ( _showingQueue )
+					RebuildQueueList();
 				SetStatus( result.Message + " (" + result.Duration.TotalSeconds.ToString( "0.0" ) + "s)" );
 			};
 		} );
@@ -1027,6 +1803,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 		RefreshAllLists();
 		RebuildDetails();
 		UpdateSyncInfoLabel();
+		UpdateQueueButton();
 		SetStatus( result.Message );
 	}
 
@@ -1084,7 +1861,6 @@ public sealed class ProjectTasksWindow : EditorWindow
 
 	static void InternalEditorUtilityOpenFile( string path )
 	{
-		// Prefer Unity's open-asset for project files; otherwise system open.
 		string projectRoot = Directory.GetParent( Application.dataPath ).FullName;
 		string full = Path.GetFullPath( path );
 		if ( full.StartsWith( Path.GetFullPath( projectRoot ), StringComparison.OrdinalIgnoreCase ) )

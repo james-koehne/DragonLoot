@@ -472,7 +472,12 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			return;
 
 		bool occupied = Application.isPlaying && _table.IsSlotOccupied( slotIndex );
-		if ( occupied )
+		bool hideForAimFeedback = Application.isPlaying
+			&& _table.IsAimFeedbackFresh
+			&& _table.AimedSlotIndex == slotIndex;
+
+		// Hide the cyan base hologram while the placement ghost shows valid/invalid feedback.
+		if ( occupied || hideForAimFeedback )
 		{
 			visual.Root.SetActive( false );
 			return;
@@ -481,13 +486,8 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 		visual.Root.SetActive( true );
 
 		Color tint = CyanTint;
-		if ( Application.isPlaying && _table.IsAimFeedbackFresh )
-		{
-			if ( _table.AimedSlotIndex == slotIndex )
-				tint = _table.AimedSlotValid ? PlacementFeedbackColors.ValidIndicator : PlacementFeedbackColors.InvalidIndicator;
-			else if ( _table.AimedSlotIndex >= 0 )
-				tint = DimCyanTint;
-		}
+		if ( Application.isPlaying && _table.IsAimFeedbackFresh && _table.AimedSlotIndex >= 0 )
+			tint = DimCyanTint;
 
 		if ( visual.PropertyBlock == null )
 			visual.PropertyBlock = new MaterialPropertyBlock();

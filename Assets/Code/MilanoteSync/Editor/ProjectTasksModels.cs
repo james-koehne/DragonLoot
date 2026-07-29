@@ -69,6 +69,8 @@ public sealed class ImportedFeature
 	public int TotalTaskCount => AllTasks.Count;
 
 	public string TaskProgressLabel => CompletedTaskCount + "/" + TotalTaskCount;
+
+	public string MilanoteProgressLabel => "M:" + CompletedTaskCount + "/" + TotalTaskCount;
 }
 
 public sealed class ImportedTask

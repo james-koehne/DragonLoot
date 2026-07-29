@@ -12,6 +12,7 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 
 	readonly ProfilingSampler _profilingSampler = new ProfilingSampler( "HoverOutlineMask" );
 	readonly Material _maskMaterial;
+	readonly List<Renderer> _rendererScratch = new List<Renderer>( 8 );
 
 	RTHandle _maskHandle;
 	TextureHandle _maskTextureHandle;
@@ -21,10 +22,6 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 		_maskMaterial = maskMaterial;
 		renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
 	}
-
-	public RTHandle MaskHandle => _maskHandle;
-
-	public TextureHandle MaskTextureHandle => _maskTextureHandle;
 
 	public void Dispose()
 	{
@@ -54,21 +51,7 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 		CommandBuffer cmd = CommandBufferPool.Get();
 		using ( new ProfilingScope( cmd, _profilingSampler ) )
 		{
-			IReadOnlyList<Renderer> renderers = HoverOutlineRegistrar.Renderers;
-			for ( int i = 0; i < renderers.Count; i++ )
-			{
-				Renderer renderer = renderers[ i ];
-				if ( renderer == null )
-					continue;
-
-				int submeshCount = 1;
-				if ( renderer.sharedMaterials != null )
-					submeshCount = Mathf.Max( 1, renderer.sharedMaterials.Length );
-
-				for ( int submesh = 0; submesh < submeshCount; submesh++ )
-					cmd.DrawRenderer( renderer, _maskMaterial, submesh, 0 );
-			}
-
+			DrawTargets( cmd, HoverOutlineRegistrar.Renderers, _maskMaterial );
 			cmd.SetGlobalTexture( MaskTextureId, _maskHandle.nameID );
 		}
 
@@ -110,36 +93,95 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 		_maskTextureHandle = renderGraph.CreateTexture( textureDesc );
 		outlineData.maskTexture = _maskTextureHandle;
 
+		_rendererScratch.Clear();
+		IReadOnlyList<Renderer> registered = HoverOutlineRegistrar.Renderers;
+		for ( int i = 0; i < registered.Count; i++ )
+		{
+			Renderer renderer = registered[ i ];
+			if ( renderer != null )
+				_rendererScratch.Add( renderer );
+		}
+
 		using ( var builder = renderGraph.AddRasterRenderPass<PassData>( "HoverOutlineMask", out PassData passData, _profilingSampler ) )
 		{
 			passData.maskMaterial = _maskMaterial;
-			passData.renderers = HoverOutlineRegistrar.Renderers;
+			passData.renderers = _rendererScratch;
 			builder.SetRenderAttachment( _maskTextureHandle, 0, AccessFlags.Write );
 			builder.SetRenderAttachmentDepth( resourceData.activeDepthTexture, AccessFlags.Read );
 			builder.SetGlobalTextureAfterPass( _maskTextureHandle, MaskTextureId );
 			builder.AllowPassCulling( false );
 			builder.SetRenderFunc( static ( PassData data, RasterGraphContext context ) =>
 			{
-				for ( int i = 0; i < data.renderers.Count; i++ )
-				{
-					Renderer renderer = data.renderers[ i ];
-					if ( renderer == null )
-						continue;
-
-					int submeshCount = 1;
-					if ( renderer.sharedMaterials != null )
-						submeshCount = Mathf.Max( 1, renderer.sharedMaterials.Length );
-
-					for ( int submesh = 0; submesh < submeshCount; submesh++ )
-						context.cmd.DrawRenderer( renderer, data.maskMaterial, submesh, 0 );
-				}
+				DrawTargets( context.cmd, data.renderers, data.maskMaterial );
 			} );
 		}
 	}
 
+	static void DrawTargets( RasterCommandBuffer cmd, List<Renderer> renderers, Material maskMaterial )
+	{
+		if ( cmd == null || renderers == null || maskMaterial == null )
+			return;
+
+		for ( int i = 0; i < renderers.Count; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null )
+				continue;
+
+			MeshFilter filter = renderer.GetComponent<MeshFilter>();
+			if ( filter != null && filter.sharedMesh != null )
+			{
+				Mesh mesh = filter.sharedMesh;
+				int submeshCount = Mathf.Max( 1, mesh.subMeshCount );
+				Matrix4x4 matrix = renderer.localToWorldMatrix;
+				for ( int submesh = 0; submesh < submeshCount; submesh++ )
+					cmd.DrawMesh( mesh, matrix, maskMaterial, submesh, 0 );
+				continue;
+			}
+
+			int materialSlots = renderer.sharedMaterials != null
+				? Mathf.Max( 1, renderer.sharedMaterials.Length )
+				: 1;
+			for ( int submesh = 0; submesh < materialSlots; submesh++ )
+				cmd.DrawRenderer( renderer, maskMaterial, submesh, 0 );
+		}
+	}
+
+#if URP_COMPATIBILITY_MODE
+	static void DrawTargets( CommandBuffer cmd, IReadOnlyList<Renderer> renderers, Material maskMaterial )
+	{
+		if ( cmd == null || renderers == null || maskMaterial == null )
+			return;
+
+		for ( int i = 0; i < renderers.Count; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null )
+				continue;
+
+			MeshFilter filter = renderer.GetComponent<MeshFilter>();
+			if ( filter != null && filter.sharedMesh != null )
+			{
+				Mesh mesh = filter.sharedMesh;
+				int submeshCount = Mathf.Max( 1, mesh.subMeshCount );
+				Matrix4x4 matrix = renderer.localToWorldMatrix;
+				for ( int submesh = 0; submesh < submeshCount; submesh++ )
+					cmd.DrawMesh( mesh, matrix, maskMaterial, submesh, 0 );
+				continue;
+			}
+
+			int materialSlots = renderer.sharedMaterials != null
+				? Mathf.Max( 1, renderer.sharedMaterials.Length )
+				: 1;
+			for ( int submesh = 0; submesh < materialSlots; submesh++ )
+				cmd.DrawRenderer( renderer, maskMaterial, submesh, 0 );
+		}
+	}
+#endif
+
 	sealed class PassData
 	{
 		public Material maskMaterial;
-		public IReadOnlyList<Renderer> renderers;
+		public List<Renderer> renderers;
 	}
 }

@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a464568a4e532b4da02222a51f608cc, type: 3}
+  m_Name: TreasureSparkleDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureSparkleDefinition
+  enableSparkles: 1
+  useFallbackRegistrar: 1
+  useStencilResolve: 0
+  sparkleOnPiles: 1
+  sparkleOnCoins: 1
+  sparkleOnGems: 1
+  sparkleOnArtifacts: 1
+  cellSize: 0.5
+  density: 0.35
+  layerCount: 1
+  randomSeed: 17
+  targetPixelSize: 0.9
+  screenDensityRefPixels: 22
+  glintTexture: {fileID: 2800000, guid: ed8ac54ffff8b5347848e87632967032, type: 3}
+  glintTextureSize: 12
+  sparkleColor: {r: 8, g: 6.2, b: 2.8, a: 1}
+  litBoost: 6
+  bloomContribution: 8
+  coreHotness: 0.75
+  coinFacetJitter: 0.85
+  metallicSharpness: 64
+  lightKillStrength: 0.85
+  viewSwapStrength: 0.75
+  closeFadeDistance: 8
+  closeFadeFullDistance: 16
+  gemDensityMultiplier: 2.5
+  artifactDensityMultiplier: 3
+  silhouetteFade: 0.85
+  maskErodePixels: 1
+  twinkleStrength: 0.2
+  twinkleSpeed: 0.85
+  halfResolution: 0
+  debugMode: 0

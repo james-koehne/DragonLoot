@@ -27,6 +27,7 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
   - {fileID: 4595524766126240979}
+  - {fileID: 3956467327884242387}
   m_RendererFeatureMap: ad6b866f10d7b46c
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
@@ -56,6 +57,23 @@ MonoBehaviour:
   m_DepthTextureFormat: 0
   m_AccurateGbufferNormals: 0
   m_IntermediateTextureMode: 0
+--- !u!114 &3956467327884242387
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99ab88707dc05af4ca51bb14d7d3d2b0, type: 3}
+  m_Name: TreasureSparkle
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureSparkleRendererFeature
+  m_Active: 1
+  definition: {fileID: 11400000, guid: d6e16621bc6cbfe4b8aed51808076553, type: 2}
+  maskResolveShader: {fileID: 4800000, guid: 3215c397b99c65340bfaf698a3bd5970, type: 3}
+  fallbackMaskShader: {fileID: 4800000, guid: 86e0bde326f866943a40beb78c4ecda7, type: 3}
+  sparkleShader: {fileID: 4800000, guid: 8462579c66ab24146bb0e5c66e33fb58, type: 3}
 --- !u!114 &4595524766126240979
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -69,8 +87,8 @@ MonoBehaviour:
   m_Name: HoverOutline
   m_EditorClassIdentifier: Assembly-CSharp::HoverOutlineRendererFeature
   m_Active: 1
-  maskShader: {fileID: 0}
-  compositeShader: {fileID: 0}
+  maskShader: {fileID: 4800000, guid: 586724ecccfd0154396109df756a3644, type: 3}
+  compositeShader: {fileID: 4800000, guid: 9091a8db16611584c80a2bfc10519137, type: 3}
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

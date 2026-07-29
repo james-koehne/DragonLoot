@@ -246,6 +246,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d6e16621bc6cbfe4b8aed51808076553
+    m_Address: TreasureSparkleDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d7bbc54db16435f48b8fc8d9b59dad62
     m_Address: Assets/Addressables/GameController.prefab
     m_ReadOnly: 0

@@ -54,7 +54,7 @@ MonoBehaviour:
   gemMaxBounces: 2
   gemBounceRestitution: 0.45
   artifactMaxBounces: 1
-  artifactBounceRestitution: 0.18
+  artifactBounceRestitution: 0.08
   gemRollAngularScale: 6
   gemAngularDamping: 2.5
   gemPushRadius: 0.18

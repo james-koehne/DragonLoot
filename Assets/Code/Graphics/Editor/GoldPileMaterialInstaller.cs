@@ -449,12 +449,12 @@ public static class GoldPileMaterialInstaller
 		material.SetFloat("_LodFar", 35f);
 		material.SetFloat("_PomEnabled", 1f);
 		material.SetFloat("_TriplanarEnabled", 1f);
-		material.SetFloat("_SparkleEnabled", 1f);
+		material.SetFloat("_SparkleEnabled", 0f);
 		material.SetFloat("_DetailEnabled", 0f);
 
 		material.EnableKeyword("_POM_ON");
 		material.EnableKeyword("_TRIPLANAR");
-		material.EnableKeyword("_SPARKLE_ON");
+		material.DisableKeyword("_SPARKLE_ON");
 		material.DisableKeyword("_DETAIL_ON");
 		GoldPileQuality.Apply(material);
 	}

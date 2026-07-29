@@ -16,7 +16,7 @@ Shader "DragonLoot/Hover Outline Mask"
 
 			ZWrite Off
 			ZTest LEqual
-			Cull Back
+			Cull Off
 			ColorMask R
 
 			HLSLPROGRAM

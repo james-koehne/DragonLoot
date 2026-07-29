@@ -217,12 +217,13 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half fresnelAmt = _FresnelIntensity * shineMul;
     color.rgb += fresnelRgb * fresnel * fresnelAmt * metallic * litGate;
 
-    color.rgb += CoinStackSparkle(
-        input.positionWS,
-        inputData.normalWS,
-        inputData.viewDirectionWS,
-        lightDirWS,
-        metallic);
+    // Local sparkles disabled — global TreasureSparkleRendererFeature owns glints.
+    // color.rgb += CoinStackSparkle(
+    //     input.positionWS,
+    //     inputData.normalWS,
+    //     inputData.viewDirectionWS,
+    //     lightDirWS,
+    //     metallic);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
     return color;

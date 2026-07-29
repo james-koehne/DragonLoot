@@ -11,7 +11,7 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 /// Per-type distance culling: coins at LOD0, gems through LOD1, large props always (frustum only).
 /// </summary>
 [DisallowMultipleComponent]
-public class GoldPileLootInstances : MonoBehaviour
+public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar.IInstanceMaskSource
 {
 	const int BatchSize = 1023;
 
@@ -148,6 +148,7 @@ public class GoldPileLootInstances : MonoBehaviour
 	System.Comparison<int> _coverageComparison;
 	bool[] _cellUsedScratch;
 	bool _ready;
+	MaterialPropertyBlock _sparkleMaskPropertyBlock;
 	bool _streamingEnabled = true;
 	bool _drawCacheDirty = true;
 	ulong _lastStreamFingerprint;
@@ -2076,17 +2077,50 @@ public class GoldPileLootInstances : MonoBehaviour
 
 	void OnDestroy()
 	{
+		TreasureSparkleMaskRegistrar.UnregisterInstanceSource( this );
 		ReleaseVisualHandles();
 		_streamer.Clear();
 		_chunkGrid.Release();
 	}
 
+	void OnEnable()
+	{
+		TreasureSparkleMaskRegistrar.RegisterInstanceSource( this );
+	}
+
 	void OnDisable()
 	{
+		TreasureSparkleMaskRegistrar.UnregisterInstanceSource( this );
 		_cachedCamera = null;
 		_streamer.Clear();
 		LastDrawnCount = 0;
 		LastCulledCount = 0;
+	}
+
+	public TreasureSparkleDefinition.SparkleSourceKind MaskKind => TreasureSparkleDefinition.SparkleSourceKind.Coin;
+
+	public void DrawSparkleMask( UnityEngine.Rendering.RasterCommandBuffer cmd, Material maskMaterial )
+	{
+		if ( cmd == null || maskMaterial == null || !_ready || _batches == null )
+			return;
+
+		if ( _sparkleMaskPropertyBlock == null )
+			_sparkleMaskPropertyBlock = new MaterialPropertyBlock();
+		_sparkleMaskPropertyBlock.SetFloat(
+			TreasureSparkleMaskPass.MaskWriteValueId,
+			TreasureSparkleDefinition.MaskWriteValueForKind( MaskKind ) );
+
+		for ( int b = 0; b < _batches.Length; b++ )
+		{
+			BatchGroup group = _batches[ b ];
+			if ( group.Mesh == null || group.StreamMatrices == null || group.StreamCount <= 0 )
+				continue;
+
+			int submesh = Mathf.Clamp( group.SubmeshIndex, 0, Mathf.Max( 0, group.Mesh.subMeshCount - 1 ) );
+			int count = group.StreamCount;
+			for ( int i = 0; i < count; i++ )
+				cmd.DrawMesh( group.Mesh, group.StreamMatrices[ i ], maskMaterial, submesh, 0, _sparkleMaskPropertyBlock );
+		}
 	}
 
 	void BuildSlots( TreasurePileDefinition definition, Dictionary<TreasureDefinition, VisualAssets> visuals )

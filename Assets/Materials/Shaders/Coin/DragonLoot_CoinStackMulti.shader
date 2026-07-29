@@ -29,9 +29,9 @@ Shader "DragonLoot/Coin Stack Multi"
         _SpecularPower("Specular Power", Range(8, 256)) = 64
 
         [Header(Sparkles)]
-        [Toggle] _SparkleEnabled("Sparkles", Float) = 1
+        [Toggle] _SparkleEnabled("Sparkles", Float) = 0
         [HDR] _SparkleColor("Sparkle Color", Color) = (1, 0.92, 0.65, 1)
-        _SparkleIntensity("Sparkle Intensity", Range(0, 8)) = 1.5
+        _SparkleIntensity("Sparkle Intensity", Range(0, 8)) = 0
         _SparkleDensity("Sparkle Density", Range(1, 64)) = 14
         _SparkleSharpness("Sparkle Sharpness", Range(4, 128)) = 48
         _SparkleSpeed("Sparkle Speed", Range(0, 10)) = 2
@@ -100,6 +100,16 @@ Shader "DragonLoot/Coin Stack Multi"
 
             Cull[_Cull]
             ZWrite On
+
+            // Treasure sparkle mask bit (Ref 64 / bit 6). Avoids URP default stencil Ref 1.
+            Stencil
+            {
+                Ref 64
+                Comp Always
+                Pass Replace
+                ReadMask 64
+                WriteMask 64
+            }
 
             HLSLPROGRAM
             #pragma target 3.5

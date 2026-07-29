@@ -132,6 +132,189 @@ public sealed class ProjectTasksLocalStore
 
 		return changed;
 	}
+
+	public static bool IsFeatureMilanoteComplete( ImportedFeature feature )
+	{
+		if ( feature == null )
+			return false;
+
+		if ( feature.IsCompleteFolder )
+			return true;
+		if ( string.Equals( feature.Status, "Complete", StringComparison.OrdinalIgnoreCase )
+		     || string.Equals( feature.Status, "Done", StringComparison.OrdinalIgnoreCase ) )
+			return true;
+
+		return feature.TotalTaskCount > 0 && feature.CompletedTaskCount == feature.TotalTaskCount;
+	}
+
+	public static bool IsLocallyDonePendingMilanote( ImportedTask task, LocalTaskMetadata taskMeta )
+	{
+		return task != null
+		       && !task.IsComplete
+		       && taskMeta != null
+		       && taskMeta.WorkStatus == LocalTaskWorkStatus.Implemented;
+	}
+
+	public int CountPendingMilanote( ImportedFeature feature )
+	{
+		if ( feature == null )
+			return 0;
+
+		LocalFeatureMetadata local = GetOrCreate( feature.FeatureId );
+		int count = 0;
+		for ( int i = 0; i < feature.AllTasks.Count; i++ )
+		{
+			ImportedTask task = feature.AllTasks[i];
+			LocalTaskMetadata taskMeta = local.GetOrCreateTask( task.Key );
+			if ( IsLocallyDonePendingMilanote( task, taskMeta ) )
+				count++;
+		}
+
+		return count;
+	}
+
+	public int CountLocalProgress( ImportedFeature feature )
+	{
+		if ( feature == null )
+			return 0;
+
+		LocalFeatureMetadata local = GetOrCreate( feature.FeatureId );
+		int count = 0;
+		for ( int i = 0; i < feature.AllTasks.Count; i++ )
+		{
+			ImportedTask task = feature.AllTasks[i];
+			if ( task.IsComplete )
+			{
+				count++;
+				continue;
+			}
+
+			LocalTaskMetadata taskMeta = local.GetOrCreateTask( task.Key );
+			if ( taskMeta.WorkStatus == LocalTaskWorkStatus.Implemented )
+				count++;
+		}
+
+		return count;
+	}
+
+	public int CountPendingMilanoteAll( ProjectTasksCatalog catalog )
+	{
+		if ( catalog == null || catalog.AllFeatures == null )
+			return 0;
+
+		int count = 0;
+		for ( int i = 0; i < catalog.AllFeatures.Count; i++ )
+			count += CountPendingMilanote( catalog.AllFeatures[i] );
+		return count;
+	}
+
+	public ProjectTasksTint GetFeatureTint( ImportedFeature feature )
+	{
+		if ( feature == null )
+			return ProjectTasksTint.None;
+
+		if ( IsFeatureMilanoteComplete( feature ) )
+			return ProjectTasksTint.Green;
+
+		if ( CountPendingMilanote( feature ) > 0 )
+			return ProjectTasksTint.Amber;
+
+		return ProjectTasksTint.None;
+	}
+
+	public ProjectTasksTint GetCategoryTint( ImportedCategory category )
+	{
+		if ( category == null || category.Features == null || category.Features.Count == 0 )
+			return ProjectTasksTint.None;
+
+		bool allGreen = true;
+		bool anyAmber = false;
+		for ( int i = 0; i < category.Features.Count; i++ )
+		{
+			ProjectTasksTint tint = GetFeatureTint( category.Features[i] );
+			if ( tint != ProjectTasksTint.Green )
+				allGreen = false;
+			if ( tint == ProjectTasksTint.Amber )
+				anyAmber = true;
+		}
+
+		if ( allGreen )
+			return ProjectTasksTint.Green;
+		if ( anyAmber )
+			return ProjectTasksTint.Amber;
+		return ProjectTasksTint.None;
+	}
+
+	public List<PendingMilanoteItem> CollectPendingMilanote( ProjectTasksCatalog catalog )
+	{
+		var list = new List<PendingMilanoteItem>();
+		if ( catalog == null || catalog.AllFeatures == null )
+			return list;
+
+		for ( int i = 0; i < catalog.AllFeatures.Count; i++ )
+		{
+			ImportedFeature feature = catalog.AllFeatures[i];
+			LocalFeatureMetadata local = GetOrCreate( feature.FeatureId );
+			for ( int t = 0; t < feature.AllTasks.Count; t++ )
+			{
+				ImportedTask task = feature.AllTasks[t];
+				LocalTaskMetadata taskMeta = local.GetOrCreateTask( task.Key );
+				if ( !IsLocallyDonePendingMilanote( task, taskMeta ) )
+					continue;
+
+				list.Add( new PendingMilanoteItem
+				{
+					Feature = feature,
+					Task = task,
+					TaskMeta = taskMeta
+				} );
+			}
+		}
+
+		return list;
+	}
+
+	public bool FeatureMatchesLocalFilter( ImportedFeature feature, string filter )
+	{
+		if ( feature == null || string.IsNullOrEmpty( filter )
+		     || string.Equals( filter, "All", StringComparison.OrdinalIgnoreCase ) )
+			return true;
+
+		LocalFeatureMetadata local = GetOrCreate( feature.FeatureId );
+		if ( string.Equals( filter, "Pending Milanote", StringComparison.OrdinalIgnoreCase ) )
+			return CountPendingMilanote( feature ) > 0;
+
+		for ( int i = 0; i < feature.AllTasks.Count; i++ )
+		{
+			ImportedTask task = feature.AllTasks[i];
+			LocalTaskMetadata taskMeta = local.GetOrCreateTask( task.Key );
+			if ( string.Equals( filter, "Blocked", StringComparison.OrdinalIgnoreCase )
+			     && taskMeta.WorkStatus == LocalTaskWorkStatus.Blocked )
+				return true;
+			if ( string.Equals( filter, "Needs Review", StringComparison.OrdinalIgnoreCase )
+			     && taskMeta.WorkStatus == LocalTaskWorkStatus.NeedsReview )
+				return true;
+			if ( string.Equals( filter, "Has Highlights", StringComparison.OrdinalIgnoreCase )
+			     && taskMeta.Highlighted )
+				return true;
+		}
+
+		return false;
+	}
+}
+
+public enum ProjectTasksTint
+{
+	None = 0,
+	Amber = 1,
+	Green = 2
+}
+
+public sealed class PendingMilanoteItem
+{
+	public ImportedFeature Feature;
+	public ImportedTask Task;
+	public LocalTaskMetadata TaskMeta;
 }
 
 [Serializable]

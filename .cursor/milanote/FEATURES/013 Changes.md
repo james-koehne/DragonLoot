@@ -56,11 +56,13 @@ Three treasure-surface physics tweaks in `TreasureSurfaceSimulator`:
 
 5. **Gem roll scales with velocity** — Initial gem spin on register also uses full impact speed; grounded roll spin was already speed-proportional.
 
-6. **Auto-stack merge animation** — When two loose coins auto-merge, the incoming coin plays the same arc/flip tween as a manual stack append (`BeginAppendFlight`).
+6. **Auto-stack merge animation** — When two loose coins auto-merge, or a coin settles onto an existing ground stack, the incoming coin plays the append arc/flip tween (`BeginAppendFlight`) instead of snapping.
 
-7. **No ground clipping** — Each sim tick clamps world Y to `TreasureSurfaceSeat.GetContactY` so mesh bottoms never render below the surface, even while tumbling.
+7. **No ground clipping** — Sim Y uses stable seat lift and never goes below surface height. Rotation-dependent mesh clamps were removed (they floated artifacts). Settle snaps to upright contact Y.
 
-8. **Artifact throw bounce** — Crowns/artifacts share the hop path with heavily damped restitution (`artifactBounceRestitution`, capped low hop height). No flip spin; they thud and settle.
+8. **Artifact throw bounce** — Crowns/artifacts share the hop path with heavy damping (`artifactBounceRestitution` 0.08, hop capped ~0.45). No post-bounce tumble spin.
+
+9. **Artifact throw flip** — Flight tween spins artifacts exactly once (`ResolveFlightSpins` → 1) before landing upright.
 
 Tuning lives on `TreasureSurfaceDefinition` / asset: `artifactFrictionScale`, `artifactSpeedScale`, `flowUphillResistance`, `artifactMaxBounces`, `artifactBounceRestitution`.
 
@@ -77,9 +79,9 @@ Tuning lives on `TreasureSurfaceDefinition` / asset: `artifactFrictionScale`, `a
 2. **Against-flow uphill** — On a sloped pile with visible flow, throw a coin/gem downhill so it picks up speed, then observe if it can coast back uphill against the flow. Expected: speed drops sharply when moving opposite flow; item should stall or reverse slowly rather than climb easily.
 3. **Gem roll damping** — Roll a gem down a slope and watch it decelerate on flat ground. Expected: visual spin rate decreases in sync with horizontal speed (no “spinning in place” while nearly stopped).
 4. **Straight-up throw bounce** — Throw a coin or gem nearly straight up onto a pile. Expected: it hops/bounces on landing like a forward throw, not a dead stop.
-5. **Auto-stack animation** — Throw two coins close together so they auto-merge. Expected: the second coin arcs/flips onto the stack instead of snapping instantly.
-6. **Ground clipping** — Throw gems/crowns onto slopes and watch them tumble to rest. Expected: mesh bottoms never sink visibly below the gold surface.
-7. **Artifact bounce** — Throw a crown/artifact onto the pile. Expected: a short heavy thud-bounce, much less lively than coins/gems.
+5. **Auto-stack animation** — Throw a coin near an existing ground stack, or throw two coins close together. Expected: incoming coin arcs/flips onto the stack instead of snapping.
+6. **Ground clipping** — Throw gems/crowns onto slopes and watch them settle. Expected: mesh bottoms never sink below the gold surface; artifacts do not hang in mid-air.
+7. **Artifact bounce + flip** — Throw a crown/artifact onto the pile. Expected: exactly one flip in flight, then a short heavy thud-bounce, settling on the surface (not floating).
 8. **Regression** — Coins still slide downhill with flow; auto-stack on settle still works; gems still hop/bounce on impact.
 
 ## Cursor Notes
@@ -87,7 +89,7 @@ Tuning lives on `TreasureSurfaceDefinition` / asset: `artifactFrictionScale`, `a
 - `artifactSettleSpeed` kept on the definition for backward compatibility but artifacts now use friction-based decel. Consider removing in a future cleanup if unused elsewhere.
 - Player slide/climb is unchanged; flow uphill resistance applies only to loose treasure surface simulation.
 - If against-flow still feels too easy on very steep piles, raise `flowUphillResistance` (try 8–10) in the asset.
-- Artifact hop height is capped at 1.6 m/s equivalent; raise `artifactBounceRestitution` slightly if crowns feel too dead on soft landings.
+- Artifact hop height is capped ~0.45 m/s vertical; raise `artifactBounceRestitution` slightly if crowns feel too dead.
 
 ## Developer Verification
 

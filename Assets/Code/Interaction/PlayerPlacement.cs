@@ -9,6 +9,7 @@ using UnityEngine;
 public class PlayerPlacement : MonoBehaviour
 {
 	PlayerPlacementDefinition _definition;
+	PlayerInteractionDefinition _pickableOutlineDefinition;
 	PlayerController _player;
 	PlayerInteraction _interaction;
 	FloorPlacementTarget _floorTarget;
@@ -21,6 +22,7 @@ public class PlayerPlacement : MonoBehaviour
 	Vector3 _smoothedPreviewPos;
 	Quaternion _smoothedPreviewRot = Quaternion.identity;
 	bool _hasSmoothedPreview;
+	static readonly List<Renderer> StackOutlineScratch = new List<Renderer>( 8 );
 
 	PlayerPlacementDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
@@ -186,7 +188,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( preview.GhostStyle == PlacementGhostStyle.Suppressed )
 		{
-			HoverOutlineRegistrar.Clear();
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
 			if ( _ghost != null )
 				_ghost.SetVisible( false );
 			return;
@@ -204,32 +206,78 @@ public class PlayerPlacement : MonoBehaviour
 				preview.VolumeHeight,
 				preview.VolumeDiameter,
 				preview.IsValid );
-			UpdateStackHoverOutline( preview.IsValid );
+			UpdateStackHoverOutline( target );
 		}
 		else
 		{
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
 			_ghost.SyncFromItem( item );
 			_ghost.UpdatePose( in preview );
 		}
 	}
 
-	void UpdateStackHoverOutline( bool valid )
+	void UpdateStackHoverOutline( ITreasurePlacementTarget target )
 	{
-		if ( _ghost == null )
+		HoverOutlineVisualSettings settings = ResolvePickableOutlineSettings();
+		List<Renderer> renderers = StackOutlineScratch;
+		renderers.Clear();
+
+		AppendStackTargetRenderers( target, renderers );
+
+		Renderer volumeRenderer;
+		HoverOutlineVisualSettings ignored;
+		if ( _ghost != null && _ghost.TryGetStackVolumeOutline( true, out volumeRenderer, out ignored )
+			&& volumeRenderer != null )
 		{
-			HoverOutlineRegistrar.Clear();
+			renderers.Add( volumeRenderer );
+		}
+
+		if ( renderers.Count == 0 )
+		{
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
 			return;
 		}
 
-		Renderer renderer;
-		HoverOutlineVisualSettings settings;
-		if ( !_ghost.TryGetStackVolumeOutline( valid, out renderer, out settings ) )
+		HoverOutlineRegistrar.SetTarget(
+			HoverOutlineRegistrar.Owner.StackVolume,
+			renderers,
+			settings );
+	}
+
+	HoverOutlineVisualSettings ResolvePickableOutlineSettings()
+	{
+		PlayerInteractionDefinition def = RuntimeDefinition.Resolve( ref _pickableOutlineDefinition );
+		if ( def != null && def.pickableOutline != null )
 		{
-			HoverOutlineRegistrar.Clear();
+			HoverOutlineVisualSettings settings = def.pickableOutline.Clone();
+			settings.Validate();
+			return settings;
+		}
+
+		return HoverOutlineVisualSettings.DefaultPickable();
+	}
+
+	static void AppendStackTargetRenderers( ITreasurePlacementTarget target, List<Renderer> renderers )
+	{
+		if ( target == null || renderers == null )
+			return;
+
+		GroundCoinStack groundStack = target as GroundCoinStack;
+		if ( groundStack != null )
+		{
+			IReadOnlyList<Renderer> collected = HoverOutlineTargetUtility.CollectFromBehaviour( groundStack );
+			for ( int i = 0; i < collected.Count; i++ )
+				renderers.Add( collected[ i ] );
 			return;
 		}
 
-		HoverOutlineRegistrar.SetTarget( new[] { renderer }, settings );
+		CoinStackInteractable coinStack = target as CoinStackInteractable;
+		if ( coinStack != null )
+		{
+			IReadOnlyList<Renderer> collected = HoverOutlineTargetUtility.CollectFromBehaviour( coinStack );
+			for ( int i = 0; i < collected.Count; i++ )
+				renderers.Add( collected[ i ] );
+		}
 	}
 
 	void ConfigureGhostVisuals()
@@ -1269,7 +1317,7 @@ public class PlayerPlacement : MonoBehaviour
 		_hasPreview = false;
 		_activePreview = default;
 		_hasSmoothedPreview = false;
-		HoverOutlineRegistrar.Clear();
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
 	}

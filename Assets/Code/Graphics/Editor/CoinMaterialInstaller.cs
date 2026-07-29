@@ -861,9 +861,9 @@ public static class CoinMaterialInstaller
 		material.SetFloat("_ShineBoost", 0.35f);
 		material.SetFloat("_SpecularIntensity", 0.75f);
 		material.SetFloat("_SpecularPower", 64f);
-		material.SetFloat("_SparkleEnabled", 1f);
+		material.SetFloat("_SparkleEnabled", 0f);
 		material.SetColor("_SparkleColor", new Color(1f, 0.92f, 0.65f, 1f));
-		material.SetFloat("_SparkleIntensity", 1.5f);
+		material.SetFloat("_SparkleIntensity", 0f);
 		material.SetFloat("_SparkleDensity", 14f);
 		material.SetFloat("_SparkleSharpness", 48f);
 		material.SetFloat("_SparkleSpeed", 2f);

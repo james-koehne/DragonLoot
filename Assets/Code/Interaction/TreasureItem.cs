@@ -85,6 +85,7 @@ public class TreasureItem : MonoBehaviour
 	void OnEnable()
 	{
 		ApplyVariationSeed();
+		EnsureSparkleMaskContributor();
 	}
 
 	public void Bind( TreasureDefinition treasure, bool viaAddressables )
@@ -102,6 +103,7 @@ public class TreasureItem : MonoBehaviour
 		ApplyVariationSeed();
 		ApplyDisplayName();
 		ApplyCollectableLayer();
+		EnsureSparkleMaskContributor();
 	}
 
 	public void SetOriginPile( TreasurePileVisual pile )
@@ -829,6 +831,19 @@ public class TreasureItem : MonoBehaviour
 		Renderer renderer = GetComponent<Renderer>();
 		if ( renderer != null && definition.materialOverride != null )
 			renderer.sharedMaterial = definition.materialOverride;
+	}
+
+	void EnsureSparkleMaskContributor()
+	{
+		TreasureSparkleMaskContributor contributor = GetComponent<TreasureSparkleMaskContributor>();
+		if ( contributor == null )
+			contributor = gameObject.AddComponent<TreasureSparkleMaskContributor>();
+
+		TreasureSparkleDefinition.SparkleSourceKind kind = TreasureSparkleDefinition.SparkleSourceKind.Artifact;
+		if ( definition != null )
+			kind = TreasureSparkleDefinition.KindFromCategory( definition.category );
+		contributor.SetKind( kind );
+		contributor.RefreshRegistration();
 	}
 
 	/// <summary>

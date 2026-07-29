@@ -148,7 +148,7 @@ public class TreasureSurfaceDefinition : ScriptableObject
 
 	[Tooltip( "Heavy bounce damping for crowns/artifacts (much lower than coins/gems)." )]
 	[Range( 0f, 1.5f )]
-	public float artifactBounceRestitution = 0.18f;
+	public float artifactBounceRestitution = 0.08f;
 
 	[Tooltip( "Converts horizontal speed into gem roll angular velocity." )]
 	[Min( 0f )]

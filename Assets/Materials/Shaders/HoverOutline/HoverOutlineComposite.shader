@@ -83,20 +83,49 @@ Shader "DragonLoot/Hover Outline Composite"
 				return 1.0 + sin(_Time.y * _PulseSpeed * 6.2831853) * _PulseAmount;
 			}
 
-			float SampleDilatedMask(float2 uv)
+			float SampleRawMask(float2 uv)
 			{
-				int radius = (int)round(_MaskDilatePixels);
+				return SAMPLE_TEXTURE2D(_HoverOutlineMask, sampler_HoverOutlineMask, uv).r;
+			}
+
+			float SampleNeighborhoodMask(float2 uv, float scalePixels, bool dilate)
+			{
+				int radius = (int)round(max(scalePixels, 0.0));
 				float2 texel = _HoverOutlineMask_TexelSize.xy;
-				float mask = 0.0;
+				float mask = dilate ? 0.0 : 1.0;
 				for (int y = -radius; y <= radius; y++)
 				{
 					for (int x = -radius; x <= radius; x++)
 					{
-						float2 offsetUv = uv + float2(x, y) * texel;
-						mask = max(mask, SAMPLE_TEXTURE2D(_HoverOutlineMask, sampler_HoverOutlineMask, offsetUv).r);
+						float sample = SampleRawMask(uv + float2(x, y) * texel);
+						mask = dilate ? max(mask, sample) : min(mask, sample);
 					}
 				}
 				return mask;
+			}
+
+			// Silhouette from the object mask itself — works on smooth cylinders where depth/normal edges fail.
+			float ComputeMaskSilhouette(float2 uv, float widthPixels)
+			{
+				float scale = max(widthPixels, 1.0);
+				float2 texelSize = _HoverOutlineMask_TexelSize.xy;
+				float halfScaleFloor = floor(scale * 0.5);
+				float halfScaleCeil = ceil(scale * 0.5);
+
+				float2 bottomLeftUV = uv - texelSize * halfScaleFloor;
+				float2 topRightUV = uv + texelSize * halfScaleCeil;
+				float2 bottomRightUV = uv + float2(texelSize.x * halfScaleCeil, -texelSize.y * halfScaleFloor);
+				float2 topLeftUV = uv + float2(-texelSize.x * halfScaleFloor, texelSize.y * halfScaleCeil);
+
+				float m0 = SampleRawMask(bottomLeftUV);
+				float m1 = SampleRawMask(topRightUV);
+				float m2 = SampleRawMask(bottomRightUV);
+				float m3 = SampleRawMask(topLeftUV);
+
+				float d0 = m1 - m0;
+				float d1 = m3 - m2;
+				float edge = sqrt(d0 * d0 + d1 * d1);
+				return edge > 0.1 ? 1.0 : 0.0;
 			}
 
 			float ComputeRoyStanEdge(float2 uv, float3 viewSpaceDir)
@@ -143,15 +172,18 @@ Shader "DragonLoot/Hover Outline Composite"
 
 			half4 Frag(Varyings input) : SV_Target
 			{
-				float mask = SampleDilatedMask(input.uv);
+				float dilate = max(_MaskDilatePixels, _Scale);
+				float mask = SampleNeighborhoodMask(input.uv, dilate, true);
 				if (mask <= 0.001)
 					discard;
 
-				float edge = ComputeRoyStanEdge(input.uv, input.viewSpaceDir);
+				float maskSilhouette = ComputeMaskSilhouette(input.uv, _Scale);
+				float sceneEdge = ComputeRoyStanEdge(input.uv, input.viewSpaceDir);
+				float edge = max(maskSilhouette, sceneEdge);
 				clip(edge - 0.5);
 
 				float pulse = GetPulseAlpha();
-				float alpha = saturate(_OutlineColor.a * _OutlineIntensity * pulse * mask);
+				float alpha = saturate(_OutlineColor.a * _OutlineIntensity * pulse);
 				float3 rgb = _OutlineColor.rgb * _HdrBoost * pulse;
 				return half4(rgb, alpha);
 			}

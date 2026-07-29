@@ -87,12 +87,13 @@ public sealed class PlacementGhost
 	public bool TryGetStackVolumeOutline( bool valid, out Renderer renderer, out HoverOutlineVisualSettings settings )
 	{
 		renderer = _volumeRenderer;
-		settings = null;
+		settings = _stackOutlineSettings;
 		if ( !_stackVolumeMode || _volumeRenderer == null )
+		{
+			settings = null;
 			return false;
+		}
 
-		Color tintRgb = valid ? _validRgb : _invalidRgb;
-		settings = _stackOutlineSettings.WithRgbTint( tintRgb );
 		return true;
 	}
 
@@ -417,20 +418,16 @@ public sealed class PlacementGhost
 		if ( _invisibleMaterial != null )
 			return _invisibleMaterial;
 
-		Shader shader = Shader.Find( "Universal Render Pipeline/Unlit" );
+		Shader shader = Shader.Find( "DragonLoot/Hover Outline Invisible" );
 		if ( shader == null )
-			shader = Shader.Find( "Sprites/Default" );
+			shader = Shader.Find( "Universal Render Pipeline/Unlit" );
 
 		_invisibleMaterial = new Material( shader );
 		if ( _invisibleMaterial.HasProperty( "_BaseColor" ) )
 			_invisibleMaterial.SetColor( "_BaseColor", Color.clear );
 		if ( _invisibleMaterial.HasProperty( "_Color" ) )
 			_invisibleMaterial.SetColor( "_Color", Color.clear );
-		if ( _invisibleMaterial.HasProperty( "_Surface" ) )
-			_invisibleMaterial.SetFloat( "_Surface", 1f );
-		if ( _invisibleMaterial.HasProperty( "_ZWrite" ) )
-			_invisibleMaterial.SetFloat( "_ZWrite", 0f );
-		_invisibleMaterial.renderQueue = (int)RenderQueue.Transparent;
+		_invisibleMaterial.renderQueue = (int)RenderQueue.Geometry + 10;
 		return _invisibleMaterial;
 	}
 

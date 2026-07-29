@@ -125,6 +125,16 @@ Shader "DragonLoot/Gold Pile Procedural"
             Cull[_Cull]
             ZWrite On
 
+            // Treasure sparkle mask bit (Ref 64 / bit 6). Avoids URP default stencil Ref 1.
+            Stencil
+            {
+                Ref 64
+                Comp Always
+                Pass Replace
+                ReadMask 64
+                WriteMask 64
+            }
+
             HLSLPROGRAM
             #pragma target 3.0
             #pragma vertex GoldPileProcLitVert

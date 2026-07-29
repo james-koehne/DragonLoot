@@ -176,21 +176,18 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			return true;
 		}
 
-		int previewSlot = hasPlacement ? placementSlot : hoveredSlot;
-		GetSlotWorldPose( previewSlot, out Vector3 pos, out Quaternion rot );
-		preview.SetSuppressed( pos, rot, scale, hasPlacement && placementValid );
+		// Feedback follows the slot under the crosshair; placement may still fall back elsewhere.
+		int feedbackSlot = hasHoveredSlot ? hoveredSlot : placementSlot;
+		bool feedbackValid = hasHoveredSlot
+			? EvaluateSlotForItem( hoveredSlot, item )
+			: placementValid;
 
-		if ( hasHoveredSlot )
-		{
-			_aimedSlotIndex = hoveredSlot;
-			_aimedSlotValid = EvaluateSlotForItem( hoveredSlot, item );
-		}
-		else if ( hasPlacement )
-		{
-			_aimedSlotIndex = placementSlot;
-			_aimedSlotValid = placementValid;
-		}
+		GetSlotWorldPose( feedbackSlot, out Vector3 pos, out Quaternion rot );
+		// Show the held-item valid/invalid ghost; slot indicators hide the cyan hologram for this slot.
+		preview.SetItemMesh( pos, rot, scale, feedbackValid );
 
+		_aimedSlotIndex = feedbackSlot;
+		_aimedSlotValid = feedbackValid;
 		_aimFeedbackFrame = Time.frameCount;
 		if ( slotIndicators != null )
 			slotIndicators.RefreshAimFeedback();

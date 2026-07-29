@@ -25,7 +25,7 @@ Shader "DragonLoot/Gem"
         _ShineThreshold("Shine Hardness", Range(0, 1)) = 0.82
         _RimIntensity("Edge Shine", Range(0, 2)) = 0.55
         _RimPower("Edge Shine Width", Range(1, 8)) = 3
-        _SparkleIntensity("Glint Intensity", Range(0, 3)) = 1.2
+        _SparkleIntensity("Glint Intensity", Range(0, 3)) = 0
         _SparkleDensity("Glint Density", Range(0.5, 32)) = 8
         _SparkleSharpness("Glint Sharpness", Range(1, 64)) = 24
 
@@ -71,6 +71,16 @@ Shader "DragonLoot/Gem"
             Blend One Zero
             ZWrite On
             Cull[_Cull]
+
+            // Treasure sparkle mask bit (Ref 64 / bit 6). Avoids URP default stencil Ref 1.
+            Stencil
+            {
+                Ref 64
+                Comp Always
+                Pass Replace
+                ReadMask 64
+                WriteMask 64
+            }
 
             HLSLPROGRAM
             #pragma target 3.0

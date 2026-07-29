@@ -46,6 +46,8 @@ public class CoinStackCylinderVisual : MonoBehaviour
 
 	public int DisplayedCount => _targetCount;
 
+	public MeshRenderer MeshRenderer => meshRenderer;
+
 	CoinStackVisualDefinition Definition
 	{
 		get
@@ -80,6 +82,12 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	{
 		EnsureVisual();
 		ApplyDefinitionSettings();
+		EnsureSparkleMaskContributor();
+	}
+
+	void OnEnable()
+	{
+		EnsureSparkleMaskContributor();
 	}
 
 	void OnDestroy()
@@ -92,6 +100,16 @@ public class CoinStackCylinderVisual : MonoBehaviour
 				DestroyImmediate( _typeMap );
 			_typeMap = null;
 		}
+	}
+
+	void EnsureSparkleMaskContributor()
+	{
+		EnsureVisual();
+		TreasureSparkleMaskContributor contributor = GetComponent<TreasureSparkleMaskContributor>();
+		if ( contributor == null )
+			contributor = gameObject.AddComponent<TreasureSparkleMaskContributor>();
+		contributor.SetKind( TreasureSparkleDefinition.SparkleSourceKind.Coin );
+		contributor.InvalidateRendererCache();
 	}
 
 	public void SetStack( TreasureDefinition definition, int count )

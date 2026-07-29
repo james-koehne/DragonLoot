@@ -22,7 +22,7 @@ public sealed class MilanoteSyncWindow : EditorWindow
 	string _boardId;
 	string _outputRelativePath;
 
-	[MenuItem( "Tools/Milanote Sync" )]
+	[MenuItem( "Tools/MilanoteSync/Settings" )]
 	public static void Open()
 	{
 		MilanoteSyncWindow window = GetWindow<MilanoteSyncWindow>( "Milanote Sync" );

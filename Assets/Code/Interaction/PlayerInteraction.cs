@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 public class PlayerInteraction : MonoBehaviour
@@ -493,7 +495,14 @@ public class PlayerInteraction : MonoBehaviour
 			}
 
 			InteractableBase interactable = ResolveInteractableFromHit( hit.collider );
-			if ( interactable == null || !interactable.CanInteract( _player ) )
+			if ( interactable == null )
+				continue;
+
+			interactable = PromoteStackedCoinToOwnerStack( interactable );
+
+			bool canInteract = interactable.CanInteract( _player );
+			bool canOutline = HoverOutlineTargetUtility.CanOutlineFocus( interactable, _player );
+			if ( !canInteract && !canOutline )
 				continue;
 
 			if ( interactable is TreasureItemInteractable itemInteractable )
@@ -540,13 +549,19 @@ public class PlayerInteraction : MonoBehaviour
 			}
 		}
 
-		// Never target interactables (gold piles, stacks, etc.) through a closer floor surface.
+		// Never target interactables through a closer floor surface.
+		// Ground coin stacks sit on the floor — their capsule is often behind the floor hit
+		// along glancing rays, so keep stack focus when the stack was hit at all.
 		if ( hasSurface )
 		{
 			if ( bestItem != null && surfaceDist < bestItemDist - 0.001f )
 				bestItem = null;
-			if ( bestOther != null && surfaceDist < bestOtherDist - 0.001f )
+			if ( bestOther != null
+				&& surfaceDist < bestOtherDist - 0.001f
+				&& !IsFloorExemptOutlineInteractable( bestOther ) )
+			{
 				bestOther = null;
+			}
 		}
 
 		if ( bestItem != null )
@@ -673,6 +688,32 @@ public class PlayerInteraction : MonoBehaviour
 		return collider.GetComponentInParent<InteractableBase>();
 	}
 
+	static InteractableBase PromoteStackedCoinToOwnerStack( InteractableBase interactable )
+	{
+		TreasureItemInteractable itemInteractable = interactable as TreasureItemInteractable;
+		if ( itemInteractable == null )
+			return interactable;
+
+		TreasureItem item = itemInteractable.Item;
+		if ( item == null || item.State != TreasureItemState.Stacked )
+			return interactable;
+
+		GroundCoinStack groundStack = item.Owner as GroundCoinStack;
+		if ( groundStack != null )
+			return groundStack;
+
+		CoinStackInteractable coinStack = item.Owner as CoinStackInteractable;
+		if ( coinStack != null )
+			return coinStack;
+
+		return interactable;
+	}
+
+	static bool IsFloorExemptOutlineInteractable( InteractableBase interactable )
+	{
+		return interactable is GroundCoinStack || interactable is CoinStackInteractable;
+	}
+
 	void ResetPrimaryRepeatState()
 	{
 		_primaryRepeatTimer = 0f;
@@ -754,26 +795,30 @@ public class PlayerInteraction : MonoBehaviour
 		EnsurePickableOutlineSettings();
 
 		if ( _placement != null && _placement.HasActiveStackVolumePreview )
+			return;
+
+		if ( _current == null )
 		{
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable );
 			return;
 		}
 
-		TreasureItemInteractable focused = _current as TreasureItemInteractable;
-		TreasureItem item = focused != null ? focused.Item : null;
-		if ( item == null || !HoverOutlineTargetUtility.ShouldHighlight( item ) )
+		IReadOnlyList<Renderer> renderers = HoverOutlineTargetUtility.CollectFromFocus( _current );
+		if ( renderers == null || renderers.Count == 0 )
 		{
-			HoverOutlineRegistrar.Clear();
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable );
 			return;
 		}
 
 		HoverOutlineRegistrar.SetTarget(
-			HoverOutlineTargetUtility.CollectRenderers( item ),
+			HoverOutlineRegistrar.Owner.Pickable,
+			renderers,
 			_cachedPickableOutline );
 	}
 
 	void ClearPickableIndicator()
 	{
-		HoverOutlineRegistrar.Clear();
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable );
 	}
 
 	static GameInput GetGameInput()

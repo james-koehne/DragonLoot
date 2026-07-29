@@ -66,7 +66,7 @@ Shader "DragonLoot/Gold Pile"
         _EdgeDirtStrength("Edge Dirt Strength", Range(0, 2)) = 0.75
 
         [Header(Sparkles)]
-        [Toggle(_SPARKLE_ON)] _SparkleEnabled("Sparkles", Float) = 1
+        [Toggle(_SPARKLE_ON)] _SparkleEnabled("Sparkles", Float) = 0
         [HDR] _SparkleColor("Sparkle Color", Color) = (1, 0.92, 0.65, 1)
         _SparkleIntensity("Sparkle Intensity", Range(0, 16)) = 2
         _SparkleDensity("Sparkle Density", Range(1, 128)) = 18
@@ -172,6 +172,16 @@ Shader "DragonLoot/Gold Pile"
 
             Cull[_Cull]
             ZWrite On
+
+            // Treasure sparkle mask bit (Ref 64 / bit 6). Avoids URP default stencil Ref 1.
+            Stencil
+            {
+                Ref 64
+                Comp Always
+                Pass Replace
+                ReadMask 64
+                WriteMask 64
+            }
 
             HLSLPROGRAM
             #pragma target 3.0

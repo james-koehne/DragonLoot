@@ -162,7 +162,7 @@ public static class GemMaterialInstaller
 		material.SetFloat("_FresnelPower", d.fresnelPower);
 		material.SetFloat("_RefractionStrength", d.refractionStrength);
 		material.SetFloat("_DistortionAmount", d.distortionAmount);
-		material.SetFloat("_SparkleIntensity", d.sparkleIntensity);
+		material.SetFloat("_SparkleIntensity", 0f);
 		material.SetFloat("_SparkleDensity", d.sparkleDensity);
 		material.SetFloat("_SparkleSharpness", d.sparkleSharpness);
 		material.SetFloat("_BrightnessVariation", 0.1f);

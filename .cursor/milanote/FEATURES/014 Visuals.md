@@ -87,8 +87,8 @@ Removed: `PickableFocusIndicator.cs`, mesh-overlay `DragonLoot/Pickable Outline`
 
 ## Cursor Notes
 
-- Stack volume cylinder `MeshRenderer` is disabled in-game; mask pass still draws it for outline registration.
-- Pickable hover deferred when stack volume preview is active (`HasActiveStackVolumePreview`).
+- Stack volume cylinder uses `DragonLoot/Hover Outline Invisible` (`ColorMask 0` + depth write) so the ghost is not visible; outline comes from the renderer feature.
+- `HoverOutlineRegistrar` uses ownership (`Pickable` vs `StackVolume`) so placement `ClearPreview` no longer wipes gem/artifact hover outlines.
 
 ## Developer Verification
 

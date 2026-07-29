@@ -4,7 +4,7 @@ using UnityEngine;
 /// Fixed-topology pile grid mesh. Visual displace via deform texture; collider verts synced on CPU.
 /// </summary>
 [DisallowMultipleComponent]
-public class GoldPileTerrainMesh : MonoBehaviour
+public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.IInstanceMaskSource
 {
 	const string DeformEnabledProp = "_DeformEnabled";
 	const string DeformMapProp = "_DeformMap";
@@ -52,6 +52,8 @@ public class GoldPileTerrainMesh : MonoBehaviour
 	bool _mpbPending;
 	bool _colliderCookPending;
 	float _lastColliderCookTime = -1000f;
+	Material _sparkleMaskMaterial;
+	static TreasureSparkleDefinition s_SparkleDefinition;
 
 	public MeshRenderer PileRenderer => _renderer;
 	public MeshCollider PileCollider => _collider;
@@ -216,6 +218,17 @@ public class GoldPileTerrainMesh : MonoBehaviour
 
 	void OnDestroy()
 	{
+		UnregisterSparkleMask();
+
+		if ( _sparkleMaskMaterial != null )
+		{
+			if ( Application.isPlaying )
+				Destroy( _sparkleMaskMaterial );
+			else
+				DestroyImmediate( _sparkleMaskMaterial );
+			_sparkleMaskMaterial = null;
+		}
+
 		if ( _visualMesh != null )
 		{
 #if UNITY_EDITOR
@@ -275,6 +288,79 @@ public class GoldPileTerrainMesh : MonoBehaviour
 
 		if ( root.GetComponent<GoldPileQualityBinder>() == null )
 			root.gameObject.AddComponent<GoldPileQualityBinder>();
+
+		RegisterSparkleMask();
+	}
+
+	void OnEnable()
+	{
+		RegisterSparkleMask();
+	}
+
+	void OnDisable()
+	{
+		UnregisterSparkleMask();
+	}
+
+	public TreasureSparkleDefinition.SparkleSourceKind MaskKind => TreasureSparkleDefinition.SparkleSourceKind.Pile;
+
+	public void DrawSparkleMask( UnityEngine.Rendering.RasterCommandBuffer cmd, Material fallbackMaskMaterial )
+	{
+		if ( cmd == null || _filter == null || _filter.sharedMesh == null || _renderer == null )
+			return;
+
+		EnsureSparkleMaskMaterial();
+		Material maskMaterial = _sparkleMaskMaterial != null ? _sparkleMaskMaterial : fallbackMaskMaterial;
+		if ( maskMaterial == null )
+			return;
+
+		if ( _mpb == null )
+			_mpb = new MaterialPropertyBlock();
+		_renderer.GetPropertyBlock( _mpb );
+		_mpb.SetFloat( TreasureSparkleMaskPass.MaskWriteValueId, TreasureSparkleDefinition.MaskPile );
+
+		Mesh mesh = _filter.sharedMesh;
+		Matrix4x4 matrix = _renderer.localToWorldMatrix;
+		int submeshCount = Mathf.Max( 1, mesh.subMeshCount );
+		for ( int submesh = 0; submesh < submeshCount; submesh++ )
+			cmd.DrawMesh( mesh, matrix, maskMaterial, submesh, 0, _mpb );
+	}
+
+	void EnsureSparkleMaskMaterial()
+	{
+		if ( _sparkleMaskMaterial != null )
+			return;
+
+		Shader shader = Shader.Find( "DragonLoot/Treasure Sparkle Pile Mask" );
+		if ( shader == null )
+			return;
+
+		_sparkleMaskMaterial = new Material( shader );
+		_sparkleMaskMaterial.hideFlags = HideFlags.HideAndDontSave;
+	}
+
+	void RegisterSparkleMask()
+	{
+		TreasureSparkleDefinition sparkleDefinition = TreasureSparkleRendererFeature.ActiveDefinition;
+		if ( sparkleDefinition == null )
+			sparkleDefinition = RuntimeDefinition.Resolve( ref s_SparkleDefinition );
+
+		if ( sparkleDefinition != null && !sparkleDefinition.Allows( TreasureSparkleDefinition.SparkleSourceKind.Pile ) )
+		{
+			UnregisterSparkleMask();
+			return;
+		}
+
+		// Piles use deform-aware instance mask draws — do not register the flat MeshRenderer.
+		TreasureSparkleMaskRegistrar.Unregister( _renderer );
+		TreasureSparkleMaskRegistrar.RegisterInstanceSource( this );
+	}
+
+	void UnregisterSparkleMask()
+	{
+		TreasureSparkleMaskRegistrar.UnregisterInstanceSource( this );
+		if ( _renderer != null )
+			TreasureSparkleMaskRegistrar.Unregister( _renderer );
 	}
 
 	void BuildTopology()

@@ -172,14 +172,15 @@ half4 GemLitFrag(Varyings input) : SV_Target
     half rim = GemSchlickFresnel(ndotv, _RimPower) * _RimIntensity;
     color += _FresnelColor.rgb * (shine + graphicShine + rim);
 
-    half sparkle = GemSparkle(
-        input.positionWS,
-        inputData.normalWS,
-        inputData.viewDirectionWS,
-        mainLight.direction,
-        input.uv,
-        variation.sparkleScale);
-    color += _FresnelColor.rgb * sparkle;
+    // Local sparkles disabled — global TreasureSparkleRendererFeature owns glints.
+    // half sparkle = GemSparkle(
+    //     input.positionWS,
+    //     inputData.normalWS,
+    //     inputData.viewDirectionWS,
+    //     mainLight.direction,
+    //     input.uv,
+    //     variation.sparkleScale);
+    // color += _FresnelColor.rgb * sparkle;
 
     color = MixFog(color, inputData.fogCoord);
     return half4(color, 1.0h);

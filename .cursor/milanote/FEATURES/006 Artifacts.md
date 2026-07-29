@@ -43,13 +43,13 @@ Sort Index:
 
 ## Cursor Implementation
 
-When aiming at an artifact presentation table while holding treasure, the held-item placement ghost stays suppressed (`PlacementGhostStyle.Suppressed`) and slot indicators provide valid/invalid feedback instead.
+When aiming at an artifact presentation slot while holding treasure:
 
-**Fixes applied:**
-1. **Hover vs placement slot split** — Ray-resolved slot index (the slot under the crosshair) is tracked separately from the placement slot (which may fall back to another empty matching slot). Indicator feedback always reflects the hovered slot; placement preview/acceptance still uses the nearest valid slot when appropriate.
-2. **Same-frame indicator refresh** — `RefreshAimFeedback()` is called immediately from `TryGetPlacementPreview` so slot tints update in the same frame as aim feedback, regardless of `LateUpdate` script execution order.
+1. The cyan **base hologram** for that slot is hidden.
+2. The held-item **placement ghost** is shown at the slot pose in green (valid) or red (invalid).
+3. Other empty slots stay visible but dimmed cyan.
 
-When hovering a slot, its cyan hologram tints green (correct artifact) or red (wrong/occupied). Other empty slots dim. The held-item placement ghost remains hidden.
+Feedback follows the slot under the crosshair. Placement may still fall back to another matching empty slot on click. Aim feedback is refreshed the same frame via `RefreshAimFeedback()` so script order does not leave the cyan hologram stuck on.
 
 ## Files Modified
 
@@ -58,16 +58,16 @@ When hovering a slot, its cyan hologram tints green (correct artifact) or red (w
 
 ## Testing Instructions
 
-1. Enter play mode with an artifact presentation table that has multiple configured slots (at least one empty).
+1. Enter play mode with an artifact presentation table that has multiple configured empty slots.
 2. Pick up an artifact that matches one empty slot.
-3. Aim at that slot's volume — the cyan slot hologram should turn **green**; no separate held-item ghost should appear at the slot.
-4. Aim at a slot that requires a **different** artifact — that slot's hologram should turn **red**, even if another slot on the table would accept the held item.
-5. Aim at the table surface away from slots — nearest slot feedback should still apply; placement should succeed on the matching empty slot when clicking.
-6. Place the artifact — slot indicator hides, artifact snaps in, other slots remain cyan.
+3. Aim at that slot — cyan hologram **disappears**; green held-item ghost appears at the slot. No cyan overlay on top of it.
+4. Aim at a slot that requires a **different** artifact — cyan hologram **disappears**; red held-item ghost appears at that slot.
+5. Look away from the table — placement ghost hides; cyan holograms return on empty slots.
+6. Place a matching artifact — ghost clears, artifact snaps in, that slot stays empty of hologram.
 
 ## Cursor Notes
 
-Slot indicator feedback uses `PlacementFeedbackColors.ValidIndicator` / `InvalidIndicator` tints on the existing hologram mesh — not the `PlacementGhost` fresnel shader. This matches the prior "placement validation improved visual" bug fix approach.
+Earlier approach only recolored the slot indicator via `_TintColor`. The shader still adds a fixed cyan `_RimColor`, so the base hologram always looked present. Hiding the indicator and using `PlacementGhostStyle.ItemMesh` avoids that.
 
 ## Developer Verification
 

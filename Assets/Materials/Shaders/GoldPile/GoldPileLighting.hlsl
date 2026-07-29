@@ -429,8 +429,9 @@ half4 GoldPileLitFrag(Varyings input) : SV_Target
         occlusion);
 #endif
 
+    // Local sparkles disabled — global TreasureSparkleRendererFeature owns glints.
     // Sparkles: float toggle + allow mid LOD (only skip far).
-    if (_SparkleEnabled > 0.5h && lodBand < 1.5h)
+    if (false && _SparkleEnabled > 0.5h && lodBand < 1.5h)
     {
         half3 sparkle = GoldPileSparkle(
             positionWS,

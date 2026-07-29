@@ -452,13 +452,10 @@ public sealed class TreasureSurfaceSimulator
 			}
 		}
 
-		pos.y = contactY + Mathf.Max( 0f, body.HeightAboveSurface );
+		// Seat on stable lift only — rotation-dependent mesh bottoms float artifacts mid-air.
+		pos.y = Mathf.Max( sample.Height, contactY + Mathf.Max( 0f, body.HeightAboveSurface ) );
 
 		Quaternion rot = IntegrateRotation( ref body, t.rotation, sample.Normal, velocity, def, dt );
-		float minContactY = TreasureSurfaceSeat.GetContactY( item, sample, rot );
-		if ( pos.y < minContactY )
-			pos.y = minContactY;
-
 		t.SetPositionAndRotation( pos, rot );
 		item.SyncRigidbodyToTransform();
 
@@ -512,8 +509,9 @@ public sealed class TreasureSurfaceSimulator
 				: def.artifactBounceRestitution;
 		restitution = Mathf.Max( 0.05f, restitution );
 
-		float hopCap = body.Category == TreasureCategory.Coin || body.Category == TreasureCategory.Gem ? 4.5f : 1.6f;
-		float hopMin = body.Category == TreasureCategory.Coin || body.Category == TreasureCategory.Gem ? 0.8f : 0.25f;
+		bool lightHop = body.Category == TreasureCategory.Coin || body.Category == TreasureCategory.Gem;
+		float hopCap = lightHop ? 4.5f : 0.45f;
+		float hopMin = lightHop ? 0.8f : 0.06f;
 		float hop = Mathf.Clamp( impactSpeed * restitution, hopMin, hopCap );
 		body.VerticalVelocity = hop;
 		body.HeightAboveSurface = Mathf.Max( body.HeightAboveSurface, 0.002f );
@@ -729,6 +727,9 @@ public sealed class TreasureSurfaceSimulator
 		body.BouncesRemaining = 0;
 		body.RestTimer = 0f;
 
+		if ( item != null )
+			SeatItemOnSurface( item );
+
 		if ( TryAutoStack( item ) )
 		{
 			body.Sleeping = true;
@@ -745,6 +746,25 @@ public sealed class TreasureSurfaceSimulator
 		}
 
 		body.Sleeping = true;
+	}
+
+	void SeatItemOnSurface( TreasureItem item )
+	{
+		if ( item == null || _world == null || _world.Sampler == null )
+			return;
+
+		Transform t = item.transform;
+		Vector3 pos = t.position;
+		if ( !_world.Sampler.TrySample( pos, out TreasureSurfaceSample sample ) || !sample.Traversable )
+			return;
+
+		Quaternion rot = TreasureOrientation.FlattenUpright( t.rotation );
+		float y = item.Definition != null && item.Definition.category == TreasureCategory.Gem
+			? sample.Height + TreasureSurfaceSeat.GetStableContactLift( item )
+			: TreasureSurfaceSeat.GetContactY( item, sample, rot );
+		pos.y = Mathf.Max( sample.Height, y );
+		t.SetPositionAndRotation( pos, rot );
+		item.SyncRigidbodyToTransform();
 	}
 
 	bool TryAutoStack( TreasureItem item )
@@ -765,13 +785,11 @@ public sealed class TreasureSurfaceSimulator
 		if ( nearestOwned != null && !nearestOwned.IsFull )
 		{
 			float topY = nearestOwned.ContactPosition.y + nearestOwned.TotalHeight;
-			if ( pos.y <= topY + heightTol )
+			if ( pos.y <= topY + heightTol && nearestOwned.CanAccept( item.Definition ) )
 			{
 				Unregister( item );
-				if ( nearestOwned.TryAbsorbLooseImmediate( item ) )
-					return true;
-
-				Register( item, Vector3.zero );
+				nearestOwned.BeginAppendFlight( item, nearestOwned.transform.rotation );
+				return true;
 			}
 		}
 

@@ -349,7 +349,22 @@ public static class TreasureSurfaceThrow
 
 	public static void ResolveFlightSpins( TreasureItem item, out float spins )
 	{
-		spins = CoinFlipMotion.IsCoin( item ) ? CoinFlipMotion.DefaultSpins : 0.55f;
+		if ( CoinFlipMotion.IsCoin( item ) )
+		{
+			spins = CoinFlipMotion.DefaultSpins;
+			return;
+		}
+
+		// Crowns / goblets / helmets / artifacts: exactly one end-over-end flip before landing.
+		if ( item != null
+			&& item.Definition != null
+			&& item.Definition.category != TreasureCategory.Gem )
+		{
+			spins = 1f;
+			return;
+		}
+
+		spins = 0.55f;
 	}
 
 	static Vector3 FlattenHorizontal( Vector3 v )
