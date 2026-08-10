@@ -50,6 +50,57 @@ public static class CoinFlipMotion
 		return EvaluateArcPosition( start, end, u, arcHeight, ResolveArcUp( start, end ) );
 	}
 
+	/// <summary>
+	/// Rise toward a peak above both ends, then arc laterally to <paramref name="end"/>.
+	/// Used for auto-stack after a coin settles near a stack.
+	/// </summary>
+	public static Vector3 EvaluateHopThenArcPosition(
+		Vector3 start,
+		Vector3 end,
+		float u,
+		float hopHeight,
+		float riseFraction,
+		float secondaryArcHeight )
+	{
+		return EvaluateHopThenArcPosition(
+			start,
+			end,
+			u,
+			hopHeight,
+			riseFraction,
+			secondaryArcHeight,
+			Vector3.zero );
+	}
+
+	/// <summary>
+	/// Rise toward a peak (with optional lateral apex jitter), then arc to <paramref name="end"/>.
+	/// Peak Y is always above both start and end so every join shows a clear bounce-up.
+	/// </summary>
+	public static Vector3 EvaluateHopThenArcPosition(
+		Vector3 start,
+		Vector3 end,
+		float u,
+		float hopHeight,
+		float riseFraction,
+		float secondaryArcHeight,
+		Vector3 apexOffset )
+	{
+		u = Mathf.Clamp01( u );
+		riseFraction = Mathf.Clamp( riseFraction, 0.05f, 0.6f );
+		float peakY = Mathf.Max( start.y, end.y ) + Mathf.Max( 0.05f, hopHeight );
+		Vector3 apex = new Vector3( start.x + apexOffset.x, peakY, start.z + apexOffset.z );
+
+		if ( u <= riseFraction )
+		{
+			float riseU = riseFraction > 0.0001f ? u / riseFraction : 1f;
+			float ease = SmoothStep( riseU );
+			return Vector3.Lerp( start, apex, ease );
+		}
+
+		float arcU = ( u - riseFraction ) / Mathf.Max( 0.0001f, 1f - riseFraction );
+		return EvaluateArcPosition( apex, end, arcU, secondaryArcHeight );
+	}
+
 	/// <summary>Unit vector for parabolic bump in the vertical plane containing travel.</summary>
 	public static Vector3 ResolveArcUp( Vector3 start, Vector3 end )
 	{
@@ -129,6 +180,65 @@ public static class CoinFlipMotion
 		float arcHeight = DefaultArcHeight,
 		float spins = DefaultSpins )
 	{
+		yield return AnimateWorldFlips(
+			items,
+			endPositions,
+			endRotations,
+			duration,
+			arcHeight,
+			spins,
+			useHopThenArc: false,
+			hopHeight: 0f,
+			riseFraction: 0.28f,
+			secondaryArcHeight: 0f,
+			apexOffset: Vector3.zero );
+	}
+
+	/// <summary>
+	/// World-space flip with optional hop-then-arc path (rise toward peak, then arc to end).
+	/// </summary>
+	public static IEnumerator AnimateWorldFlips(
+		IReadOnlyList<TreasureItem> items,
+		Vector3[] endPositions,
+		Quaternion[] endRotations,
+		float duration,
+		float arcHeight,
+		float spins,
+		bool useHopThenArc,
+		float hopHeight,
+		float riseFraction,
+		float secondaryArcHeight )
+	{
+		yield return AnimateWorldFlips(
+			items,
+			endPositions,
+			endRotations,
+			duration,
+			arcHeight,
+			spins,
+			useHopThenArc,
+			hopHeight,
+			riseFraction,
+			secondaryArcHeight,
+			Vector3.zero );
+	}
+
+	/// <summary>
+	/// World-space flip with optional hop-then-arc path and lateral apex jitter.
+	/// </summary>
+	public static IEnumerator AnimateWorldFlips(
+		IReadOnlyList<TreasureItem> items,
+		Vector3[] endPositions,
+		Quaternion[] endRotations,
+		float duration,
+		float arcHeight,
+		float spins,
+		bool useHopThenArc,
+		float hopHeight,
+		float riseFraction,
+		float secondaryArcHeight,
+		Vector3 apexOffset )
+	{
 		if ( items == null || endPositions == null || endRotations == null )
 			yield break;
 
@@ -182,7 +292,20 @@ public static class CoinFlipMotion
 					continue;
 
 				Transform t = item.transform;
-				t.position = EvaluateArcPosition( startPos[ i ], endPositions[ i ], u, arcHeight );
+				if ( useHopThenArc )
+				{
+					t.position = EvaluateHopThenArcPosition(
+						startPos[ i ],
+						endPositions[ i ],
+						u,
+						hopHeight,
+						riseFraction,
+						secondaryArcHeight,
+						apexOffset );
+				}
+				else
+					t.position = EvaluateArcPosition( startPos[ i ], endPositions[ i ], u, arcHeight );
+
 				t.rotation = EvaluateFlipRotation( startRot[ i ], endRotations[ i ], startPos[ i ], endPositions[ i ], u, spins );
 				t.localScale = Vector3.Lerp( startScale[ i ], endScale[ i ], scaleEase );
 			}

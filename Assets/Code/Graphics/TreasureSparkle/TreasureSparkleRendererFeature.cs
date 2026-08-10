@@ -8,10 +8,16 @@ public sealed class TreasureSparkleRendererFeature : ScriptableRendererFeature
 	public sealed class FrameData : ContextItem
 	{
 		public TextureHandle maskTexture = TextureHandle.nullHandle;
+		public GraphicsBuffer glintsBuffer;
+		public GraphicsBuffer argsBuffer;
+		public bool hasDiscoveredGlints;
 
 		public override void Reset()
 		{
 			maskTexture = TextureHandle.nullHandle;
+			glintsBuffer = null;
+			argsBuffer = null;
+			hasDiscoveredGlints = false;
 		}
 	}
 
@@ -27,10 +33,14 @@ public sealed class TreasureSparkleRendererFeature : ScriptableRendererFeature
 	[SerializeField]
 	Shader sparkleShader;
 
+	[SerializeField]
+	ComputeShader discoverCompute;
+
 	Material _resolveMaterial;
 	Material _fallbackMaterial;
 	Material _sparkleMaterial;
 	TreasureSparkleMaskPass _maskPass;
+	TreasureSparkleDiscoverPass _discoverPass;
 	TreasureSparklePass _sparklePass;
 	TreasureSparkleDefinition _resolvedDefinition;
 
@@ -52,7 +62,12 @@ public sealed class TreasureSparkleRendererFeature : ScriptableRendererFeature
 		if ( sparkleShader != null && _sparkleMaterial == null )
 			_sparkleMaterial = CoreUtils.CreateEngineMaterial( sparkleShader );
 
+		if ( _fallbackMaterial != null )
+			_fallbackMaterial.enableInstancing = true;
+
 		_maskPass = new TreasureSparkleMaskPass( _resolveMaterial, _fallbackMaterial );
+		_discoverPass?.Dispose();
+		_discoverPass = new TreasureSparkleDiscoverPass( discoverCompute );
 		_sparklePass = new TreasureSparklePass( _sparkleMaterial );
 	}
 
@@ -65,10 +80,26 @@ public sealed class TreasureSparkleRendererFeature : ScriptableRendererFeature
 		if ( renderingData.cameraData.cameraType != CameraType.Game )
 			return;
 
-		if ( _resolveMaterial == null || _sparkleMaterial == null )
+		if ( !TreasureSparkleMaskRegistrar.HasTargets )
+			return;
+
+		if ( _sparkleMaterial == null || discoverCompute == null || !SystemInfo.supportsComputeShaders )
+			return;
+
+		if ( _fallbackMaterial == null && ( _resolveMaterial == null || !ActiveDefinition.useStencilResolve ) )
+			return;
+
+		if ( _discoverPass == null || !_discoverPass.IsReady )
+		{
+			_discoverPass?.Dispose();
+			_discoverPass = new TreasureSparkleDiscoverPass( discoverCompute );
+		}
+
+		if ( !_discoverPass.IsReady )
 			return;
 
 		renderer.EnqueuePass( _maskPass );
+		renderer.EnqueuePass( _discoverPass );
 		renderer.EnqueuePass( _sparklePass );
 	}
 
@@ -83,7 +114,10 @@ public sealed class TreasureSparkleRendererFeature : ScriptableRendererFeature
 
 	protected override void Dispose( bool disposing )
 	{
+		_discoverPass?.Dispose();
+		_maskPass?.Dispose();
 		_maskPass = null;
+		_discoverPass = null;
 		_sparklePass = null;
 		ActiveDefinition = null;
 

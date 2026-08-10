@@ -106,7 +106,7 @@ public static class ArtifactTreasureInstaller
 
 	const string AutoInstallFlagPath = "Temp/InstallFantasyPackArtifacts.flag";
 
-	[MenuItem( "DragonLoot/Treasure/Install Fantasy Pack Artifacts" )]
+	[MenuItem( DragonLootMenus.TreasureInstallArtifacts )]
 	public static void InstallFromMenu()
 	{
 		Install( showDialog: true );
@@ -365,6 +365,7 @@ public static class ArtifactTreasureInstaller
 		def.worldScale = Vector3.one * spec.Scale;
 		def.heldScale = Vector3.one * spec.Scale;
 		def.canStack = false;
+		def.cartGridSize = new Vector2Int( 2, 2 );
 		def.coinThickness = spec.Scale * 0.6f;
 		def.prefab = new AssetReferenceGameObject( visualGuid );
 
@@ -394,7 +395,7 @@ public static class ArtifactTreasureInstaller
 	static void UpdatePileContents( TreasurePileDefinition pile, List<TreasureDefinition> artifactDefs )
 	{
 		var kept = new List<TreasurePileEntry>();
-		TreasurePileEntry[] existing = pile.contents;
+		TreasurePileEntry[] existing = pile.treasureContents;
 		if ( existing != null )
 		{
 			for ( int i = 0; i < existing.Length; i++ )
@@ -419,11 +420,10 @@ public static class ArtifactTreasureInstaller
 			{
 				treasure = match,
 				count = spec.PileCount,
-				maxVisible = spec.MaxVisible,
 			} );
 		}
 
-		pile.contents = kept.ToArray();
+		pile.treasureContents = kept.ToArray();
 	}
 
 	static TreasureDefinition FindDef( List<TreasureDefinition> defs, string id )

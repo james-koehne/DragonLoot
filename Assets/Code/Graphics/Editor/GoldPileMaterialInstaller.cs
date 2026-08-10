@@ -3,27 +3,20 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// One-shot create / soft-repair for M_GoldPile.mat and dynamic heightfield pile wiring.
+/// One-shot create / soft-repair for M_GoldPile_Procedural.mat and dynamic heightfield pile wiring.
 /// Does not overwrite authored float/color/keyword values (those were being reset on Play Mode).
 /// </summary>
 public static class GoldPileMaterialInstaller
 {
-	const string ShaderName = "DragonLoot/Gold Pile";
-	const string StylizedShaderName = "DragonLoot/Gold Pile Stylized";
 	const string ProceduralShaderName = "DragonLoot/Gold Pile Procedural";
-	const string MaterialPath = "Assets/Materials/Shaders/GoldPile/M_GoldPile.mat";
-	const string StylizedMaterialPath = "Assets/Materials/Shaders/GoldPile/M_GoldPile_Stylized.mat";
-	const string ProceduralMaterialPath = "Assets/Materials/Shaders/GoldPile/M_GoldPile_Procedural.mat";
-	const string GoldBc = "Assets/ThirdParty/REAL_DEDICATED/BasicTreasureCoins/Textures/T_BasicTreasureCoins_Gold_BC.tga";
-	const string Normal = "Assets/ThirdParty/REAL_DEDICATED/BasicTreasureCoins/Textures/T_BasicTreasureCoins_N.tga";
-	const string MetallicSmooth = "Assets/ThirdParty/REAL_DEDICATED/BasicTreasureCoins/Textures/T_BasicTreasureCoins_MetallicSmooth.tga";
-	const string Occlusion = "Assets/ThirdParty/REAL_DEDICATED/BasicTreasureCoins/Textures/T_BasicTreasureCoins_Occlusion.tga";
+	const string MaterialPath = "Assets/Materials/Shaders/GoldPile/M_GoldPile_Procedural.mat";
 	const string ProcCoinAlbedo =
 		"Assets/ThirdParty/LiquidFire Package 4 - BSH games/Devtoid - Gold Coins/3D Assets/Gold Coins/Textures/GoldCoins_AlbedoTransparency.png";
 	const string ProcCoinNormal =
 		"Assets/ThirdParty/LiquidFire Package 4 - BSH games/Devtoid - Gold Coins/3D Assets/Gold Coins/Textures/GoldCoins_Normal.png";
 	const string ProcCoinMetallic =
 		"Assets/ThirdParty/LiquidFire Package 4 - BSH games/Devtoid - Gold Coins/3D Assets/Gold Coins/Textures/GoldCoins_MetallicSmoothness.png";
+	const string Occlusion = "Assets/ThirdParty/REAL_DEDICATED/BasicTreasureCoins/Textures/T_BasicTreasureCoins_Occlusion.tga";
 	const string ProcCopperAlbedo =
 		"Assets/ThirdParty/LiquidFire Package 4 - BSH games/Devtoid - Gold Coins/3D Assets/Copper Coins/Textures/CopperCoins_AlbedoTransparency.png";
 	const string ProcSilverAlbedo =
@@ -31,115 +24,28 @@ public static class GoldPileMaterialInstaller
 	const string GoldPilePrefab = "Assets/ThirdParty/REAL_DEDICATED/BasicTreasureCoins/Prefabs/CoinPile_Gold.prefab";
 	const string GoldCoinVisual = "Assets/Addressables/Treasure/Coins/GoldCoinVisual.prefab";
 	const string GoldCoinDef = "Assets/Definitions/Treasure/GoldCoin.asset";
-	const string LootStreamSettingsPath = "Assets/Materials/Shaders/GoldPile/GoldPileLootStreamSettings.asset";
+	const string LootStreamSettingsPath = GoldPileLootStreamSettings.AssetPath;
+	const string LegacyLootStreamSettingsPath = GoldPileLootStreamSettings.LegacyAssetPath;
 
-	[MenuItem("DragonLoot/Graphics/Install Gold Pile Material")]
+	[MenuItem(DragonLootMenus.GraphicsGoldPileInstall)]
 	public static void MenuInstall()
 	{
 		TryInstall(forceAssignTargets: true);
 	}
 
-	[MenuItem("DragonLoot/Graphics/Install Gold Pile Stylized Material (AB)")]
-	public static void MenuInstallStylized()
+	[MenuItem(DragonLootMenus.GraphicsGoldPileApply)]
+	public static void MenuApplyToSelection()
 	{
-		Material material = EnsureStylizedMaterial(forceDefaults: true);
+		Material material = EnsureMaterial(forceDefaults: false);
 		if (material == null)
 			return;
 
-		Debug.Log(
-			"M_GoldPile_Stylized ready at " + StylizedMaterialPath
-			+ ". Assign it on TreasurePileVisual / pile renderer to A/B against M_GoldPile. "
-			+ "Does not overwrite the production material assignment.");
-	}
-
-	[MenuItem("DragonLoot/Graphics/Apply Gold Pile Stylized To Selection")]
-	public static void MenuApplyStylizedToSelection()
-	{
-		Material material = EnsureStylizedMaterial(forceDefaults: false);
-		if (material == null)
-			return;
-
-		int assigned = 0;
-
-		Object[] selectedAssets = Selection.objects;
-		for (int i = 0; i < selectedAssets.Length; i++)
-		{
-			TreasurePileDefinition definition = selectedAssets[i] as TreasurePileDefinition;
-			if (definition == null)
-				continue;
-
-			Undo.RecordObject(definition, "Apply Gold Pile Stylized");
-			definition.pileMaterial = material;
-			EditorUtility.SetDirty(definition);
-			assigned++;
-		}
-
-		GameObject[] selection = Selection.gameObjects;
-		for (int i = 0; i < selection.Length; i++)
-		{
-			TreasurePileVisual visual = selection[i].GetComponentInParent<TreasurePileVisual>();
-			if (visual == null)
-				visual = selection[i].GetComponentInChildren<TreasurePileVisual>(true);
-
-			if (visual != null)
-			{
-				Undo.RecordObject(visual, "Apply Gold Pile Stylized");
-				SerializedObject so = new SerializedObject(visual);
-				SerializedProperty prop = so.FindProperty("pileMaterial");
-				if (prop != null)
-				{
-					prop.objectReferenceValue = material;
-					so.ApplyModifiedProperties();
-				}
-			}
-
-			MeshRenderer[] renderers = selection[i].GetComponentsInChildren<MeshRenderer>(true);
-			for (int r = 0; r < renderers.Length; r++)
-			{
-				MeshRenderer renderer = renderers[r];
-				bool isGoldPile = renderer.sharedMaterial != null
-					&& GoldPileQuality.IsGoldPileMaterial(renderer.sharedMaterial);
-				if (!isGoldPile && visual == null)
-					continue;
-
-				Undo.RecordObject(renderer, "Apply Gold Pile Stylized");
-				renderer.sharedMaterial = material;
-				if (renderer.GetComponent<GoldPileQualityBinder>() == null)
-					Undo.AddComponent<GoldPileQualityBinder>(renderer.gameObject);
-				assigned++;
-			}
-		}
-
-		AssetDatabase.SaveAssets();
-		Debug.Log("Applied M_GoldPile_Stylized to " + assigned + " target(s).");
-	}
-
-	[MenuItem("DragonLoot/Graphics/Install Gold Pile Procedural Material (AB)")]
-	public static void MenuInstallProcedural()
-	{
-		Material material = EnsureProceduralMaterial(forceDefaults: true);
-		if (material == null)
-			return;
-
-		Debug.Log(
-			"M_GoldPile_Procedural ready at " + ProceduralMaterialPath
-			+ ". Assign it on TreasurePileVisual / pile renderer to A/B against M_GoldPile. "
-			+ "Does not overwrite the production material assignment.");
-	}
-
-	[MenuItem("DragonLoot/Graphics/Apply Gold Pile Procedural To Selection")]
-	public static void MenuApplyProceduralToSelection()
-	{
-		Material material = EnsureProceduralMaterial(forceDefaults: false);
-		if (material == null)
-			return;
-
-		int assigned = ApplyGoldPileMaterialToSelection(material, "Apply Gold Pile Procedural");
+		int assigned = ApplyGoldPileMaterialToSelection(material, "Apply Gold Pile Material");
 		AssetDatabase.SaveAssets();
 		Debug.Log("Applied M_GoldPile_Procedural to " + assigned + " target(s).");
 	}
 
-	[MenuItem("DragonLoot/Graphics/Wire Dynamic Gold Pile Prefab")]
+	[MenuItem(DragonLootMenus.GraphicsGoldPileWireDynamic)]
 	public static void MenuWireDynamicPile()
 	{
 		Material material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
@@ -157,14 +63,12 @@ public static class GoldPileMaterialInstaller
 	/// </summary>
 	public static void RefreshLootInstanceCoinPileMaterials()
 	{
-		Material surface = AssetDatabase.LoadAssetAtPath<Material>(StylizedMaterialPath);
-		if (surface == null)
-			surface = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
+		Material surface = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
 		EnsureLootStreamSettings();
 		WireDynamicPilePrefab(surface);
 	}
 
-	[MenuItem("DragonLoot/Graphics/Install Loot Stream Settings")]
+	[MenuItem(DragonLootMenus.GraphicsGoldPileLootStream)]
 	public static void MenuInstallLootStreamSettings()
 	{
 		GoldPileLootStreamSettings settings = EnsureLootStreamSettings();
@@ -177,23 +81,14 @@ public static class GoldPileMaterialInstaller
 			+ " at " + LootStreamSettingsPath);
 	}
 
-	[MenuItem("DragonLoot/Graphics/Reset Gold Pile Material Defaults")]
+	[MenuItem(DragonLootMenus.GraphicsGoldPileReset)]
 	public static void MenuResetDefaults()
 	{
-		Shader shader = Shader.Find(ShaderName);
-		if (shader == null)
-		{
-			Debug.LogWarning("Gold Pile shader not found: " + ShaderName);
+		Material material = EnsureMaterial(forceDefaults: true);
+		if (material == null)
 			return;
-		}
 
-		Material material = LoadOrCreateMaterial(shader, applyDefaults: true);
-		AssignMapsIfMissing(material, forceOverwrite: true);
-		SetDefaults(material);
-		GoldPileQuality.Apply(material);
-		EditorUtility.SetDirty(material);
-		AssetDatabase.SaveAssets();
-		Debug.Log("M_GoldPile defaults reset.");
+		Debug.Log("M_GoldPile_Procedural defaults reset.");
 	}
 
 	/// <summary>
@@ -201,28 +96,11 @@ public static class GoldPileMaterialInstaller
 	/// </summary>
 	public static void TryInstall(bool forceAssignTargets = false)
 	{
-		Shader shader = Shader.Find(ShaderName);
-		if (shader == null)
+		Material material = EnsureMaterial(forceDefaults: false);
+		if (material == null)
 			return;
 
-		Material material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
-		bool created = false;
-		if (material == null)
-		{
-			material = LoadOrCreateMaterial(shader, applyDefaults: true);
-			created = true;
-		}
-		else if (material.shader != shader)
-		{
-			material.shader = shader;
-			EditorUtility.SetDirty(material);
-		}
-
-		AssignMapsIfMissing(material, forceOverwrite: created);
-		GoldPileQuality.Apply(material);
-		EditorUtility.SetDirty(material);
-
-		if (forceAssignTargets || created)
+		if (forceAssignTargets)
 		{
 			EnsureLootStreamSettings();
 			AssignToPrefab(material);
@@ -233,57 +111,7 @@ public static class GoldPileMaterialInstaller
 		AssetDatabase.SaveAssets();
 	}
 
-	static Material LoadOrCreateMaterial(Shader shader, bool applyDefaults)
-	{
-		Material material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
-		if (material != null)
-			return material;
-
-		material = new Material(shader);
-		material.name = "M_GoldPile";
-		AssetDatabase.CreateAsset(material, MaterialPath);
-		AssignMapsIfMissing(material, forceOverwrite: true);
-		if (applyDefaults)
-			SetDefaults(material);
-		GoldPileQuality.Apply(material);
-		EditorUtility.SetDirty(material);
-		return material;
-	}
-
-	static Material EnsureStylizedMaterial(bool forceDefaults)
-	{
-		Shader shader = Shader.Find(StylizedShaderName);
-		if (shader == null)
-		{
-			Debug.LogWarning("Gold Pile Stylized shader not found: " + StylizedShaderName
-				+ ". Wait for Unity to import DragonLoot_GoldPileStylized.shader.");
-			return null;
-		}
-
-		Material material = AssetDatabase.LoadAssetAtPath<Material>(StylizedMaterialPath);
-		bool created = false;
-		if (material == null)
-		{
-			material = new Material(shader);
-			material.name = "M_GoldPile_Stylized";
-			AssetDatabase.CreateAsset(material, StylizedMaterialPath);
-			created = true;
-		}
-		else if (material.shader != shader)
-		{
-			material.shader = shader;
-		}
-
-		AssignMapsIfMissing(material, forceOverwrite: created || forceDefaults);
-		if (created || forceDefaults)
-			SetStylizedDefaults(material);
-		GoldPileQuality.Apply(material);
-		EditorUtility.SetDirty(material);
-		AssetDatabase.SaveAssets();
-		return material;
-	}
-
-	static Material EnsureProceduralMaterial(bool forceDefaults)
+	static Material EnsureMaterial(bool forceDefaults)
 	{
 		Shader shader = Shader.Find(ProceduralShaderName);
 		if (shader == null)
@@ -293,13 +121,13 @@ public static class GoldPileMaterialInstaller
 			return null;
 		}
 
-		Material material = AssetDatabase.LoadAssetAtPath<Material>(ProceduralMaterialPath);
+		Material material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
 		bool created = false;
 		if (material == null)
 		{
 			material = new Material(shader);
 			material.name = "M_GoldPile_Procedural";
-			AssetDatabase.CreateAsset(material, ProceduralMaterialPath);
+			AssetDatabase.CreateAsset(material, MaterialPath);
 			created = true;
 		}
 		else if (material.shader != shader)
@@ -372,34 +200,6 @@ public static class GoldPileMaterialInstaller
 		return assigned;
 	}
 
-	static void AssignMapsIfMissing(Material material, bool forceOverwrite)
-	{
-		Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(GoldBc);
-		Texture2D bump = AssetDatabase.LoadAssetAtPath<Texture2D>(Normal);
-		Texture2D mask = AssetDatabase.LoadAssetAtPath<Texture2D>(MetallicSmooth);
-		Texture2D ao = AssetDatabase.LoadAssetAtPath<Texture2D>(Occlusion);
-
-		if (albedo != null && (forceOverwrite || material.GetTexture("_BaseMap") == null))
-			material.SetTexture("_BaseMap", albedo);
-		if (bump != null)
-		{
-			if (forceOverwrite || material.GetTexture("_BumpMap") == null)
-				material.SetTexture("_BumpMap", bump);
-			if (forceOverwrite || material.GetTexture("_PileNormalMap") == null)
-				material.SetTexture("_PileNormalMap", bump);
-		}
-		if (mask != null && (forceOverwrite || material.GetTexture("_MetallicGlossMap") == null))
-			material.SetTexture("_MetallicGlossMap", mask);
-		if (ao != null)
-		{
-			if (forceOverwrite || material.GetTexture("_OcclusionMap") == null)
-				material.SetTexture("_OcclusionMap", ao);
-			if (material.HasProperty("_HeightMap")
-				&& (forceOverwrite || material.GetTexture("_HeightMap") == null))
-				material.SetTexture("_HeightMap", ao);
-		}
-	}
-
 	static void AssignProceduralMapsIfMissing(Material material, bool forceOverwrite)
 	{
 		Texture2D albedo = AssetDatabase.LoadAssetAtPath<Texture2D>(ProcCoinAlbedo);
@@ -424,39 +224,6 @@ public static class GoldPileMaterialInstaller
 		if (silverAlbedo != null && material.HasProperty("_SilverBaseMap")
 			&& (forceOverwrite || material.GetTexture("_SilverBaseMap") == null))
 			material.SetTexture("_SilverBaseMap", silverAlbedo);
-	}
-
-	static void SetDefaults(Material material)
-	{
-		material.SetColor("_BaseColor", new Color(1f, 0.84f, 0.3f, 1f));
-		material.SetFloat("_Metallic", 1f);
-		material.SetFloat("_Smoothness", 0.85f);
-		material.SetFloat("_BumpScale", 1f);
-		material.SetFloat("_CoinNormalStrength", 1f);
-		material.SetFloat("_PileNormalStrength", 0.35f);
-		material.SetFloat("_OcclusionStrength", 1f);
-		material.SetFloat("_HeightScale", 0f);
-		material.SetFloat("_HeightAmount", 0f);
-		material.SetFloat("_DeformEnabled", 0f);
-		material.SetFloat("_DeformScale", 1.5f);
-		material.SetFloat("_DeformWorldSize", 4f);
-		material.SetFloat("_DeformResolution", 64f);
-		material.SetFloat("_Parallax", 0.03f);
-		material.SetFloat("_POMSteps", 12f);
-		material.SetFloat("_WorldTiling", 0.35f);
-		material.SetFloat("_TriplanarSharpness", 4f);
-		material.SetFloat("_LodNear", 12f);
-		material.SetFloat("_LodFar", 35f);
-		material.SetFloat("_PomEnabled", 1f);
-		material.SetFloat("_TriplanarEnabled", 1f);
-		material.SetFloat("_SparkleEnabled", 0f);
-		material.SetFloat("_DetailEnabled", 0f);
-
-		material.EnableKeyword("_POM_ON");
-		material.EnableKeyword("_TRIPLANAR");
-		material.DisableKeyword("_SPARKLE_ON");
-		material.DisableKeyword("_DETAIL_ON");
-		GoldPileQuality.Apply(material);
 	}
 
 	static void SetProceduralDefaults(Material material)
@@ -540,51 +307,6 @@ public static class GoldPileMaterialInstaller
 		GoldPileQuality.Apply(material);
 	}
 
-	static void SetStylizedDefaults(Material material)
-	{
-		material.SetColor("_BaseColor", new Color(1f, 0.78f, 0.28f, 1f));
-		material.SetFloat("_Metallic", 0.72f);
-		material.SetFloat("_Smoothness", 0.45f);
-		material.SetFloat("_BumpScale", 1f);
-		material.SetFloat("_CoinNormalStrength", 1f);
-		material.SetFloat("_PileNormalStrength", 0.3f);
-		material.SetFloat("_OcclusionStrength", 1f);
-		material.SetFloat("_DeformEnabled", 0f);
-		material.SetFloat("_DeformScale", 1.5f);
-		material.SetFloat("_DeformWorldSize", 4f);
-		material.SetFloat("_DeformResolution", 64f);
-		material.SetFloat("_WorldTiling", 0.42f);
-		material.SetFloat("_HueVariation", 0.04f);
-		material.SetFloat("_BrightnessVariation", 0.12f);
-		material.SetFloat("_RoughnessVariation", 0.15f);
-		material.SetFloat("_EdgeDirtStrength", 1.1f);
-		material.SetFloat("_DetailEnabled", 0f);
-
-		material.SetFloat("_StylizedMetalSoftness", 0.55f);
-		material.SetFloat("_StylizedContrast", 1.15f);
-		material.SetFloat("_StylizedSaturation", 1.25f);
-		material.SetColor("_StylizedWarmTint", new Color(1f, 0.82f, 0.4f, 1f));
-		material.SetFloat("_StylizedWarmStrength", 0.45f);
-		material.SetFloat("_AlbedoMix", 0.35f);
-		material.SetColor("_RimColor", new Color(1.4f, 1.05f, 0.45f, 1f));
-		material.SetFloat("_RimPower", 2.5f);
-		material.SetFloat("_RimIntensity", 0.85f);
-		material.SetColor("_SpecRampColor", new Color(1.6f, 1.35f, 0.7f, 1f));
-		material.SetFloat("_SpecRampThreshold", 0.68f);
-		material.SetFloat("_SpecRampSoftness", 0.1f);
-		material.SetFloat("_SpecRampIntensity", 1.1f);
-		material.SetColor("_CreviceColor", new Color(0.42f, 0.18f, 0.06f, 1f));
-		material.SetFloat("_CreviceStrength", 0.9f);
-
-		material.SetFloat("_DistantCoinShineEnabled", 0f);
-		material.SetFloat("_DistantCoinShineIntensity", 1f);
-		material.SetFloat("_DistantCoinShineMetallic", 0.9f);
-		material.SetFloat("_DistantCoinShineSmoothness", 0.75f);
-		material.SetFloat("_DistantCoinShineNormalStrength", 1f);
-		material.DisableKeyword("_DETAIL_ON");
-		GoldPileQuality.Apply(material);
-	}
-
 	static void AssignToPrefab(Material material)
 	{
 		GameObject prefabRoot = PrefabUtility.LoadPrefabContents(GoldPilePrefab);
@@ -627,7 +349,7 @@ public static class GoldPileMaterialInstaller
 
 		try
 		{
-			EnsureRootCollider(prefabRoot);
+			EnsureRootColliderRemoved(prefabRoot);
 
 			TreasurePileInteractable interactable = prefabRoot.GetComponent<TreasurePileInteractable>();
 			if (interactable == null)
@@ -664,28 +386,12 @@ public static class GoldPileMaterialInstaller
 			if (prefabRoot.GetComponent<GoldPileLootStreamDebug>() == null)
 				prefabRoot.AddComponent<GoldPileLootStreamDebug>();
 
-			GoldPilePhysicsPool physics = prefabRoot.GetComponent<GoldPilePhysicsPool>();
-			if (physics != null)
-				Object.DestroyImmediate(physics);
-			GoldPileEdgeProps edges = prefabRoot.GetComponent<GoldPileEdgeProps>();
-			if (edges != null)
-				Object.DestroyImmediate(edges);
-			GoldPileInstanceScatter scatter = prefabRoot.GetComponent<GoldPileInstanceScatter>();
-			if (scatter != null)
-				Object.DestroyImmediate(scatter);
-
 			GoldPileLootStreamSettings streamSettings = EnsureLootStreamSettings();
 
 			SerializedObject so = new SerializedObject(visual);
 			if (pileMaterial != null)
 				so.FindProperty("pileMaterial").objectReferenceValue = pileMaterial;
 			so.FindProperty("lootInstances").objectReferenceValue = loot;
-			SerializedProperty carveRadiusProp = so.FindProperty("carveRadius");
-			if (carveRadiusProp != null)
-				carveRadiusProp.floatValue = 0.55f;
-			SerializedProperty carveScale = so.FindProperty("carveVolumeScale");
-			if (carveScale != null)
-				carveScale.floatValue = 0.02f;
 
 			GameObject coinVisual = AssetDatabase.LoadAssetAtPath<GameObject>(GoldCoinVisual);
 			SerializedObject lootSo = new SerializedObject(loot);
@@ -766,10 +472,33 @@ public static class GoldPileMaterialInstaller
 		if (settings != null)
 			return settings;
 
+		// Prefer migrating the legacy Materials path into Definitions if it still exists.
+		GoldPileLootStreamSettings legacy = AssetDatabase.LoadAssetAtPath<GoldPileLootStreamSettings>(LegacyLootStreamSettingsPath);
+		if (legacy != null)
+		{
+			string moveError = AssetDatabase.MoveAsset(LegacyLootStreamSettingsPath, LootStreamSettingsPath);
+			if (string.IsNullOrEmpty(moveError))
+			{
+				settings = AssetDatabase.LoadAssetAtPath<GoldPileLootStreamSettings>(LootStreamSettingsPath);
+				if (settings != null)
+					return settings;
+			}
+
+			settings = legacy;
+			return settings;
+		}
+
 		// Migrate / replace obsolete shell settings asset if present.
 		const string ObsoleteShellSettings = "Assets/Materials/Shaders/GoldPile/GoldPileCoinShellSettings.asset";
 		if (AssetDatabase.LoadAssetAtPath<Object>(ObsoleteShellSettings) != null)
 			AssetDatabase.DeleteAsset(ObsoleteShellSettings);
+
+		string folder = System.IO.Path.GetDirectoryName(LootStreamSettingsPath)?.Replace('\\', '/');
+		if (!string.IsNullOrEmpty(folder) && !AssetDatabase.IsValidFolder(folder))
+		{
+			// Definitions/Treasure/Pile should already exist; create only if missing.
+			EnsureFolder(folder);
+		}
 
 		settings = ScriptableObject.CreateInstance<GoldPileLootStreamSettings>();
 		settings.chunkSize = 8f;
@@ -785,34 +514,45 @@ public static class GoldPileMaterialInstaller
 		return settings;
 	}
 
-	static void EnsureRootCollider(GameObject root)
+	static void EnsureFolder(string folderPath)
 	{
-		if (root.GetComponent<Collider>() != null)
+		if (AssetDatabase.IsValidFolder(folderPath))
 			return;
 
-		MeshCollider meshCollider = root.AddComponent<MeshCollider>();
-		meshCollider.convex = false;
+		string[] parts = folderPath.Split('/');
+		if (parts.Length < 2 || parts[0] != "Assets")
+			return;
 
-		MeshFilter ownFilter = root.GetComponent<MeshFilter>();
-		if (ownFilter != null && ownFilter.sharedMesh != null)
+		string current = "Assets";
+		for (int i = 1; i < parts.Length; i++)
 		{
-			meshCollider.sharedMesh = ownFilter.sharedMesh;
-			return;
+			string next = current + "/" + parts[i];
+			if (!AssetDatabase.IsValidFolder(next))
+				AssetDatabase.CreateFolder(current, parts[i]);
+			current = next;
 		}
+	}
 
-		MeshFilter[] childFilters = root.GetComponentsInChildren<MeshFilter>(true);
-		for (int i = 0; i < childFilters.Length; i++)
+	static void EnsureRootColliderRemoved(GameObject root)
+	{
+		if (root == null)
+			return;
+
+		// Heightfield piles use chunked GoldPileColliderTiles — never keep a root MeshCollider.
+		MeshCollider[] colliders = root.GetComponentsInChildren<MeshCollider>(true);
+		for (int i = 0; i < colliders.Length; i++)
 		{
-			MeshFilter filter = childFilters[i];
-			if (filter == null || filter.sharedMesh == null)
+			MeshCollider col = colliders[i];
+			if (col == null)
 				continue;
 
-			meshCollider.sharedMesh = filter.sharedMesh;
-			return;
-		}
+			// Keep runtime collider tiles if somehow present while wiring.
+			Transform t = col.transform;
+			if (t.name.StartsWith("ColliderTile_") || t.name == "GoldPileColliders" || t.name == "~GoldPileColliders")
+				continue;
 
-		// Placeholder until GoldPileTerrainMesh builds the runtime collider mesh.
-		meshCollider.sharedMesh = null;
+			Object.DestroyImmediate(col, true);
+		}
 	}
 
 	static void AssignToOpenScenes(Material material)

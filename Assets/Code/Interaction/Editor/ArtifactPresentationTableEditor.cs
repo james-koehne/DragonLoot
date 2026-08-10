@@ -88,7 +88,7 @@ public class ArtifactPresentationTableEditor : Editor
 		}
 	}
 
-	[MenuItem( "DragonLoot/Treasure/Purge Artifact Slot Indicator Orphans" )]
+	[MenuItem( DragonLootMenus.TreasurePurgeSlotOrphans )]
 	static void PurgeAllSceneOrphans()
 	{
 		ArtifactPresentationSlotIndicators[] all = Object.FindObjectsByType<ArtifactPresentationSlotIndicators>(

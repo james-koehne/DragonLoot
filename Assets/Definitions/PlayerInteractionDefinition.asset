@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d2e3f4a5b60718293a4b5c6d7e8f9012, type: 3}
   m_Name: PlayerInteractionDefinition
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInteractionDefinition
-  interactRange: 8
+  interactRange: 3
   interactMask:
     serializedVersion: 2
     m_Bits: 0
@@ -38,6 +38,6 @@ MonoBehaviour:
     normalThreshold: 0.4
     depthNormalThreshold: 0.5
     depthNormalThresholdScale: 7
-    normalEdgeWeight: 1
+    normalEdgeWeight: 0
     pulseSpeed: 1.1
     pulseAmount: 0.1

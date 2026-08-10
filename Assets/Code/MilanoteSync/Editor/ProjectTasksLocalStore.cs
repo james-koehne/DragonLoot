@@ -135,16 +135,7 @@ public sealed class ProjectTasksLocalStore
 
 	public static bool IsFeatureMilanoteComplete( ImportedFeature feature )
 	{
-		if ( feature == null )
-			return false;
-
-		if ( feature.IsCompleteFolder )
-			return true;
-		if ( string.Equals( feature.Status, "Complete", StringComparison.OrdinalIgnoreCase )
-		     || string.Equals( feature.Status, "Done", StringComparison.OrdinalIgnoreCase ) )
-			return true;
-
-		return feature.TotalTaskCount > 0 && feature.CompletedTaskCount == feature.TotalTaskCount;
+		return feature != null && feature.IsMilanoteComplete;
 	}
 
 	public static bool IsLocallyDonePendingMilanote( ImportedTask task, LocalTaskMetadata taskMeta )

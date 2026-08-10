@@ -76,7 +76,7 @@ Material:
     - _SeamViewAlignEnd: 0.92
     - _SeamViewAlignStart: 0.7
     - _SeamWorldOffsetMax: 0.012
-    - _ShineBoost: 1
+    - _ShineBoost: 0.5
     - _SideBumpScale: 0.35
     - _SideFacetFrequency: 8
     - _SideFacetStrength: 0.04

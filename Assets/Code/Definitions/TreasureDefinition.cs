@@ -70,6 +70,17 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "When seated on a gold pile, solid-collide with the player. Leave off for small props you can walk through; enable for large obstacles." )]
 	public bool collideWithPlayerOnPile = false;
 
+	[Header( "Key" )]
+	[Tooltip( "Used when category is Key. Ignored for skeleton keys." )]
+	public KeyType keyType = KeyType.Iron;
+
+	[Tooltip( "When true, this key opens any chest key type and is not consumed on use." )]
+	public bool isSkeletonKey = false;
+
+	[Header( "Chest" )]
+	[Tooltip( "Used when category is Chest. Owns lock type, duration, and placeholder contents." )]
+	public ChestDefinition chestDefinition;
+
 	[Header( "Visuals" )]
 	public Sprite icon;
 
@@ -95,6 +106,10 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "Local euler degrees for items in the Held Stack (hand pile). Identity when zero." )]
 	public Vector3 heldStackLocalEuler = Vector3.zero;
 
+	[Header( "Cleaning" )]
+	[Tooltip( "Auto: Artifacts require cleaning. Required / NotRequired override the category default." )]
+	public TreasureCleaningRequirement cleaningRequirement = TreasureCleaningRequirement.Auto;
+
 	[Header( "Stacking" )]
 	[Tooltip( "If false, this treasure cannot be stacked onto other loose treasure, coin stacks, or mixed table slots. Gems never floor-stack regardless." )]
 	public bool canStack = true;
@@ -103,6 +118,9 @@ public class TreasureDefinition : ScriptableObject
 	[Min( 0f )]
 	public float coinThickness = 0.04f;
 
+	[Tooltip( "Cells this treasure occupies on a minecart cargo grid (X = columns, Y = rows). Minimum 1×1." )]
+	public Vector2Int cartGridSize = Vector2Int.one;
+
 	public float GetStackThickness()
 	{
 		if ( coinThickness > 0.0001f )
@@ -110,6 +128,28 @@ public class TreasureDefinition : ScriptableObject
 
 		float fallback = worldScale.y * 0.12f;
 		return fallback > 0.0001f ? fallback : 0.04f;
+	}
+
+	public Vector2Int GetCartGridSize()
+	{
+		return new Vector2Int( Mathf.Max( 1, cartGridSize.x ), Mathf.Max( 1, cartGridSize.y ) );
+	}
+
+	/// <summary>
+	/// True when this treasure must be cleaned before artifact presentation display.
+	/// Auto resolves to true for <see cref="TreasureCategory.Artifact"/> only.
+	/// </summary>
+	public bool GetRequiresCleaning()
+	{
+		switch ( cleaningRequirement )
+		{
+			case TreasureCleaningRequirement.Required:
+				return true;
+			case TreasureCleaningRequirement.NotRequired:
+				return false;
+			default:
+				return category == TreasureCategory.Artifact;
+		}
 	}
 
 	public PrimitiveType GetFallbackPrimitive()
@@ -191,6 +231,7 @@ public class TreasureDefinition : ScriptableObject
 		physicsStabilizationDelay = Mathf.Max( 0f, physicsStabilizationDelay );
 		pickupRadius = Mathf.Max( 0.01f, pickupRadius );
 		coinThickness = Mathf.Max( 0f, coinThickness );
+		cartGridSize = new Vector2Int( Mathf.Max( 1, cartGridSize.x ), Mathf.Max( 1, cartGridSize.y ) );
 	}
 
 	Vector3 GetCategoryWorldScale()

@@ -1,0 +1,50 @@
+---
+description: Use FeedbackSystem for runtime FX/SFX instead of ad-hoc audio/VFX code
+alwaysApply: true
+---
+
+# FeedbackSystem for Runtime FX/SFX
+
+When adding **running** (play-mode) visual FX, SFX, punches, shakes, particle bursts, or similar juice, use the project **FeedbackSystem** (`Assets/Plugins/FeedbackSystem/`). Do not wire one-off `AudioSource.Play` / `PlayOneShot` / `PlayClipAtPoint`, direct particle `Play()`, or ad-hoc tween/coroutine juice in gameplay code.
+
+## Pattern
+
+1. Add a `Feedbacks` component on the relevant GameObject (or a dedicated feedback child).
+2. Configure the chain in the Inspector (`+ Add Feedback`).
+3. From gameplay code, call `Play()` (optionally with `FeedbackContext`).
+
+```csharp
+using FeedbackSystem;
+
+[SerializeField] Feedbacks _onSortedFeedback;
+
+void OnSorted()
+{
+	_onSortedFeedback.Play();
+}
+```
+
+Optional context:
+
+```csharp
+FeedbackContext context = new FeedbackContext();
+context.Source = gameObject;
+context.Target = other;
+context.Position = transform.position;
+_onSortedFeedback.Play(context);
+```
+
+## Project-specific feedbacks
+
+- Built-in types live in `Assets/Plugins/FeedbackSystem/` — do not put game logic there.
+- New Dragon Loot–specific feedback types go in `Assets/Code/ProjectFeedbacks/` with `[FeedbackInfo("Category/Name")]`.
+- Prefer composing existing feedbacks (Audio, Particles, Transforms, Parallel/Sequence, Delay) before writing a custom `Feedback` subclass.
+
+## Do / Don't
+
+- **Do** expose `Feedbacks` fields and trigger them from interactables, abilities, UI events, etc.
+- **Do** use `Stop()` / `Reset()` when interrupting a playing chain.
+- **Don't** spawn juice with Addressables/Instantiate solely for one-shot FX when a feedback (`PlayParticles`, `Instantiate`, etc.) already covers it.
+- **Don't** reference game assemblies from `FeedbackSystem` package code.
+
+See `Assets/Plugins/FeedbackSystem/README.md` and the demo scene (`FeedbackSystem > Open Demo Scene`) for API and built-in types.

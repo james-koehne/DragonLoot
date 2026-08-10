@@ -152,19 +152,13 @@ public class TreasureCounterManager : MonoBehaviour
 			return;
 
 		TreasurePileDefinition def = pile.PileDefinition;
-		if ( def != null && def.contents != null )
+		if ( def != null )
 		{
-			for ( int i = 0; i < def.contents.Length; i++ )
-			{
-				TreasurePileEntry entry = def.contents[ i ];
-				if ( entry.treasure == null || entry.count <= 0 )
-					continue;
-
-				TreasureCounterEntry counter = GetOrCreateEntry( entry.treasure );
-				counter.Total += entry.count;
-			}
-
-			return;
+			SeedPileEntries( def.coinContents );
+			SeedPileEntries( def.treasureContents );
+			if ( ( def.coinContents != null && def.coinContents.Length > 0 )
+				|| ( def.treasureContents != null && def.treasureContents.Length > 0 ) )
+				return;
 		}
 
 		if ( pile.Treasure == null )
@@ -178,6 +172,22 @@ public class TreasureCounterManager : MonoBehaviour
 
 		TreasureCounterEntry legacy = GetOrCreateEntry( pile.Treasure );
 		legacy.Total += amount;
+	}
+
+	void SeedPileEntries( TreasurePileEntry[] entries )
+	{
+		if ( entries == null )
+			return;
+
+		for ( int i = 0; i < entries.Length; i++ )
+		{
+			TreasurePileEntry entry = entries[ i ];
+			if ( entry.treasure == null || entry.count <= 0 )
+				continue;
+
+			TreasureCounterEntry counter = GetOrCreateEntry( entry.treasure );
+			counter.Total += entry.count;
+		}
 	}
 
 	void SeedCoinStack( CoinStackInteractable stack )

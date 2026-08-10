@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -10,6 +11,7 @@ public class DebugGoldPileSection : DebugOverlaySection
 	static int s_gameplayPullOverride = 1;
 	static int s_selectedPile;
 	static string s_lastStatus = "";
+	static List<TreasureDefinition> s_artifactGemCatalog;
 
 	public string Title => "Gold Pile";
 
@@ -24,6 +26,12 @@ public class DebugGoldPileSection : DebugOverlaySection
 
 		GUILayout.Label( $"Piles: {piles.Count}" );
 		GoldPileEditTiming.Enabled = GUILayout.Toggle( GoldPileEditTiming.Enabled, "Log edit timings" );
+		if ( GoldPileEditTiming.Enabled )
+		{
+			GoldPileEditTiming.Verbose = GUILayout.Toggle( GoldPileEditTiming.Verbose, "Verbose phase logs" );
+			if ( !string.IsNullOrEmpty( GoldPileEditTiming.LastSummary ) )
+				GUILayout.Label( GoldPileEditTiming.LastSummary );
+		}
 		DrawStreamingControls( piles );
 
 		GUILayout.Space( 4f );
@@ -51,7 +59,14 @@ public class DebugGoldPileSection : DebugOverlaySection
 
 		GUILayout.Label( $"Name: {visual.gameObject.name}" );
 		GUILayout.Label( $"Remaining: {visual.TotalRemainingLoot}" );
-		GUILayout.Label( $"Carve R: {visual.CarveRadius:0.00}  VolScale: {visual.CarveVolumeScale:0.000}" );
+		GUILayout.Label( $"Carve R: {visual.CarveRadius:0.00}" );
+		GoldPileCarveSettings globalCarve = GoldPileCarveSettings.FromGlobalDefinition().ResolvedForPile(
+			visual.Heightfield != null && visual.Heightfield.IsInitialized
+				? visual.Heightfield.WorldSize
+				: 6f );
+		GUILayout.Label(
+			$"Global carve R:{globalCarve.radius:0.00} " +
+			$"Blur pad:{globalCarve.blurPadCells} x{globalCarve.blurPasses} str:{globalCarve.blurStrength:0.##} fall:{globalCarve.falloffSharpness:0.##}" );
 		if ( interactable != null )
 			GUILayout.Label( $"Interactable Remaining: {interactable.RemainingCount}" );
 
@@ -60,12 +75,12 @@ public class DebugGoldPileSection : DebugOverlaySection
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( $"Carve {s_carveAmount}" ) )
 		{
-			bool ok = visual.TryDebugCarveAmount( aim, s_carveAmount );
+			bool ok = visual.TryDebugCarveAmount( aim, s_carveAmount, globalCarve );
 			s_lastStatus = ok ? $"Carved {s_carveAmount} at aim" : "Carve failed";
 		}
 		if ( GUILayout.Button( $"Deposit {s_carveAmount}" ) )
 		{
-			bool ok = visual.TryDebugDepositAmount( aim, s_carveAmount );
+			bool ok = visual.TryDebugDepositAmount( aim, s_carveAmount, globalCarve );
 			s_lastStatus = ok ? $"Deposited {s_carveAmount} at aim" : "Deposit failed";
 		}
 		GUILayout.EndHorizontal();
@@ -97,6 +112,9 @@ public class DebugGoldPileSection : DebugOverlaySection
 				s_lastStatus = "No TreasurePileInteractable";
 			}
 		}
+
+		GUILayout.Space( 4f );
+		DrawArtifactGemSpawnControls( visual );
 
 		if ( !string.IsNullOrEmpty( s_lastStatus ) )
 			GUILayout.Label( s_lastStatus );
@@ -229,6 +247,133 @@ public class DebugGoldPileSection : DebugOverlaySection
 			s_takeAmount = 100;
 		GUILayout.EndHorizontal();
 		s_takeAmount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_takeAmount, 1, 500 ) );
+	}
+
+	static void DrawArtifactGemSpawnControls( TreasurePileVisual visual )
+	{
+		GoldPileArtifactProps props = visual != null ? visual.ArtifactProps : null;
+		int latent = props != null ? props.LatentCount : 0;
+		int live = props != null ? props.LivePropCount : 0;
+		GUILayout.Label( $"Artifacts/gems: latent={latent} live={live}" );
+
+		if ( GUILayout.Button( "Spawn existing artifacts/gems" ) )
+		{
+			if ( visual == null || props == null )
+			{
+				s_lastStatus = "No ArtifactProps on selected pile";
+			}
+			else
+			{
+				s_lastStatus = "Force-spawning existing artifacts/gems...";
+				visual.DebugForceSpawnExistingArtifactsAndGems( ( spawned, attempted ) =>
+				{
+					s_lastStatus = $"Spawned existing {spawned}/{attempted} artifacts/gems";
+				} );
+			}
+		}
+
+		EnsureArtifactGemCatalog();
+		int catalogCount = s_artifactGemCatalog != null ? s_artifactGemCatalog.Count : 0;
+		if ( GUILayout.Button( $"Spawn all artifacts & gems inside ({catalogCount})" ) )
+		{
+			if ( visual == null || props == null )
+			{
+				s_lastStatus = "No ArtifactProps on selected pile";
+			}
+			else if ( catalogCount == 0 )
+			{
+				s_lastStatus = "No gem/artifact definitions found";
+			}
+			else
+			{
+				s_lastStatus = $"Spawning {catalogCount} artifacts/gems inside pile...";
+				visual.DebugSpawnArtifactsAndGemsInside( s_artifactGemCatalog, ( spawned, attempted ) =>
+				{
+					s_lastStatus = $"Spawned {spawned}/{attempted} artifacts/gems inside pile";
+				} );
+			}
+		}
+	}
+
+	static void EnsureArtifactGemCatalog()
+	{
+		if ( s_artifactGemCatalog != null && s_artifactGemCatalog.Count > 0 )
+			return;
+
+		HashSet<TreasureDefinition> seen = new HashSet<TreasureDefinition>();
+		s_artifactGemCatalog = new List<TreasureDefinition>();
+
+#if UNITY_EDITOR
+		string[] guids = UnityEditor.AssetDatabase.FindAssets( "t:TreasureDefinition" );
+		for ( int i = 0; i < guids.Length; i++ )
+		{
+			string path = UnityEditor.AssetDatabase.GUIDToAssetPath( guids[ i ] );
+			TreasureDefinition def = UnityEditor.AssetDatabase.LoadAssetAtPath<TreasureDefinition>( path );
+			TryAddArtifactOrGem( def, seen );
+		}
+#endif
+
+		TreasureDefinition[] loaded = Resources.FindObjectsOfTypeAll<TreasureDefinition>();
+		for ( int i = 0; i < loaded.Length; i++ )
+			TryAddArtifactOrGem( loaded[ i ], seen );
+
+		IReadOnlyList<GoldPileLootStreamDebug> piles = GoldPileLootStreamDebug.ActiveInstances;
+		if ( piles != null )
+		{
+			for ( int i = 0; i < piles.Count; i++ )
+			{
+				GoldPileLootStreamDebug pile = piles[ i ];
+				if ( pile == null )
+					continue;
+
+				TreasurePileInteractable interactable = pile.GetComponent<TreasurePileInteractable>();
+				if ( interactable == null )
+					interactable = pile.GetComponentInParent<TreasurePileInteractable>();
+				if ( interactable == null || interactable.PileDefinition == null )
+					continue;
+
+				AddTreasureEntries( interactable.PileDefinition.treasureContents, seen );
+			}
+		}
+
+		s_artifactGemCatalog.Sort( CompareDefs );
+	}
+
+	static void AddTreasureEntries( TreasurePileEntry[] contents, HashSet<TreasureDefinition> seen )
+	{
+		if ( contents == null )
+			return;
+
+		for ( int i = 0; i < contents.Length; i++ )
+			TryAddArtifactOrGem( contents[ i ].treasure, seen );
+	}
+
+	static void TryAddArtifactOrGem( TreasureDefinition def, HashSet<TreasureDefinition> seen )
+	{
+		if ( def == null || !seen.Add( def ) )
+			return;
+		if ( def.category != TreasureCategory.Gem && def.category != TreasureCategory.Artifact )
+			return;
+		s_artifactGemCatalog.Add( def );
+	}
+
+	static int CompareDefs( TreasureDefinition a, TreasureDefinition b )
+	{
+		int cat = a.category.CompareTo( b.category );
+		if ( cat != 0 )
+			return cat;
+		return string.Compare( FormatDefLabel( a ), FormatDefLabel( b ), StringComparison.OrdinalIgnoreCase );
+	}
+
+	static string FormatDefLabel( TreasureDefinition def )
+	{
+		if ( def == null )
+			return "(null)";
+		if ( !string.IsNullOrEmpty( def.displayName ) )
+			return def.displayName;
+		if ( !string.IsNullOrEmpty( def.id ) )
+			return def.id;
+		return def.name;
 	}
 
 	static TreasurePileVisual ResolveVisual( GoldPileLootStreamDebug debug )

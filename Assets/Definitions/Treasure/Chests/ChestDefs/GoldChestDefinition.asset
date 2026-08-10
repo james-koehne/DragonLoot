@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6f67c2b436895249b5369555ad2680b, type: 3}
+  m_Name: GoldChestDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::ChestDefinition
+  id: GoldChest
+  displayName: Gold Chest
+  chestType: Ornate
+  keyType: 1
+  startsLocked: 1
+  lockpickDuration: 12
+  contents:
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 8
+  - treasure: {fileID: 11400000, guid: 3f8a2d6c9e1b4570a4d8c2f6b0e5a937, type: 2}
+    count: 1

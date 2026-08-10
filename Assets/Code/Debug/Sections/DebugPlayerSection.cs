@@ -16,6 +16,11 @@ public class DebugPlayerSection : DebugOverlaySection
 		GUILayout.Label( $"Grounded: {player.IsGrounded}" );
 		GUILayout.Label( $"Ground angle: {player.GroundAngle:0.0}°" );
 		GUILayout.Label( $"Speed: {player.PlanarSpeed:0.00}" );
+		bool climbingEnabled = GUILayout.Toggle( player.IsClimbingEnabled, "Climbing Enabled" );
+		if ( climbingEnabled != player.IsClimbingEnabled )
+			player.SetClimbingEnabled( climbingEnabled );
+
+		GUILayout.Label( $"Climbing: {player.IsClimbing}" );
 		GUILayout.Label( $"Sliding: {player.IsSliding}" );
 		if ( player.IsSlideExitBoostActive )
 			GUILayout.Label( $"Exit boost: {player.SlideExitBoostSpeed:0.00} u/s" );

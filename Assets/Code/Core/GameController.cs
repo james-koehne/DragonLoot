@@ -125,12 +125,56 @@ public class GameController : MonoBehaviour
 		if ( PlayerController == null )
 			return;
 
+#if UNITY_EDITOR
+		if ( TryPlacePlayerAtSceneCamera() )
+			return;
+#endif
+
 		LevelSceneMarkers markers = LevelSceneMarkers.Instance;
 		if ( markers == null || markers.playerSpawn == null )
 			return;
 
 		PlayerController.TeleportTo( markers.playerSpawn.position, markers.playerSpawn.rotation );
 	}
+
+#if UNITY_EDITOR
+	bool TryPlacePlayerAtSceneCamera()
+	{
+		if ( GameMode.Instance == null )
+			return false;
+
+		DebugDefinition debug = GameMode.Instance.DebugDefinition;
+		if ( debug == null || !debug.spawnAtSceneCamera )
+			return false;
+
+		if ( !EditorSceneCameraSpawn.TryGetPose( out Vector3 camPosition, out Quaternion camRotation ) )
+			return false;
+
+		Vector3 forward = camRotation * Vector3.forward;
+		forward.y = 0f;
+		Quaternion bodyRotation = forward.sqrMagnitude > 0.0001f
+			? Quaternion.LookRotation( forward.normalized, Vector3.up )
+			: Quaternion.Euler( 0f, camRotation.eulerAngles.y, 0f );
+
+		Vector3 spawnPosition = camPosition;
+		if ( PlayerController.CameraMount != null )
+		{
+			Vector3 mountOffset = bodyRotation * PlayerController.CameraMount.localPosition;
+			spawnPosition = camPosition - mountOffset;
+		}
+
+		PlayerController.TeleportTo( spawnPosition, bodyRotation );
+
+		if ( GameMode.Instance.cameraController != null )
+		{
+			FirstPersonCameraController look = GameMode.Instance.cameraController.FirstPerson;
+			if ( look != null )
+				look.SetPitch( camRotation.eulerAngles.x );
+		}
+
+		return true;
+	}
+#endif
 
 	public void StartGame()
 	{

@@ -3,7 +3,6 @@ using UnityEngine;
 /// <summary>
 /// Multi-count pickup: each Interact removes one unit until empty.
 /// </summary>
-[RequireComponent( typeof( Collider ) )]
 public abstract class StackInteractable : InteractableBase
 {
 	[SerializeField]

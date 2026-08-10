@@ -12,12 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cfe025c4ea4ea6246ba479da7e942108, type: 3}
   m_Name: TreasureSurfaceDefinition
   m_EditorClassIdentifier: Assembly-CSharp::TreasureSurfaceDefinition
-  worldOrigin: {x: 0, y: 0, z: 128}
-  worldSizeX: 256
-  worldSizeZ: 384
+  worldOrigin: {x: 0, y: 0, z: 0}
+  worldSizeX: 512
+  worldSizeZ: 512
   chunkSize: 8
   cellsPerChunk: 64
-  baseHeight: 0
+  baseHeight: 1
   minWorldY: -2
   maxWorldY: 32
   activeRadius: 24
@@ -30,12 +30,28 @@ MonoBehaviour:
   gravity: 18
   flowAcceleration: 6
   maxSlideSpeed: 8
+  pileReleaseAccelRampTime: 1
+  softEdgeDeflectScale: 0.6
+  artifactSurfaceSnapDistance: 0.07
   throwBallisticGravity: 18
   throwLandingSpeedScale: 0.85
   throwCoinArcScale: 1.35
   throwItemArcScale: 1
+  throwCoinSpins: 1.25
+  throwGemSpins: 0.55
+  throwArtifactSpins: 1
   autoStackRadius: 0.36
   autoStackHeightTolerance: 0.65
+  autoStackFlipDuration: 0.4
+  autoStackHopHeight: 0.7
+  autoStackRiseFraction: 0.35
+  autoStackSecondaryArcHeight: 0.15
+  autoStackFlipSpins: 1.25
+  autoStackHopHeightVariance: 0.3
+  autoStackDurationVariance: 0.2
+  autoStackRiseFractionVariance: 0.2
+  autoStackSpinVariance: 0.25
+  autoStackApexJitter: 0.08
   coinFrictionScale: 0.8
   coinBounceScale: 0.8
   coinSpeedScale: 1
@@ -50,17 +66,28 @@ MonoBehaviour:
   coinMaxBounces: 1
   coinBounceRestitution: 0.55
   coinPostBounceFlipSpins: 14
+  coinHopMin: 0.8
+  coinHopMax: 4.5
   hopImpactSpeedThreshold: 0.35
   gemMaxBounces: 2
   gemBounceRestitution: 0.45
+  gemHopMin: 0.8
+  gemHopMax: 4.5
   artifactMaxBounces: 1
   artifactBounceRestitution: 0.08
+  artifactHopMin: 2
+  artifactHopMax: 3.2
   gemRollAngularScale: 6
   gemAngularDamping: 2.5
-  gemPushRadius: 0.18
+  gemPushRadius: 0.1
   gemPushStrength: 8
   gemVsCoinPushRadiusScale: 1.15
+  gemPyramidSpacingScale: 1.05
+  gemPyramidJoinRadius: 0.75
+  gemPyramidTuckDuration: 0.28
+  gemPyramidTuckHopHeight: 0.12
   gemSeatUsesBottomOffset: 1
+  gemFlattenOnSettle: 0
   materials:
   - material: 0
     friction: 0.7

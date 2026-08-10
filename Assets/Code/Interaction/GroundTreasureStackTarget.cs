@@ -129,21 +129,11 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( bottom == null )
 			bottom = _baseItem;
 
-		float columnHeight = 0f;
-		TreasureSupportStack.CollectColumn( bottom, SupportBuffer );
-		for ( int i = 0; i < SupportBuffer.Count; i++ )
-			columnHeight += TreasureStackSpacing.GetStep( SupportBuffer[ i ] );
-		SupportBuffer.Clear();
-
-		columnHeight = Mathf.Max( TreasureStackSpacing.FallbackStep, columnHeight );
-		float diameter = Mathf.Max( scale.x, scale.z );
 		Vector3 contact = bottom != null ? bottom.transform.position : placePos;
-		preview.SetStackVolume(
+		preview.SetStackOutline(
 			contact,
 			placeRot,
 			scale,
-			columnHeight,
-			diameter,
 			CanPlace( item, in query ) );
 		preview.Position = placePos;
 		return true;

@@ -1,7 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Fixed-topology pile grid mesh. Visual displace via deform texture; collider verts synced on CPU.
+/// Fixed-topology pile grid mesh. Visual displace via deform texture;
+/// collider uses chunked MeshColliders cooked only for dirty tiles.
 /// </summary>
 [DisallowMultipleComponent]
 public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.IInstanceMaskSource
@@ -11,10 +12,22 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	const string DeformScaleProp = "_DeformScale";
 	const string DeformWorldSizeProp = "_DeformWorldSize";
 	const string DeformResolutionProp = "_DeformResolution";
+	const string DeformNormalSoftenProp = "_DeformNormalSoften";
+	const string DeformSampleBlurProp = "_DeformSampleBlur";
 	const string GroundLevelProp = "_GroundLevelHeight";
 	const int MinColliderResolution = 16;
-	/// <summary>Minimum seconds between MeshCollider cooks (verts still update every dirty LateUpdate).</summary>
-	const float ColliderCookMinInterval = 0.05f;
+	/// <summary>
+	/// Collider grid matches heightfield resolution (divisor 1) so digs track the mound closely.
+	/// Chunked dirty-tile cooks keep this affordable on large piles.
+	/// </summary>
+	const int ColliderResolutionDivisor = 1;
+	/// <summary>World-space size of each collider tile (matches loot chunk default).</summary>
+	const float ColliderChunkSize = GoldPileChunkGrid.DefaultChunkSize;
+	/// <summary>Minimum seconds between MeshCollider cook batches while edits are pending.</summary>
+	const float ColliderCookMinInterval = 0.2f;
+	/// <summary>Max tiles to schedule async PhysX bakes per LateUpdate.</summary>
+	const int MaxAsyncCooksPerFrame = 8;
+	const HideFlags RuntimeMeshHideFlags = HideFlags.HideAndDontSave;
 
 	[SerializeField]
 	[Min( 8 )]
@@ -28,17 +41,13 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 	MeshFilter _filter;
 	MeshRenderer _renderer;
-	MeshCollider _collider;
 	Mesh _visualMesh;
-	Mesh _colliderMesh;
 	Vector3[] _baseVerts;
-	Vector3[] _colliderBaseVerts;
-	Vector3[] _displacedVerts;
 	Vector2[] _uvs;
 	int[] _tris;
-	int[] _colliderTris;
 	MaterialPropertyBlock _mpb;
 	GoldPileHeightfield _heightfield;
+	readonly GoldPileColliderTiles _colliderTiles = new GoldPileColliderTiles();
 	bool _built;
 	bool _colliderDirty;
 	bool _colliderDirtyFull;
@@ -48,23 +57,75 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	int _colliderDirtyMaxZ;
 	int _colliderResolution;
 	int _visualResolution = 64;
+	float _deformNormalSoften;
+	float _deformSampleBlur = 4f;
 	bool _uploadPending;
 	bool _mpbPending;
 	bool _colliderCookPending;
 	float _lastColliderCookTime = -1000f;
 	Material _sparkleMaskMaterial;
+	MaterialPropertyBlock _sparkleMaskMpb;
 	static TreasureSparkleDefinition s_SparkleDefinition;
 
 	public MeshRenderer PileRenderer => _renderer;
-	public MeshCollider PileCollider => _collider;
+	/// <summary>First collider tile (compat). Prefer resolving hits via parent GoldPileTerrainMesh.</summary>
+	public MeshCollider PileCollider => _colliderTiles.FirstCollider;
+	public int ColliderTileCount => _colliderTiles.TileCount;
+	public int ColliderResolution => _colliderResolution;
 	public Transform MeshTransform => _filter != null ? _filter.transform : transform;
 	public int VisualResolution => _visualResolution;
 
 	/// <summary>
-	/// Configures material and optional visual mesh resolution.
-	/// meshRes 0 or negative matches heightRes; collider stays derived from heightfield res on Bind.
+	/// Clears MeshFilter/collider references and destroys procedural meshes so they are not
+	/// written into scene YAML. Safe to call before save; rebuild via Bind / editor preview.
 	/// </summary>
-	public void Configure( Material material, int heightRes, int meshRes = 0 )
+	public void StripPersistedRuntimeGeometry()
+	{
+		_colliderTiles.Release();
+		_colliderDirty = false;
+		_colliderDirtyFull = false;
+		_colliderCookPending = false;
+		_built = false;
+
+		if ( _filter != null )
+		{
+			Mesh assigned = _filter.sharedMesh;
+			_filter.sharedMesh = null;
+			if ( assigned != null && assigned != _visualMesh )
+				DestroyProceduralMesh( assigned );
+		}
+
+		if ( _visualMesh != null )
+		{
+			DestroyProceduralMesh( _visualMesh );
+			_visualMesh = null;
+		}
+	}
+
+	static void DestroyProceduralMesh( Mesh mesh )
+	{
+		if ( mesh == null )
+			return;
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying )
+			DestroyImmediate( mesh );
+		else
+#endif
+			Destroy( mesh );
+	}
+
+	/// <summary>
+	/// Configures material, optional visual mesh resolution, and deform visual overrides.
+	/// meshRes 0 or negative matches heightRes; collider matches heightfield res on Bind.
+	/// Soften/blur override shared material defaults via MPB (procedural gold-pile shader).
+	/// </summary>
+	public void Configure(
+		Material material,
+		int heightRes,
+		int meshRes = 0,
+		float deformNormalSoften = 0f,
+		float deformSampleBlur = 4f )
 	{
 		if ( material != null )
 			pileMaterial = material;
@@ -72,6 +133,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		int height = Mathf.Max( 8, heightRes );
 		_visualResolution = meshRes > 0 ? Mathf.Max( 8, meshRes ) : height;
 		resolution = _visualResolution;
+		_deformNormalSoften = Mathf.Clamp01( deformNormalSoften );
+		_deformSampleBlur = Mathf.Clamp( deformSampleBlur, 0f, 4f );
 	}
 
 	public void Bind( GoldPileHeightfield heightfield )
@@ -91,16 +154,31 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		ApplyMaterialAndDeform();
 		if ( syncCollider )
 		{
-			if ( _collider != null )
-				_collider.enabled = true;
+			_colliderTiles.SetEnabled( true );
 			SyncColliderImmediate();
 		}
-		else if ( _collider != null )
-			_collider.enabled = false;
+		else
+			_colliderTiles.SetEnabled( false );
 	}
 
 	/// <summary>
-	/// Queues deform upload + deferred low-res collider sync (coalesced in LateUpdate).
+	/// Enables colliders and queues displace + async PhysX cooks (no sync BakeMesh).
+	/// Use after Bind(..., syncCollider: false) at runtime so scene Integrate stays cheap.
+	/// </summary>
+	public void BeginDeferredColliderCook()
+	{
+		if ( !_built || _heightfield == null )
+			return;
+
+		_colliderTiles.SetEnabled( true );
+		_colliderDirtyFull = true;
+		_colliderDirty = true;
+		_colliderCookPending = true;
+		_lastColliderCookTime = -1000f;
+	}
+
+	/// <summary>
+	/// Queues deform upload + deferred collider tile sync (coalesced in LateUpdate).
 	/// In edit mode, flushes immediately so sculpt preview stays responsive.
 	/// </summary>
 	public void RefreshFromHeightfield()
@@ -138,6 +216,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_colliderDirtyFull = true;
 		_colliderDirty = true;
 		_colliderCookPending = true;
+		_colliderTiles.CancelAllBakes();
 		SyncCollider( forceCook: true );
 		_colliderDirty = false;
 		_colliderDirtyFull = false;
@@ -149,55 +228,43 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	{
 		if ( _renderer != null )
 			_renderer.enabled = visible;
-		if ( _collider != null )
-			_collider.enabled = visible;
+		_colliderTiles.SetEnabled( visible );
 	}
 
 	void LateUpdate()
 	{
+		GoldPileEditTiming.TryFlushDeferredFromPriorFrame();
 		FlushPendingUpload();
-
-		if ( !_colliderDirty && !_colliderCookPending )
-			return;
-
-		System.Diagnostics.Stopwatch sw = null;
-		if ( GoldPileEditTiming.Enabled )
-			sw = System.Diagnostics.Stopwatch.StartNew();
-
-		bool forceCook = _colliderCookPending
-			&& ( Time.unscaledTime - _lastColliderCookTime ) >= ColliderCookMinInterval;
+		_colliderTiles.ApplyCompletedBakes();
 
 		if ( _colliderDirty )
 		{
-			// New height edits: refresh verts. Defer PhysX cook unless interval allows.
-			bool cookNow = forceCook
-				|| ( Time.unscaledTime - _lastColliderCookTime ) >= ColliderCookMinInterval;
-			SyncCollider( cookNow );
+			// Vert displace every dirty frame; PhysX cook is rate-limited below.
+			SyncCollider( forceCook: false );
 			_colliderDirty = false;
 			_colliderDirtyFull = false;
-			if ( cookNow )
-			{
-				_colliderCookPending = false;
-				_lastColliderCookTime = Time.unscaledTime;
-			}
-			else
-				_colliderCookPending = true;
-		}
-		else if ( forceCook )
-		{
-			// Verts already current; only reassign sharedMesh for PhysX.
-			CookColliderMesh( force: false );
-			_colliderCookPending = false;
-			_lastColliderCookTime = Time.unscaledTime;
+			_colliderCookPending = true;
 		}
 
-		if ( sw != null )
-		{
-			sw.Stop();
-			GoldPileEditTiming.LogIfEnabled(
-				$"[GoldPileEdit] collider sync={sw.Elapsed.TotalMilliseconds:F2}ms cookPending={_colliderCookPending} res={_colliderResolution}",
-				this );
-		}
+		if ( !_colliderCookPending && !_colliderTiles.HasDirtyOrPending() )
+			return;
+
+		if ( !ShouldCookColliderNow() )
+			return;
+
+		int scheduled = _colliderTiles.RequestAsyncBakes( MaxAsyncCooksPerFrame );
+		_colliderCookPending = _colliderTiles.HasDirtyOrPending();
+		if ( scheduled > 0 )
+			_lastColliderCookTime = Time.unscaledTime;
+	}
+
+	bool ShouldCookColliderNow()
+	{
+		if ( !Application.isPlaying )
+			return true;
+
+		float sinceCook = Time.unscaledTime - _lastColliderCookTime;
+		return sinceCook >= ColliderCookMinInterval;
 	}
 
 	void FlushPendingUpload()
@@ -206,18 +273,34 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 			return;
 
 		GoldPileEditTiming.Begin( "GoldPile.FlushDeform" );
+		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
+
 		if ( _uploadPending && _heightfield != null )
 			_heightfield.UploadIfDirty();
 		_uploadPending = false;
 
-		if ( _mpbPending )
+		bool applyMpb = _mpbPending;
+		if ( applyMpb )
+		{
+			if ( phaseSw != null )
+				phaseSw.Restart();
 			ApplyMaterialAndDeform();
-		_mpbPending = false;
+			_mpbPending = false;
+			if ( phaseSw != null )
+			{
+				phaseSw.Stop();
+				GoldPileEditTiming.Record( "flush.mpb", phaseSw.Elapsed.TotalMilliseconds );
+			}
+		}
+		else
+			_mpbPending = false;
+
 		GoldPileEditTiming.End();
 	}
 
 	void OnDestroy()
 	{
+		_colliderTiles.Release();
 		UnregisterSparkleMask();
 
 		if ( _sparkleMaskMaterial != null )
@@ -231,24 +314,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 		if ( _visualMesh != null )
 		{
-#if UNITY_EDITOR
-			if ( !Application.isPlaying )
-				DestroyImmediate( _visualMesh );
-			else
-#endif
-				Destroy( _visualMesh );
+			DestroyProceduralMesh( _visualMesh );
 			_visualMesh = null;
-		}
-
-		if ( _colliderMesh != null )
-		{
-#if UNITY_EDITOR
-			if ( !Application.isPlaying )
-				DestroyImmediate( _colliderMesh );
-			else
-#endif
-				Destroy( _colliderMesh );
-			_colliderMesh = null;
 		}
 	}
 
@@ -279,17 +346,30 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		if ( _renderer == null )
 			_renderer = root.gameObject.AddComponent<MeshRenderer>();
 
-		_collider = root.GetComponent<MeshCollider>();
-		if ( _collider == null )
-			_collider = root.gameObject.AddComponent<MeshCollider>();
-
-		// Avoid Weld/Clean on dynamic cooks — they dominate SyncCollider cost.
-		_collider.cookingOptions = MeshColliderCookingOptions.CookForFasterSimulation;
+		// Colliders live on chunked tiles — remove legacy MeshColliders on terrain child and pile root.
+		StripLegacyMeshCollider( root.gameObject );
+		if ( root != transform )
+			StripLegacyMeshCollider( gameObject );
 
 		if ( root.GetComponent<GoldPileQualityBinder>() == null )
 			root.gameObject.AddComponent<GoldPileQualityBinder>();
 
 		RegisterSparkleMask();
+	}
+
+	static void StripLegacyMeshCollider( GameObject go )
+	{
+		if ( go == null )
+			return;
+
+		MeshCollider legacy = go.GetComponent<MeshCollider>();
+		if ( legacy == null )
+			return;
+
+		if ( Application.isPlaying )
+			Destroy( legacy );
+		else
+			DestroyImmediate( legacy );
 	}
 
 	void OnEnable()
@@ -304,26 +384,30 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 	public TreasureSparkleDefinition.SparkleSourceKind MaskKind => TreasureSparkleDefinition.SparkleSourceKind.Pile;
 
+	public bool TryGetSparkleWorldBounds( out Bounds bounds )
+	{
+		bounds = default;
+		if ( _renderer == null || !_renderer.enabled )
+			return false;
+
+		bounds = _renderer.bounds;
+		return true;
+	}
+
 	public void DrawSparkleMask( UnityEngine.Rendering.RasterCommandBuffer cmd, Material fallbackMaskMaterial )
 	{
 		if ( cmd == null || _filter == null || _filter.sharedMesh == null || _renderer == null )
 			return;
 
-		EnsureSparkleMaskMaterial();
 		Material maskMaterial = _sparkleMaskMaterial != null ? _sparkleMaskMaterial : fallbackMaskMaterial;
-		if ( maskMaterial == null )
+		if ( maskMaterial == null || _sparkleMaskMpb == null )
 			return;
-
-		if ( _mpb == null )
-			_mpb = new MaterialPropertyBlock();
-		_renderer.GetPropertyBlock( _mpb );
-		_mpb.SetFloat( TreasureSparkleMaskPass.MaskWriteValueId, TreasureSparkleDefinition.MaskPile );
 
 		Mesh mesh = _filter.sharedMesh;
 		Matrix4x4 matrix = _renderer.localToWorldMatrix;
 		int submeshCount = Mathf.Max( 1, mesh.subMeshCount );
 		for ( int submesh = 0; submesh < submeshCount; submesh++ )
-			cmd.DrawMesh( mesh, matrix, maskMaterial, submesh, 0, _mpb );
+			cmd.DrawMesh( mesh, matrix, maskMaterial, submesh, 0, _sparkleMaskMpb );
 	}
 
 	void EnsureSparkleMaskMaterial()
@@ -337,6 +421,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 		_sparkleMaskMaterial = new Material( shader );
 		_sparkleMaskMaterial.hideFlags = HideFlags.HideAndDontSave;
+		SyncSparkleMaskDeform();
 	}
 
 	void RegisterSparkleMask()
@@ -350,6 +435,9 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 			UnregisterSparkleMask();
 			return;
 		}
+
+		EnsureSparkleMaskMaterial();
+		SyncSparkleMaskDeform();
 
 		// Piles use deform-aware instance mask draws — do not register the flat MeshRenderer.
 		TreasureSparkleMaskRegistrar.Unregister( _renderer );
@@ -372,7 +460,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		resolution = res;
 
 		float size = _heightfield != null ? _heightfield.WorldSize : 4f;
-		_colliderResolution = Mathf.Max( MinColliderResolution, heightRes / 4 );
+		_colliderResolution = Mathf.Max( MinColliderResolution, heightRes / ColliderResolutionDivisor );
 
 		int vertCount = res * res;
 		_baseVerts = new Vector3[ vertCount ];
@@ -388,9 +476,10 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 				float lx = -half + x * step;
 				float lz = -half + z * step;
 				_baseVerts[ i ] = new Vector3( lx, 0f, lz );
+				// Texel centers: matches Point-filtered deform map and CPU grid heights / collider verts.
 				_uvs[ i ] = new Vector2(
-					res <= 1 ? 0.5f : ( float )x / ( res - 1 ),
-					res <= 1 ? 0.5f : ( float )z / ( res - 1 ) );
+					( x + 0.5f ) / res,
+					( z + 0.5f ) / res );
 			}
 		}
 
@@ -416,6 +505,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		else
 			_visualMesh.Clear();
 
+		_visualMesh.hideFlags = RuntimeMeshHideFlags;
 		_visualMesh.indexFormat = vertCount > 65000
 			? UnityEngine.Rendering.IndexFormat.UInt32
 			: UnityEngine.Rendering.IndexFormat.UInt16;
@@ -428,62 +518,19 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 		_filter.sharedMesh = _visualMesh;
 
-		BuildColliderTopology( size );
+		BuildColliderTiles( size );
 		_built = true;
 	}
 
-	void BuildColliderTopology( float size )
+	void BuildColliderTiles( float size )
 	{
-		int res = _colliderResolution;
-		int vertCount = res * res;
-		_colliderBaseVerts = new Vector3[ vertCount ];
-		_displacedVerts = new Vector3[ vertCount ];
-		float half = size * 0.5f;
-		float step = size / Mathf.Max( 1, res - 1 );
-
-		for ( int z = 0; z < res; z++ )
-		{
-			for ( int x = 0; x < res; x++ )
-			{
-				int i = z * res + x;
-				float lx = -half + x * step;
-				float lz = -half + z * step;
-				_colliderBaseVerts[ i ] = new Vector3( lx, 0f, lz );
-				_displacedVerts[ i ] = _colliderBaseVerts[ i ];
-			}
-		}
-
-		int quadCount = ( res - 1 ) * ( res - 1 );
-		_colliderTris = new int[ quadCount * 6 ];
-		int t = 0;
-		for ( int z = 0; z < res - 1; z++ )
-		{
-			for ( int x = 0; x < res - 1; x++ )
-			{
-				int i = z * res + x;
-				_colliderTris[ t++ ] = i;
-				_colliderTris[ t++ ] = i + res;
-				_colliderTris[ t++ ] = i + 1;
-				_colliderTris[ t++ ] = i + 1;
-				_colliderTris[ t++ ] = i + res;
-				_colliderTris[ t++ ] = i + res + 1;
-			}
-		}
-
-		if ( _colliderMesh == null )
-			_colliderMesh = new Mesh { name = "GoldPileCollider" };
-		else
-			_colliderMesh.Clear();
-
-		_colliderMesh.indexFormat = vertCount > 65000
-			? UnityEngine.Rendering.IndexFormat.UInt32
-			: UnityEngine.Rendering.IndexFormat.UInt16;
-		_colliderMesh.MarkDynamic();
-		_colliderMesh.vertices = _displacedVerts;
-		_colliderMesh.triangles = _colliderTris;
-		_colliderMesh.RecalculateBounds();
-
-		CookColliderMesh( force: true );
+		_colliderTiles.Build(
+			transform,
+			_colliderResolution,
+			size,
+			ColliderChunkSize,
+			gameObject.layer );
+		_colliderTiles.MarkAllDirty();
 	}
 
 	void ApplyMaterialAndDeform()
@@ -506,11 +553,44 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_mpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
 		_mpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
 		_mpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_mpb.SetFloat( DeformNormalSoftenProp, _deformNormalSoften );
+		_mpb.SetFloat( DeformSampleBlurProp, _deformSampleBlur );
 		_mpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
 		_renderer.SetPropertyBlock( _mpb );
+		SyncSparkleMaskDeform();
 
 		// Shader displacement is not reflected in vertex buffers; keep culling bounds tall enough.
 		ExpandVisualBounds( _heightfield.WorldSize, _heightfield.MaxHeight );
+	}
+
+	void SyncSparkleMaskDeform()
+	{
+		if ( _heightfield == null || _heightfield.Texture == null )
+			return;
+
+		EnsureSparkleMaskMaterial();
+		if ( _sparkleMaskMaterial == null )
+			return;
+
+		_sparkleMaskMaterial.SetFloat( DeformEnabledProp, 1f );
+		_sparkleMaskMaterial.SetTexture( DeformMapProp, _heightfield.Texture );
+		_sparkleMaskMaterial.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
+		_sparkleMaskMaterial.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
+		_sparkleMaskMaterial.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_sparkleMaskMaterial.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
+		_sparkleMaskMaterial.SetFloat( TreasureSparkleMaskPass.MaskWriteValueId, TreasureSparkleDefinition.MaskPile );
+
+		if ( _sparkleMaskMpb == null )
+			_sparkleMaskMpb = new MaterialPropertyBlock();
+
+		_sparkleMaskMpb.Clear();
+		_sparkleMaskMpb.SetFloat( DeformEnabledProp, 1f );
+		_sparkleMaskMpb.SetTexture( DeformMapProp, _heightfield.Texture );
+		_sparkleMaskMpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
+		_sparkleMaskMpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
+		_sparkleMaskMpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_sparkleMaskMpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
+		_sparkleMaskMpb.SetFloat( TreasureSparkleMaskPass.MaskWriteValueId, TreasureSparkleDefinition.MaskPile );
 	}
 
 	/// <summary>
@@ -562,78 +642,26 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	void SyncCollider( bool forceCook )
 	{
 		GoldPileEditTiming.Begin( "GoldPile.SyncCollider" );
-		if ( !_built || _heightfield == null || _displacedVerts == null || _colliderMesh == null )
+		if ( !_built || _heightfield == null || _colliderTiles.TileCount == 0 )
 		{
 			GoldPileEditTiming.End();
 			return;
 		}
 
-		int res = _colliderResolution;
-		float maxH = _heightfield.MaxHeight;
-		int minX = 0;
-		int maxX = res - 1;
-		int minZ = 0;
-		int maxZ = res - 1;
-
-		if ( !_colliderDirtyFull && _heightfield.Resolution > 1 )
-		{
-			float inv = 1f / ( _heightfield.Resolution - 1 );
-			float u0 = _colliderDirtyMinX * inv;
-			float u1 = _colliderDirtyMaxX * inv;
-			float v0 = _colliderDirtyMinZ * inv;
-			float v1 = _colliderDirtyMaxZ * inv;
-			minX = Mathf.Clamp( Mathf.FloorToInt( u0 * ( res - 1 ) ) - 1, 0, res - 1 );
-			maxX = Mathf.Clamp( Mathf.CeilToInt( u1 * ( res - 1 ) ) + 1, 0, res - 1 );
-			minZ = Mathf.Clamp( Mathf.FloorToInt( v0 * ( res - 1 ) ) - 1, 0, res - 1 );
-			maxZ = Mathf.Clamp( Mathf.CeilToInt( v1 * ( res - 1 ) ) + 1, 0, res - 1 );
-		}
-
-		for ( int z = minZ; z <= maxZ; z++ )
-		{
-			float v = res <= 1 ? 0.5f : ( float )z / ( res - 1 );
-			for ( int x = minX; x <= maxX; x++ )
-			{
-				int i = z * res + x;
-				float u = res <= 1 ? 0.5f : ( float )x / ( res - 1 );
-				float h = _heightfield.SampleNormalizedUV( u, v ) * maxH;
-				// Sink below-ground cells so room floor / other colliders win raycasts.
-				if ( h < _heightfield.GroundLevel )
-					h = -1f;
-				Vector3 b = _colliderBaseVerts[ i ];
-				_displacedVerts[ i ] = new Vector3( b.x, h, b.z );
-			}
-		}
-
-		_colliderMesh.vertices = _displacedVerts;
-		_colliderMesh.RecalculateBounds();
-
-		if ( forceCook )
-			CookColliderMesh( force: false );
-
-		GoldPileEditTiming.End();
-	}
-
-	/// <summary>
-	/// Reassigns the MeshCollider without the null-swap cook. Unity 6 updates from MarkDynamic meshes
-	/// when sharedMesh is set to the same instance again; null/reassign was forcing a full recook.
-	/// </summary>
-	void CookColliderMesh( bool force )
-	{
-		if ( _collider == null || _colliderMesh == null )
-			return;
-
-		GoldPileEditTiming.Begin( "GoldPile.CookCollider" );
-		if ( _collider.sharedMesh != _colliderMesh || force )
-			_collider.sharedMesh = _colliderMesh;
+		if ( _colliderDirtyFull )
+			_colliderTiles.MarkAllDirty();
 		else
 		{
-			// Same mesh instance: toggle enables PhysX to pick up vertex changes without nulling.
-			bool wasEnabled = _collider.enabled;
-			_collider.enabled = false;
-			_collider.sharedMesh = _colliderMesh;
-			_collider.enabled = wasEnabled;
+			_colliderTiles.MarkDirtyFromHeightfieldRect(
+				_heightfield.Resolution,
+				_colliderDirtyMinX,
+				_colliderDirtyMaxX,
+				_colliderDirtyMinZ,
+				_colliderDirtyMaxZ,
+				full: false );
 		}
 
+		_colliderTiles.SyncDirty( _heightfield, forceCook );
 		GoldPileEditTiming.End();
 	}
 }

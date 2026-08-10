@@ -268,7 +268,7 @@ Shader "DragonLoot/Coin Stack"
                 return output;
             }
 
-            half4 CoinStackDepthFrag(DepthVaryings input) : SV_Target
+			half4 CoinStackDepthFrag(DepthVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
                 float coinCount = max((float)_CoinCount, 1.0);
@@ -286,6 +286,80 @@ Shader "DragonLoot/Coin Stack"
                     CoinStackClipSeamSide(seam);
                 }
                 return 0;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "DepthNormals"
+            Tags { "LightMode" = "DepthNormals" }
+
+            ZWrite On
+            Cull[_Cull]
+
+            HLSLPROGRAM
+            #pragma target 3.0
+            #pragma vertex CoinStackDepthNormalsVert
+            #pragma fragment CoinStackDepthNormalsFrag
+            #pragma multi_compile_instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "CoinStackMaterial.hlsl"
+            #include "CoinStackSeamClip.hlsl"
+
+            struct DepthNormalsAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS   : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct DepthNormalsVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 positionWS : TEXCOORD0;
+                float3 normalOS   : TEXCOORD1;
+                float3 normalWS   : TEXCOORD2;
+                float stackY01    : TEXCOORD3;
+                nointerpolation float instanceSeed : TEXCOORD4;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            DepthNormalsVaryings CoinStackDepthNormalsVert(DepthNormalsAttributes input)
+            {
+                DepthNormalsVaryings output = (DepthNormalsVaryings)0;
+                UNITY_SETUP_INSTANCE_ID(input);
+                UNITY_TRANSFER_INSTANCE_ID(input, output);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
+                output.normalOS = input.normalOS;
+                output.stackY01 = CoinStackComputeStackY01(input.positionOS.y);
+                output.instanceSeed = CoinStackInstanceSeed();
+                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                return output;
+            }
+
+            half4 CoinStackDepthNormalsFrag(DepthNormalsVaryings input) : SV_Target
+            {
+                UNITY_SETUP_INSTANCE_ID(input);
+                float coinCount = max((float)_CoinCount, 1.0);
+                if (!CoinStackIsCap(input.normalOS))
+                {
+                    CoinStackBandData bands = CoinStackEvaluateBands(input.stackY01, coinCount);
+                    CoinStackSeamView seam = CoinStackEvaluateSeamView(
+                        input.positionWS,
+                        input.normalOS,
+                        input.stackY01,
+                        coinCount,
+                        input.instanceSeed,
+                        bands.grooveMask,
+                        bands.ridgeMask);
+                    CoinStackClipSeamSide(seam);
+                }
+                return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
             }
             ENDHLSL
         }

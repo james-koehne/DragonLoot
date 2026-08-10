@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_COIN_LIGHTING_INCLUDED
 #define DRAGONLOOT_COIN_LIGHTING_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "../Stylized/StylizedLightingCommon.hlsl"
 #include "CoinCommon.hlsl"
 
 struct Attributes
@@ -169,7 +169,7 @@ half4 CoinLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor * metallic);
 
-    half4 color = UniversalFragmentPBR(inputData, surfaceData);
+    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
 
     // Reflection floor on final lit result (probes + specular + ambient).
     color.rgb = max(color.rgb, ambientFloor * metallic);

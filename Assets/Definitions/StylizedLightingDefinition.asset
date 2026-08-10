@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c48e51e92be38b940a96cd4667bbe7d0, type: 3}
+  m_Name: StylizedLightingDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::StylizedLightingDefinition
+  falloffExponent: 1
+  falloffEdgeSoftness: 0.35
+  diffuseWrap: 0.35
+  directLightScale: 1
+  enableSpecular: 1
+  specularIntensity: 0.45
+  specularSize: 48
+  specularColor: {r: 1, g: 1, b: 1, a: 1}
+  rimColor: {r: 1, g: 0.95, b: 0.85, a: 1}
+  rimIntensity: 0
+  rimPower: 3
+  shadowColor: {r: 0.15, g: 0.18, b: 0.28, a: 1}
+  shadowStrength: 1
+  receiveShadows: 1
+  ambientIntensity: 1
+  ambientTint: {r: 1, g: 1, b: 1, a: 1}
+  ambientFloor: 0.04
+  saturation: 1
+  contrast: 1
+  environmentReflections: 0
+  reflectionIntensity: 0.35

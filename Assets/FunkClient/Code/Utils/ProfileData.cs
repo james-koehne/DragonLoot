@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 using Newtonsoft.Json;
 
-#if UNITY_EDITOR
+#if UNITY_EDITOR && PARRELSYNC
 using ParrelSync;
 #endif
 
@@ -78,14 +78,14 @@ public static class ProfileData
 	private static string GetFullName( string name )
 	{
 		return $"Profile.Settings.{name}(" +
-#if UNITY_EDITOR
-			   "Editor" + ( ClonesManager.IsClone() ? "." + ClonesManager.GetCurrentProject().name : "" )
-#elif UNITY_WEBGL
-               "WebGL"
+#if UNITY_EDITOR && PARRELSYNC
+			"Editor" + ( ClonesManager.IsClone() ? "." + ClonesManager.GetCurrentProject().name : "" )
+#elif UNITY_EDITOR
+			"Editor.Default"
 #else
-               "Standalone"
+			"Default"
 #endif
-			   + $".{GameInstance.gameDef.gameBackendName})";
+			+ $".{GameInstance.gameDef.gameBackendName})";
 	}
 
 	public static T GetSetting<T>( string name, bool encrypted = false )

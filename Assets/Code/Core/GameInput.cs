@@ -3,6 +3,8 @@ using UnityEngine.InputSystem;
 
 public sealed class GameInput : System.IDisposable
 {
+	public const int AbilitySlotCount = 4;
+
 	readonly InputActionMap _game;
 
 	public InputAction PointerPosition { get; }
@@ -12,7 +14,9 @@ public sealed class GameInput : System.IDisposable
 	public InputAction CameraDelta { get; }
 	public InputAction Interact { get; }
 	public InputAction SecondaryInteract { get; }
+	public InputAction Clean { get; }
 	public InputAction ScrollWheel { get; }
+	public InputAction[] AbilitySlots { get; }
 
 	public GameInput( InputActionAsset asset )
 	{
@@ -25,7 +29,12 @@ public sealed class GameInput : System.IDisposable
 		CameraDelta = _game.FindAction( "CameraDelta", throwIfNotFound: true );
 		Interact = _game.FindAction( "Interact", throwIfNotFound: true );
 		SecondaryInteract = _game.FindAction( "SecondaryInteract", throwIfNotFound: true );
+		Clean = _game.FindAction( "Clean", throwIfNotFound: true );
 		ScrollWheel = _game.FindAction( "ScrollWheel", throwIfNotFound: true );
+
+		AbilitySlots = new InputAction[ AbilitySlotCount ];
+		for ( int i = 0; i < AbilitySlotCount; i++ )
+			AbilitySlots[ i ] = _game.FindAction( "AbilitySlot" + ( i + 1 ), throwIfNotFound: true );
 	}
 
 	public void Enable()

@@ -19,13 +19,13 @@ public class TreasureSurfaceEditorWindow : EditorWindow
 	bool _alwaysShowBounds;
 	TreasureSurfaceDefinition _previewDefinition;
 
-	[MenuItem( "DragonLoot/Treasure Surface Editor" )]
+	[MenuItem( DragonLootMenus.TreasureSurfaceEditor )]
 	public static void Open()
 	{
 		GetWindow<TreasureSurfaceEditorWindow>( "Treasure Surface" );
 	}
 
-	[MenuItem( "DragonLoot/Create Treasure Surface Definition" )]
+	[MenuItem( DragonLootMenus.TreasureSurfaceCreateDefinition )]
 	public static void CreateDefinitionAsset()
 	{
 		const string folder = "Assets/Definitions/TreasureSurface";

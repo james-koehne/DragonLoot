@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_GOLDPILE_PROCEDURAL_LIGHTING_INCLUDED
 #define DRAGONLOOT_GOLDPILE_PROCEDURAL_LIGHTING_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "../Stylized/StylizedLightingCommon.hlsl"
 #include "GoldPileProceduralCommon.hlsl"
 
 struct Attributes
@@ -144,7 +144,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
         // Match Coin Pile: lift ambient for all materials, then floor lit metals.
         half3 ambientFloorFar = coin.albedo * _ReflectionFloor;
         inputFar.bakedGI = max(inputFar.bakedGI, ambientFloorFar);
-        half4 colorFar = UniversalFragmentPBR(inputFar, surfaceFar);
+        half4 colorFar = DragonLootFragmentPBR(inputFar, surfaceFar);
         colorFar.rgb = max(colorFar.rgb, ambientFloorFar * coin.metallic);
 
         Light pixelLightFar = GetMainLight(
@@ -183,7 +183,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = coin.albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor);
 
-    half4 color = UniversalFragmentPBR(inputData, surfaceData);
+    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
     color.rgb = max(color.rgb, ambientFloor * coin.metallic);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));

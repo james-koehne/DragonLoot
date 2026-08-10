@@ -6,8 +6,6 @@ using UnityEngine;
 /// </summary>
 public static class GoldPileQuality
 {
-	public const string ShaderName = "DragonLoot/Gold Pile";
-	public const string StylizedShaderName = "DragonLoot/Gold Pile Stylized";
 	public const string ProceduralShaderName = "DragonLoot/Gold Pile Procedural";
 	public const string PomKeyword = "_POM_ON";
 
@@ -28,10 +26,7 @@ public static class GoldPileQuality
 		if (material == null || material.shader == null)
 			return false;
 
-		string shaderName = material.shader.name;
-		return shaderName == ShaderName
-			|| shaderName == StylizedShaderName
-			|| shaderName == ProceduralShaderName;
+		return material.shader.name == ProceduralShaderName;
 	}
 
 	/// <summary>

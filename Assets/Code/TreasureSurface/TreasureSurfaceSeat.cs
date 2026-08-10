@@ -49,8 +49,9 @@ public static class TreasureSurfaceSeat
 	}
 
 	/// <summary>
-	/// Rotation-independent seat lift for rolling gems. Using the live mesh bottom while
-	/// tumbling makes contact Y bounce every frame.
+	/// Rotation-independent seat lift for surface sim. Uses upright mesh bottom so
+	/// gems/artifacts sit on the surface; slight tumble intersection is accepted.
+	/// Push radius is only for horizontal gem separation, not vertical lift.
 	/// </summary>
 	public static float GetStableContactLift( TreasureItem item )
 	{
@@ -65,10 +66,7 @@ public static class TreasureSurfaceSeat
 		if ( def != null && !def.gemSeatUsesBottomOffset )
 			return 0f;
 
-		float radius = EstimatePushRadius( item, TreasureStackSpacing.GetHalfStep( item ) );
-		// Prefer the larger of push-radius and upright bottom offset so settled pose stays clear.
-		float upright = GetBottomOffsetAlongUp( item, Quaternion.identity, Vector3.up );
-		return Mathf.Max( radius, upright );
+		return GetBottomOffsetAlongUp( item, Quaternion.identity, Vector3.up );
 	}
 
 	/// <summary>
@@ -86,8 +84,9 @@ public static class TreasureSurfaceSeat
 		else
 			up.Normalize();
 
+		// InverseTransformPoint yields model-local units (scale removed). Apply worldScale
+		// explicitly — do not treat local as world meters (that floats gems/artifacts).
 		Vector3 placeScale = item.GetWorldScale();
-		Vector3 heldScale = item.GetHeldScale();
 		Transform root = item.transform;
 
 		float maxBelow = 0f;
@@ -114,12 +113,43 @@ public static class TreasureSurfaceSeat
 
 				Vector3 worldCorner = meshT.TransformPoint( meshLocal );
 				Vector3 rootLocal = root.InverseTransformPoint( worldCorner );
-				rootLocal = RescaleHeldLocalToPlace( rootLocal, heldScale, placeScale );
-				Vector3 placedOffset = placeRot * rootLocal;
+				Vector3 placedOffset = placeRot * Vector3.Scale( rootLocal, placeScale );
 				float below = -Vector3.Dot( placedOffset, up );
 				if ( below > maxBelow )
 					maxBelow = below;
 				any = true;
+			}
+		}
+
+		if ( !any )
+		{
+			MeshRenderer[] renderers = item.GetComponentsInChildren<MeshRenderer>();
+			for ( int r = 0; r < renderers.Length; r++ )
+			{
+				MeshRenderer renderer = renderers[ r ];
+				if ( renderer == null )
+					continue;
+
+				Bounds lb = renderer.localBounds;
+				Vector3 min = lb.min;
+				Vector3 max = lb.max;
+				Transform meshT = renderer.transform;
+
+				for ( int i = 0; i < 8; i++ )
+				{
+					Vector3 meshLocal = new Vector3(
+						( i & 1 ) == 0 ? min.x : max.x,
+						( i & 2 ) == 0 ? min.y : max.y,
+						( i & 4 ) == 0 ? min.z : max.z );
+
+					Vector3 worldCorner = meshT.TransformPoint( meshLocal );
+					Vector3 rootLocal = root.InverseTransformPoint( worldCorner );
+					Vector3 placedOffset = placeRot * Vector3.Scale( rootLocal, placeScale );
+					float below = -Vector3.Dot( placedOffset, up );
+					if ( below > maxBelow )
+						maxBelow = below;
+					any = true;
+				}
 			}
 		}
 
@@ -133,19 +163,17 @@ public static class TreasureSurfaceSeat
 					continue;
 
 				Bounds wb = col.bounds;
-				Vector3 center = root.InverseTransformPoint( wb.center );
+				Vector3 worldCenter = wb.center;
 				Vector3 extents = wb.extents;
-				center = RescaleHeldLocalToPlace( center, heldScale, placeScale );
-				extents = RescaleHeldLocalToPlace( extents, heldScale, placeScale );
-				extents = new Vector3( Mathf.Abs( extents.x ), Mathf.Abs( extents.y ), Mathf.Abs( extents.z ) );
 
 				for ( int i = 0; i < 8; i++ )
 				{
-					Vector3 corner = center + new Vector3(
+					Vector3 worldCorner = worldCenter + new Vector3(
 						( i & 1 ) == 0 ? -extents.x : extents.x,
 						( i & 2 ) == 0 ? -extents.y : extents.y,
 						( i & 4 ) == 0 ? -extents.z : extents.z );
-					Vector3 placedOffset = placeRot * corner;
+					Vector3 rootLocal = root.InverseTransformPoint( worldCorner );
+					Vector3 placedOffset = placeRot * Vector3.Scale( rootLocal, placeScale );
 					float below = -Vector3.Dot( placedOffset, up );
 					if ( below > maxBelow )
 						maxBelow = below;
@@ -154,8 +182,12 @@ public static class TreasureSurfaceSeat
 			}
 		}
 
-		if ( !any || maxBelow < 0.0001f )
+		if ( !any )
 			return fallback;
+
+		// Pivot at/near mesh bottom: sit on the plane (no half-step hover).
+		if ( maxBelow < 0.0001f )
+			return 0f;
 
 		return maxBelow;
 	}
@@ -175,20 +207,5 @@ public static class TreasureSurfaceSeat
 		}
 
 		return Mathf.Max( fallback, half );
-	}
-
-	static Vector3 RescaleHeldLocalToPlace( Vector3 rootLocal, Vector3 heldScale, Vector3 placeScale )
-	{
-		return new Vector3(
-			SafeRescaleAxis( rootLocal.x, heldScale.x, placeScale.x ),
-			SafeRescaleAxis( rootLocal.y, heldScale.y, placeScale.y ),
-			SafeRescaleAxis( rootLocal.z, heldScale.z, placeScale.z ) );
-	}
-
-	static float SafeRescaleAxis( float value, float fromScale, float toScale )
-	{
-		if ( Mathf.Abs( fromScale ) < 0.0001f )
-			return value;
-		return value * ( toScale / fromScale );
 	}
 }

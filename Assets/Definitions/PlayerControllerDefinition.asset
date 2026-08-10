@@ -12,28 +12,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c1d2e3f4a5b60718293a4b5c6d7e8f90, type: 3}
   m_Name: PlayerControllerDefinition
   m_EditorClassIdentifier: Assembly-CSharp::PlayerControllerDefinition
-  walkSpeed: 12
+  walkSpeed: 6
   walkAcceleration: 40
   walkDeceleration: 50
-  jumpForce: 14
+  jumpForce: 7
   coyoteTime: 0.12
   doubleJumpForce: 4
-  glideGravity: -6
-  glideMaxFallSpeed: -5
+  glideGravity: -3
+  glideMaxFallSpeed: -2.5
   glideAcceleration: 10
   glideDeceleration: 8
   glideRequiresJumpHeld: 0
   airAcceleration: 6
   airDeceleration: 4
-  sprintSpeed: 18
+  sprintSpeed: 9
   sprintAcceleration: 50
   sprintDeceleration: 45
   sprintAirControl: 8
-  gravity: -25
+  gravity: -18
   groundStickVelocity: -8
   groundCheckDistance: 0.2
   groundSnapDistance: 0.35
   groundSnapSpeed: 6
+  climbingEnabled: 0
+  climbSpeed: 7
+  climbSprintSpeed: 10
+  climbAcceleration: 35
+  climbDeceleration: 40
+  climbSurfacePull: 12
+  climbJumpForce: 9
+  climbExitHysteresis: 5
+  climbReleaseHoldTime: 0.25
   slideAngle: 45
   slideGravityScale: 1.25
   slideSteer: 12

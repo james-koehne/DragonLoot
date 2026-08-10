@@ -18,6 +18,10 @@ public static class HoverOutlineTargetUtility
 		if ( itemInteractable != null )
 			return CanOutlineTreasureItem( itemInteractable.Item );
 
+		ChestInteractable chest = interactable as ChestInteractable;
+		if ( chest != null )
+			return CanOutlineChest( chest );
+
 		GroundCoinStack groundStack = interactable as GroundCoinStack;
 		if ( groundStack != null )
 			return groundStack.Count > 0;
@@ -26,7 +30,51 @@ public static class HoverOutlineTargetUtility
 		if ( coinStack != null )
 			return coinStack.isActiveAndEnabled;
 
+		CoinSortingCrankInteractable crank = interactable as CoinSortingCrankInteractable;
+		if ( crank != null )
+			return CanOutlineCrank( crank );
+
 		return false;
+	}
+
+	public static bool CanOutlineCrank( CoinSortingCrankInteractable crank )
+	{
+		if ( crank == null || !crank.isActiveAndEnabled )
+			return false;
+
+		CoinSortingStation station = crank.GetComponentInParent<CoinSortingStation>();
+		if ( station == null )
+			return false;
+
+		int level = station.StationLevel;
+		return level >= 1 && level < 2;
+	}
+
+	public static bool CanOutlineChest( ChestInteractable chest )
+	{
+		if ( chest == null || chest.State == ChestState.Opened )
+			return false;
+
+		TreasureItem item = chest.Item;
+		if ( item == null || item.Definition == null )
+			return false;
+
+		item.TryRepairPickupState();
+
+		if ( item.State == TreasureItemState.Held
+			|| item.State == TreasureItemState.Stacked
+			|| item.IsReclaiming )
+			return false;
+
+		TreasurePileVisual origin = item.OriginPile;
+		if ( origin != null && origin.IsTreasureBuried( item ) )
+			return false;
+
+		TreasurePileVisual ownerPile = item.PileOwner;
+		if ( ownerPile != null && ownerPile.IsTreasureBuried( item ) )
+			return false;
+
+		return true;
 	}
 
 	public static bool CanOutlineTreasureItem( TreasureItem item )
@@ -57,6 +105,10 @@ public static class HoverOutlineTargetUtility
 		if ( itemInteractable != null )
 			return CollectRenderers( itemInteractable.Item );
 
+		ChestInteractable chest = focus as ChestInteractable;
+		if ( chest != null )
+			return CollectRenderers( chest.Item );
+
 		GroundCoinStack groundStack = focus as GroundCoinStack;
 		if ( groundStack != null )
 			return CollectFromBehaviour( groundStack );
@@ -64,6 +116,10 @@ public static class HoverOutlineTargetUtility
 		CoinStackInteractable coinStack = focus as CoinStackInteractable;
 		if ( coinStack != null )
 			return CollectFromBehaviour( coinStack );
+
+		CoinSortingCrankInteractable crank = focus as CoinSortingCrankInteractable;
+		if ( crank != null )
+			return CollectFromBehaviour( crank );
 
 		return Buffer;
 	}
@@ -86,6 +142,32 @@ public static class HoverOutlineTargetUtility
 
 		AppendRenderers( component.gameObject );
 		return Buffer;
+	}
+
+	/// <summary>
+	/// Appends enabled mesh/skinned renderers under <paramref name="root"/> into <paramref name="destination"/>
+	/// without clearing it (safe while building a multi-source outline list).
+	/// </summary>
+	public static void AppendEnabledMeshRenderers( GameObject root, List<Renderer> destination )
+	{
+		if ( root == null || destination == null )
+			return;
+
+		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < renderers.Length; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null || !renderer.enabled )
+				continue;
+
+			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+				continue;
+
+			if ( renderer.sharedMaterial == null )
+				continue;
+
+			destination.Add( renderer );
+		}
 	}
 
 	static void AppendRenderers( GameObject root )

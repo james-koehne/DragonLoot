@@ -28,6 +28,7 @@ Shader "DragonLoot/Treasure Sparkle Fallback Mask"
 			HLSLPROGRAM
 			#pragma vertex Vert
 			#pragma fragment Frag
+			#pragma multi_compile_instancing
 			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
 			float _MaskWriteValue;
@@ -35,22 +36,27 @@ Shader "DragonLoot/Treasure Sparkle Fallback Mask"
 			struct Attributes
 			{
 				float4 positionOS : POSITION;
+				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
 			struct Varyings
 			{
 				float4 positionCS : SV_POSITION;
+				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
 			Varyings Vert(Attributes input)
 			{
 				Varyings output;
+				UNITY_SETUP_INSTANCE_ID(input);
+				UNITY_TRANSFER_INSTANCE_ID(input, output);
 				output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
 				return output;
 			}
 
 			half Frag(Varyings input) : SV_Target
 			{
+				UNITY_SETUP_INSTANCE_ID(input);
 				return _MaskWriteValue;
 			}
 			ENDHLSL

@@ -74,6 +74,7 @@ MonoBehaviour:
   maskResolveShader: {fileID: 4800000, guid: 3215c397b99c65340bfaf698a3bd5970, type: 3}
   fallbackMaskShader: {fileID: 4800000, guid: 86e0bde326f866943a40beb78c4ecda7, type: 3}
   sparkleShader: {fileID: 4800000, guid: 8462579c66ab24146bb0e5c66e33fb58, type: 3}
+  discoverCompute: {fileID: 7200000, guid: 79304744af0991742a850baa97282afd, type: 3}
 --- !u!114 &4595524766126240979
 MonoBehaviour:
   m_ObjectHideFlags: 0

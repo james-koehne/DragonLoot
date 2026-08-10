@@ -12,36 +12,50 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9a464568a4e532b4da02222a51f608cc, type: 3}
   m_Name: TreasureSparkleDefinition
   m_EditorClassIdentifier: Assembly-CSharp::TreasureSparkleDefinition
-  enableSparkles: 1
+  enableSparkles: 0
   useFallbackRegistrar: 1
   useStencilResolve: 0
+  maskResolutionScale: 0.25
+  maskLootInstances: 1
   sparkleOnPiles: 1
   sparkleOnCoins: 1
-  sparkleOnGems: 1
-  sparkleOnArtifacts: 1
-  cellSize: 0.5
-  density: 0.35
-  layerCount: 1
+  sparkleOnGems: 0
+  sparkleOnArtifacts: 0
+  cellSize: 2
+  density: 0.2
   randomSeed: 17
-  targetPixelSize: 0.9
   screenDensityRefPixels: 22
-  glintTexture: {fileID: 2800000, guid: ed8ac54ffff8b5347848e87632967032, type: 3}
-  glintTextureSize: 12
-  sparkleColor: {r: 8, g: 6.2, b: 2.8, a: 1}
-  litBoost: 6
-  bloomContribution: 8
-  coreHotness: 0.75
-  coinFacetJitter: 0.85
-  metallicSharpness: 64
-  lightKillStrength: 0.85
-  viewSwapStrength: 0.75
-  closeFadeDistance: 8
-  closeFadeFullDistance: 16
   gemDensityMultiplier: 2.5
   artifactDensityMultiplier: 3
-  silhouetteFade: 0.85
-  maskErodePixels: 1
-  twinkleStrength: 0.2
+  coinFacetJitter: 0.85
+  metallicSharpness: 64
+  litBoost: 6
+  lightKillStrength: 0.85
+  baseCoverage: 0.2
+  specularBoost: 0.8
+  specularDensity: 8
+  viewSwapStrength: 0.75
+  viewSwapThreshold: 0.222
+  viewSwapSharpness: 6
+  viewCrossfade: 0.05
+  viewCrossfadeRefDistance: 15
+  minIntensity: 0.1
+  closeFadeDistance: 0.35
+  closeFadeFullDistance: 1.5
+  farFadeStart: 32
+  farFadeEnd: 256
+  twinkleStrength: 0
   twinkleSpeed: 0.85
-  halfResolution: 0
-  debugMode: 0
+  glintTexture: {fileID: 2800000, guid: ed8ac54ffff8b5347848e87632967032, type: 3}
+  targetPixelSize: 0.9
+  glintTextureSizeNear: 16
+  glintTextureSizeFar: 4
+  glintSizeNearDistance: 1.5
+  glintSizeFarDistance: 35
+  spotFalloff: 1.8
+  sparkleColor: {r: 8, g: 6.2, b: 2.8, a: 1}
+  bloomContribution: 8
+  coreHotness: 0.75
+  maxGlints: 1024
+  maxVolumes: 256
+  maxDiscoverCells: 131072

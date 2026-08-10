@@ -16,6 +16,7 @@ public class PlayerInteraction : MonoBehaviour
 	bool _maskInitialized;
 	LayerMask _resolvedMask;
 	IInteractable _current;
+	IInteractable _previousPrimaryFocus;
 	RaycastHit _lastHit;
 	bool _hasLastHit;
 	RaycastHit _surfaceHit;
@@ -405,6 +406,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( !_inputEnabled )
 		{
 			_current = null;
+			_previousPrimaryFocus = null;
 			ResetSecondaryRepeatState();
 			ResetPrimaryRepeatState();
 			ClearPickableIndicator();
@@ -639,6 +641,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( input.Interact.WasReleasedThisFrame() || !input.Interact.IsPressed() )
 		{
 			ResetPrimaryRepeatState();
+			_previousPrimaryFocus = null;
 			return;
 		}
 
@@ -647,8 +650,26 @@ public class PlayerInteraction : MonoBehaviour
 			TryInteractWithFocus();
 			_primaryRepeatTimer = 0f;
 			_primaryPastInitialDelay = false;
+			if ( _current != null )
+				_previousPrimaryFocus = _current;
 			return;
 		}
+
+		// Skip hold delay only when the cursor moves onto a different live interactable.
+		// Do not treat "previous item was just picked up" as a cursor move.
+		if ( _current != null
+			&& !ReferenceEquals( _current, _previousPrimaryFocus )
+			&& IsFocusStillHoverable( _previousPrimaryFocus )
+			&& _current.CanInteract( _player ) )
+		{
+			TryInteractWithFocus();
+			_primaryRepeatTimer = 0f;
+			_previousPrimaryFocus = _current;
+			return;
+		}
+
+		if ( _current != null )
+			_previousPrimaryFocus = _current;
 
 		float wait = GetPrimaryHoldWait();
 		_primaryRepeatTimer += Time.deltaTime;
@@ -658,6 +679,16 @@ public class PlayerInteraction : MonoBehaviour
 		_primaryRepeatTimer -= wait;
 		_primaryPastInitialDelay = true;
 		TryInteractWithFocus();
+	}
+
+	bool IsFocusStillHoverable( IInteractable focus )
+	{
+		InteractableBase interactable = focus as InteractableBase;
+		if ( interactable == null )
+			return false;
+
+		return HoverOutlineTargetUtility.CanOutlineFocus( interactable, _player )
+			|| interactable.CanInteract( _player );
 	}
 
 	void TryInteractWithFocus()
@@ -683,7 +714,19 @@ public class PlayerInteraction : MonoBehaviour
 
 		TreasureItemInteractable treasureInteractable = TreasureItemInteractable.ResolveFromCollider( collider );
 		if ( treasureInteractable != null )
+		{
+			TreasureItem item = treasureInteractable.Item;
+			if ( item != null
+				&& item.Definition != null
+				&& item.Definition.category == TreasureCategory.Chest )
+			{
+				ChestInteractable chest = ChestInteractable.ResolveFromItem( item );
+				if ( chest != null )
+					return chest;
+			}
+
 			return treasureInteractable;
+		}
 
 		return collider.GetComponentInParent<InteractableBase>();
 	}
@@ -695,7 +738,14 @@ public class PlayerInteraction : MonoBehaviour
 			return interactable;
 
 		TreasureItem item = itemInteractable.Item;
-		if ( item == null || item.State != TreasureItemState.Stacked )
+		if ( item == null )
+			return interactable;
+
+		MinecartInteractable minecart = item.Owner as MinecartInteractable;
+		if ( minecart != null )
+			return minecart;
+
+		if ( item.State != TreasureItemState.Stacked )
 			return interactable;
 
 		GroundCoinStack groundStack = item.Owner as GroundCoinStack;
@@ -794,7 +844,7 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		EnsurePickableOutlineSettings();
 
-		if ( _placement != null && _placement.HasActiveStackVolumePreview )
+		if ( _placement != null && _placement.HasActivePlacementOutline )
 			return;
 
 		if ( _current == null )

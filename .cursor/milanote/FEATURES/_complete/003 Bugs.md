@@ -24,6 +24,7 @@ Complete
 - [x] Movement penalty off by default
 - [x] Glide press jump again to cancel
 - [x] Auto sort table/coin stacks on an auto sort table - if placement is invalid it should always find a valid slot
+- [x] There is a bug that needs fixing
 
 ## Metadata
 
@@ -31,7 +32,7 @@ Milanote ID:
 bugs-general-bugs
 
 Last Sync:
-2026-07-28
+2026-08-06
 
 Category Sort Score:
 229376

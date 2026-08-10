@@ -9,6 +9,7 @@ using UnityEngine.Rendering.Universal;
 /// <summary>
 /// Builds <c>_TreasureSparkleMask</c> (R8) with depth-tested treasure redraws so
 /// occluders in front of piles/coins block sparkles. Optional stencil resolve is off by default.
+/// Uses a RasterPass (not UnsafePass) so we never manually rebind the camera depth target.
 /// </summary>
 public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 {
@@ -29,6 +30,11 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		_resolveMaterial = resolveMaterial;
 		_fallbackMaterial = fallbackMaterial;
 		renderPassEvent = RenderPassEvent.AfterRenderingOpaques;
+		ConfigureInput( ScriptableRenderPassInput.Depth );
+	}
+
+	public void Dispose()
+	{
 	}
 
 	public override void RecordRenderGraph( RenderGraph renderGraph, ContextContainer frameData )
@@ -37,12 +43,31 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		if ( definition == null || !definition.enableSparkles )
 			return;
 
+		if ( !TreasureSparkleMaskRegistrar.HasTargets )
+			return;
+
 		if ( _fallbackMaterial == null && ( _resolveMaterial == null || !definition.useStencilResolve ) )
 			return;
 
 		UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
 		UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
 		TreasureSparkleRendererFeature.FrameData sparkleData = frameData.GetOrCreate<TreasureSparkleRendererFeature.FrameData>();
+
+		if ( !resourceData.activeDepthTexture.IsValid() )
+			return;
+
+		_entryScratch.Clear();
+		_instanceScratch.Clear();
+
+		if ( definition.useFallbackRegistrar )
+		{
+			TreasureSparkleMaskRegistrar.CollectEntries( definition, _entryScratch );
+			TreasureSparkleMaskRegistrar.CollectInstanceSources( definition, _instanceScratch );
+		}
+
+		bool hasResolve = definition.useStencilResolve && _resolveMaterial != null;
+		if ( _entryScratch.Count == 0 && _instanceScratch.Count == 0 && !hasResolve )
+			return;
 
 		RenderTextureDescriptor cameraDesc = cameraData.cameraTargetDescriptor;
 		int width = Mathf.Max( 1, cameraDesc.width );
@@ -61,22 +86,13 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		TextureHandle maskTexture = renderGraph.CreateTexture( textureDesc );
 		sparkleData.maskTexture = maskTexture;
 
-		TreasureSparkleMaskRegistrar.CompactNulls();
-		_entryScratch.Clear();
-		_instanceScratch.Clear();
-
-		if ( definition.useFallbackRegistrar )
-		{
-			TreasureSparkleMaskRegistrar.CollectEntries( definition, _entryScratch );
-			TreasureSparkleMaskRegistrar.CollectInstanceSources( definition, _instanceScratch );
-		}
-
 		using ( var builder = renderGraph.AddRasterRenderPass<PassData>( "TreasureSparkleMask", out PassData passData, _profilingSampler ) )
 		{
-			passData.resolveMaterial = definition.useStencilResolve ? _resolveMaterial : null;
+			passData.resolveMaterial = hasResolve ? _resolveMaterial : null;
 			passData.fallbackMaterial = _fallbackMaterial;
 			passData.entries = _entryScratch;
 			passData.instanceSources = _instanceScratch;
+			passData.maskLootInstances = definition.maskLootInstances;
 
 			builder.SetRenderAttachment( maskTexture, 0, AccessFlags.Write );
 			builder.SetRenderAttachmentDepth( resourceData.activeDepthTexture, AccessFlags.Read );
@@ -94,7 +110,6 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		if ( cmd == null )
 			return;
 
-		// Optional: stencil resolve uses ZTest Always and can bleed through occluders.
 		if ( data.resolveMaterial != null )
 			cmd.DrawProcedural( Matrix4x4.identity, data.resolveMaterial, 0, MeshTopology.Triangles, 3, 1 );
 
@@ -111,10 +126,9 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 					continue;
 
 				float maskValue = TreasureSparkleDefinition.MaskWriteValueForKind( entry.Kind );
-				MeshFilter filter = renderer.GetComponent<MeshFilter>();
-				if ( filter != null && filter.sharedMesh != null )
+				Mesh mesh = entry.Mesh;
+				if ( mesh != null )
 				{
-					Mesh mesh = filter.sharedMesh;
 					int submeshCount = Mathf.Max( 1, mesh.subMeshCount );
 					Matrix4x4 matrix = renderer.localToWorldMatrix;
 					for ( int submesh = 0; submesh < submeshCount; submesh++ )
@@ -136,8 +150,13 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		for ( int i = 0; i < data.instanceSources.Count; i++ )
 		{
 			TreasureSparkleMaskRegistrar.IInstanceMaskSource source = data.instanceSources[ i ];
-			if ( source != null )
-				source.DrawSparkleMask( cmd, data.fallbackMaterial );
+			if ( source == null )
+				continue;
+
+			if ( !data.maskLootInstances && source is GoldPileLootInstances )
+				continue;
+
+			source.DrawSparkleMask( cmd, data.fallbackMaterial );
 		}
 	}
 
@@ -155,6 +174,7 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		if ( s_maskPropertyBlock == null )
 			s_maskPropertyBlock = new MaterialPropertyBlock();
 
+		s_maskPropertyBlock.Clear();
 		s_maskPropertyBlock.SetFloat( MaskWriteValueId, maskValue );
 		cmd.DrawMesh( mesh, matrix, material, submesh, 0, s_maskPropertyBlock );
 	}
@@ -171,10 +191,7 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 
 		Mesh mesh = null;
 		Matrix4x4 matrix = renderer.localToWorldMatrix;
-		MeshFilter filter = renderer.GetComponent<MeshFilter>();
-		if ( filter != null && filter.sharedMesh != null )
-			mesh = filter.sharedMesh;
-		else if ( renderer is SkinnedMeshRenderer skinned && skinned.sharedMesh != null )
+		if ( renderer is SkinnedMeshRenderer skinned && skinned.sharedMesh != null )
 			mesh = skinned.sharedMesh;
 
 		if ( mesh != null )
@@ -186,6 +203,7 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		if ( s_maskPropertyBlock == null )
 			s_maskPropertyBlock = new MaterialPropertyBlock();
 
+		s_maskPropertyBlock.Clear();
 		s_maskPropertyBlock.SetFloat( MaskWriteValueId, maskValue );
 		renderer.SetPropertyBlock( s_maskPropertyBlock );
 		cmd.DrawRenderer( renderer, material, submesh, 0 );
@@ -197,5 +215,6 @@ public sealed class TreasureSparkleMaskPass : ScriptableRenderPass
 		public Material fallbackMaterial;
 		public List<TreasureSparkleMaskRegistrar.RendererEntry> entries;
 		public List<TreasureSparkleMaskRegistrar.IInstanceMaskSource> instanceSources;
+		public bool maskLootInstances;
 	}
 }

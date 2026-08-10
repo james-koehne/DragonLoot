@@ -77,7 +77,6 @@ public sealed class GoldPileHeightfield
 	const float BlurKernelCenter = 4f;
 	const float BlurKernelSum = 16f;
 	const float DirtyRectFullUploadThreshold = 0.25f;
-	const int MaxCarveBlurPadCells = 4;
 
 	float[] _heights;
 	float[] _blurScratch;
@@ -136,6 +135,8 @@ public sealed class GoldPileHeightfield
 		{
 			name = "GoldPileDeform",
 			wrapMode = TextureWrapMode.Clamp,
+			// Bilinear for smooth normals/lighting. Mesh UVs use texel centers so vertex
+			// displace still matches CPU/collider grid heights (avoids edge-UV drift).
 			filterMode = FilterMode.Bilinear
 		};
 
@@ -1529,23 +1530,38 @@ public sealed class GoldPileHeightfield
 	/// </summary>
 	public void CarveAtLocal( float localX, float localZ, float radius, float volumeToRemove )
 	{
+		CarveAtLocal( localX, localZ, radius, volumeToRemove, GoldPileCarveSettings.Default );
+	}
+
+	public void CarveAtLocal(
+		float localX,
+		float localZ,
+		float radius,
+		float volumeToRemove,
+		GoldPileCarveSettings settings )
+	{
 		if ( _heights == null || volumeToRemove <= 0f )
 			return;
 
 		GoldPileEditTiming.Begin( "GoldPile.CarveBrush" );
-		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
+		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
 
 		radius = Mathf.Max( 0.05f, radius );
 		float radiusSq = radius * radius;
 		float half = _worldSize * 0.5f;
 		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		float falloffSharpness = Mathf.Max( 0.1f, settings.falloffSharpness );
 
 		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + half ) / cell ), 0, _resolution - 1 );
 		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + half ) / cell ), 0, _resolution - 1 );
 		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + half ) / cell ), 0, _resolution - 1 );
 		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + half ) / cell ), 0, _resolution - 1 );
+		int brushW = maxX - minX + 1;
+		int brushH = maxZ - minZ + 1;
+		string brushDetail = $"cells={brushW}x{brushH} res={_resolution}";
 
 		float weightSum = 0f;
+		int weightedCells = 0;
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
@@ -1558,8 +1574,16 @@ public sealed class GoldPileHeightfield
 				if ( distSq > radiusSq )
 					continue;
 
-				weightSum += SoftFalloff( distSq, radiusSq );
+				weightSum += SoftFalloff( distSq, radiusSq, falloffSharpness );
+				weightedCells++;
 			}
+		}
+
+		if ( phaseSw != null )
+		{
+			phaseSw.Stop();
+			GoldPileEditTiming.Record( "brush.weight", phaseSw.Elapsed.TotalMilliseconds, $"{brushDetail} hit={weightedCells}" );
+			phaseSw.Restart();
 		}
 
 		if ( weightSum < 1e-6f )
@@ -1581,49 +1605,79 @@ public sealed class GoldPileHeightfield
 				if ( distSq > radiusSq )
 					continue;
 
-				float w = SoftFalloff( distSq, radiusSq );
+				float w = SoftFalloff( distSq, radiusSq, falloffSharpness );
 				int idx = Index( x, z );
 				_heights[ idx ] = Mathf.Max( 0f, _heights[ idx ] - invWeight * w );
 			}
 		}
 
-		// Cap blur pad so large carve radii do not expand work to ~brush diameter.
-		int pad = Mathf.Min( MaxCarveBlurPadCells, Mathf.Max( 2, Mathf.CeilToInt( radius / cell ) ) );
-		BlurRegion( minX, maxX, minZ, maxZ, pad );
-
-		if ( sw != null )
+		if ( phaseSw != null )
 		{
-			sw.Stop();
-			GoldPileEditTiming.LogIfEnabled(
-				$"[GoldPileEdit] carve brush={sw.Elapsed.TotalMilliseconds:F2}ms pad={pad} cells=({maxX - minX + 1}x{maxZ - minZ + 1})" );
+			phaseSw.Stop();
+			GoldPileEditTiming.Record( "brush.apply", phaseSw.Elapsed.TotalMilliseconds, brushDetail );
+			phaseSw.Restart();
+		}
+
+		int pad = ResolveCarveBlurPad( radius, cell, settings.blurPadCells );
+		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
+
+		if ( phaseSw != null )
+		{
+			phaseSw.Stop();
+			int blurW = Mathf.Min( _resolution, brushW + pad * 2 );
+			int blurH = Mathf.Min( _resolution, brushH + pad * 2 );
+			GoldPileEditTiming.Record(
+				"brush.blur",
+				phaseSw.Elapsed.TotalMilliseconds,
+				$"pad={pad} passes={settings.blurPasses} strength={settings.blurStrength:0.##} blurCells~={blurW}x{blurH}" );
 		}
 
 		GoldPileEditTiming.End();
 	}
 
-	static float SoftFalloff( float distSq, float radiusSq )
+	static float SoftFalloff( float distSq, float radiusSq, float falloffSharpness )
 	{
 		float t = 1f - Mathf.Sqrt( distSq / radiusSq );
 		t = Mathf.Clamp01( t );
 		// Smoothstep * mild Gaussian: strong center, long soft skirt.
 		float smooth = t * t * ( 3f - 2f * t );
-		float gaussian = Mathf.Exp( -3.5f * distSq / radiusSq );
+		float gaussian = Mathf.Exp( -falloffSharpness * distSq / radiusSq );
 		return smooth * gaussian;
 	}
 
 	public void CarveAtWorld( Vector3 worldPos, Transform pileRoot, float radius, float amountNormalized )
 	{
+		CarveAtWorld( worldPos, pileRoot, radius, amountNormalized, GoldPileCarveSettings.Default );
+	}
+
+	public void CarveAtWorld(
+		Vector3 worldPos,
+		Transform pileRoot,
+		float radius,
+		float amountNormalized,
+		GoldPileCarveSettings settings )
+	{
 		if ( pileRoot == null )
 			return;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		CarveAtLocal( local.x, local.z, radius, amountNormalized );
+		CarveAtLocal( local.x, local.z, radius, amountNormalized, settings );
 	}
 
 	/// <summary>
 	/// Adds volume with the same soft brush as carve (inverse of removal for pile growth).
 	/// </summary>
 	public void DepositAtLocal( float localX, float localZ, float radius, float volumeToAdd )
+	{
+		DepositAtLocal( localX, localZ, radius, volumeToAdd, GoldPileCarveSettings.Default );
+	}
+
+	public void DepositAtLocal(
+		float localX,
+		float localZ,
+		float radius,
+		float volumeToAdd,
+		GoldPileCarveSettings settings )
 	{
 		if ( _heights == null || volumeToAdd <= 0f )
 			return;
@@ -1632,6 +1686,7 @@ public sealed class GoldPileHeightfield
 		float radiusSq = radius * radius;
 		float half = _worldSize * 0.5f;
 		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		float falloffSharpness = Mathf.Max( 0.1f, settings.falloffSharpness );
 
 		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + half ) / cell ), 0, _resolution - 1 );
 		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + half ) / cell ), 0, _resolution - 1 );
@@ -1651,7 +1706,7 @@ public sealed class GoldPileHeightfield
 				if ( distSq > radiusSq )
 					continue;
 
-				weightSum += SoftFalloff( distSq, radiusSq );
+				weightSum += SoftFalloff( distSq, radiusSq, falloffSharpness );
 			}
 		}
 
@@ -1671,23 +1726,51 @@ public sealed class GoldPileHeightfield
 				if ( distSq > radiusSq )
 					continue;
 
-				float w = SoftFalloff( distSq, radiusSq );
+				float w = SoftFalloff( distSq, radiusSq, falloffSharpness );
 				int idx = Index( x, z );
 				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + invWeight * w );
 			}
 		}
 
-		int pad = Mathf.Min( MaxCarveBlurPadCells, Mathf.Max( 2, Mathf.CeilToInt( radius / cell ) ) );
-		BlurRegion( minX, maxX, minZ, maxZ, pad );
+		int pad = ResolveCarveBlurPad( radius, cell, settings.blurPadCells );
+		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
 	}
 
 	public void DepositAtWorld( Vector3 worldPos, Transform pileRoot, float radius, float amountNormalized )
+	{
+		DepositAtWorld( worldPos, pileRoot, radius, amountNormalized, GoldPileCarveSettings.Default );
+	}
+
+	public void DepositAtWorld(
+		Vector3 worldPos,
+		Transform pileRoot,
+		float radius,
+		float amountNormalized,
+		GoldPileCarveSettings settings )
 	{
 		if ( pileRoot == null )
 			return;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		DepositAtLocal( local.x, local.z, radius, amountNormalized );
+		DepositAtLocal( local.x, local.z, radius, amountNormalized, settings );
+	}
+
+	static int ResolveCarveBlurPad( float radius, float cell, int maxPadCells )
+	{
+		if ( maxPadCells <= 0 )
+			return 0;
+
+		// Cap blur pad so large carve radii do not expand work to ~brush diameter.
+		return Mathf.Min( maxPadCells, Mathf.Max( 1, Mathf.CeilToInt( radius / cell ) ) );
+	}
+
+	void ApplyCarveBlur( int minX, int maxX, int minZ, int maxZ, int pad, int passes, float strength )
+	{
+		if ( passes <= 0 || strength <= 0f )
+			return;
+
+		for ( int i = 0; i < passes; i++ )
+			BlurRegion( minX, maxX, minZ, maxZ, pad, strength );
 	}
 
 	public void Blur3x3Full()
@@ -1718,9 +1801,12 @@ public sealed class GoldPileHeightfield
 		_dirtyMaxZ = 0;
 	}
 
-	void BlurRegion( int minX, int maxX, int minZ, int maxZ, int pad = 1 )
+	void BlurRegion( int minX, int maxX, int minZ, int maxZ, int pad = 1, float strength = 1f )
 	{
-		pad = Mathf.Max( 1, pad );
+		if ( strength <= 0f )
+			return;
+
+		pad = Mathf.Max( 0, pad );
 		minX = Mathf.Max( 0, minX - pad );
 		maxX = Mathf.Min( _resolution - 1, maxX + pad );
 		minZ = Mathf.Max( 0, minZ - pad );
@@ -1738,6 +1824,7 @@ public sealed class GoldPileHeightfield
 			Array.Copy( _heights, src, _blurScratch, src, copyWidth );
 		}
 
+		bool fullStrength = strength >= 0.999f;
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
@@ -1756,7 +1843,11 @@ public sealed class GoldPileHeightfield
 					}
 				}
 
-				_heights[ Index( x, z ) ] = sum / BlurKernelSum;
+				int idx = Index( x, z );
+				float blurred = sum / BlurKernelSum;
+				_heights[ idx ] = fullStrength
+					? blurred
+					: Mathf.Lerp( _blurScratch[ idx ], blurred, strength );
 			}
 		}
 
@@ -1769,12 +1860,13 @@ public sealed class GoldPileHeightfield
 			return false;
 
 		GoldPileEditTiming.Begin( "GoldPile.UploadDeform" );
-		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
+		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
 
 		int total = _heights.Length;
 		int dirtyW = _dirtyMaxX - _dirtyMinX + 1;
 		int dirtyCount = dirtyW * ( _dirtyMaxZ - _dirtyMinZ + 1 );
 		bool useFull = _dirtyFull || dirtyCount >= total * DirtyRectFullUploadThreshold;
+		string detail = $"full={useFull} dirty={dirtyCount}/{total}";
 
 		if ( useFull )
 		{
@@ -1791,15 +1883,21 @@ public sealed class GoldPileHeightfield
 			}
 		}
 
+		if ( phaseSw != null )
+		{
+			phaseSw.Stop();
+			GoldPileEditTiming.Record( "upload.pack", phaseSw.Elapsed.TotalMilliseconds, detail );
+			phaseSw.Restart();
+		}
+
 		_texture.SetPixelData( _rawPixels, 0 );
 		_texture.Apply( false, false );
 		ClearDirtyRect();
 
-		if ( sw != null )
+		if ( phaseSw != null )
 		{
-			sw.Stop();
-			GoldPileEditTiming.LogIfEnabled(
-				$"[GoldPileEdit] deform upload={sw.Elapsed.TotalMilliseconds:F2}ms full={useFull} dirtyCells={dirtyCount}" );
+			phaseSw.Stop();
+			GoldPileEditTiming.Record( "upload.gpu", phaseSw.Elapsed.TotalMilliseconds, detail );
 		}
 
 		GoldPileEditTiming.End();
@@ -1819,11 +1917,19 @@ public sealed class GoldPileHeightfield
 
 	public float HeightPerCoin( int totalCount )
 	{
-		totalCount = Mathf.Max( 1, totalCount );
-		float volume = _initialVolume > 0.0001f ? _initialVolume : SumHeights();
+		return VolumePerCoin( totalCount );
+	}
+
+	/// <summary>
+	/// Live mound volume share per remaining coin: <see cref="SumHeights"/> / coinCount.
+	/// </summary>
+	public float VolumePerCoin( int remainingCoinCount )
+	{
+		remainingCoinCount = Mathf.Max( 1, remainingCoinCount );
+		float volume = SumHeights();
 		if ( volume < 0.0001f )
-			return 1f / totalCount;
-		return volume / totalCount;
+			return 0f;
+		return volume / remainingCoinCount;
 	}
 
 	void MarkDirtyFull()
@@ -1881,38 +1987,5 @@ public sealed class GoldPileHeightfield
 	int Index( int x, int z )
 	{
 		return z * _resolution + x;
-	}
-}
-
-/// <summary>
-/// Dev toggle + Profiler markers for gold-pile edit timing (brush / upload / collider / stamp / loot).
-/// </summary>
-public static class GoldPileEditTiming
-{
-	public static bool Enabled;
-
-	public static void Begin( string name )
-	{
-		UnityEngine.Profiling.Profiler.BeginSample( name );
-	}
-
-	public static void End()
-	{
-		UnityEngine.Profiling.Profiler.EndSample();
-	}
-
-	public static System.Diagnostics.Stopwatch StartWatchIfEnabled()
-	{
-		return Enabled ? System.Diagnostics.Stopwatch.StartNew() : null;
-	}
-
-	public static void LogIfEnabled( string message, UnityEngine.Object context = null )
-	{
-		if ( !Enabled )
-			return;
-		if ( context != null )
-			UnityEngine.Debug.Log( message, context );
-		else
-			UnityEngine.Debug.Log( message );
 	}
 }

@@ -152,6 +152,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			meshRenderer.enabled = visible;
 
 		ApplyTransform( visible ? _targetHeight : 0f );
+		EnsureSparkleMaskContributor();
 	}
 
 	/// <summary>
@@ -204,6 +205,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			meshRenderer.enabled = visible;
 
 		ApplyTransform( visible ? _targetHeight : 0f );
+		EnsureSparkleMaskContributor();
 		_ = snap;
 	}
 

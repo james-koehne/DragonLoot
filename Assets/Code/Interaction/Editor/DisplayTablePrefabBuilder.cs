@@ -25,7 +25,7 @@ public static class DisplayTablePrefabBuilder
 	const string ArtifactSlotIndicatorMaterialPath = ArtifactSlotShaderFolder + "/M_ArtifactSlotIndicator.mat";
 	const string ArtifactSlotIndicatorShaderName = "DragonLoot/ArtifactSlotIndicator";
 
-	[MenuItem( "DragonLoot/Prefabs/Build Display Table Prefabs" )]
+	[MenuItem( DragonLootMenus.TreasureBuildDisplayTables )]
 	public static void BuildFromMenu()
 	{
 		BuildAll( force: true );

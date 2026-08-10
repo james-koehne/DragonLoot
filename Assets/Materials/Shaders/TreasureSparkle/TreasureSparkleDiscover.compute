@@ -1,0 +1,244 @@
+#pragma kernel Discover
+#pragma kernel CopyArgs
+#pragma multi_compile_local _ _GBUFFER_NORMALS_OCT
+
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
+#include "TreasureSparkleEvaluate.hlsl"
+
+struct GpuVolume
+{
+	int cellMinX;
+	int cellMinY;
+	int cellMinZ;
+	int sizeX;
+	int sizeY;
+	int sizeZ;
+	int flatOffset;
+	float kindMask;
+};
+
+struct GlintInstance
+{
+	float3 centerWS;
+	float intensity;
+	float sizeJitter;
+	float pad0;
+	float pad1;
+	float pad2;
+};
+
+StructuredBuffer<GpuVolume> _SparkleVolumes;
+RWStructuredBuffer<GlintInstance> _SparkleGlints;
+RWStructuredBuffer<uint> _SparkleGlintCount;
+RWStructuredBuffer<uint> _SparkleIndirectArgs;
+
+TEXTURE2D_FLOAT(_CameraDepthTexture);
+SAMPLER(sampler_CameraDepthTexture);
+TEXTURE2D(_CameraNormalsTexture);
+SAMPLER(sampler_CameraNormalsTexture);
+TEXTURE2D(_TreasureSparkleMask);
+SAMPLER(sampler_TreasureSparkleMask);
+
+float4 _CameraNormalsTexture_TexelSize;
+
+float3 SampleSparkleNormals(float2 uv)
+{
+	float3 normal = SAMPLE_TEXTURE2D_LOD(_CameraNormalsTexture, sampler_CameraNormalsTexture, uv, 0).xyz;
+	#if defined(_GBUFFER_NORMALS_OCT)
+	float2 remappedOctNormalWS = Unpack888ToFloat2(normal);
+	float2 octNormalWS = remappedOctNormalWS.xy * 2.0 - 1.0;
+	normal = UnpackNormalOctQuadEncode(octNormalWS);
+	#endif
+	return normal;
+}
+
+float _SparkleCellSize;
+float _SparkleDensity;
+float _SparkleMaxActive;
+float _SparkleSeed;
+float _SparkleTargetPixelSize;
+float _SparkleGlintTexSize;
+float _SparkleUseGlintTex;
+float _SparkleGlintTexBlend;
+float _SparkleMinSize;
+float _SparkleMaxSize;
+float _SparkleScreenDensityBlend;
+float _SparkleScreenDensityRefPixels;
+float4 _SparkleColor;
+float _SparkleBaseGlint;
+float _SparkleLitBoost;
+float _SparkleBrightnessJitter;
+float _SparkleCoreHotness;
+float _SparkleCoinFacetJitter;
+float _SparkleMetallicSharpness;
+float _SparkleLightKillStrength;
+float _SparkleBaseCoverage;
+float _SparkleSpecularBoost;
+float _SparkleSpecularDensity;
+float _SparkleMinIntensity;
+float _SparkleSoftLobeAmount;
+float _SparkleAlignmentThreshold;
+float _SparkleFadeAngle;
+float _SparkleViewCrossfade;
+float _SparkleViewCrossfadeRefDistance;
+float _SparkleViewSwapStrength;
+float _SparkleViewSwapSharpness;
+float _SparkleViewSwapThreshold;
+float _SparkleNearGlintStart;
+float _SparkleNearGlintFull;
+float _SparkleFarGlintStart;
+float _SparkleFarGlintEnd;
+float _SparkleNearDensityScale;
+float _SparkleFarDensityScale;
+float _SparkleNearIntensityFloor;
+float _SparkleGemDensityMul;
+float _SparkleArtifactDensityMul;
+float _SparkleScreenEdgeFade;
+float _SparkleTwinkleStrength;
+float _SparkleTwinkleSpeed;
+float _SparkleTwinkleDesync;
+float _SparkleBloomContribution;
+float _SparkleSurfaceSlack;
+float _SparkleTime;
+float3 _SparkleCameraPosition;
+float3 _SparkleLightDirWS;
+float4x4 _SparkleViewProj;
+float4x4 _SparkleInvViewProj;
+float4 _SparkleResolution; // xy = size, z = tanHalfFovY
+uint _SparkleVolumeIndex;
+uint _SparkleVolumeCellCount;
+uint _SparkleMaxGlints;
+
+TreasureSparkleParams BuildParams()
+{
+	TreasureSparkleParams p;
+	p.cellSize = _SparkleCellSize;
+	p.density = _SparkleDensity;
+	p.maxActive = _SparkleMaxActive;
+	p.seed = _SparkleSeed;
+	p.targetPixelSize = _SparkleTargetPixelSize;
+	p.glintTexSize = _SparkleGlintTexSize;
+	p.useGlintTex = _SparkleUseGlintTex;
+	p.glintTexBlend = _SparkleGlintTexBlend;
+	p.minSize = _SparkleMinSize;
+	p.maxSize = _SparkleMaxSize;
+	p.screenDensityBlend = _SparkleScreenDensityBlend;
+	p.screenDensityRefPixels = _SparkleScreenDensityRefPixels;
+	p.sparkleColor = _SparkleColor.rgb;
+	p.baseGlint = _SparkleBaseGlint;
+	p.litBoost = _SparkleLitBoost;
+	p.brightnessJitter = _SparkleBrightnessJitter;
+	p.coreHotness = _SparkleCoreHotness;
+	p.coinFacetJitter = _SparkleCoinFacetJitter;
+	p.metallicSharpness = _SparkleMetallicSharpness;
+	p.lightKillStrength = _SparkleLightKillStrength;
+	p.softLobeAmount = _SparkleSoftLobeAmount;
+	p.baseCoverage = _SparkleBaseCoverage;
+	p.specularBoost = _SparkleSpecularBoost;
+	p.specularDensity = _SparkleSpecularDensity;
+	p.minIntensity = _SparkleMinIntensity;
+	p.alignmentThreshold = _SparkleAlignmentThreshold;
+	p.fadeAngle = _SparkleFadeAngle;
+	p.viewCrossfade = _SparkleViewCrossfade;
+	p.viewCrossfadeRefDistance = _SparkleViewCrossfadeRefDistance;
+	p.viewSwapStrength = _SparkleViewSwapStrength;
+	p.viewSwapSharpness = _SparkleViewSwapSharpness;
+	p.viewSwapThreshold = _SparkleViewSwapThreshold;
+	p.nearGlintStart = _SparkleNearGlintStart;
+	p.nearGlintFull = _SparkleNearGlintFull;
+	p.farGlintStart = _SparkleFarGlintStart;
+	p.farGlintEnd = _SparkleFarGlintEnd;
+	p.nearDensityScale = _SparkleNearDensityScale;
+	p.farDensityScale = _SparkleFarDensityScale;
+	p.nearIntensityFloor = _SparkleNearIntensityFloor;
+	p.gemDensityMul = _SparkleGemDensityMul;
+	p.artifactDensityMul = _SparkleArtifactDensityMul;
+	p.screenEdgeFade = _SparkleScreenEdgeFade;
+	p.twinkleStrength = _SparkleTwinkleStrength;
+	p.twinkleSpeed = _SparkleTwinkleSpeed;
+	p.twinkleDesync = _SparkleTwinkleDesync;
+	p.bloomContribution = _SparkleBloomContribution;
+	p.surfaceSlack = _SparkleSurfaceSlack;
+	p.time = _SparkleTime;
+	p.cameraPosition = _SparkleCameraPosition;
+	p.lightDirWS = _SparkleLightDirWS;
+	p.viewProj = _SparkleViewProj;
+	p.invViewProj = _SparkleInvViewProj;
+	p.resolution = _SparkleResolution.xy;
+	p.tanHalfFovY = max(_SparkleResolution.z, 1e-4);
+	return p;
+}
+
+[numthreads(64, 1, 1)]
+void Discover(uint3 id : SV_DispatchThreadID)
+{
+	uint localIndex = id.x;
+	if (localIndex >= _SparkleVolumeCellCount)
+		return;
+
+	GpuVolume volume = _SparkleVolumes[_SparkleVolumeIndex];
+	int sizeX = max(volume.sizeX, 1);
+	int sizeY = max(volume.sizeY, 1);
+	int sizeZ = max(volume.sizeZ, 1);
+	int lx = (int)(localIndex % (uint)sizeX);
+	int ly = (int)((localIndex / (uint)sizeX) % (uint)sizeY);
+	int lz = (int)(localIndex / (uint)(sizeX * sizeY));
+	int3 cell = int3(volume.cellMinX + lx, volume.cellMinY + ly, volume.cellMinZ + lz);
+
+	TreasureSparkleParams p = BuildParams();
+	float cellSize = max(p.cellSize, 0.02);
+	float3 seedBase = (float3)cell + float3(p.seed, p.seed * 1.7, p.seed * 2.3);
+	float3 rnd = TreasureSparkleHash33(seedBase + 19.19);
+	float3 glintCenter = rnd * 0.85 + 0.075;
+	float3 probeWS = ((float3)cell + glintCenter) * cellSize;
+
+	float4 probeClip = mul(p.viewProj, float4(probeWS, 1.0));
+	if (probeClip.w <= 1e-5)
+		return;
+
+	float2 uv = TreasureSparkleProjectWorldToScreenUV(probeWS, p.viewProj);
+	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+		return;
+
+	float mask = SAMPLE_TEXTURE2D_LOD(_TreasureSparkleMask, sampler_TreasureSparkleMask, uv, 0).r;
+	if (mask < 0.02)
+		return;
+
+	float rawDepth = SAMPLE_TEXTURE2D_LOD(_CameraDepthTexture, sampler_CameraDepthTexture, uv, 0).r;
+	float3 normalSample = SampleSparkleNormals(uv);
+
+	TreasureSparkleGlint glint = TreasureSparkleEvaluateCell(
+		cell,
+		volume.kindMask,
+		mask,
+		rawDepth,
+		normalSample,
+		p);
+	if (!glint.valid)
+		return;
+
+	uint slot;
+	InterlockedAdd(_SparkleGlintCount[0], 1, slot);
+	if (slot >= _SparkleMaxGlints)
+		return;
+
+	GlintInstance instance;
+	instance.centerWS = glint.centerWS;
+	instance.intensity = glint.intensity;
+	instance.sizeJitter = glint.sizeJitter;
+	instance.pad0 = 0;
+	instance.pad1 = 0;
+	instance.pad2 = 0;
+	_SparkleGlints[slot] = instance;
+}
+
+[numthreads(1, 1, 1)]
+void CopyArgs(uint3 id : SV_DispatchThreadID)
+{
+	uint count = min(_SparkleGlintCount[0], _SparkleMaxGlints);
+	_SparkleIndirectArgs[0] = 6; // two triangles
+	_SparkleIndirectArgs[1] = count;
+	_SparkleIndirectArgs[2] = 0;
+	_SparkleIndirectArgs[3] = 0;
+}

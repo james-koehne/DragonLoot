@@ -30,6 +30,10 @@ public static class PlacementFloorSurface
 			if ( t.TryGetComponent( out ITreasurePlacementTarget _ ) )
 				return false;
 
+			// Station body mesh is not Interactable / placement target itself — hopper is a sibling.
+			if ( t.TryGetComponent( out CoinSortingStation _ ) )
+				return false;
+
 			t = t.parent;
 		}
 

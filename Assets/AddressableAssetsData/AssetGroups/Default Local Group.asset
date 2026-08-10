@@ -36,6 +36,18 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1b45042b9e8c93a45aa79fa446b6c7cf
+    m_Address: GoldKey
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 25acb71897fabd943b3ab7239da496c8
+    m_Address: UpgradeCatalogDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 287c2924858783c4ea90ae9d96082f59
     m_Address: Assets/FunkClient/Addressables/FunkClient.prefab
     m_ReadOnly: 0
@@ -71,6 +83,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/BrassCandelabrumVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4d45c4be941a20643b2598157b796a23
+    m_Address: SkeletonKey
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 54b18aea4c0eec147b576328346e822d
     m_Address: Assets/Addressables/Treasure/Artifacts/RustyShortswordVisual.prefab
@@ -128,6 +146,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 968fd6fce3ac7014b84e09e5c4a36cf9
+    m_Address: StylizedLightingDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9b148b7ec87286a4ca086c9608bbf586
     m_Address: Assets/Addressables/Treasure/Gems/TopazVisual.prefab
     m_ReadOnly: 0
@@ -139,8 +163,26 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9fbccced7b04e6548be78a79e698ade1
+    m_Address: IronChest
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a07fd9b5f623e8d438d52ee42a52e66b
+    m_Address: GoldChest
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a1b2c3d4e5f60718293a4b5c6d7e8f01
     m_Address: Assets/Definitions/PlayerControllerDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a2936f58ea37cef458b338918cad0834
+    m_Address: AbilityCatalogDefinition
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
@@ -160,6 +202,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: afd255348924afb479e4738ec99fabfc
+    m_Address: Treasure/SkeletonKeyDisplayCase
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: b2c3d4e5f60718293a4b5c6d7e8f0123
     m_Address: Assets/Definitions/PlayerInteractionDefinition.asset
     m_ReadOnly: 0
@@ -173,6 +220,12 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: b7d3e1a20c4f5a8b9e7d6c5a4b3e2f1d
     m_Address: Assets/Definitions/CarryDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b8ff7f56e1131614fa3ac882993c160d
+    m_Address: IronKey
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
@@ -241,6 +294,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d41b6f371516c5447864fbeb53cac658
+    m_Address: TreasureCleaningDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d5b1c0a42f6e3b8d9c8a7e6f5d4c3b2a
     m_Address: Assets/Addressables/SapphireVisual.prefab
     m_ReadOnly: 0
@@ -261,6 +320,18 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/RoyalWineCupVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e68806ba61a378d42bc41ff7654957ae
+    m_Address: GoldPileCarveDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ee80806408e6f154ca5e948598832dca
+    m_Address: CoinSortingStationDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eedfcfef417e10c4eb34affe9b184e7c
     m_Address: Assets/Addressables/Treasure/Gems/AmethystVisual.prefab
@@ -284,6 +355,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f9c49dcdcbb799e4883dc88563295f85
     m_Address: Assets/Addressables/Treasure/SilverCoinVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fd1ad64857f7ea94088cd4db9b6af849
+    m_Address: Tables/CleaningStation
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

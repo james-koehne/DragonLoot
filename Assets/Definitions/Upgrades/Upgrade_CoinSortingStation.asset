@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7b0e4bb49bf5d645ac46f76ed68088b, type: 3}
+  m_Name: Upgrade_CoinSortingStation
+  m_EditorClassIdentifier: Assembly-CSharp::UpgradeDefinition
+  id: coin_sorting_station
+  displayName: Coin Sorting Station
+  description: 'Levels: 1 manual crank, 2 automatic, 3 faster processing, 4 larger
+    hopper.'
+  icon: {fileID: 0}
+  maxLevel: 4
+  enabled: 1

@@ -5,6 +5,8 @@ using UnityEngine;
 
 /// <summary>
 /// Tracks loose (Physics) treasure with category caps and reclaim sink toward origin piles.
+/// Gems/artifacts over cap absorb back into the origin pile with an updated pose.
+/// Parked world props from <see cref="WorldTreasurePersistence"/> count toward caps.
 /// </summary>
 public class LooseTreasureManager : MonoBehaviour
 {
@@ -35,6 +37,7 @@ public class LooseTreasureManager : MonoBehaviour
 		GameObject go = new GameObject( "LooseTreasureManager" );
 		_instance = go.AddComponent<LooseTreasureManager>();
 		Object.DontDestroyOnLoad( go );
+		WorldTreasurePersistence.EnsureExists();
 	}
 
 	public static void Register( TreasureItem item )
@@ -46,6 +49,9 @@ public class LooseTreasureManager : MonoBehaviour
 		if ( !Loose.Contains( item ) )
 			Loose.Add( item );
 
+		if ( item.Definition != null && GoldPileArtifactProps.IsLargeProp( item.Definition ) )
+			WorldTreasurePersistence.NotifyLoose( item );
+
 		_instance.EnforceCaps();
 	}
 
@@ -55,6 +61,14 @@ public class LooseTreasureManager : MonoBehaviour
 			return;
 
 		Loose.Remove( item );
+		WorldTreasurePersistence.NotifyOwned( item );
+	}
+
+	public static void NotifyParkedChanged()
+	{
+		if ( _instance == null )
+			return;
+		_instance.EnforceCaps();
 	}
 
 	void Awake()
@@ -66,41 +80,82 @@ public class LooseTreasureManager : MonoBehaviour
 		}
 
 		_instance = this;
+		WorldTreasurePersistence.EnsureExists();
 	}
 
 	void EnforceCaps()
 	{
-		EnforceCategory( TreasureCategory.Coin, maxLooseCoins );
-		EnforceCategory( TreasureCategory.Gem, maxLooseGems );
+		EnforceCategory( TreasureCategory.Gem, maxLooseGems, gems: true );
 		EnforceOther( maxLooseOther );
+		EnforceCategory( TreasureCategory.Coin, maxLooseCoins, gems: false );
 	}
 
-	void EnforceCategory( TreasureCategory category, int max )
+	void EnforceCategory( TreasureCategory category, int max, bool gems )
 	{
 		int count = CountCategory( category );
+		if ( gems )
+			count += WorldTreasurePersistence.CountParkedGems();
+
 		while ( count > max )
 		{
 			TreasureItem victim = FindReclaimCandidate( category );
-			if ( victim == null )
-				break;
+			if ( victim != null )
+			{
+				StartCoroutine( ReclaimRoutine( victim ) );
+				count--;
+				continue;
+			}
 
-			StartCoroutine( ReclaimRoutine( victim ) );
-			count--;
+			if ( gems
+				&& WorldTreasurePersistence.TryTakeParkedForReclaim(
+					gems: true,
+					out TreasureDefinition def,
+					out Vector3 pos,
+					out TreasurePileVisual origin ) )
+			{
+				AbsorbParked( def, pos, origin );
+				count--;
+				continue;
+			}
+
+			break;
 		}
 	}
 
 	void EnforceOther( int max )
 	{
-		int count = CountOther();
+		int count = CountOther() + WorldTreasurePersistence.CountParkedArtifacts();
 		while ( count > max )
 		{
 			TreasureItem victim = FindReclaimCandidateOther();
-			if ( victim == null )
-				break;
+			if ( victim != null )
+			{
+				StartCoroutine( ReclaimRoutine( victim ) );
+				count--;
+				continue;
+			}
 
-			StartCoroutine( ReclaimRoutine( victim ) );
-			count--;
+			if ( WorldTreasurePersistence.TryTakeParkedForReclaim(
+				gems: false,
+				out TreasureDefinition def,
+				out Vector3 pos,
+				out TreasurePileVisual origin ) )
+			{
+				AbsorbParked( def, pos, origin );
+				count--;
+				continue;
+			}
+
+			break;
 		}
+	}
+
+	static void AbsorbParked( TreasureDefinition def, Vector3 pos, TreasurePileVisual origin )
+	{
+		if ( origin != null && origin.AbsorbParkedTreasure( def, pos ) )
+			return;
+
+		// No origin pile — parked record already removed; nothing else to do.
 	}
 
 	int CountCategory( TreasureCategory category )
@@ -111,8 +166,12 @@ public class LooseTreasureManager : MonoBehaviour
 			TreasureItem item = Loose[ i ];
 			if ( item == null || item.IsReclaiming || !item.IsWorldLoose )
 				continue;
-			if ( item.Definition != null && item.Definition.category == category )
-				n++;
+			if ( item.Definition == null || item.Definition.category != category )
+				continue;
+			// Sorted pyramid gems stay pickable/loose but do not consume the gem budget.
+			if ( category == TreasureCategory.Gem && GemPyramidRegistry.FindClusterContaining( item ) != null )
+				continue;
+			n++;
 		}
 
 		return n;
@@ -153,6 +212,8 @@ public class LooseTreasureManager : MonoBehaviour
 			if ( !item.IsWorldLoose )
 				continue;
 			if ( item.Definition == null || item.Definition.category != category )
+				continue;
+			if ( category == TreasureCategory.Gem && GemPyramidRegistry.FindClusterContaining( item ) != null )
 				continue;
 			if ( item.Body != null && !item.Body.IsSleeping() )
 				continue;
@@ -217,6 +278,7 @@ public class LooseTreasureManager : MonoBehaviour
 		item.SetReclaiming( true );
 		Unregister( item );
 		TreasureProximitySleep.Unregister( item );
+		WorldTreasurePersistence.CancelParkForItem( item );
 
 		Vector3 start = item.transform.position;
 		Vector3 end = start;
@@ -249,8 +311,14 @@ public class LooseTreasureManager : MonoBehaviour
 			yield return null;
 		}
 
-		if ( item != null )
-			TreasureItemFactory.Despawn( item );
+		if ( item == null )
+			yield break;
+
+		bool isProp = item.Definition != null && GoldPileArtifactProps.IsLargeProp( item.Definition );
+		if ( isProp && origin != null && origin.AbsorbReclaimItem( item, end ) )
+			yield break;
+
+		TreasureItemFactory.Despawn( item );
 	}
 
 	void OnDestroy()

@@ -11,6 +11,7 @@ public class TreasureItem : MonoBehaviour
 	TreasureDefinition definition;
 
 	static readonly int VariationSeedId = Shader.PropertyToID( "_VariationSeed" );
+	static readonly int DirtStrengthId = Shader.PropertyToID( "_DirtStrength" );
 	static MaterialPropertyBlock s_PropertyBlock;
 
 	Rigidbody _body;
@@ -27,6 +28,7 @@ public class TreasureItem : MonoBehaviour
 	float _stableTimer;
 	bool _usingContinuous;
 	float _variationSeed;
+	float _cleanProgress = 1f;
 
 	public TreasureDefinition Definition => definition;
 	public TreasureItemState State => _state;
@@ -39,6 +41,24 @@ public class TreasureItem : MonoBehaviour
 	public bool IsReclaiming => _reclaiming;
 	/// <summary>True while a pickup/place tween owns this item's transform.</summary>
 	public bool IsInFlight => _inFlight;
+
+	/// <summary>0 = fully dirty, 1 = clean. Orthogonal to <see cref="TreasureItemState"/>.</summary>
+	public float CleanProgress => _cleanProgress;
+
+	public bool RequiresCleaning
+	{
+		get { return definition != null && definition.GetRequiresCleaning(); }
+	}
+
+	public bool IsClean
+	{
+		get { return !RequiresCleaning || _cleanProgress >= 0.999f; }
+	}
+
+	public bool IsDirty
+	{
+		get { return RequiresCleaning && _cleanProgress < 0.999f; }
+	}
 
 	/// <summary>
 	/// Claims stack ownership during place flight without parenting (keeps tween free).
@@ -85,6 +105,7 @@ public class TreasureItem : MonoBehaviour
 	void OnEnable()
 	{
 		ApplyVariationSeed();
+		ApplyDirtVisual();
 		EnsureSparkleMaskContributor();
 	}
 
@@ -100,10 +121,49 @@ public class TreasureItem : MonoBehaviour
 		EnsureComponents();
 		ApplyPhysicsFromDefinition();
 		ApplyVisualOverrides();
+		ResetCleanlinessFromDefinition();
 		ApplyVariationSeed();
+		ApplyDirtVisual();
 		ApplyDisplayName();
 		ApplyCollectableLayer();
 		EnsureSparkleMaskContributor();
+	}
+
+	public void ResetCleanlinessFromDefinition()
+	{
+		_cleanProgress = RequiresCleaning ? 0f : 1f;
+		ApplyDirtVisual();
+	}
+
+	public void SetDirty()
+	{
+		if ( !RequiresCleaning )
+		{
+			_cleanProgress = 1f;
+			ApplyDirtVisual();
+			return;
+		}
+
+		_cleanProgress = 0f;
+		ApplyDirtVisual();
+	}
+
+	public void SetClean()
+	{
+		_cleanProgress = 1f;
+		ApplyDirtVisual();
+	}
+
+	/// <summary>
+	/// Adds cleaning progress in 0–1 units (not seconds). Refreshes dirt MPB.
+	/// </summary>
+	public void ApplyCleaning( float delta )
+	{
+		if ( !RequiresCleaning || delta <= 0f || _cleanProgress >= 1f )
+			return;
+
+		_cleanProgress = Mathf.Clamp01( _cleanProgress + delta );
+		ApplyDirtVisual();
 	}
 
 	public void SetOriginPile( TreasurePileVisual pile )
@@ -122,6 +182,7 @@ public class TreasureItem : MonoBehaviour
 
 	public void OnDespawned()
 	{
+		GemPyramidRegistry.NotifyRemoved( this );
 		LooseTreasureManager.Unregister( this );
 		TreasureProximitySleep.Unregister( this );
 		UnregisterFromSurface();
@@ -132,6 +193,7 @@ public class TreasureItem : MonoBehaviour
 		_renderers = null;
 		_meshVisibilityState = null;
 		_variationSeed = 0f;
+		_cleanProgress = 1f;
 	}
 
 	/// <summary>True when loose in the world (physics or surface rolling).</summary>
@@ -145,7 +207,11 @@ public class TreasureItem : MonoBehaviour
 
 	public static bool UsesSurfaceSimulation( TreasureDefinition def )
 	{
-		return true;
+		if ( def == null )
+			return true;
+
+		// Artifacts use real Rigidbody physics; coins/gems/other props stay on TreasureSurface.
+		return def.category != TreasureCategory.Artifact;
 	}
 
 	void UnregisterFromSurface()
@@ -157,6 +223,7 @@ public class TreasureItem : MonoBehaviour
 
 	public void EnterPile( ITreasureOwner pileOwner )
 	{
+		GemPyramidRegistry.NotifyRemoved( this );
 		LeavePreviousOwner();
 		LooseTreasureManager.Unregister( this );
 		TreasureProximitySleep.Unregister( this );
@@ -188,6 +255,7 @@ public class TreasureItem : MonoBehaviour
 	public void BeginHold( ITreasureOwner playerOwner )
 	{
 		_inFlight = false;
+		GemPyramidRegistry.NotifyRemoved( this );
 		LeavePreviousOwner();
 		LooseTreasureManager.Unregister( this );
 		TreasureProximitySleep.Unregister( this );
@@ -270,6 +338,32 @@ public class TreasureItem : MonoBehaviour
 	/// </summary>
 	public void EnterSurface( Vector3 worldPosition, Quaternion worldRotation, Vector3 velocity )
 	{
+		EnterSurface( worldPosition, worldRotation, velocity, snapToSeat: true );
+	}
+
+	/// <param name="snapToSeat">
+	/// When false, keep the authored Y so the simulator can fall with gravity/flow
+	/// (used when gems release from a gold pile above the stamped surface).
+	/// </param>
+	public void EnterSurface(
+		Vector3 worldPosition,
+		Quaternion worldRotation,
+		Vector3 velocity,
+		bool snapToSeat )
+	{
+		EnterSurface( worldPosition, worldRotation, velocity, snapToSeat, fromRest: false );
+	}
+
+	/// <param name="fromRest">
+	/// When true, surface flow acceleration ramps up from zero (pile detach).
+	/// </param>
+	public void EnterSurface(
+		Vector3 worldPosition,
+		Quaternion worldRotation,
+		Vector3 velocity,
+		bool snapToSeat,
+		bool fromRest )
+	{
 		_inFlight = false;
 		LeavePreviousOwner();
 		TreasureProximitySleep.Unregister( this );
@@ -295,10 +389,13 @@ public class TreasureItem : MonoBehaviour
 		if ( world.TryGetChunkCoord( worldPosition, out TreasureChunkCoord coord ) )
 			world.EnsureChunkLoaded( coord );
 
-		if ( world.Sampler != null && world.Sampler.TrySample( worldPosition, out TreasureSurfaceSample sample ) )
+		if ( snapToSeat
+			&& world.Sampler != null
+			&& world.Sampler.TrySample( worldPosition, out TreasureSurfaceSample sample ) )
 		{
-			// Use stable lift for gems so rolling doesn't fight a rotation-dependent seat height.
-			float contactY = definition != null && definition.category == TreasureCategory.Gem
+			// Stable lift for gems/artifacts so throw land → sim seat → settle use the same Y.
+			bool useStableSeat = definition != null && definition.category != TreasureCategory.Coin;
+			float contactY = useStableSeat
 				? sample.Height + TreasureSurfaceSeat.GetStableContactLift( this )
 				: TreasureSurfaceSeat.GetContactY( this, sample, worldRotation );
 			float seatTolerance = 0.12f;
@@ -319,7 +416,7 @@ public class TreasureItem : MonoBehaviour
 			}
 		}
 
-		world.Simulator.Register( this, velocity );
+		world.Simulator.Register( this, velocity, fromRest );
 	}
 
 	public void EnterSurface( Vector3 worldPosition, Quaternion worldRotation )
@@ -363,6 +460,10 @@ public class TreasureItem : MonoBehaviour
 		SetPhysicsMode( kinematic: true, detectCollisions: true, collidersEnabled: true );
 		ApplyPhysicsConstraints();
 		SyncRigidbodyToTransform();
+
+		if ( definition != null && definition.category == TreasureCategory.Artifact )
+			TrySnapArtifactToTreasureSurface();
+
 		ForceSleep();
 		SetMeshVisible( true );
 
@@ -524,7 +625,10 @@ public class TreasureItem : MonoBehaviour
 			PlayerCarry carry = _owner as PlayerCarry;
 			if ( carry == null || !carry.ContainsItem( this ) )
 				{
-					EnterSurface( transform.position, transform.rotation, Vector3.zero );
+					if ( UsesSurfaceSimulation( definition ) )
+						EnterSurface( transform.position, transform.rotation, Vector3.zero );
+					else
+						EnterPhysics( transform.position, transform.rotation, Vector3.zero );
 					return true;
 				}
 		}
@@ -653,6 +757,15 @@ public class TreasureItem : MonoBehaviour
 
 		if ( GetComponent<TreasureItemInteractable>() == null )
 			gameObject.AddComponent<TreasureItemInteractable>();
+
+		if ( definition != null && definition.category == TreasureCategory.Chest )
+		{
+			ChestInteractable chest = GetComponent<ChestInteractable>();
+			if ( chest == null )
+				chest = gameObject.AddComponent<ChestInteractable>();
+			if ( definition.chestDefinition != null )
+				chest.BindDefinition( definition.chestDefinition );
+		}
 
 		_body.sleepThreshold = 0.01f;
 		if ( definition != null )
@@ -877,6 +990,70 @@ public class TreasureItem : MonoBehaviour
 		}
 	}
 
+	void ApplyDirtVisual()
+	{
+		EnsureRendererCache();
+		if ( _renderers == null || _renderers.Length == 0 )
+			return;
+
+		float dirtStrength = 0f;
+		if ( RequiresCleaning )
+		{
+			float maxDirt = 1.35f;
+			TreasureCleaningDefinition cleaning = RuntimeDefinition.Resolve(
+				ref s_cleaningDefinitionCache );
+			if ( cleaning != null )
+				maxDirt = cleaning.maxDirtStrength;
+			dirtStrength = ( 1f - Mathf.Clamp01( _cleanProgress ) ) * maxDirt;
+		}
+
+		if ( s_PropertyBlock == null )
+			s_PropertyBlock = new MaterialPropertyBlock();
+
+		for ( int i = 0; i < _renderers.Length; i++ )
+		{
+			Renderer renderer = _renderers[ i ];
+			if ( renderer == null )
+				continue;
+
+			if ( !RendererSupportsDirt( renderer ) )
+				continue;
+
+			renderer.GetPropertyBlock( s_PropertyBlock );
+			s_PropertyBlock.SetFloat( DirtStrengthId, dirtStrength );
+			renderer.SetPropertyBlock( s_PropertyBlock );
+		}
+	}
+
+	static bool RendererSupportsDirt( Renderer renderer )
+	{
+		Material[] mats = renderer.sharedMaterials;
+		if ( mats == null || mats.Length == 0 )
+		{
+			Material single = renderer.sharedMaterial;
+			return MaterialSupportsDirt( single );
+		}
+
+		for ( int i = 0; i < mats.Length; i++ )
+		{
+			if ( MaterialSupportsDirt( mats[ i ] ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool MaterialSupportsDirt( Material material )
+	{
+		if ( material == null )
+			return false;
+		if ( material.HasProperty( DirtStrengthId ) )
+			return true;
+		return material.shader != null && material.shader.name == "DragonLoot/Artifact";
+	}
+
+	static TreasureCleaningDefinition s_cleaningDefinitionCache;
+
 	void ApplyPhysicsFromDefinition()
 	{
 		if ( _body == null )
@@ -1007,6 +1184,10 @@ public class TreasureItem : MonoBehaviour
 
 		_body.linearVelocity = Vector3.zero;
 		_body.angularVelocity = Vector3.zero;
+
+		if ( definition != null && definition.category == TreasureCategory.Artifact )
+			TrySnapArtifactToTreasureSurface();
+
 		if ( _usingContinuous )
 		{
 			_body.collisionDetectionMode = CollisionDetectionMode.Discrete;
@@ -1016,6 +1197,45 @@ public class TreasureItem : MonoBehaviour
 		EnsureCollidersEnabledForPickup();
 		_body.Sleep();
 		_stableTimer = 0f;
+	}
+
+	/// <summary>
+	/// When an artifact has nearly stopped, snap Y to surface contact and pull XZ
+	/// back onto traversable if it settled outside the painted area.
+	/// </summary>
+	void TrySnapArtifactToTreasureSurface()
+	{
+		TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+		if ( world == null || world.Sampler == null || !world.IsInitialized )
+			return;
+
+		TreasureSurfaceDefinition surfaceDef = world.Definition;
+		float snapDist = surfaceDef != null ? surfaceDef.artifactSurfaceSnapDistance : 0.07f;
+		float seatLift = TreasureSurfaceSeat.GetContactLift( this, transform.rotation, Vector3.up );
+		Vector3 pos = transform.position;
+
+		bool needXz = true;
+		if ( world.Sampler.TrySample( pos, out TreasureSurfaceSample sample ) && sample.Traversable )
+		{
+			needXz = false;
+			float contactY = sample.Height + seatLift;
+			if ( Mathf.Abs( pos.y - contactY ) > snapDist )
+			{
+				pos.y = contactY;
+				transform.position = pos;
+				SyncRigidbodyToTransform();
+			}
+		}
+
+		if ( needXz )
+		{
+			if ( !world.TryFindNearestTraversable( pos, out Vector3 dest, out TreasureSurfaceSample recovered, preferStable: true ) )
+				return;
+
+			dest.y = recovered.Height + seatLift;
+			transform.SetPositionAndRotation( dest, transform.rotation );
+			SyncRigidbodyToTransform();
+		}
 	}
 
 	void EnsureCollidersEnabledForPickup()

@@ -6,7 +6,6 @@ using UnityEngine.Rendering;
 /// <summary>
 /// Reused translucent ghost mesh for placement preview. Rebuilds when the held item
 /// identity changes, and draws every MeshFilter/submesh from the source visual.
-/// Stack-volume previews register an invisible volume mesh for the hover outline renderer feature.
 /// </summary>
 public sealed class PlacementGhost
 {
@@ -29,10 +28,7 @@ public sealed class PlacementGhost
 	TreasureItem _syncedItem;
 	TreasureDefinition _syncedDefinition;
 	bool _visible;
-	bool _stackVolumeMode;
 	bool _lastValid = true;
-	GameObject _volumeChild;
-	MeshRenderer _volumeRenderer;
 
 	Color _validColor = PlacementFeedbackColors.ValidGhost;
 	Color _invalidColor = PlacementFeedbackColors.InvalidGhost;
@@ -42,10 +38,6 @@ public sealed class PlacementGhost
 	float _pulseSpeed = 0.85f;
 	float _rimIntensity = 1.15f;
 	float _coreIntensity = 0.28f;
-	float _stackVolumeOversize = 1.1f;
-	HoverOutlineVisualSettings _stackOutlineSettings = HoverOutlineVisualSettings.DefaultStack();
-	Color _validRgb = PlacementFeedbackColors.ValidRgb;
-	Color _invalidRgb = PlacementFeedbackColors.InvalidRgb;
 
 	public PlacementGhost()
 	{
@@ -64,37 +56,17 @@ public sealed class PlacementGhost
 		float pulseAmount,
 		float pulseSpeed,
 		float rimIntensity,
-		float coreIntensity,
-		float stackVolumeOversize,
-		HoverOutlineVisualSettings stackOutline )
+		float coreIntensity )
 	{
 		_validColor = validColor;
 		_invalidColor = invalidColor;
-		_validRgb = new Color( validColor.r, validColor.g, validColor.b, 1f );
-		_invalidRgb = new Color( invalidColor.r, invalidColor.g, invalidColor.b, 1f );
 		_fresnelPower = fresnelPower;
 		_fresnelBoost = fresnelBoost;
 		_pulseAmount = pulseAmount;
 		_pulseSpeed = pulseSpeed;
 		_rimIntensity = rimIntensity;
 		_coreIntensity = coreIntensity;
-		_stackVolumeOversize = stackVolumeOversize;
-		_stackOutlineSettings = stackOutline != null ? stackOutline.Clone() : HoverOutlineVisualSettings.DefaultStack();
-		_stackOutlineSettings.Validate();
 		ApplyTint( _lastValid );
-	}
-
-	public bool TryGetStackVolumeOutline( bool valid, out Renderer renderer, out HoverOutlineVisualSettings settings )
-	{
-		renderer = _volumeRenderer;
-		settings = _stackOutlineSettings;
-		if ( !_stackVolumeMode || _volumeRenderer == null )
-		{
-			settings = null;
-			return false;
-		}
-
-		return true;
 	}
 
 	public void Destroy()
@@ -107,7 +79,6 @@ public sealed class PlacementGhost
 			Object.Destroy( _root );
 
 		_renderers.Clear();
-		_volumeRenderer = null;
 	}
 
 	public void SetVisible( bool visible )
@@ -122,50 +93,13 @@ public sealed class PlacementGhost
 		if ( !_visible || _rootTransform == null )
 			return;
 
-		if ( _stackVolumeMode )
-			return;
-
 		_rootTransform.SetPositionAndRotation( preview.Position, preview.Rotation );
 		_rootTransform.localScale = preview.Scale;
 		ApplyTint( preview.IsValid );
 	}
 
-	public void UpdateStackVolume( Vector3 contactPosition, Quaternion rotation, float height, float diameter, bool valid )
-	{
-		if ( !_visible || _rootTransform == null )
-			return;
-
-		EnsureVolumeChild();
-		_stackVolumeMode = true;
-		ClearItemChildren();
-
-		float safeHeight = Mathf.Max( 0.02f, height );
-		float safeDiameter = Mathf.Max( 0.05f, diameter ) * _stackVolumeOversize;
-
-		_rootTransform.SetPositionAndRotation( contactPosition, rotation );
-		_rootTransform.localScale = Vector3.one;
-
-		if ( _volumeChild != null )
-		{
-			_volumeChild.SetActive( true );
-			_volumeChild.transform.localPosition = Vector3.up * ( safeHeight * 0.5f );
-			_volumeChild.transform.localRotation = Quaternion.identity;
-			_volumeChild.transform.localScale = new Vector3( safeDiameter, safeHeight * 0.5f, safeDiameter );
-		}
-
-		_lastValid = valid;
-	}
-
-	public void ClearStackVolumeMode()
-	{
-		_stackVolumeMode = false;
-		if ( _volumeChild != null )
-			_volumeChild.SetActive( false );
-	}
-
 	public void SyncFromItem( TreasureItem item )
 	{
-		ClearStackVolumeMode();
 		if ( item == null )
 		{
 			_syncedItem = null;
@@ -175,7 +109,9 @@ public sealed class PlacementGhost
 		}
 
 		TreasureDefinition definition = item.Definition;
-		if ( item == _syncedItem && definition == _syncedDefinition && _renderers.Count > 0 && !_stackVolumeMode )
+		if ( item == _syncedItem
+			&& definition == _syncedDefinition
+			&& HasGhostMeshRenderers() )
 			return;
 
 		_syncedItem = item;
@@ -183,44 +119,16 @@ public sealed class PlacementGhost
 		RebuildFromItem( item );
 	}
 
-	void EnsureVolumeChild()
+	bool HasGhostMeshRenderers()
 	{
-		if ( _volumeChild != null )
-			return;
-
-		_volumeChild = GameObject.CreatePrimitive( PrimitiveType.Cylinder );
-		_volumeChild.name = "StackVolume";
-		Object.Destroy( _volumeChild.GetComponent<Collider>() );
-		_volumeChild.transform.SetParent( _rootTransform, false );
-
-		_volumeRenderer = _volumeChild.GetComponent<MeshRenderer>();
-		if ( _volumeRenderer != null )
+		for ( int i = 0; i < _renderers.Count; i++ )
 		{
-			_volumeRenderer.shadowCastingMode = ShadowCastingMode.Off;
-			_volumeRenderer.receiveShadows = false;
-			_volumeRenderer.sharedMaterial = CreateInvisibleMaterial();
-			_volumeRenderer.enabled = true;
-			_renderers.Add( _volumeRenderer );
-		}
-	}
-
-	void ClearItemChildren()
-	{
-		if ( _rootTransform == null )
-			return;
-
-		for ( int i = _rootTransform.childCount - 1; i >= 0; i-- )
-		{
-			Transform child = _rootTransform.GetChild( i );
-			if ( child == null || child.gameObject == _volumeChild )
-				continue;
-
-			Object.Destroy( child.gameObject );
+			MeshRenderer renderer = _renderers[ i ];
+			if ( renderer != null )
+				return true;
 		}
 
-		_renderers.Clear();
-		if ( _volumeRenderer != null )
-			_renderers.Add( _volumeRenderer );
+		return false;
 	}
 
 	void RebuildFromItem( TreasureItem item )
@@ -328,9 +236,6 @@ public sealed class PlacementGhost
 	void ApplyTint( bool valid )
 	{
 		_lastValid = valid;
-		if ( _stackVolumeMode )
-			return;
-
 		ApplyFresnelTint( valid );
 	}
 
@@ -377,9 +282,7 @@ public sealed class PlacementGhost
 
 	void ClearChildren()
 	{
-		ClearStackVolumeMode();
 		_renderers.Clear();
-		_volumeRenderer = null;
 		if ( _rootTransform == null )
 			return;
 
@@ -389,8 +292,6 @@ public sealed class PlacementGhost
 			if ( child != null )
 				Object.Destroy( child.gameObject );
 		}
-
-		_volumeChild = null;
 	}
 
 	static float SafeDiv( float a, float b )
@@ -409,26 +310,6 @@ public sealed class PlacementGhost
 		_builtinCube = temp.GetComponent<MeshFilter>().sharedMesh;
 		Object.Destroy( temp );
 		return _builtinCube;
-	}
-
-	static Material _invisibleMaterial;
-
-	static Material CreateInvisibleMaterial()
-	{
-		if ( _invisibleMaterial != null )
-			return _invisibleMaterial;
-
-		Shader shader = Shader.Find( "DragonLoot/Hover Outline Invisible" );
-		if ( shader == null )
-			shader = Shader.Find( "Universal Render Pipeline/Unlit" );
-
-		_invisibleMaterial = new Material( shader );
-		if ( _invisibleMaterial.HasProperty( "_BaseColor" ) )
-			_invisibleMaterial.SetColor( "_BaseColor", Color.clear );
-		if ( _invisibleMaterial.HasProperty( "_Color" ) )
-			_invisibleMaterial.SetColor( "_Color", Color.clear );
-		_invisibleMaterial.renderQueue = (int)RenderQueue.Geometry + 10;
-		return _invisibleMaterial;
 	}
 
 	static Material CreateFresnelMaterial()

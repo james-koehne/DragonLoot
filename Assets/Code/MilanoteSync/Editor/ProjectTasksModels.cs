@@ -71,6 +71,20 @@ public sealed class ImportedFeature
 	public string TaskProgressLabel => CompletedTaskCount + "/" + TotalTaskCount;
 
 	public string MilanoteProgressLabel => "M:" + CompletedTaskCount + "/" + TotalTaskCount;
+
+	public bool IsMilanoteComplete
+	{
+		get
+		{
+			if ( IsCompleteFolder )
+				return true;
+			if ( string.Equals( Status, "Complete", StringComparison.OrdinalIgnoreCase )
+			     || string.Equals( Status, "Done", StringComparison.OrdinalIgnoreCase ) )
+				return true;
+
+			return TotalTaskCount > 0 && CompletedTaskCount == TotalTaskCount;
+		}
+	}
 }
 
 public sealed class ImportedTask
@@ -86,16 +100,14 @@ public sealed class ImportedCategory
 	public string Name;
 	public readonly List<ImportedFeature> Features = new List<ImportedFeature>();
 
-	public int ActiveCount
+	public int CompletedCount
 	{
 		get
 		{
 			int count = 0;
 			for ( int i = 0; i < Features.Count; i++ )
 			{
-				if ( !Features[i].IsCompleteFolder
-				     && !string.Equals( Features[i].Status, "Complete", StringComparison.OrdinalIgnoreCase )
-				     && !string.Equals( Features[i].Status, "Done", StringComparison.OrdinalIgnoreCase ) )
+				if ( Features[i].IsMilanoteComplete )
 					count++;
 			}
 

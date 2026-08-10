@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_Artifact_texture_10
+  m_Shader: {fileID: 4800000, guid: 0d031fe7952f9bc4b9bfd44a1d35c6fe, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: a754497fe746a464e819a7b4188ff7b1, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DirtMap:
+        m_Texture: {fileID: 2800000, guid: 5551f2320b5bfde4dbdbb0604036a53a, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MatCap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _BumpScale: 1
+    - _CleanFresnelBoost: 0.6
+    - _CleanSmoothnessBoost: 0.15
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DirtAlbedoMultiply: 0.55
+    - _DirtContrast: 4
+    - _DirtMapStrength: 1
+    - _DirtMetallicLoss: 0.85
+    - _DirtSmoothnessLoss: 0.75
+    - _DirtStrength: 2
+    - _FresnelIntensity: 0.25
+    - _FresnelPower: 4
+    - _MatCapIntensity: 0.45
+    - _MatCapPower: 8
+    - _Metallic: 0.92
+    - _OcclusionStrength: 1
+    - _ReflectionFloor: 0.25
+    - _ShineBoost: 3
+    - _Smoothness: 0.2
+    - _SparkleCoverage: 0.12
+    - _SparkleDensity: 6
+    - _SparkleFlicker: 0.45
+    - _SparkleIntensity: 0
+    - _SparkleSharpness: 64
+    - _SparkleSpeed: 2
+    - _Surface: 0
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _DirtColor: {r: 0.17999998, g: 0.11999995, b: 0.06999998, a: 1}
+    - _FresnelColor: {r: 1, g: 0.9, b: 0.7, a: 1}
+    - _MatCapColor: {r: 1, g: 0.92, b: 0.75, a: 1}
+    - _ShineColor: {r: 1.2, g: 0.95, b: 0.65, a: 1}
+    - _SparkleColor: {r: 1.5, g: 1.3, b: 0.9, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

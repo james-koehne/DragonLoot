@@ -32,7 +32,8 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		if ( pileVisual == null )
 			pileVisual = GetComponent<TreasurePileVisual>();
 
-		TryBindVisual();
+		// Do not Bind here — Integrate/Awake must stay light. Bind runs from Start after
+		// LoadSceneAsync finishes so PhysX tile cooks and heightfield setup are not in Integrate.
 	}
 
 	void Start()
@@ -460,7 +461,10 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 			}
 
 			item.EndFlight();
-			item.EnterSurface( targetPos, endRot, Vector3.zero );
+			if ( TreasureItem.UsesSurfaceSimulation( def ) )
+				item.EnterSurface( targetPos, endRot, Vector3.zero );
+			else
+				item.EnterPhysics( targetPos, endRot, Vector3.zero );
 			yield break;
 		}
 
@@ -477,7 +481,10 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		else
 		{
 			item.EndFlight();
-			item.EnterSurface( targetPos, endRot, Vector3.zero );
+			if ( TreasureItem.UsesSurfaceSimulation( def ) )
+				item.EnterSurface( targetPos, endRot, Vector3.zero );
+			else
+				item.EnterPhysics( targetPos, endRot, Vector3.zero );
 		}
 	}
 }

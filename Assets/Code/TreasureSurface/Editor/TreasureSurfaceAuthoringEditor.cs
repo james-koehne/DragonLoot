@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 [CustomEditor( typeof( TreasureSurfaceAuthoring ) )]
@@ -48,6 +49,21 @@ public class TreasureSurfaceAuthoringEditor : Editor
 
 		EditorGUILayout.Space( 8f );
 		EditorGUILayout.LabelField( "Scene Authoring", EditorStyles.boldLabel );
+
+		using ( new EditorGUI.DisabledScope( authoring.PaintAsset == null ) )
+		{
+			EditorGUILayout.ObjectField( "Paint Asset", authoring.PaintAsset, typeof( TreasureSurfacePaintAsset ), false );
+		}
+
+		if ( GUILayout.Button( "Migrate / Ensure Paint Asset" ) )
+		{
+			Undo.RecordObject( authoring, "Migrate Treasure Surface Paint" );
+			authoring.EditorMigratePaintToAsset( saveAssets: true );
+			EditorUtility.SetDirty( authoring );
+			if ( authoring.PaintAsset != null )
+				authoring.PaintAsset.MarkDirty();
+		}
+
 		_paintMode = ( PaintMode )EditorGUILayout.EnumPopup( "Paint Mode", _paintMode );
 		_brushRadius = EditorGUILayout.Slider( "Brush Radius (m)", _brushRadius, authoring.CellSize * 0.5f, 8f );
 		_paintMaterial = ( TreasureSurfaceMaterial )EditorGUILayout.EnumPopup( "Paint Material", _paintMaterial );
@@ -65,15 +81,16 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		EditorGUILayout.HelpBox(
 			"Drag the green box handles to move/resize bounds.\n"
 			+ "Paint with LMB in the Scene view (snaps to cells).\n"
+			+ "Paint data is stored in a .paintbin sidecar (not in the ScriptableObject).\n"
 			+ "Overlay is a hidden textured mesh plane over the bounds.",
 			MessageType.Info );
 
 		EditorGUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Fill Traversable" ) )
 		{
-			Undo.RecordObject( authoring, "Fill Traversable" );
+			RecordPaintUndo( authoring, "Fill Traversable" );
 			authoring.FillAll( true, _paintMaterial );
-			EditorUtility.SetDirty( authoring );
+			MarkPaintDirty( authoring );
 			TreasureSurfaceAuthoringOverlay.Invalidate();
 			if ( _showCellOverlay )
 				TreasureSurfaceAuthoringOverlay.Show( authoring );
@@ -81,9 +98,9 @@ public class TreasureSurfaceAuthoringEditor : Editor
 
 		if ( GUILayout.Button( "Fill Blocked" ) )
 		{
-			Undo.RecordObject( authoring, "Fill Blocked" );
+			RecordPaintUndo( authoring, "Fill Blocked" );
 			authoring.FillAll( false, _paintMaterial );
-			EditorUtility.SetDirty( authoring );
+			MarkPaintDirty( authoring );
 			TreasureSurfaceAuthoringOverlay.Invalidate();
 			if ( _showCellOverlay )
 				TreasureSurfaceAuthoringOverlay.Show( authoring );
@@ -236,6 +253,8 @@ public class TreasureSurfaceAuthoringEditor : Editor
 					TreasureSurfaceAuthoringOverlay.Show( authoring );
 
 				EditorUtility.SetDirty( authoring );
+				if ( authoring.PaintAsset != null )
+					authoring.PaintAsset.MarkDirty();
 			}
 
 			_painting = false;
@@ -246,7 +265,7 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		{
 			if ( !_paintUndoRegistered )
 			{
-				Undo.RecordObject( authoring, "Paint Treasure Surface" );
+				RecordPaintUndo( authoring, "Paint Treasure Surface" );
 				_paintUndoRegistered = true;
 			}
 
@@ -281,11 +300,25 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		_brushHit = hit;
 		_hasBrushHit = true;
 	}
+
+	static void RecordPaintUndo( TreasureSurfaceAuthoring authoring, string undoName )
+	{
+		if ( authoring.PaintAsset != null )
+			authoring.PaintAsset.EditorPushUndo( undoName );
+		Undo.RecordObject( authoring, undoName );
+	}
+
+	static void MarkPaintDirty( TreasureSurfaceAuthoring authoring )
+	{
+		EditorUtility.SetDirty( authoring );
+		if ( authoring.PaintAsset != null )
+			authoring.PaintAsset.MarkDirty();
+	}
 }
 
 public static class TreasureSurfaceAuthoringMenu
 {
-	[MenuItem( "DragonLoot/Create Treasure Surface Authoring In Active Scene" )]
+	[MenuItem( DragonLootMenus.TreasureSurfaceCreateAuthoring )]
 	public static void CreateInActiveScene()
 	{
 		if ( TreasureSurfaceAuthoring.Instance != null )
@@ -302,8 +335,49 @@ public static class TreasureSurfaceAuthoringMenu
 		if ( def != null )
 			authoring.SetDefinition( def );
 
+		authoring.EditorMigratePaintToAsset( saveAssets: true );
+
 		Undo.RegisterCreatedObjectUndo( go, "Create Treasure Surface Authoring" );
 		Selection.activeGameObject = go;
+	}
+
+	[MenuItem( DragonLootMenus.TreasureSurfaceMigratePaint, priority = 22 )]
+	public static void MigratePaintFromOpenScenes()
+	{
+		int migrated = 0;
+		for ( int s = 0; s < UnityEngine.SceneManagement.SceneManager.sceneCount; s++ )
+		{
+			UnityEngine.SceneManagement.Scene scene =
+				UnityEngine.SceneManagement.SceneManager.GetSceneAt( s );
+			if ( !scene.IsValid() || !scene.isLoaded )
+				continue;
+
+			GameObject[] roots = scene.GetRootGameObjects();
+			for ( int r = 0; r < roots.Length; r++ )
+			{
+				TreasureSurfaceAuthoring[] authorings =
+					roots[ r ].GetComponentsInChildren<TreasureSurfaceAuthoring>( true );
+				for ( int i = 0; i < authorings.Length; i++ )
+				{
+					TreasureSurfaceAuthoring authoring = authorings[ i ];
+					if ( authoring == null )
+						continue;
+
+					Undo.RecordObject( authoring, "Migrate Treasure Surface Paint" );
+					if ( authoring.EditorMigratePaintToAsset( saveAssets: false ) )
+					{
+						EditorUtility.SetDirty( authoring );
+						if ( authoring.PaintAsset != null )
+							authoring.PaintAsset.MarkDirty();
+						EditorSceneManager.MarkSceneDirty( authoring.gameObject.scene );
+						migrated++;
+					}
+				}
+			}
+		}
+
+		AssetDatabase.SaveAssets();
+		Debug.Log( "TreasureSurfaceAuthoring: migrated paint for " + migrated + " authoring object(s)." );
 	}
 }
 #endif

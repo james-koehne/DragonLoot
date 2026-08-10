@@ -177,6 +177,10 @@ public class DebugCarrySection : DebugOverlaySection
 		DrawFilterButton( "Goblet", (int)TreasureCategory.Goblet );
 		DrawFilterButton( "Helmet", (int)TreasureCategory.Helmet );
 		GUILayout.EndHorizontal();
+		GUILayout.BeginHorizontal();
+		DrawFilterButton( "Key", (int)TreasureCategory.Key );
+		DrawFilterButton( "Chest", (int)TreasureCategory.Chest );
+		GUILayout.EndHorizontal();
 	}
 
 	static void DrawFilterButton( string label, int filter )
@@ -285,16 +289,22 @@ public class DebugCarrySection : DebugOverlaySection
 				if ( interactable == null || interactable.PileDefinition == null )
 					continue;
 
-				TreasurePileEntry[] contents = interactable.PileDefinition.contents;
-				if ( contents == null )
-					continue;
-
-				for ( int c = 0; c < contents.Length; c++ )
-					TryAddToCatalog( contents[ c ].treasure, seen );
+				TreasurePileDefinition pileDef = interactable.PileDefinition;
+				AddEntriesToCatalog( pileDef.coinContents, seen );
+				AddEntriesToCatalog( pileDef.treasureContents, seen );
 			}
 		}
 
 		s_catalog.Sort( CompareDefs );
+	}
+
+	static void AddEntriesToCatalog( TreasurePileEntry[] contents, HashSet<TreasureDefinition> seen )
+	{
+		if ( contents == null )
+			return;
+
+		for ( int c = 0; c < contents.Length; c++ )
+			TryAddToCatalog( contents[ c ].treasure, seen );
 	}
 
 	static void TryAddToCatalog( TreasureDefinition def, HashSet<TreasureDefinition> seen )

@@ -14,3 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DebugDefinition
   debugLogging: 0
   debugBackend: 0
+  spawnAtSceneCamera: 0

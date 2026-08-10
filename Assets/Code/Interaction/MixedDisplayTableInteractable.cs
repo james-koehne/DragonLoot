@@ -77,6 +77,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	SlotStack[] _slots;
 	readonly List<TreasureItem> _allItems = new List<TreasureItem>();
 	int _itemCount;
+	int _previewOutlineSlot = -1;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Table;
 
@@ -220,18 +221,40 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	public bool TryGetPlacementPreview( TreasureItem item, in PlacementQuery query, out PlacementPreview preview )
 	{
 		preview = default;
+		_previewOutlineSlot = -1;
 		if ( item == null )
 			return false;
 
 		if ( !TryResolveNearestSlot( item, in query, out int slotIndex, out int stackIndex, out bool valid ) )
 			return false;
 
-		GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 pos, out Quaternion rot );
-		preview.Position = pos;
-		preview.Rotation = rot;
-		preview.Scale = item.GetWorldScale();
-		preview.IsValid = valid;
+		_previewOutlineSlot = slotIndex;
+		Vector3 scale = item.GetWorldScale();
+
+		// Coin columns use the same stack outline as ground stacks (no item-mesh ghost).
+		if ( GroundCoinStack.IsGroundStackableCoin( item ) )
+		{
+			GetSlotBaseWorldPose( slotIndex, out Vector3 contact, out Quaternion rot );
+			preview.SetStackOutline( contact, rot, scale, valid );
+			GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 tipPos, out _ );
+			preview.Position = tipPos;
+			return true;
+		}
+
+		GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 pos, out Quaternion itemRot );
+		preview.SetItemMesh( pos, itemRot, scale, valid );
 		return true;
+	}
+
+	/// <summary>
+	/// Appends mesh renderers for the last placement-preview slot (cylinder + visible coins).
+	/// </summary>
+	public void AppendPreviewStackOutlineRenderers( List<Renderer> renderers )
+	{
+		if ( renderers == null || _slots == null || _previewOutlineSlot < 0 || _previewOutlineSlot >= _slots.Length )
+			return;
+
+		AppendSlotOutlineRenderers( _slots[ _previewOutlineSlot ], renderers );
 	}
 
 	public bool TryPlace( TreasureItem item, in PlacementQuery query )
@@ -580,6 +603,69 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		local.y += GetStackHeightForIndex( slot, stackIndex, item );
 		worldPos = area.TransformPoint( local );
 		worldRot = area.rotation * slot.LocalRotation;
+	}
+
+	void GetSlotBaseWorldPose( int slotIndex, out Vector3 worldPos, out Quaternion worldRot )
+	{
+		Transform area = displayArea != null ? displayArea : transform;
+		SlotStack slot = _slots[ slotIndex ];
+		worldPos = area.TransformPoint( slot.LocalBasePosition );
+		worldRot = area.rotation * slot.LocalRotation;
+	}
+
+	float GetSlotStackHeight( int slotIndex )
+	{
+		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+			return TreasureStackSpacing.FallbackStep;
+
+		SlotStack slot = _slots[ slotIndex ];
+		float height = 0f;
+		for ( int i = 0; i < slot.Items.Count; i++ )
+			height += TreasureStackSpacing.GetStep( slot.Items[ i ] );
+
+		return Mathf.Max( TreasureStackSpacing.FallbackStep, height );
+	}
+
+	float GetSlotStackDiameter( int slotIndex, Vector3 placingScale )
+	{
+		float diameter = Mathf.Max( placingScale.x, placingScale.z );
+		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+			return diameter;
+
+		SlotStack slot = _slots[ slotIndex ];
+		for ( int i = 0; i < slot.Items.Count; i++ )
+		{
+			TreasureItem member = slot.Items[ i ];
+			if ( member == null )
+				continue;
+
+			Vector3 scale = member.GetWorldScale();
+			diameter = Mathf.Max( diameter, Mathf.Max( scale.x, scale.z ) );
+		}
+
+		return diameter;
+	}
+
+	static void AppendSlotOutlineRenderers( SlotStack slot, List<Renderer> renderers )
+	{
+		if ( slot == null || renderers == null )
+			return;
+
+		if ( slot.Cylinder != null )
+		{
+			Transform host = slot.Cylinder.transform.parent;
+			GameObject root = host != null ? host.gameObject : slot.Cylinder.gameObject;
+			HoverOutlineTargetUtility.AppendEnabledMeshRenderers( root, renderers );
+		}
+
+		for ( int i = 0; i < slot.Items.Count; i++ )
+		{
+			TreasureItem member = slot.Items[ i ];
+			if ( member == null )
+				continue;
+
+			HoverOutlineTargetUtility.AppendEnabledMeshRenderers( member.gameObject, renderers );
+		}
 	}
 
 	float GetStackHeightForIndex( SlotStack slot, int stackIndex, TreasureItem placing )

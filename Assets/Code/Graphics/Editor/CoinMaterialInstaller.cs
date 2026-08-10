@@ -78,13 +78,13 @@ public static class CoinMaterialInstaller
 		};
 	}
 
-	[MenuItem("DragonLoot/Graphics/Install Coin Materials")]
+	[MenuItem(DragonLootMenus.GraphicsCoinsInstall)]
 	public static void MenuInstall()
 	{
 		TryInstall(forceAssignPrefabs: true, applyDefaults: false);
 	}
 
-	[MenuItem("DragonLoot/Graphics/Reset Coin Material Defaults")]
+	[MenuItem(DragonLootMenus.GraphicsCoinsReset)]
 	public static void MenuResetDefaults()
 	{
 		TryInstall(forceAssignPrefabs: true, applyDefaults: true);

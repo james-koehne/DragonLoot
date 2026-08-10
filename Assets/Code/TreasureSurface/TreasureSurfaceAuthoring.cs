@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Level-authored layout + cell paint for the treasure surface.
 /// Place in the Level scene; edit bounds and paint in the Scene view without Play Mode.
+/// Paint grids live on a <see cref="TreasureSurfacePaintAsset"/> sidecar (.paintbin), not in scene YAML.
 /// </summary>
 [DisallowMultipleComponent]
 [ExecuteAlways]
@@ -13,6 +14,11 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	[Header( "Definition (tuning)" )]
 	[SerializeField]
 	TreasureSurfaceDefinition definition;
+
+	[Header( "Paint Asset" )]
+	[Tooltip( "Binary paint grids (PreferBinarySerialization). Prefer one asset per level scene." )]
+	[SerializeField]
+	TreasureSurfacePaintAsset paintAsset;
 
 	[Header( "Layout (level)" )]
 	[SerializeField]
@@ -42,10 +48,12 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	[SerializeField]
 	bool defaultNonTraversable = true;
 
+	/// <summary>Legacy scene-inline paint. Migrated into <see cref="paintAsset"/> then cleared.</summary>
 	[SerializeField]
 	[HideInInspector]
 	byte[] traversablePaint;
 
+	/// <summary>Legacy scene-inline paint. Migrated into <see cref="paintAsset"/> then cleared.</summary>
 	[SerializeField]
 	[HideInInspector]
 	byte[] materialPaint;
@@ -67,6 +75,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	public static TreasureSurfaceAuthoring Instance => _instance;
 
 	public TreasureSurfaceDefinition Definition => definition;
+	public TreasureSurfacePaintAsset PaintAsset => paintAsset;
 	public Vector3 WorldOrigin => worldOrigin;
 	public float WorldSizeX => worldSizeX;
 	public float WorldSizeZ => worldSizeZ;
@@ -160,52 +169,25 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		def.baseHeight = baseHeight;
 	}
 
+	public void SetPaintAsset( TreasureSurfacePaintAsset asset )
+	{
+		paintAsset = asset;
+		EnsurePaintBuffers();
+	}
+
 	public void EnsurePaintBuffers()
 	{
-		int cellsX = TotalCellsX;
-		int cellsZ = TotalCellsZ;
-		int count = cellsX * cellsZ;
-
-		if ( traversablePaint != null
-			&& materialPaint != null
-			&& paintCellsX == cellsX
-			&& paintCellsZ == cellsZ
-			&& traversablePaint.Length == count
-			&& materialPaint.Length == count )
+#if UNITY_EDITOR
+		if ( HasLegacyPaint() || paintAsset == null )
+			EditorEnsurePaintAssetAssigned();
+		MigrateLegacyPaintIntoAsset();
+#endif
+		if ( paintAsset == null )
 			return;
 
-		byte[] newTrav = new byte[ count ];
-		byte[] newMat = new byte[ count ];
-		byte fillTrav = defaultNonTraversable ? ( byte )0 : ( byte )1;
-
-		for ( int i = 0; i < count; i++ )
-		{
-			newTrav[ i ] = fillTrav;
-			newMat[ i ] = ( byte )TreasureSurfaceMaterial.Stone;
-		}
-
-		// Copy overlapping cell indices when resolution changes (top-left aligned in grid space).
-		if ( traversablePaint != null && materialPaint != null && paintCellsX > 0 && paintCellsZ > 0 )
-		{
-			int copyX = Mathf.Min( paintCellsX, cellsX );
-			int copyZ = Mathf.Min( paintCellsZ, cellsZ );
-			for ( int z = 0; z < copyZ; z++ )
-			{
-				for ( int x = 0; x < copyX; x++ )
-				{
-					int oi = z * paintCellsX + x;
-					int ni = z * cellsX + x;
-					newTrav[ ni ] = traversablePaint[ oi ];
-					newMat[ ni ] = materialPaint[ oi ];
-				}
-			}
-		}
-
-		traversablePaint = newTrav;
-		materialPaint = newMat;
-		paintCellsX = cellsX;
-		paintCellsZ = cellsZ;
-		NotifyPaintChanged();
+		paintAsset.EnsureBuffers( TotalCellsX, TotalCellsZ, defaultNonTraversable );
+		paintCellsX = paintAsset.CellsX;
+		paintCellsZ = paintAsset.CellsZ;
 	}
 
 	public void BeginPaintNotifyBatch()
@@ -229,16 +211,140 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 			return;
 
 		paintRevision++;
+#if UNITY_EDITOR
+		if ( paintAsset != null )
+			paintAsset.MarkDirty();
+#endif
+	}
+
+	bool TryGetPaintArrays( out byte[] traversable, out byte[] materials, out int cellsX, out int cellsZ )
+	{
+		EnsurePaintBuffers();
+		if ( paintAsset == null || !paintAsset.HasBuffers )
+		{
+			traversable = null;
+			materials = null;
+			cellsX = 0;
+			cellsZ = 0;
+			return false;
+		}
+
+		traversable = paintAsset.TraversablePaint;
+		materials = paintAsset.MaterialPaint;
+		cellsX = paintAsset.CellsX;
+		cellsZ = paintAsset.CellsZ;
+		return true;
 	}
 
 #if UNITY_EDITOR
 	public void EditorGetPaintArrays( out byte[] traversable, out byte[] materials, out int cellsX, out int cellsZ )
 	{
+		if ( !TryGetPaintArrays( out traversable, out materials, out cellsX, out cellsZ ) )
+		{
+			traversable = System.Array.Empty<byte>();
+			materials = System.Array.Empty<byte>();
+			cellsX = 0;
+			cellsZ = 0;
+		}
+	}
+
+	const string DefaultPaintAssetFolder = "Assets/Definitions/TreasureSurface";
+	const string DefaultPaintAssetPath = DefaultPaintAssetFolder + "/TreasureSurfacePaint_Level.asset";
+
+	bool _paintAssetCreateQueued;
+
+	bool HasLegacyPaint()
+	{
+		return traversablePaint != null
+			&& materialPaint != null
+			&& paintCellsX > 0
+			&& paintCellsZ > 0
+			&& traversablePaint.Length >= paintCellsX * paintCellsZ
+			&& materialPaint.Length >= paintCellsX * paintCellsZ;
+	}
+
+	void EditorEnsurePaintAssetAssigned()
+	{
+		if ( paintAsset != null )
+			return;
+
+		TreasureSurfacePaintAsset existing =
+			UnityEditor.AssetDatabase.LoadAssetAtPath<TreasureSurfacePaintAsset>( DefaultPaintAssetPath );
+		if ( existing != null )
+		{
+			paintAsset = existing;
+			UnityEditor.EditorUtility.SetDirty( this );
+			return;
+		}
+
+		if ( _paintAssetCreateQueued )
+			return;
+
+		_paintAssetCreateQueued = true;
+		UnityEditor.EditorApplication.delayCall += EditorCreateDefaultPaintAssetIfNeeded;
+	}
+
+	void EditorCreateDefaultPaintAssetIfNeeded()
+	{
+		_paintAssetCreateQueued = false;
+		if ( this == null || paintAsset != null )
+			return;
+
+		TreasureSurfacePaintAsset existing =
+			UnityEditor.AssetDatabase.LoadAssetAtPath<TreasureSurfacePaintAsset>( DefaultPaintAssetPath );
+		if ( existing != null )
+		{
+			paintAsset = existing;
+			UnityEditor.EditorUtility.SetDirty( this );
+			MigrateLegacyPaintIntoAsset();
+			EnsurePaintBuffers();
+			return;
+		}
+
+		if ( !UnityEditor.AssetDatabase.IsValidFolder( "Assets/Definitions" ) )
+			UnityEditor.AssetDatabase.CreateFolder( "Assets", "Definitions" );
+		if ( !UnityEditor.AssetDatabase.IsValidFolder( DefaultPaintAssetFolder ) )
+			UnityEditor.AssetDatabase.CreateFolder( "Assets/Definitions", "TreasureSurface" );
+
+		TreasureSurfacePaintAsset created = ScriptableObject.CreateInstance<TreasureSurfacePaintAsset>();
+		created.name = "TreasureSurfacePaint_Level";
+		UnityEditor.AssetDatabase.CreateAsset( created, DefaultPaintAssetPath );
+		paintAsset = created;
+		UnityEditor.EditorUtility.SetDirty( this );
+		MigrateLegacyPaintIntoAsset();
 		EnsurePaintBuffers();
-		traversable = traversablePaint;
-		materials = materialPaint;
-		cellsX = paintCellsX;
-		cellsZ = paintCellsZ;
+		UnityEditor.AssetDatabase.SaveAssets();
+	}
+
+	void MigrateLegacyPaintIntoAsset()
+	{
+		if ( paintAsset == null || !HasLegacyPaint() )
+			return;
+
+		// Legacy scene arrays are authoritative for a one-time migrate.
+		paintAsset.ImportLegacy( traversablePaint, materialPaint, paintCellsX, paintCellsZ );
+
+		traversablePaint = null;
+		materialPaint = null;
+		UnityEditor.EditorUtility.SetDirty( this );
+	}
+
+	/// <summary>Editor menu / tools: force migrate + clear legacy scene arrays.</summary>
+	public bool EditorMigratePaintToAsset( bool saveAssets )
+	{
+		EditorCreateDefaultPaintAssetIfNeeded();
+		if ( paintAsset == null )
+		{
+			TreasureSurfacePaintAsset existing =
+				UnityEditor.AssetDatabase.LoadAssetAtPath<TreasureSurfacePaintAsset>( DefaultPaintAssetPath );
+			paintAsset = existing;
+		}
+
+		MigrateLegacyPaintIntoAsset();
+		EnsurePaintBuffers();
+		if ( saveAssets )
+			UnityEditor.AssetDatabase.SaveAssets();
+		return paintAsset != null;
 	}
 #endif
 
@@ -273,13 +379,14 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	{
 		traversable = !defaultNonTraversable;
 		material = TreasureSurfaceMaterial.Stone;
-		EnsurePaintBuffers();
-		if ( cellX < 0 || cellZ < 0 || cellX >= paintCellsX || cellZ >= paintCellsZ )
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+			return false;
+		if ( cellX < 0 || cellZ < 0 || cellX >= cellsX || cellZ >= cellsZ )
 			return false;
 
-		int i = cellZ * paintCellsX + cellX;
-		traversable = traversablePaint[ i ] != 0;
-		material = ( TreasureSurfaceMaterial )materialPaint[ i ];
+		int i = cellZ * cellsX + cellX;
+		traversable = trav[ i ] != 0;
+		material = ( TreasureSurfaceMaterial )mats[ i ];
 		return true;
 	}
 
@@ -296,7 +403,8 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		fullyTraversable = false;
 		anyTraversable = false;
 		material = TreasureSurfaceMaterial.Stone;
-		EnsurePaintBuffers();
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsXOut, out int cellsZOut ) )
+			return false;
 
 		if ( chunkX < 0 || chunkZ < 0 || chunkX >= ChunkCountX || chunkZ >= ChunkCountZ )
 			return false;
@@ -304,29 +412,29 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		int baseX = chunkX * cellsPerChunk;
 		int baseZ = chunkZ * cellsPerChunk;
 		int blocked = 0;
-		int trav = 0;
+		int travCount = 0;
 		byte firstMat = 0;
 		bool hasMat = false;
 
 		for ( int z = 0; z < cellsPerChunk; z++ )
 		{
 			int worldZ = baseZ + z;
-			if ( worldZ >= paintCellsZ )
+			if ( worldZ >= cellsZOut )
 				break;
 
 			for ( int x = 0; x < cellsPerChunk; x++ )
 			{
 				int worldX = baseX + x;
-				if ( worldX >= paintCellsX )
+				if ( worldX >= cellsXOut )
 					break;
 
-				int i = worldZ * paintCellsX + worldX;
-				if ( traversablePaint[ i ] != 0 )
+				int i = worldZ * cellsXOut + worldX;
+				if ( trav[ i ] != 0 )
 				{
-					trav++;
+					travCount++;
 					if ( !hasMat )
 					{
-						firstMat = materialPaint[ i ];
+						firstMat = mats[ i ];
 						hasMat = true;
 					}
 				}
@@ -337,12 +445,11 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 			}
 		}
 
-		anyTraversable = trav > 0;
-		fullyTraversable = trav > 0 && blocked == 0;
+		anyTraversable = travCount > 0;
+		fullyTraversable = travCount > 0 && blocked == 0;
 		if ( hasMat )
 			material = ( TreasureSurfaceMaterial )firstMat;
 
-		// Fully traversable with mixed materials still uses one square (first material tint).
 		return true;
 	}
 
@@ -358,13 +465,14 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	public void SetPaintCell( int cellX, int cellZ, bool traversable, TreasureSurfaceMaterial material )
 	{
-		EnsurePaintBuffers();
-		if ( cellX < 0 || cellZ < 0 || cellX >= paintCellsX || cellZ >= paintCellsZ )
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+			return;
+		if ( cellX < 0 || cellZ < 0 || cellX >= cellsX || cellZ >= cellsZ )
 			return;
 
-		int i = cellZ * paintCellsX + cellX;
-		traversablePaint[ i ] = traversable ? ( byte )1 : ( byte )0;
-		materialPaint[ i ] = ( byte )material;
+		int i = cellZ * cellsX + cellX;
+		trav[ i ] = traversable ? ( byte )1 : ( byte )0;
+		mats[ i ] = ( byte )material;
 		NotifyPaintChanged();
 	}
 
@@ -379,7 +487,8 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		bool paintTraversable,
 		bool paintMaterial )
 	{
-		EnsurePaintBuffers();
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+			return;
 		if ( radiusMeters <= 0f )
 			return;
 
@@ -390,7 +499,6 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		int cellRadius = Mathf.Max( 0, Mathf.CeilToInt( radiusMeters / cell ) );
 		if ( !TryWorldToCell( worldCenter, out int cx, out int cz ) )
 		{
-			// Still allow painting near the edge by clamping center into bounds.
 			float localX = Mathf.Clamp( worldCenter.x - worldOrigin.x + halfX, 0f, worldSizeX - 0.001f );
 			float localZ = Mathf.Clamp( worldCenter.z - worldOrigin.z + halfZ, 0f, worldSizeZ - 0.001f );
 			cx = Mathf.FloorToInt( localX / cell );
@@ -411,24 +519,24 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 			for ( int x = cx - cellRadius; x <= cx + cellRadius; x++ )
 			{
-				if ( x < 0 || z < 0 || x >= paintCellsX || z >= paintCellsZ )
+				if ( x < 0 || z < 0 || x >= cellsX || z >= cellsZ )
 					continue;
 
 				float dx = ( x + 0.5f ) * cell - localCenterX;
 				if ( dx * dx + dzSq > radiusSq )
 					continue;
 
-				int i = z * paintCellsX + x;
+				int i = z * cellsX + x;
 				if ( paintTraversable )
 				{
-					if ( traversablePaint[ i ] != travByte )
-						traversablePaint[ i ] = travByte;
+					if ( trav[ i ] != travByte )
+						trav[ i ] = travByte;
 				}
 
 				if ( paintMaterial )
 				{
-					if ( materialPaint[ i ] != matByte )
-						materialPaint[ i ] = matByte;
+					if ( mats[ i ] != matByte )
+						mats[ i ] = matByte;
 				}
 			}
 		}
@@ -438,13 +546,15 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	public void FillAll( bool traversable, TreasureSurfaceMaterial material )
 	{
-		EnsurePaintBuffers();
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out _, out _ ) )
+			return;
+
 		byte t = traversable ? ( byte )1 : ( byte )0;
 		byte m = ( byte )material;
-		for ( int i = 0; i < traversablePaint.Length; i++ )
+		for ( int i = 0; i < trav.Length; i++ )
 		{
-			traversablePaint[ i ] = t;
-			materialPaint[ i ] = m;
+			trav[ i ] = t;
+			mats[ i ] = m;
 		}
 
 		NotifyPaintChanged();
@@ -455,7 +565,9 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		if ( chunk == null || !chunk.Loaded || chunk.PaintTraversable == null )
 			return;
 
-		EnsurePaintBuffers();
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+			return;
+
 		int res = chunk.Resolution;
 		int baseCellX = chunk.Coord.X * cellsPerChunk;
 		int baseCellZ = chunk.Coord.Z * cellsPerChunk;
@@ -468,16 +580,16 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 				int worldCellX = baseCellX + x;
 				int chunkIndex = chunk.Index( x, z );
 
-				if ( worldCellX < 0 || worldCellZ < 0 || worldCellX >= paintCellsX || worldCellZ >= paintCellsZ )
+				if ( worldCellX < 0 || worldCellZ < 0 || worldCellX >= cellsX || worldCellZ >= cellsZ )
 				{
 					chunk.PaintTraversable[ chunkIndex ] = defaultNonTraversable ? ( byte )0 : ( byte )1;
 					chunk.PaintMaterial[ chunkIndex ] = ( byte )TreasureSurfaceMaterial.Stone;
 					continue;
 				}
 
-				int paintIndex = worldCellZ * paintCellsX + worldCellX;
-				chunk.PaintTraversable[ chunkIndex ] = traversablePaint[ paintIndex ];
-				chunk.PaintMaterial[ chunkIndex ] = materialPaint[ paintIndex ];
+				int paintIndex = worldCellZ * cellsX + worldCellX;
+				chunk.PaintTraversable[ chunkIndex ] = trav[ paintIndex ];
+				chunk.PaintMaterial[ chunkIndex ] = mats[ paintIndex ];
 			}
 		}
 	}
@@ -488,7 +600,6 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		Bounds b = WorldBounds;
 		Gizmos.DrawWireCube( b.center, b.size );
 
-		// Chunk grid only when selected — keep line count low.
 		Gizmos.color = new Color( 0.35f, 0.8f, 1f, 0.25f );
 		float y = baseHeight + 0.02f;
 		float halfX = worldSizeX * 0.5f;

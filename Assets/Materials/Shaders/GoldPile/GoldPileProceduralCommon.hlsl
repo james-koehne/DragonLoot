@@ -40,8 +40,9 @@ float SampleProcDeformHeight(float2 uv)
     if (blur <= 0.001)
         return center;
 
-    // Cross blur in deform UV; blur amount is in heightfield texels.
-    float uvStep = rcp(max(_DeformResolution - 1.0, 1.0)) * blur;
+	// Cross blur in deform UV; blur amount is in heightfield texels.
+    // Mesh UVs are texel centers ((i+0.5)/res), so one texel step is 1/res.
+    float uvStep = rcp(max(_DeformResolution, 1.0)) * blur;
     float sum = center * 2.0;
     sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(uvStep, 0), 0).r;
     sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(uvStep, 0), 0).r;
@@ -193,7 +194,8 @@ ProcCoinSurface SampleProcVirtualCoins(
     float3 baseCell = floor(worldScaled);
 
     bool hasCoin = false;
-    half bestDepth = 1e9h;
+    // Stable stack order: higher priority always wins the full overlap (no mid-face depth cuts).
+    half bestPriority = -1.0h;
     half bestMask = 0;
     half3 bestAlbedo = 0;
     half3 bestNormalWS = nWS;
@@ -254,10 +256,11 @@ ProcCoinSurface SampleProcVirtualCoins(
                     continue;
 
                 half burial = saturate((half)rnd.z * 0.85h + 0.15h) * _BurialAmount;
-                // Prefer coins whose centers sit closer to the surface (and shallower burial).
-                half depth = burial + (half)(abs(outOfPlane) / max(slice, 1e-4)) * 0.35h;
-                depth += (1.0h - mask) * 0.001h;
-                if (hasCoin && depth >= bestDepth)
+                // Per-coin layer from cell hash — winner is constant across the whole disc overlap.
+                half priority = (half)ProcHash31(cell + 29.53);
+                // Tiny mask bias only for AA edge ties on the same layer (never splits two coins mid-face).
+                priority += mask * 1e-4h;
+                if (hasCoin && priority <= bestPriority)
                     continue;
 
                 // Per-coin lighting orientation: tilt facing away from the mound normal.
@@ -380,7 +383,7 @@ ProcCoinSurface SampleProcVirtualCoins(
                     albedo = lerp(_GapColor.rgb, albedo, exposed);
 
                 hasCoin = true;
-                bestDepth = depth;
+                bestPriority = priority;
                 bestMask = mask;
                 bestAlbedo = albedo;
                 bestNormalTS = normalTS;
@@ -437,7 +440,7 @@ half3 ProcDeformNormalWS(float2 deformUV, half3 fallbackNormalWS)
     float soften = saturate((float)_DeformNormalSoften);
     // Larger finite-difference step kills texel-scale creases in the lighting normal.
     float stepScale = 1.0 + soften * 3.0;
-    float uvStep = rcp(max(_DeformResolution - 1.0, 1.0)) * stepScale;
+    float uvStep = rcp(max(_DeformResolution, 1.0)) * stepScale;
     half heightLeft = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV - float2(uvStep, 0)).r;
     half heightRight = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV + float2(uvStep, 0)).r;
     half heightDown = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV - float2(0, uvStep)).r;

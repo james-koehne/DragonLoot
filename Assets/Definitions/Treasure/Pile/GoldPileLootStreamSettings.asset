@@ -14,12 +14,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GoldPileLootStreamSettings
   chunkSize: 4
   useCategoryDistanceCulling: 1
-  lod0End: 32
-  lod1End: 64
-  lod2End: 96
+  lod0End: 16
+  lod1End: 24
+  lod2End: 32
   lodHysteresisFrames: 8
   lod0Density: 1
   lod1Density: 0.6
   lod2Density: 0.25
+  gemNeverCull: 0
+  gemMaxStreamDistance: 48
+  artifactNeverCull: 1
+  artifactMaxStreamDistance: 48
+  propStreamHysteresisMeters: 2
   drawChunkGizmos: 1
   drawOverlayStats: 1

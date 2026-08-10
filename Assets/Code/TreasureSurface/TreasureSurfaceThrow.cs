@@ -335,7 +335,8 @@ public static class TreasureSurfaceThrow
 				&& world.Sampler.TrySample( pos, out TreasureSurfaceSample landSample )
 				&& landSample.Traversable )
 			{
-				pos.y = member.Definition != null && member.Definition.category == TreasureCategory.Gem
+				bool useStableSeat = member.Definition != null && member.Definition.category != TreasureCategory.Coin;
+				pos.y = useStableSeat
 					? landSample.Height + TreasureSurfaceSeat.GetStableContactLift( member )
 					: TreasureSurfaceSeat.GetContactY( member, landSample, rot );
 			}
@@ -343,28 +344,36 @@ public static class TreasureSurfaceThrow
 			if ( TreasurePileLooseDeposit.TryAbsorbLooseItem( member, pos ) )
 				continue;
 
-			member.EnterSurface( pos, rot, vel );
+			if ( TreasureItem.UsesSurfaceSimulation( member.Definition ) )
+				member.EnterSurface( pos, rot, vel );
+			else
+				member.EnterPhysics( pos, rot, vel );
 		}
 	}
 
 	public static void ResolveFlightSpins( TreasureItem item, out float spins )
 	{
+		TreasureSurfaceDefinition def = null;
+		TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+		if ( world != null )
+			def = world.Definition;
+
 		if ( CoinFlipMotion.IsCoin( item ) )
 		{
-			spins = CoinFlipMotion.DefaultSpins;
+			spins = def != null ? def.throwCoinSpins : CoinFlipMotion.DefaultSpins;
 			return;
 		}
 
-		// Crowns / goblets / helmets / artifacts: exactly one end-over-end flip before landing.
 		if ( item != null
 			&& item.Definition != null
-			&& item.Definition.category != TreasureCategory.Gem )
+			&& item.Definition.category == TreasureCategory.Gem )
 		{
-			spins = 1f;
+			spins = def != null ? def.throwGemSpins : 0.55f;
 			return;
 		}
 
-		spins = 0.55f;
+		// Crowns / goblets / helmets / artifacts.
+		spins = def != null ? def.throwArtifactSpins : 1f;
 	}
 
 	static Vector3 FlattenHorizontal( Vector3 v )

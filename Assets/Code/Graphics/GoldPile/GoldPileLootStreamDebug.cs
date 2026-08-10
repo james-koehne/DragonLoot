@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// Debug visualisation and hotkeys for loot instance chunk streaming.
-/// F1 = toggle streaming filter, F2 = toggle loot instances.
+/// Overlay lists every active pile. F1 = toggle streaming on all, F2 = toggle loot instances on all.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent( typeof( GoldPileLootInstances ) )]
@@ -54,7 +54,8 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 
 	void Update()
 	{
-		if ( _loot == null )
+		// Hotkeys are handled once by the first active instance so all piles stay in sync.
+		if ( s_active.Count == 0 || s_active[ 0 ] != this )
 			return;
 
 		Keyboard keyboard = Keyboard.current;
@@ -62,10 +63,10 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 			return;
 
 		if ( keyboard[ toggleStreamingKey ].wasPressedThisFrame )
-			ToggleStreaming();
+			ToggleStreamingAll();
 
 		if ( keyboard[ toggleLootKey ].wasPressedThisFrame )
-			ToggleLoot();
+			ToggleLootAll();
 	}
 
 	public void ToggleStreaming()
@@ -87,18 +88,83 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 		drawOverlay = enabled;
 	}
 
+	static void ToggleStreamingAll()
+	{
+		bool anyOn = false;
+		for ( int i = 0; i < s_active.Count; i++ )
+		{
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile != null && pile.StreamingEnabled )
+			{
+				anyOn = true;
+				break;
+			}
+		}
+
+		bool next = !anyOn;
+		for ( int i = 0; i < s_active.Count; i++ )
+		{
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile == null || pile._loot == null )
+				continue;
+			pile._loot.SetStreamingEnabled( next );
+		}
+	}
+
+	static void ToggleLootAll()
+	{
+		bool anyOn = false;
+		for ( int i = 0; i < s_active.Count; i++ )
+		{
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile != null && pile.LootEnabled )
+			{
+				anyOn = true;
+				break;
+			}
+		}
+
+		bool next = !anyOn;
+		for ( int i = 0; i < s_active.Count; i++ )
+		{
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile == null || pile._loot == null )
+				continue;
+			pile._loot.enabled = next;
+		}
+	}
+
+	static bool AnyOverlayEnabled()
+	{
+		for ( int i = 0; i < s_active.Count; i++ )
+		{
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile == null || !pile.drawOverlay )
+				continue;
+
+			GoldPileLootStreamSettings settings = pile._loot != null ? pile._loot.StreamSettings : null;
+			if ( settings != null && !settings.drawOverlayStats )
+				continue;
+
+			return true;
+		}
+
+		return false;
+	}
+
 	void OnGUI()
 	{
-		if ( !drawOverlay || _loot == null )
+		if ( s_active.Count == 0 || s_active[ 0 ] != this )
 			return;
-
-		GoldPileLootStreamSettings settings = _loot.StreamSettings;
-		if ( settings != null && !settings.drawOverlayStats )
+		if ( !AnyOverlayEnabled() )
 			return;
 
 		const float pad = 8f;
-		const float width = 460f;
-		const float height = 168f;
+		const float width = 560f;
+		const float line = 18f;
+		const float headerLines = 5f;
+		const float linesPerPile = 7f;
+		float height = pad * 2f + line * ( headerLines + linesPerPile * Mathf.Max( 1, s_active.Count ) );
 		float x = pad;
 		if ( DebugOverlay.IsOpen )
 			x = DebugOverlay.PanelWidth + pad * 2f;
@@ -107,22 +173,70 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 		GUI.Box( r, GUIContent.none );
 		GUILayout.BeginArea( new Rect( x + 6f, pad + 4f, width - 12f, height - 8f ) );
 
-		GUILayout.Label( "Gold Pile Loot Stream Debug" );
-		GUILayout.Label( $"[{toggleStreamingKey}] Streaming: {( _loot.StreamingEnabled ? "ON" : "OFF (draw all Drawn)" )}" );
-		GUILayout.Label( $"[{toggleLootKey}] Loot Inst: {( _loot.enabled ? "ON" : "OFF" )}" );
+		Key streamKey = toggleStreamingKey;
+		Key lootKey = toggleLootKey;
+		GUILayout.Label( $"Gold Pile Loot Stream Debug  ({s_active.Count} piles)" );
+		GUILayout.Label( $"[{streamKey}] Streaming all  [{lootKey}] Loot inst all" );
 
-		if ( !_loot.IsReady )
+		bool anyStreaming = false;
+		bool anyLoot = false;
+		for ( int i = 0; i < s_active.Count; i++ )
 		{
-			GUILayout.Label( "NOT READY" );
-			GUILayout.EndArea();
-			return;
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile == null )
+				continue;
+			if ( pile.StreamingEnabled )
+				anyStreaming = true;
+			if ( pile.LootEnabled )
+				anyLoot = true;
 		}
 
-		GoldPileChunkStreamer streamer = _loot.Streamer;
-		GUILayout.Label( $"Loaded {streamer.LoadedCount}  Visible {streamer.VisibleCount}  Rendered {streamer.RenderedCount}" );
-		GUILayout.Label( $"Frustum culled {streamer.FrustumCulledCount}" );
-		GUILayout.Label( $"Drawn {_loot.LastDrawnCount}  Culled {_loot.LastCulledCount}  Pool {_loot.DrawnPoolCount}" );
-		GUILayout.Label( $"Cache rebuilds {_loot.CacheRebuildCount}" );
+		GUILayout.Label( $"Streaming: {( anyStreaming ? "ON" : "OFF (draw all Drawn)" )}  Loot Inst: {( anyLoot ? "ON" : "OFF" )}" );
+		GUILayout.Label( $"World parked props: {WorldTreasurePersistence.ParkedCount}" );
+		GUILayout.Space( 4f );
+
+		for ( int i = 0; i < s_active.Count; i++ )
+		{
+			GoldPileLootStreamDebug pile = s_active[ i ];
+			if ( pile == null )
+				continue;
+
+			GoldPileLootInstances loot = pile._loot;
+			string name = pile.gameObject != null ? pile.gameObject.name : "?";
+			if ( loot == null )
+			{
+				GUILayout.Label( $"[{i}] {name}: (no loot component)" );
+				continue;
+			}
+
+			string stream = loot.StreamingEnabled ? "stream ON" : "stream OFF";
+			string lootOn = loot.enabled ? "loot ON" : "loot OFF";
+			if ( !loot.IsReady )
+			{
+				GUILayout.Label( $"[{i}] {name}: NOT READY  {stream}  {lootOn}" );
+				continue;
+			}
+
+			GoldPileChunkStreamer streamer = loot.Streamer;
+			GUILayout.Label(
+				$"[{i}] {name}: {stream}  {lootOn}  " +
+				$"L{streamer.LoadedCount} V{streamer.VisibleCount} R{streamer.RenderedCount} F{streamer.FrustumCulledCount}" );
+			GUILayout.Label(
+				$"    Coins drawn {loot.LastDrawnCount}  Culled {loot.LastCulledCount}  Pool {loot.DrawnPoolCount}  " +
+				$"Steady {loot.SteadyVisibleBudget}/{loot.MaxVisibleTotal}" );
+			GUILayout.Label(
+				$"    Rebuilds {loot.CacheRebuildCount}  Dirty {loot.LastDirtyChunkRebuildCount}" );
+
+			GoldPileArtifactProps props = pile.GetComponent<GoldPileArtifactProps>();
+			if ( props == null )
+				props = pile.GetComponentInParent<GoldPileArtifactProps>();
+			if ( props != null )
+			{
+				GUILayout.Label(
+					$"    Props live {props.LivePropCount}  latent {props.LatentCount}  " +
+					$"exposed {props.ExposedLatentCount}  streamed-out {props.StreamedOutCount}" );
+			}
+		}
 
 		GUILayout.EndArea();
 	}

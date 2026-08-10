@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1130d2fb0c4e0b44e9ec35ebba2440ea, type: 3}
+  m_Name: Ability_PlaceholderSpark
+  m_EditorClassIdentifier: Assembly-CSharp::AbilityDefinition
+  id: placeholder_spark
+  displayName: Placeholder Spark
+  description: Debug placeholder ability used to verify activation and cooldowns.
+  icon: {fileID: 0}
+  cooldown: 2
+  enabled: 1
+  behaviour: {fileID: 11400000, guid: 8f44ca285b01e2041a03c31e4c60798a, type: 2}

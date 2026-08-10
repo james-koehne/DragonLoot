@@ -22,6 +22,8 @@ public sealed class TreasureSurfaceSimulator
 		public float RestTimer;
 		public bool Sleeping;
 		public TreasureCategory Category;
+		public bool FromRest;
+		public float RestAccelT;
 	}
 
 	readonly TreasureSurfaceWorld _world;
@@ -40,6 +42,11 @@ public sealed class TreasureSurfaceSimulator
 
 	public void Register( TreasureItem item, Vector3 velocity )
 	{
+		Register( item, velocity, fromRest: false );
+	}
+
+	public void Register( TreasureItem item, Vector3 velocity, bool fromRest )
+	{
 		if ( item == null )
 			return;
 
@@ -53,6 +60,10 @@ public sealed class TreasureSurfaceSimulator
 		Vector3 flatVel = new Vector3( velocity.x, 0f, velocity.z );
 		float impactSpeed = ComputeImpactSpeed( velocity );
 		float threshold = def != null ? def.hopImpactSpeedThreshold : 0.35f;
+
+		// Meaningful horizontal speed means this is not a from-rest pile release.
+		if ( flatVel.sqrMagnitude > 0.0001f )
+			fromRest = false;
 
 		int bounces = 0;
 		Vector3 angular = Vector3.zero;
@@ -68,21 +79,35 @@ public sealed class TreasureSurfaceSimulator
 			}
 		}
 
+		float seatLift = TreasureSurfaceSeat.GetStableContactLift( item );
+		float heightAbove = 0f;
+		float verticalVel = velocity.y;
+		if ( _world != null
+			&& _world.Sampler != null
+			&& _world.Sampler.TrySample( item.transform.position, out TreasureSurfaceSample sample )
+			&& sample.Valid )
+		{
+			float contactY = sample.Height + seatLift;
+			heightAbove = Mathf.Max( 0f, item.transform.position.y - contactY );
+		}
+
 		_bodies.Add( new SimBody
 		{
 			Item = item,
 			Velocity = flatVel,
-			VerticalVelocity = velocity.y,
-			HeightAboveSurface = 0f,
+			VerticalVelocity = verticalVel,
+			HeightAboveSurface = heightAbove,
 			BouncesRemaining = bounces,
 			AngularVelocity = angular,
 			SmoothedRollAxis = angular.sqrMagnitude > 0.0001f ? angular.normalized : Vector3.zero,
 			// Stable seat radius — must not depend on tumbling rotation or Y jitters every frame.
-			SeatLift = TreasureSurfaceSeat.GetStableContactLift( item ),
+			SeatLift = seatLift,
 			HasLandedOnce = false,
 			RestTimer = 0f,
 			Sleeping = false,
-			Category = category
+			Category = category,
+			FromRest = fromRest,
+			RestAccelT = 0f
 		} );
 	}
 
@@ -128,6 +153,8 @@ public sealed class TreasureSurfaceSimulator
 			body.HasLandedOnce = false;
 			body.SeatLift = TreasureSurfaceSeat.GetStableContactLift( item );
 			body.SmoothedRollAxis = Vector3.zero;
+			body.FromRest = false;
+			body.RestAccelT = 0f;
 			TreasureSurfaceDefinition def = _world != null ? _world.Definition : null;
 			float impactSpeed = ComputeImpactSpeed( velocity );
 			float threshold = def != null ? def.hopImpactSpeedThreshold : 0.35f;
@@ -154,14 +181,26 @@ public sealed class TreasureSurfaceSimulator
 			if ( TryAutoStack( item ) )
 				return;
 
-			body.Sleeping = true;
-			body.RestTimer = 0f;
-			body.Velocity = Vector3.zero;
-			body.VerticalVelocity = 0f;
-			body.HeightAboveSurface = 0f;
-			body.BouncesRemaining = 0;
-			body.AngularVelocity = Vector3.zero;
-			_bodies[ i ] = body;
+			// Join / pose apply may Unregister+Register — never write back via a stale index.
+			TryJoinGemPyramid( item );
+
+			for ( int j = 0; j < _bodies.Count; j++ )
+			{
+				if ( _bodies[ j ].Item != item )
+					continue;
+
+				body = _bodies[ j ];
+				body.Sleeping = true;
+				body.RestTimer = 0f;
+				body.Velocity = Vector3.zero;
+				body.VerticalVelocity = 0f;
+				body.HeightAboveSurface = 0f;
+				body.BouncesRemaining = 0;
+				body.AngularVelocity = Vector3.zero;
+				_bodies[ j ] = body;
+				return;
+			}
+
 			return;
 		}
 	}
@@ -264,6 +303,21 @@ public sealed class TreasureSurfaceSimulator
 
 		Vector3 velocity = body.Velocity;
 
+		float restRamp = 1f;
+		if ( body.FromRest )
+		{
+			float rampTime = Mathf.Max( 0.05f, def.pileReleaseAccelRampTime );
+			body.RestAccelT += dt;
+			float u = Mathf.Clamp01( body.RestAccelT / rampTime );
+			restRamp = u * u * ( 3f - 2f * u );
+			if ( u >= 1f )
+			{
+				body.FromRest = false;
+				body.RestAccelT = rampTime;
+				restRamp = 1f;
+			}
+		}
+
 		bool airborne = body.HeightAboveSurface > 0.001f || body.VerticalVelocity > 0.01f;
 
 		// First surface contact: spend a bounce as an upward hop + flip/roll impulse.
@@ -301,6 +355,7 @@ public sealed class TreasureSurfaceSimulator
 			{
 				float downhillAccel = def.gravity * sample.Slope * speedScale;
 				downhillAccel += def.flowAcceleration * sample.Slope * speedScale * 0.35f;
+				downhillAccel *= restRamp;
 				velocity.x += downhill.x * downhillAccel * dt;
 				velocity.z += downhill.y * downhillAccel * dt;
 			}
@@ -310,8 +365,8 @@ public sealed class TreasureSurfaceSimulator
 				&& sample.Slope <= def.stableSlopeThreshold )
 			{
 				float phase = Time.time * 7.3f + item.GetInstanceID() * 0.01f;
-				velocity.x += Mathf.Sin( phase ) * wobble * dt;
-				velocity.z += Mathf.Cos( phase * 0.87f ) * wobble * dt;
+				velocity.x += Mathf.Sin( phase ) * wobble * dt * restRamp;
+				velocity.z += Mathf.Cos( phase * 0.87f ) * wobble * dt * restRamp;
 			}
 
 			// Slope-aware friction: steep slopes keep nearly full gravity; flats damp quickly.
@@ -358,6 +413,20 @@ public sealed class TreasureSurfaceSimulator
 			// Light air drag on horizontal speed.
 			velocity.x *= 1f - Mathf.Clamp01( 0.35f * dt );
 			velocity.z *= 1f - Mathf.Clamp01( 0.35f * dt );
+
+			// Gentle flow pull while falling so pile releases accelerate downhill before landing.
+			if ( sample.Flow.sqrMagnitude > 0.0001f && def != null )
+			{
+				Vector2 flow = sample.Flow;
+				float mag = flow.magnitude;
+				if ( mag > 0.0001f )
+				{
+					flow /= mag;
+					float airFlow = def.flowAcceleration * sample.Slope * 0.5f * dt * restRamp;
+					velocity.x += flow.x * airFlow;
+					velocity.z += flow.y * airFlow;
+				}
+			}
 		}
 
 		velocity.y = 0f;
@@ -366,6 +435,7 @@ public sealed class TreasureSurfaceSimulator
 		next.x += velocity.x * dt;
 		next.z += velocity.z * dt;
 
+		float edgeDeflect = bounce * Mathf.Max( 0.1f, def.softEdgeDeflectScale );
 		if ( !sampler.TrySample( next, out TreasureSurfaceSample nextSample ) || !nextSample.Traversable )
 		{
 			Vector3 slideX = new Vector3( next.x, pos.y, pos.z );
@@ -377,24 +447,40 @@ public sealed class TreasureSurfaceSimulator
 			{
 				next = slideX;
 				nextSample = sx;
-				velocity.z *= -bounce * 0.25f;
+				velocity.z *= -edgeDeflect;
 			}
 			else if ( okZ && !okX )
 			{
 				next = slideZ;
 				nextSample = sz;
-				velocity.x *= -bounce * 0.25f;
+				velocity.x *= -edgeDeflect;
 			}
 			else if ( okX )
 			{
 				next = slideX;
 				nextSample = sx;
 			}
+			else if ( okZ )
+			{
+				next = slideZ;
+				nextSample = sz;
+			}
 			else
 			{
+				// Corner / dead-end: soft reverse along approach, stay put. Recover only if current sample is invalid.
 				next = pos;
-				velocity *= 0.5f;
-				if ( !sampler.TrySample( next, out nextSample ) )
+				Vector2 approach = new Vector2( velocity.x, velocity.z );
+				if ( approach.sqrMagnitude > 0.0001f )
+				{
+					approach.Normalize();
+					float approachSpeed = new Vector2( velocity.x, velocity.z ).magnitude;
+					velocity.x = -approach.x * approachSpeed * edgeDeflect;
+					velocity.z = -approach.y * approachSpeed * edgeDeflect;
+				}
+				else
+					velocity *= edgeDeflect;
+
+				if ( !sampler.TrySample( next, out nextSample ) || !nextSample.Traversable )
 				{
 					Recover( ref body, item, preferStable: true );
 					return;
@@ -437,7 +523,7 @@ public sealed class TreasureSurfaceSimulator
 					float drop = t.position.y - contactY;
 					if ( drop > 0.04f && bounce > 0f )
 					{
-						float boost = Mathf.Min( drop * bounce * 2f, 1.5f );
+						float boost = Mathf.Min( drop * bounce * 2f, 1.5f ) * restRamp;
 						Vector2 slideDir = sample.Flow;
 						if ( slideDir.sqrMagnitude < 0.0001f )
 							slideDir = new Vector2( sample.Normal.x, sample.Normal.z );
@@ -509,12 +595,36 @@ public sealed class TreasureSurfaceSimulator
 				: def.artifactBounceRestitution;
 		restitution = Mathf.Max( 0.05f, restitution );
 
-		bool lightHop = body.Category == TreasureCategory.Coin || body.Category == TreasureCategory.Gem;
-		float hopCap = lightHop ? 4.5f : 0.45f;
-		float hopMin = lightHop ? 0.8f : 0.06f;
+		float hopMin;
+		float hopCap;
+		if ( body.Category == TreasureCategory.Coin )
+		{
+			hopMin = def.coinHopMin;
+			hopCap = def.coinHopMax;
+		}
+		else if ( body.Category == TreasureCategory.Gem )
+		{
+			hopMin = def.gemHopMin;
+			hopCap = def.gemHopMax;
+		}
+		else
+		{
+			hopMin = def.artifactHopMin;
+			hopCap = def.artifactHopMax;
+		}
+
+		if ( hopCap < hopMin )
+			hopCap = hopMin;
+
 		float hop = Mathf.Clamp( impactSpeed * restitution, hopMin, hopCap );
 		body.VerticalVelocity = hop;
-		body.HeightAboveSurface = Mathf.Max( body.HeightAboveSurface, 0.002f );
+		// Seed a visible lift so the bounce isn't a one-frame flick from 2mm above the seat.
+		float gravity = Mathf.Max( 1f, def.gravity );
+		float peakHeight = ( hop * hop ) / ( 2f * gravity );
+		float seed = body.Category == TreasureCategory.Coin || body.Category == TreasureCategory.Gem
+			? 0.002f
+			: Mathf.Max( 0.02f, peakHeight * 0.2f );
+		body.HeightAboveSurface = Mathf.Max( body.HeightAboveSurface, seed );
 		body.BouncesRemaining--;
 		body.HasLandedOnce = true;
 
@@ -653,7 +763,13 @@ public sealed class TreasureSurfaceSimulator
 
 			float otherRadius;
 			if ( other.Category == TreasureCategory.Gem )
+			{
+				// Same-type gems may sit together; only push apart different gems.
+				if ( AreSameTreasureType( item.Definition, otherItem.Definition ) )
+					continue;
+
 				otherRadius = Mathf.Max( def.gemPushRadius, TreasureSurfaceSeat.EstimatePushRadius( otherItem, def.gemPushRadius ) );
+			}
 			else if ( other.Category == TreasureCategory.Coin )
 				otherRadius = TreasureSurfaceSeat.EstimatePushRadius( otherItem, 0.08f ) * def.gemVsCoinPushRadiusScale;
 			else
@@ -736,6 +852,12 @@ public sealed class TreasureSurfaceSimulator
 			return;
 		}
 
+		if ( TryJoinGemPyramid( item ) )
+		{
+			body.Sleeping = true;
+			return;
+		}
+
 		if ( item != null
 			&& TreasurePileLooseDeposit.TryAbsorbLooseItem( item, item.transform.position ) )
 		{
@@ -753,18 +875,63 @@ public sealed class TreasureSurfaceSimulator
 		if ( item == null || _world == null || _world.Sampler == null )
 			return;
 
+		// Pyramid members keep authored stack height — do not snap them to the ground plane.
+		if ( GemPyramidRegistry.FindClusterContaining( item ) != null )
+			return;
+
 		Transform t = item.transform;
 		Vector3 pos = t.position;
 		if ( !_world.Sampler.TrySample( pos, out TreasureSurfaceSample sample ) || !sample.Traversable )
 			return;
 
-		Quaternion rot = TreasureOrientation.FlattenUpright( t.rotation );
-		float y = item.Definition != null && item.Definition.category == TreasureCategory.Gem
+		Quaternion rot = t.rotation;
+		bool isGem = item.Definition != null && item.Definition.category == TreasureCategory.Gem;
+		bool isCoin = item.Definition != null && item.Definition.category == TreasureCategory.Coin;
+		TreasureSurfaceDefinition def = _world.Definition;
+		bool flattenGem = def != null && def.gemFlattenOnSettle;
+		if ( isCoin || ( !isGem ) || flattenGem )
+			rot = TreasureOrientation.FlattenUpright( t.rotation );
+
+		// Match sim SeatLift so settle does not snap Y after a hop.
+		float y = !isCoin
 			? sample.Height + TreasureSurfaceSeat.GetStableContactLift( item )
 			: TreasureSurfaceSeat.GetContactY( item, sample, rot );
 		pos.y = Mathf.Max( sample.Height, y );
 		t.SetPositionAndRotation( pos, rot );
 		item.SyncRigidbodyToTransform();
+	}
+
+	bool TryJoinGemPyramid( TreasureItem item )
+	{
+		if ( item == null || item.Definition == null )
+			return false;
+		if ( item.Definition.category != TreasureCategory.Gem )
+			return false;
+
+		// Already shelved in a pyramid — leave pose alone.
+		if ( GemPyramidRegistry.FindClusterContaining( item ) != null )
+			return true;
+
+		// Different-type repel before join so settle doesn't nest inside foreign gems.
+		Vector3 separated = FloorPlacementTarget.ResolveGemPlaceSeparation( item, item.transform.position );
+		Vector3 delta = separated - item.transform.position;
+		delta.y = 0f;
+		if ( delta.sqrMagnitude > 0.0001f )
+		{
+			separated.y = item.transform.position.y;
+			item.transform.position = separated;
+			item.SyncRigidbodyToTransform();
+			if ( _world.Sampler.TrySample( separated, out TreasureSurfaceSample sample ) && sample.Traversable )
+			{
+				float y = sample.Height + TreasureSurfaceSeat.GetStableContactLift( item );
+				Vector3 seated = separated;
+				seated.y = y;
+				item.transform.position = seated;
+				item.SyncRigidbodyToTransform();
+			}
+		}
+
+		return GemPyramidRegistry.TryJoin( item, animate: true );
 	}
 
 	bool TryAutoStack( TreasureItem item )
@@ -880,6 +1047,17 @@ public sealed class TreasureSurfaceSimulator
 			default:
 				return Mathf.Max( 0, def.artifactMaxBounces );
 		}
+	}
+
+	static bool AreSameTreasureType( TreasureDefinition a, TreasureDefinition b )
+	{
+		if ( a == b )
+			return true;
+		if ( a == null || b == null )
+			return false;
+		if ( !string.IsNullOrEmpty( a.id ) && a.id == b.id )
+			return true;
+		return false;
 	}
 
 	static float ComputeImpactSpeed( Vector3 velocity )

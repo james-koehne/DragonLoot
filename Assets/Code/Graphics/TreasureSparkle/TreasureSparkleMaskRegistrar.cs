@@ -11,20 +11,31 @@ public static class TreasureSparkleMaskRegistrar
 	public interface IInstanceMaskSource
 	{
 		TreasureSparkleDefinition.SparkleSourceKind MaskKind { get; }
+		bool TryGetSparkleWorldBounds( out Bounds bounds );
 		void DrawSparkleMask( UnityEngine.Rendering.RasterCommandBuffer cmd, Material maskMaterial );
 	}
 
 	public struct RendererEntry
 	{
 		public Renderer Renderer;
+		public Mesh Mesh;
+		public TreasureSparkleDefinition.SparkleSourceKind Kind;
+	}
+
+	public struct SparkleVolume
+	{
+		public Bounds Bounds;
 		public TreasureSparkleDefinition.SparkleSourceKind Kind;
 	}
 
 	static readonly List<RendererEntry> ActiveEntries = new List<RendererEntry>( 64 );
 	static readonly HashSet<int> ActiveIds = new HashSet<int>();
 	static readonly List<IInstanceMaskSource> InstanceSources = new List<IInstanceMaskSource>( 8 );
+	static int _revision;
 
 	public static bool HasTargets => ActiveEntries.Count > 0 || InstanceSources.Count > 0;
+
+	public static int Revision => _revision;
 
 	public static IReadOnlyList<IInstanceMaskSource> Instances => InstanceSources;
 
@@ -33,6 +44,23 @@ public static class TreasureSparkleMaskRegistrar
 		ActiveEntries.Clear();
 		ActiveIds.Clear();
 		InstanceSources.Clear();
+		_revision++;
+	}
+
+	static Mesh ResolveMesh( Renderer renderer )
+	{
+		if ( renderer == null )
+			return null;
+
+		MeshFilter filter = renderer.GetComponent<MeshFilter>();
+		if ( filter != null && filter.sharedMesh != null )
+			return filter.sharedMesh;
+
+		SkinnedMeshRenderer skinned = renderer as SkinnedMeshRenderer;
+		if ( skinned != null )
+			return skinned.sharedMesh;
+
+		return null;
 	}
 
 	public static void Register( Renderer renderer, TreasureSparkleDefinition.SparkleSourceKind kind )
@@ -49,7 +77,10 @@ public static class TreasureSparkleMaskRegistrar
 				{
 					RendererEntry updated = ActiveEntries[ i ];
 					updated.Kind = kind;
+					if ( updated.Mesh == null )
+						updated.Mesh = ResolveMesh( renderer );
 					ActiveEntries[ i ] = updated;
+					_revision++;
 					return;
 				}
 			}
@@ -57,7 +88,13 @@ public static class TreasureSparkleMaskRegistrar
 			return;
 		}
 
-		ActiveEntries.Add( new RendererEntry { Renderer = renderer, Kind = kind } );
+		ActiveEntries.Add( new RendererEntry
+		{
+			Renderer = renderer,
+			Mesh = ResolveMesh( renderer ),
+			Kind = kind
+		} );
+		_revision++;
 	}
 
 	public static void Register( IReadOnlyList<Renderer> renderers, TreasureSparkleDefinition.SparkleSourceKind kind )
@@ -84,6 +121,8 @@ public static class TreasureSparkleMaskRegistrar
 			if ( existing == null || existing.GetInstanceID() == id )
 				ActiveEntries.RemoveAt( i );
 		}
+
+		_revision++;
 	}
 
 	public static void Unregister( IReadOnlyList<Renderer> renderers )
@@ -104,6 +143,7 @@ public static class TreasureSparkleMaskRegistrar
 			return;
 
 		InstanceSources.Add( source );
+		_revision++;
 	}
 
 	public static void UnregisterInstanceSource( IInstanceMaskSource source )
@@ -111,7 +151,10 @@ public static class TreasureSparkleMaskRegistrar
 		if ( source == null )
 			return;
 
-		InstanceSources.Remove( source );
+		if ( !InstanceSources.Remove( source ) )
+			return;
+
+		_revision++;
 	}
 
 	public static void CollectEntries(
@@ -122,6 +165,29 @@ public static class TreasureSparkleMaskRegistrar
 			return;
 
 		dst.Clear();
+		bool removed = false;
+		for ( int i = ActiveEntries.Count - 1; i >= 0; i-- )
+		{
+			if ( ActiveEntries[ i ].Renderer != null )
+				continue;
+
+			ActiveEntries.RemoveAt( i );
+			removed = true;
+		}
+
+		if ( removed )
+		{
+			ActiveIds.Clear();
+			for ( int i = 0; i < ActiveEntries.Count; i++ )
+			{
+				Renderer r = ActiveEntries[ i ].Renderer;
+				if ( r != null )
+					ActiveIds.Add( r.GetInstanceID() );
+			}
+
+			_revision++;
+		}
+
 		for ( int i = 0; i < ActiveEntries.Count; i++ )
 		{
 			RendererEntry entry = ActiveEntries[ i ];
@@ -131,6 +197,12 @@ public static class TreasureSparkleMaskRegistrar
 
 			if ( definition != null && !definition.Allows( entry.Kind ) )
 				continue;
+
+			if ( entry.Mesh == null )
+			{
+				entry.Mesh = ResolveMesh( renderer );
+				ActiveEntries[ i ] = entry;
+			}
 
 			dst.Add( entry );
 		}
@@ -166,8 +238,67 @@ public static class TreasureSparkleMaskRegistrar
 			return;
 
 		dst.Clear();
+		bool removed = false;
+		for ( int i = InstanceSources.Count - 1; i >= 0; i-- )
+		{
+			IInstanceMaskSource source = InstanceSources[ i ];
+			if ( source == null )
+			{
+				InstanceSources.RemoveAt( i );
+				removed = true;
+				continue;
+			}
+
+			if ( definition != null && !definition.Allows( source.MaskKind ) )
+				continue;
+
+			dst.Add( source );
+		}
+
+		if ( removed )
+			_revision++;
+	}
+
+	public static void CollectVolumes(
+		TreasureSparkleDefinition definition,
+		Camera camera,
+		List<SparkleVolume> dst,
+		int maxVolumes )
+	{
+		if ( dst == null )
+			return;
+
+		dst.Clear();
+		if ( maxVolumes <= 0 )
+			return;
+
+		Plane[] frustum = camera != null ? GeometryUtility.CalculateFrustumPlanes( camera ) : null;
+
+		for ( int i = 0; i < ActiveEntries.Count; i++ )
+		{
+			if ( dst.Count >= maxVolumes )
+				return;
+
+			RendererEntry entry = ActiveEntries[ i ];
+			Renderer renderer = entry.Renderer;
+			if ( renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy )
+				continue;
+
+			if ( definition != null && !definition.Allows( entry.Kind ) )
+				continue;
+
+			Bounds bounds = renderer.bounds;
+			if ( frustum != null && !GeometryUtility.TestPlanesAABB( frustum, bounds ) )
+				continue;
+
+			dst.Add( new SparkleVolume { Bounds = bounds, Kind = entry.Kind } );
+		}
+
 		for ( int i = 0; i < InstanceSources.Count; i++ )
 		{
+			if ( dst.Count >= maxVolumes )
+				return;
+
 			IInstanceMaskSource source = InstanceSources[ i ];
 			if ( source == null )
 				continue;
@@ -175,7 +306,14 @@ public static class TreasureSparkleMaskRegistrar
 			if ( definition != null && !definition.Allows( source.MaskKind ) )
 				continue;
 
-			dst.Add( source );
+			Bounds bounds;
+			if ( !source.TryGetSparkleWorldBounds( out bounds ) )
+				continue;
+
+			if ( frustum != null && !GeometryUtility.TestPlanesAABB( frustum, bounds ) )
+				continue;
+
+			dst.Add( new SparkleVolume { Bounds = bounds, Kind = source.MaskKind } );
 		}
 	}
 
@@ -206,9 +344,7 @@ public static class TreasureSparkleMaskRegistrar
 		if ( string.IsNullOrEmpty( shaderName ) )
 			return false;
 
-		return shaderName == "DragonLoot/Gold Pile"
-			|| shaderName == "DragonLoot/Gold Pile Stylized"
-			|| shaderName == "DragonLoot/Gold Pile Procedural"
+		return shaderName == "DragonLoot/Gold Pile Procedural"
 			|| shaderName == "DragonLoot/Coin"
 			|| shaderName == "DragonLoot/Coin Pile"
 			|| shaderName == "DragonLoot/Coin Stack"
@@ -218,22 +354,33 @@ public static class TreasureSparkleMaskRegistrar
 
 	public static void CompactNulls()
 	{
+		bool removed = false;
 		for ( int i = ActiveEntries.Count - 1; i >= 0; i-- )
 		{
 			if ( ActiveEntries[ i ].Renderer != null )
 				continue;
 
 			ActiveEntries.RemoveAt( i );
+			removed = true;
 		}
 
-		ActiveIds.Clear();
-		for ( int i = 0; i < ActiveEntries.Count; i++ )
-			ActiveIds.Add( ActiveEntries[ i ].Renderer.GetInstanceID() );
+		if ( removed )
+		{
+			ActiveIds.Clear();
+			for ( int i = 0; i < ActiveEntries.Count; i++ )
+				ActiveIds.Add( ActiveEntries[ i ].Renderer.GetInstanceID() );
+		}
 
 		for ( int i = InstanceSources.Count - 1; i >= 0; i-- )
 		{
 			if ( InstanceSources[ i ] == null )
+			{
 				InstanceSources.RemoveAt( i );
+				removed = true;
+			}
 		}
+
+		if ( removed )
+			_revision++;
 	}
 }

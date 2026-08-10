@@ -37,6 +37,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 
 	ProjectTasksCatalog _catalog;
 	ProjectTasksLocalStore _localStore;
+	ProjectTasksInboxStore _inboxStore;
 	string _outputRoot;
 
 	List<ImportedCategory> _visibleCategories = new List<ImportedCategory>();
@@ -56,6 +57,8 @@ public sealed class ProjectTasksWindow : EditorWindow
 	FeatureSortColumn _sortColumn = FeatureSortColumn.Name;
 	bool _sortAscending = true;
 	bool _showingQueue;
+	bool _showingInbox;
+	string _inboxEditingId;
 	bool _compactMode;
 	CompactPane _compactPane = CompactPane.Categories;
 	float _lastLayoutWidth = -1f;
@@ -70,6 +73,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 	Label _statusLabel;
 	Label _syncInfoLabel;
 	Button _queueButton;
+	Button _inboxButton;
 	VisualElement _toolbar;
 	VisualElement _filterBar;
 	readonly List<ToolbarAction> _toolbarActions = new List<ToolbarAction>();
@@ -85,6 +89,9 @@ public sealed class ProjectTasksWindow : EditorWindow
 	Button _compactDetailsButton;
 	VisualElement _queuePanel;
 	ListView _queueList;
+	VisualElement _inboxPanel;
+	ListView _inboxList;
+	TextField _inboxAddField;
 
 	sealed class ToolbarAction
 	{
@@ -101,7 +108,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 	DropdownField _verificationFilter;
 	DropdownField _localFilter;
 
-	[MenuItem( "Tools/MilanoteSync/Tasks" )]
+	[MenuItem( DragonLootMenus.ToolsMilanoteTasks )]
 	public static void Open()
 	{
 		ProjectTasksWindow window = GetWindow<ProjectTasksWindow>();
@@ -129,6 +136,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 			window.RebuildDetails();
 			window.UpdateSyncInfoLabel();
 			window.UpdateQueueButton();
+			window.UpdateInboxButton();
 			window.SetStatus( "Refreshed after Milanote sync." );
 			window.Repaint();
 		}
@@ -142,6 +150,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 	void OnDisable()
 	{
 		PersistLocalStore();
+		PersistInboxStore();
 		CancelBusy();
 	}
 
@@ -168,6 +177,10 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_queuePanel.style.display = DisplayStyle.None;
 		rootVisualElement.Add( _queuePanel );
 
+		_inboxPanel = BuildInboxPanel();
+		_inboxPanel.style.display = DisplayStyle.None;
+		rootVisualElement.Add( _inboxPanel );
+
 		_statusLabel = new Label( _statusText );
 		_statusLabel.style.paddingLeft = 8;
 		_statusLabel.style.paddingRight = 8;
@@ -186,6 +199,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 		RefreshAllLists();
 		RebuildDetails();
 		UpdateQueueButton();
+		UpdateInboxButton();
 		ApplyContentMode();
 	}
 
@@ -234,6 +248,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 			RefreshAllLists();
 			RebuildDetails();
 			UpdateQueueButton();
+			UpdateInboxButton();
 			SetStatus( "Refreshed from disk." );
 		} );
 		AddToolbarAction( _toolbar, "Clear Generated Data…", "Clear…", () => ClearGeneratedData() );
@@ -246,6 +261,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 		AddToolbarAction( _toolbar, "Settings", "Settings", () => MilanoteSyncWindow.Open() );
 
 		_queueButton = AddToolbarAction( _toolbar, "Milanote Queue (0)", "Queue (0)", () => ToggleQueueView() );
+		_inboxButton = AddToolbarAction( _toolbar, "Inbox (0)", "Inbox (0)", () => ToggleInboxView() );
 
 		_syncInfoLabel = new Label();
 		_syncInfoLabel.style.flexGrow = 1;
@@ -283,12 +299,13 @@ public sealed class ProjectTasksWindow : EditorWindow
 			ToolbarAction action = _toolbarActions[i];
 			if ( action.Button == null )
 				continue;
-			if ( action.Button == _queueButton )
+			if ( action.Button == _queueButton || action.Button == _inboxButton )
 				continue;
 			action.Button.text = compact ? action.CompactLabel : action.WideLabel;
 		}
 
 		UpdateQueueButton();
+		UpdateInboxButton();
 
 		if ( _syncInfoLabel != null )
 			_syncInfoLabel.style.display = compact ? DisplayStyle.None : DisplayStyle.Flex;
@@ -457,11 +474,11 @@ public sealed class ProjectTasksWindow : EditorWindow
 			}
 
 			ImportedCategory category = _visibleCategories[index];
-			ImportedCategory tintSource = ResolveCatalogCategory( category.Name ) ?? category;
-			int pending = CountPendingInCategory( tintSource );
+			ImportedCategory countSource = ResolveCatalogCategory( category.Name ) ?? category;
+			int pending = CountPendingInCategory( countSource );
 			string pendingSuffix = pending > 0 ? " ↑" + pending : string.Empty;
-			label.text = category.Name + " (" + category.ActiveCount + "/" + category.Features.Count + ")" + pendingSuffix;
-			ApplyTintBorder( label, _localStore.GetCategoryTint( tintSource ) );
+			label.text = category.Name + " (" + countSource.CompletedCount + "/" + countSource.Features.Count + ")" + pendingSuffix;
+			ApplyTintBorder( label, _localStore.GetCategoryTint( countSource ) );
 		};
 		_categoryList.selectedIndicesChanged += indices =>
 		{
@@ -695,6 +712,458 @@ public sealed class ProjectTasksWindow : EditorWindow
 		};
 		panel.Add( _queueList );
 		return panel;
+	}
+
+	VisualElement BuildInboxPanel()
+	{
+		var panel = new VisualElement();
+		panel.style.flexGrow = 1;
+		panel.style.paddingLeft = 8;
+		panel.style.paddingRight = 8;
+		panel.style.paddingTop = 6;
+
+		var headerRow = new VisualElement();
+		headerRow.style.flexDirection = FlexDirection.Row;
+		headerRow.style.marginBottom = 6;
+		headerRow.style.flexWrap = Wrap.Wrap;
+		headerRow.style.alignItems = Align.Center;
+
+		var title = new Label( "Inbox — capture ideas to add to Milanote later (drag to reorder)" );
+		title.style.unityFontStyleAndWeight = FontStyle.Bold;
+		title.style.flexGrow = 1;
+		headerRow.Add( title );
+
+		headerRow.Add( MakeToolbarButton( "Copy Checklist", () => CopyInboxChecklist() ) );
+		headerRow.Add( MakeToolbarButton( "Clear Done", () => ClearInboxDone() ) );
+		headerRow.Add( MakeToolbarButton( "Back to Features", () =>
+		{
+			_showingInbox = false;
+			ApplyContentMode();
+		} ) );
+		panel.Add( headerRow );
+
+		var addRow = new VisualElement();
+		addRow.style.flexDirection = FlexDirection.Row;
+		addRow.style.marginBottom = 6;
+		addRow.style.alignItems = Align.Center;
+
+		_inboxAddField = new TextField();
+		_inboxAddField.style.flexGrow = 1;
+		_inboxAddField.style.marginRight = 4;
+		_inboxAddField.RegisterCallback<KeyDownEvent>( evt =>
+		{
+			if ( evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter )
+				return;
+			evt.StopPropagation();
+			evt.PreventDefault();
+			TryAddInboxItemFromField();
+		}, TrickleDown.TrickleDown );
+		addRow.Add( _inboxAddField );
+		addRow.Add( MakeToolbarButton( "Add", () => TryAddInboxItemFromField() ) );
+		panel.Add( addRow );
+
+		_inboxList = new ListView();
+		_inboxList.style.flexGrow = 1;
+		_inboxList.selectionType = SelectionType.Single;
+		_inboxList.reorderable = true;
+		_inboxList.reorderMode = ListViewReorderMode.Animated;
+		_inboxList.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
+		_inboxList.itemIndexChanged += OnInboxItemIndexChanged;
+		_inboxList.makeItem = () =>
+		{
+			var root = new VisualElement();
+			root.style.flexDirection = FlexDirection.Row;
+			root.style.alignItems = Align.FlexStart;
+			root.style.paddingLeft = 4;
+			root.style.paddingRight = 4;
+			root.style.paddingTop = 4;
+			root.style.paddingBottom = 4;
+
+			var toggle = new Toggle { name = "done" };
+			toggle.style.marginRight = 6;
+			toggle.style.flexShrink = 0;
+			toggle.style.marginTop = 2;
+			toggle.RegisterValueChangedCallback( OnInboxToggleChanged );
+
+			var textHost = new VisualElement { name = "text-host" };
+			textHost.style.flexGrow = 1;
+			textHost.style.flexShrink = 1;
+
+			var label = new Label { name = "label" };
+			label.style.flexGrow = 1;
+			label.style.whiteSpace = WhiteSpace.Normal;
+			label.style.paddingTop = 3;
+			label.style.paddingBottom = 3;
+			label.RegisterCallback<ClickEvent>( OnInboxLabelClicked );
+
+			var editor = new TextField { name = "editor", multiline = true };
+			editor.style.flexGrow = 1;
+			editor.style.whiteSpace = WhiteSpace.Normal;
+			editor.style.display = DisplayStyle.None;
+			editor.RegisterCallback<FocusOutEvent>( OnInboxEditorFocusOut );
+			editor.RegisterCallback<KeyDownEvent>( OnInboxEditorKeyDown, TrickleDown.TrickleDown );
+
+			textHost.Add( label );
+			textHost.Add( editor );
+
+			var moveColumn = new VisualElement { name = "move" };
+			moveColumn.style.flexDirection = FlexDirection.Column;
+			moveColumn.style.flexShrink = 0;
+			moveColumn.style.marginLeft = 2;
+			moveColumn.style.marginTop = 0;
+
+			var moveUpButton = new Button { name = "move-up", text = "↑" };
+			moveUpButton.style.width = 22;
+			moveUpButton.style.height = 18;
+			moveUpButton.style.marginBottom = 1;
+			moveUpButton.clicked += () =>
+			{
+				var bound = moveUpButton.userData as ProjectTasksInboxItem;
+				TryMoveInboxItem( bound, -1 );
+			};
+
+			var moveDownButton = new Button { name = "move-down", text = "↓" };
+			moveDownButton.style.width = 22;
+			moveDownButton.style.height = 18;
+			moveDownButton.clicked += () =>
+			{
+				var bound = moveDownButton.userData as ProjectTasksInboxItem;
+				TryMoveInboxItem( bound, 1 );
+			};
+
+			moveColumn.Add( moveUpButton );
+			moveColumn.Add( moveDownButton );
+
+			var deleteButton = new Button { name = "delete", text = "×" };
+			deleteButton.style.width = 22;
+			deleteButton.style.flexShrink = 0;
+			deleteButton.style.marginLeft = 4;
+			deleteButton.style.marginTop = 1;
+			deleteButton.clicked += () =>
+			{
+				var bound = deleteButton.userData as ProjectTasksInboxItem;
+				if ( bound == null || _inboxStore == null )
+					return;
+				if ( _inboxEditingId != null
+				     && string.Equals( _inboxEditingId, bound.Id, StringComparison.Ordinal ) )
+					_inboxEditingId = null;
+				if ( !_inboxStore.Remove( bound.Id ) )
+					return;
+				PersistInboxStore();
+				RebuildInboxList();
+				UpdateInboxButton();
+				SetStatus( "Removed inbox item." );
+			};
+
+			root.Add( toggle );
+			root.Add( textHost );
+			root.Add( moveColumn );
+			root.Add( deleteButton );
+			return root;
+		};
+		_inboxList.bindItem = ( element, index ) =>
+		{
+			if ( _inboxStore == null || _inboxStore.Items == null
+			     || index < 0 || index >= _inboxStore.Items.Count )
+				return;
+
+			ProjectTasksInboxItem item = _inboxStore.Items[index];
+			if ( item == null )
+				return;
+
+			var toggle = element.Q<Toggle>( "done" );
+			var textHost = element.Q<VisualElement>( "text-host" );
+			var label = element.Q<Label>( "label" );
+			var editor = element.Q<TextField>( "editor" );
+			var moveUpButton = element.Q<Button>( "move-up" );
+			var moveDownButton = element.Q<Button>( "move-down" );
+			var deleteButton = element.Q<Button>( "delete" );
+
+			toggle.userData = item;
+			toggle.SetValueWithoutNotify( item.Done );
+			label.userData = item;
+			editor.userData = item;
+			moveUpButton.userData = item;
+			moveDownButton.userData = item;
+			deleteButton.userData = item;
+
+			moveUpButton.SetEnabled( index > 0 );
+			moveDownButton.SetEnabled( index < _inboxStore.Items.Count - 1 );
+
+			bool editing = !string.IsNullOrEmpty( _inboxEditingId )
+			               && string.Equals( _inboxEditingId, item.Id, StringComparison.Ordinal );
+			ApplyInboxRowDisplay( label, editor, item, editing );
+			if ( editing )
+				editor.schedule.Execute( () => editor.Focus() );
+		};
+		panel.Add( _inboxList );
+		return panel;
+	}
+
+	void OnInboxItemIndexChanged( int fromIndex, int toIndex )
+	{
+		if ( fromIndex == toIndex )
+			return;
+
+		// ListView already reordered itemsSource (the store list); persist that order.
+		PersistInboxStore();
+		RebuildInboxList();
+		SetStatus( "Reordered inbox." );
+	}
+
+	void TryMoveInboxItem( ProjectTasksInboxItem item, int delta )
+	{
+		if ( item == null || _inboxStore == null || _inboxStore.Items == null || delta == 0 )
+			return;
+
+		if ( !string.IsNullOrEmpty( _inboxEditingId ) )
+			CommitInboxEditFromId( _inboxEditingId, rebuild: false );
+
+		int fromIndex = -1;
+		for ( int i = 0; i < _inboxStore.Items.Count; i++ )
+		{
+			ProjectTasksInboxItem candidate = _inboxStore.Items[i];
+			if ( candidate == null || !string.Equals( candidate.Id, item.Id, StringComparison.Ordinal ) )
+				continue;
+			fromIndex = i;
+			break;
+		}
+
+		if ( fromIndex < 0 )
+			return;
+
+		int toIndex = fromIndex + delta;
+		if ( !_inboxStore.Move( fromIndex, toIndex ) )
+			return;
+
+		PersistInboxStore();
+		RebuildInboxList();
+		if ( _inboxList != null )
+			_inboxList.selectedIndex = toIndex;
+		SetStatus( "Reordered inbox." );
+	}
+
+	void OnInboxToggleChanged( ChangeEvent<bool> evt )
+	{
+		var toggle = evt.target as Toggle;
+		if ( toggle == null )
+			return;
+
+		var item = toggle.userData as ProjectTasksInboxItem;
+		if ( item == null )
+			return;
+
+		item.Done = evt.newValue;
+		PersistInboxStore();
+		UpdateInboxButton();
+
+		VisualElement row = toggle.parent;
+		if ( row == null )
+			return;
+
+		var label = row.Q<Label>( "label" );
+		if ( label != null )
+			ApplyInboxLabelStyle( label, item.Done );
+	}
+
+	void OnInboxLabelClicked( ClickEvent evt )
+	{
+		var label = evt.currentTarget as Label;
+		if ( label == null )
+			return;
+
+		var item = label.userData as ProjectTasksInboxItem;
+		if ( item == null )
+			return;
+
+		BeginInboxEdit( label.parent, item );
+		evt.StopPropagation();
+	}
+
+	void BeginInboxEdit( VisualElement textHost, ProjectTasksInboxItem item )
+	{
+		if ( item == null || string.IsNullOrEmpty( item.Id ) || textHost == null )
+			return;
+
+		if ( !string.IsNullOrEmpty( _inboxEditingId )
+		     && !string.Equals( _inboxEditingId, item.Id, StringComparison.Ordinal ) )
+			CommitInboxEditFromId( _inboxEditingId, rebuild: false );
+
+		_inboxEditingId = item.Id;
+
+		var label = textHost.Q<Label>( "label" );
+		var editor = textHost.Q<TextField>( "editor" );
+		if ( label == null || editor == null )
+		{
+			RebuildInboxList();
+			return;
+		}
+
+		ApplyInboxRowDisplay( label, editor, item, editing: true );
+		editor.schedule.Execute( () =>
+		{
+			editor.Focus();
+			editor.SelectAll();
+		} );
+	}
+
+	void OnInboxEditorFocusOut( FocusOutEvent evt )
+	{
+		var editor = evt.currentTarget as TextField;
+		if ( editor == null )
+		{
+			VisualElement target = evt.target as VisualElement;
+			if ( target != null )
+				editor = target.GetFirstAncestorOfType<TextField>();
+		}
+
+		if ( editor == null )
+			return;
+
+		// Defer so a click onto another control (e.g. another label) can run first if needed.
+		editor.schedule.Execute( () => CommitInboxEdit( editor ) );
+	}
+
+	void OnInboxEditorKeyDown( KeyDownEvent evt )
+	{
+		if ( evt.keyCode == KeyCode.Escape )
+		{
+			var editor = evt.currentTarget as TextField;
+			CancelInboxEdit( editor );
+			evt.StopPropagation();
+			evt.PreventDefault();
+			return;
+		}
+
+		// Enter saves; Shift+Enter inserts a newline (default multiline behavior).
+		if ( ( evt.keyCode == KeyCode.Return || evt.keyCode == KeyCode.KeypadEnter )
+		     && !evt.shiftKey )
+		{
+			var editor = evt.currentTarget as TextField;
+			CommitInboxEdit( editor );
+			evt.StopPropagation();
+			evt.PreventDefault();
+		}
+	}
+
+	void CommitInboxEditFromId( string itemId, bool rebuild )
+	{
+		if ( string.IsNullOrEmpty( itemId ) || _inboxList == null )
+			return;
+
+		// Best-effort: commit currently visible editor for that id.
+		int itemCount = _inboxList.itemsSource != null ? _inboxList.itemsSource.Count : 0;
+		for ( int i = 0; i < itemCount; i++ )
+		{
+			VisualElement row = _inboxList.GetRootElementForIndex( i );
+			if ( row == null )
+				continue;
+			var editor = row.Q<TextField>( "editor" );
+			if ( editor == null )
+				continue;
+			var item = editor.userData as ProjectTasksInboxItem;
+			if ( item == null || !string.Equals( item.Id, itemId, StringComparison.Ordinal ) )
+				continue;
+			CommitInboxEdit( editor );
+			return;
+		}
+
+		_inboxEditingId = null;
+		if ( rebuild )
+			RebuildInboxList();
+	}
+
+	void CommitInboxEdit( TextField editor )
+	{
+		if ( editor == null )
+			return;
+
+		var item = editor.userData as ProjectTasksInboxItem;
+		if ( item == null )
+			return;
+
+		if ( string.IsNullOrEmpty( _inboxEditingId )
+		     || !string.Equals( _inboxEditingId, item.Id, StringComparison.Ordinal ) )
+			return;
+
+		string trimmed = ( editor.value ?? string.Empty ).Trim();
+		if ( string.IsNullOrEmpty( trimmed ) )
+			trimmed = item.Text ?? string.Empty;
+		else if ( !string.Equals( item.Text, trimmed, StringComparison.Ordinal ) )
+		{
+			item.Text = trimmed;
+			PersistInboxStore();
+		}
+
+		_inboxEditingId = null;
+
+		VisualElement textHost = editor.parent;
+		var label = textHost != null ? textHost.Q<Label>( "label" ) : null;
+		if ( label != null )
+			ApplyInboxRowDisplay( label, editor, item, editing: false );
+		else
+			RebuildInboxList();
+	}
+
+	void CancelInboxEdit( TextField editor )
+	{
+		if ( editor == null )
+			return;
+
+		var item = editor.userData as ProjectTasksInboxItem;
+		if ( item == null )
+			return;
+
+		_inboxEditingId = null;
+		VisualElement textHost = editor.parent;
+		var label = textHost != null ? textHost.Q<Label>( "label" ) : null;
+		if ( label != null )
+			ApplyInboxRowDisplay( label, editor, item, editing: false );
+		else
+			RebuildInboxList();
+	}
+
+	static void ApplyInboxRowDisplay( Label label, TextField editor, ProjectTasksInboxItem item, bool editing )
+	{
+		if ( label == null || editor == null || item == null )
+			return;
+
+		string text = item.Text ?? string.Empty;
+		label.text = text;
+		ApplyInboxLabelStyle( label, item.Done );
+		editor.SetValueWithoutNotify( text );
+
+		label.style.display = editing ? DisplayStyle.None : DisplayStyle.Flex;
+		editor.style.display = editing ? DisplayStyle.Flex : DisplayStyle.None;
+	}
+
+	static void ApplyInboxLabelStyle( Label label, bool done )
+	{
+		if ( label == null )
+			return;
+
+		label.style.color = done
+			? new Color( 0.55f, 0.55f, 0.55f )
+			: new Color( 0.9f, 0.9f, 0.9f );
+		label.style.unityFontStyleAndWeight = done ? FontStyle.Italic : FontStyle.Normal;
+	}
+
+	void TryAddInboxItemFromField()
+	{
+		if ( _inboxAddField == null || _inboxStore == null )
+			return;
+
+		string text = _inboxAddField.value;
+		ProjectTasksInboxItem added = _inboxStore.Add( text );
+		if ( added == null )
+			return;
+
+		_inboxAddField.value = string.Empty;
+		PersistInboxStore();
+		RebuildInboxList();
+		UpdateInboxButton();
+		_inboxAddField.schedule.Execute( () => _inboxAddField.Focus() );
+		SetStatus( "Added inbox item." );
 	}
 
 	void RebuildDetails()
@@ -1039,11 +1508,13 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_outputRoot = MilanoteSyncService.ResolveOutputRoot();
 		_catalog = FeatureMarkdownReader.Load( _outputRoot );
 		_localStore = ProjectTasksLocalStore.Load( _outputRoot );
+		_inboxStore = ProjectTasksInboxStore.Load( _outputRoot );
 		if ( _localStore.ApplyMilanoteCompletionAssumptions( _catalog ) )
 			PersistLocalStore();
 		ApplyFilters( refreshUi: false );
 		UpdateSyncInfoLabel();
 		UpdateQueueButton();
+		UpdateInboxButton();
 
 		for ( int i = 0; i < _catalog.LoadWarnings.Count; i++ )
 			Debug.LogWarning( "[Project Tasks] " + _catalog.LoadWarnings[i] );
@@ -1056,10 +1527,18 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_localStore.Save( _outputRoot );
 	}
 
+	void PersistInboxStore()
+	{
+		if ( _inboxStore == null || string.IsNullOrEmpty( _outputRoot ) )
+			return;
+		_inboxStore.Save( _outputRoot );
+	}
+
 	void RefreshAllLists()
 	{
 		ApplyFilters();
 		UpdateQueueButton();
+		UpdateInboxButton();
 	}
 
 	void ApplyFilters( bool refreshUi = true )
@@ -1384,23 +1863,44 @@ public sealed class ProjectTasksWindow : EditorWindow
 	void ToggleQueueView()
 	{
 		_showingQueue = !_showingQueue;
+		if ( _showingQueue )
+			_showingInbox = false;
+		ApplyContentMode();
+	}
+
+	void ToggleInboxView()
+	{
+		_showingInbox = !_showingInbox;
+		if ( _showingInbox )
+			_showingQueue = false;
 		ApplyContentMode();
 	}
 
 	void ApplyContentMode()
 	{
-		if ( _contentHost == null || _queuePanel == null )
+		if ( _contentHost == null || _queuePanel == null || _inboxPanel == null )
 			return;
 
-		if ( _showingQueue )
+		if ( _showingInbox )
+		{
+			RebuildInboxList();
+			_contentHost.style.display = DisplayStyle.None;
+			_queuePanel.style.display = DisplayStyle.None;
+			_inboxPanel.style.display = DisplayStyle.Flex;
+			if ( _inboxAddField != null )
+				_inboxAddField.schedule.Execute( () => _inboxAddField.Focus() );
+		}
+		else if ( _showingQueue )
 		{
 			RebuildQueueList();
 			_contentHost.style.display = DisplayStyle.None;
+			_inboxPanel.style.display = DisplayStyle.None;
 			_queuePanel.style.display = DisplayStyle.Flex;
 		}
 		else
 		{
 			_queuePanel.style.display = DisplayStyle.None;
+			_inboxPanel.style.display = DisplayStyle.None;
 			_contentHost.style.display = DisplayStyle.Flex;
 			if ( _contentHost.childCount == 0 )
 				RebuildContentLayout();
@@ -1592,6 +2092,74 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_queueButton.text = _compactMode
 			? "Queue (" + count + ")"
 			: "Milanote Queue (" + count + ")";
+	}
+
+	void UpdateInboxButton()
+	{
+		if ( _inboxButton == null )
+			return;
+
+		int count = _inboxStore != null ? _inboxStore.CountPending() : 0;
+		_inboxButton.text = "Inbox (" + count + ")";
+	}
+
+	void RebuildInboxList()
+	{
+		if ( _inboxList == null )
+			return;
+
+		List<ProjectTasksInboxItem> items = _inboxStore != null && _inboxStore.Items != null
+			? _inboxStore.Items
+			: new List<ProjectTasksInboxItem>();
+		_inboxList.itemsSource = items;
+		_inboxList.RefreshItems();
+	}
+
+	void CopyInboxChecklist()
+	{
+		if ( _inboxStore == null )
+			return;
+
+		List<ProjectTasksInboxItem> items = _inboxStore.CollectPending();
+		if ( items.Count == 0 )
+		{
+			EditorGUIUtility.systemCopyBuffer = "(No pending inbox items)";
+			SetStatus( "Inbox has no unchecked items." );
+			return;
+		}
+
+		var sb = new StringBuilder();
+		sb.AppendLine( "# Inbox" );
+		sb.AppendLine( "Ideas to add to Milanote." );
+		sb.AppendLine();
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			ProjectTasksInboxItem item = items[i];
+			if ( item == null )
+				continue;
+			sb.AppendLine( "- [ ] " + item.Text );
+		}
+
+		EditorGUIUtility.systemCopyBuffer = sb.ToString();
+		SetStatus( "Copied " + items.Count + " inbox item(s) to clipboard." );
+	}
+
+	void ClearInboxDone()
+	{
+		if ( _inboxStore == null )
+			return;
+
+		int removed = _inboxStore.ClearDone();
+		if ( removed == 0 )
+		{
+			SetStatus( "No done inbox items to clear." );
+			return;
+		}
+
+		PersistInboxStore();
+		RebuildInboxList();
+		UpdateInboxButton();
+		SetStatus( "Cleared " + removed + " done inbox item(s)." );
 	}
 
 	void CopyMilanoteQueueChecklist()
@@ -1791,7 +2359,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 			"Delete all generated Milanote markdown and local Project Tasks metadata?\n\n"
 			+ "This removes FEATURES/, CURRENT.md, INDEX.md, .sync-manifest.json, "
 			+ ".raw-pull.json, and .unity-dev-metadata.json.\n\n"
-			+ "Cookies and Board ID are kept.",
+			+ "Inbox (.project-tasks-inbox.json), cookies, and Board ID are kept.",
 			"Clear",
 			"Cancel" );
 		if ( !confirmed )
@@ -1804,6 +2372,9 @@ public sealed class ProjectTasksWindow : EditorWindow
 		RebuildDetails();
 		UpdateSyncInfoLabel();
 		UpdateQueueButton();
+		UpdateInboxButton();
+		if ( _showingInbox )
+			RebuildInboxList();
 		SetStatus( result.Message );
 	}
 

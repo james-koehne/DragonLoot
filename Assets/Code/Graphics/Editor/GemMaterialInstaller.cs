@@ -59,13 +59,13 @@ public static class GemMaterialInstaller
 		};
 	}
 
-	[MenuItem("DragonLoot/Graphics/Install Gem Materials")]
+	[MenuItem(DragonLootMenus.GraphicsGemsInstall)]
 	public static void MenuInstall()
 	{
 		TryInstall(forceAssignPrefabs: true, applyDefaults: false);
 	}
 
-	[MenuItem("DragonLoot/Graphics/Reset Gem Material Defaults")]
+	[MenuItem(DragonLootMenus.GraphicsGemsReset)]
 	public static void MenuResetDefaults()
 	{
 		TryInstall(forceAssignPrefabs: true, applyDefaults: true);

@@ -5,5 +5,7 @@ public enum TreasureCategory
 	Crown,
 	Goblet,
 	Helmet,
-	Artifact
+	Artifact,
+	Key,
+	Chest
 }

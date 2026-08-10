@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 586c8f828e135f0499fd5c3bd24fc569, type: 3}
+  m_Name: GoldChest
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureDefinition
+  id: GoldChest
+  displayName: Gold Chest
+  category: 7
+  variant: Ornate
+  value: 150
+  weight: 10
+  exclusiveCarry: 1
+  usesHeavyThrow: 1
+  throwForceScale: 1
+  throwUpBiasScale: 1
+  rigidbodyMass: 2
+  drag: 0.8
+  angularDrag: 0.8
+  sleepThreshold: 0.01
+  autoToppleStrength: 2.5
+  maxUprightAngle: 35
+  physicsStabilizationDelay: 0.35
+  pickupRadius: 0.6
+  collideWithPlayerOnPile: 1
+  keyType: 0
+  isSkeletonKey: 0
+  chestDefinition: {fileID: 11400000, guid: 608535a8cd3e01144858688a6ac67796, type: 2}
+  icon: {fileID: 0}
+  meshOverride: {fileID: 0}
+  materialOverride: {fileID: 0}
+  prefab:
+    m_AssetGUID: 
+    m_SubObjectName: 
+    m_SubObjectType: 
+    m_SubObjectGUID: 
+    m_EditorAssetChanged: 0
+  worldScale: {x: 0.55, y: 0.55, z: 0.55}
+  heldScale: {x: 0.35, y: 0.35, z: 0.35}
+  activeHeldLocalEuler: {x: 0, y: 0, z: 0}
+  heldStackLocalEuler: {x: 0, y: 0, z: 0}
+  cleaningRequirement: 0
+  canStack: 0
+  coinThickness: 0.4
+  cartGridSize: {x: 2, y: 2}

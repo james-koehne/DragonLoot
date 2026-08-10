@@ -1,18 +1,15 @@
 using System.Collections.Generic;
 
 using UnityEngine;
-using UnityEngine.Serialization;
 
 /// <summary>
 /// Heightfield-driven gold pile: displaced terrain + GPU-instanced coins/gems + real artifact props.
 /// </summary>
-public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationCallbackReceiver
+public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 {
 	const int DefaultResolution = 64;
 	const float DefaultWorldSize = 6f;
 	const float DefaultMaxHeight = 1.75f;
-	const float DefaultCarveRadius = 0.55f;
-	const float DefaultCarveVolumeScale = 0.02f;
 	const float DefaultPickRadius = 0.45f;
 
 	[SerializeField]
@@ -39,12 +36,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 	[HideInInspector]
 	ushort[] authoredHeights;
 
-	/// <summary>Legacy 8-bit authored heights; migrated to authoredHeights on deserialize.</summary>
-	[SerializeField]
-	[HideInInspector]
-	[FormerlySerializedAs( "authoredHeights" )]
-	byte[] authoredHeights8;
-
 	[SerializeField]
 	[HideInInspector]
 	int authoredRes;
@@ -69,8 +60,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 	Vector3 _lastInteractPoint;
 	bool _hasInteractPoint;
 	int _totalUnits = 1;
-	float _carveRadius = DefaultCarveRadius;
-	float _carveVolumeScale = DefaultCarveVolumeScale;
+	GoldPileCarveSettings _carveSettings = GoldPileCarveSettings.Default;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Pile;
 	public GoldPileHeightfield Heightfield => _heightfield;
@@ -186,6 +176,55 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		return true;
 	}
 
+	/// <summary>
+	/// World loose-cap reclaim: absorb a live gem/artifact back into the pile with an updated pose.
+	/// </summary>
+	public bool AbsorbReclaimItem( TreasureItem item, Vector3 worldPos )
+	{
+		if ( item == null || item.Definition == null || !GoldPileArtifactProps.IsLargeProp( item.Definition ) )
+			return false;
+		if ( artifactProps == null )
+			return false;
+
+		WorldTreasurePersistence.NotifyOwned( item );
+		if ( !artifactProps.AbsorbReclaim( item, worldPos ) )
+			return false;
+
+		DepositForUnitReturned( worldPos );
+		if ( _pile != null )
+		{
+			_pile.SyncRemainingFromVisual();
+			if ( !gameObject.activeSelf )
+				gameObject.SetActive( true );
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// World loose-cap reclaim for a parked (despawned) gem/artifact record.
+	/// </summary>
+	public bool AbsorbParkedTreasure( TreasureDefinition definition, Vector3 worldPos )
+	{
+		if ( definition == null || !GoldPileArtifactProps.IsLargeProp( definition ) )
+			return false;
+		if ( artifactProps == null )
+			return false;
+
+		if ( !artifactProps.AbsorbParkedLatent( definition, worldPos ) )
+			return false;
+
+		DepositForUnitReturned( worldPos );
+		if ( _pile != null )
+		{
+			_pile.SyncRemainingFromVisual();
+			if ( !gameObject.activeSelf )
+				gameObject.SetActive( true );
+		}
+
+		return true;
+	}
+
 	public bool IsTreasureBuried( TreasureItem item, float surfaceClearance = 0.03f )
 	{
 		if ( item == null )
@@ -199,27 +238,69 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 	}
 
 	public int TotalRemainingLoot => lootInstances != null ? lootInstances.TotalRemaining : 0;
-	public float CarveRadius => _carveRadius;
-	public float CarveVolumeScale => _carveVolumeScale;
+	public float CarveRadius => _carveSettings.radius;
+	public GoldPileCarveSettings CarveSettings => _carveSettings;
 
 	public bool TryDebugCarveAmount( Vector3 worldPos, int amount )
+	{
+		return TryDebugCarveAmount( worldPos, amount, ResolveGlobalCarveSettings() );
+	}
+
+	public bool TryDebugCarveAmount( Vector3 worldPos, int amount, GoldPileCarveSettings settings )
 	{
 		if ( amount <= 0 || _emptied || _heightfield == null || !_heightfield.IsInitialized )
 			return false;
 
 		SetLastInteractPoint( worldPos );
-		CarveForUnitsTaken( worldPos, amount );
+		CarveForUnitsTaken( worldPos, amount, settings, inventoryAlreadyConsumed: false );
 		return true;
 	}
 
 	public bool TryDebugDepositAmount( Vector3 worldPos, int amount )
+	{
+		return TryDebugDepositAmount( worldPos, amount, ResolveGlobalCarveSettings() );
+	}
+
+	/// <summary>
+	/// Debug: seat catalog gems/artifacts inside the mound and force-spawn live props.
+	/// </summary>
+	public void DebugSpawnArtifactsAndGemsInside(
+		IReadOnlyList<TreasureDefinition> definitions,
+		System.Action<int, int> onComplete = null )
+	{
+		if ( artifactProps == null )
+		{
+			if ( onComplete != null )
+				onComplete( 0, 0 );
+			return;
+		}
+
+		artifactProps.DebugSpawnDefinitionsInside( definitions, onComplete );
+	}
+
+	/// <summary>
+	/// Debug: force-spawn authored latent gems/artifacts already seated in this pile.
+	/// </summary>
+	public void DebugForceSpawnExistingArtifactsAndGems( System.Action<int, int> onComplete = null )
+	{
+		if ( artifactProps == null )
+		{
+			if ( onComplete != null )
+				onComplete( 0, 0 );
+			return;
+		}
+
+		artifactProps.DebugForceSpawnExistingInside( onComplete );
+	}
+
+	public bool TryDebugDepositAmount( Vector3 worldPos, int amount, GoldPileCarveSettings settings )
 	{
 		if ( amount <= 0 || _heightfield == null || !_heightfield.IsInitialized )
 			return false;
 
 		SetLastInteractPoint( worldPos );
 		for ( int i = 0; i < amount; i++ )
-			DepositForUnitReturned( worldPos, refresh: false );
+			DepositForUnitReturned( worldPos, refresh: false, settings );
 		RefreshVisuals( worldPos );
 		return true;
 	}
@@ -292,19 +373,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 	static readonly List<TreasureDefinition> DebugConsumeBuffer = new List<TreasureDefinition>( 128 );
 
-	public void Configure(
-		TreasurePileInteractable pile,
-		Transform baseTransform,
-		Transform spawnLayerTransform,
-		int initialSurface,
-		int coinsPerSpawn,
-		int maxSurface,
-		float embed,
-		float scaleFloor )
-	{
-		_pile = pile;
-	}
-
 	public void Bind( TreasurePileInteractable pile )
 	{
 		_pile = pile;
@@ -354,13 +422,15 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 		if ( terrainMesh != null && _heightfield != null )
 		{
-			int meshRes = ResolveMeshResolution( _definition, _heightfield.Resolution );
-			terrainMesh.Configure( pileMaterial, _heightfield.Resolution, meshRes );
-			terrainMesh.Bind( _heightfield );
+			ConfigureTerrainMesh( terrainMesh, pileMaterial, _heightfield.Resolution, _definition );
+			// Runtime: defer PhysX cooks across frames (SyncColliderImmediate stalls LoadScene Integrate / first frames).
+			terrainMesh.Bind( _heightfield, syncCollider: false );
+			if ( Application.isPlaying )
+				terrainMesh.BeginDeferredColliderCook();
 		}
 
 		if ( lootInstances != null && _definition != null && _heightfield != null )
-			await lootInstances.BindAsync( _definition, _heightfield, transform, lootLayoutSeed );
+			await lootInstances.BindAsync( this, _definition, _heightfield, transform, lootLayoutSeed );
 
 		// Bind may destroy/recreate during Addressables await (domain reload / scene unload).
 		if ( this == null )
@@ -411,6 +481,26 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 			_pile.NotifyUnitStolen();
 	}
 
+	/// <summary>
+	/// Called when a gem/artifact/coin auto-releases from the pile as loose world loot.
+	/// </summary>
+	public void NotifyPropReleasedToWorld( Vector3 carvePos )
+	{
+		NotifyPropReleasedToWorld( carvePos, coinInventoryAlreadyConsumed: false );
+	}
+
+	public void NotifyPropReleasedToWorld( Vector3 carvePos, bool coinInventoryAlreadyConsumed )
+	{
+		CarveForUnitTaken(
+			carvePos,
+			refresh: true,
+			units: 1,
+			settings: ResolveGlobalCarveSettings(),
+			inventoryAlreadyConsumed: coinInventoryAlreadyConsumed );
+		if ( _pile != null )
+			_pile.OnEmptiedFromVisual();
+	}
+
 	public void OnCoinsTaken( int amount )
 	{
 		if ( amount <= 0 || _emptied || _heightfield == null || !_heightfield.IsInitialized )
@@ -423,39 +513,94 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		CarveForUnitsTaken( carvePos, amount );
 	}
 
-	/// <summary>Carves <paramref name="amount"/> units in a single brush stroke.</summary>
+	/// <summary>Carves <paramref name="amount"/> coin-units in a single brush stroke.</summary>
 	public void CarveForUnitsTaken( Vector3 worldPos, int amount )
 	{
-		CarveForUnitTaken( worldPos, refresh: true, units: amount );
+		CarveForUnitsTaken( worldPos, amount, ResolveGlobalCarveSettings(), inventoryAlreadyConsumed: true );
+	}
+
+	public void CarveForUnitsTaken( Vector3 worldPos, int amount, GoldPileCarveSettings settings )
+	{
+		CarveForUnitsTaken( worldPos, amount, settings, inventoryAlreadyConsumed: true );
+	}
+
+	public void CarveForUnitsTaken(
+		Vector3 worldPos,
+		int amount,
+		GoldPileCarveSettings settings,
+		bool inventoryAlreadyConsumed )
+	{
+		CarveForUnitTaken( worldPos, refresh: true, units: amount, settings: settings, inventoryAlreadyConsumed );
 	}
 
 	public void CarveForUnitTaken( Vector3 worldPos )
 	{
-		CarveForUnitTaken( worldPos, refresh: true, units: 1 );
+		CarveForUnitTaken( worldPos, refresh: true, units: 1, settings: ResolveGlobalCarveSettings(), inventoryAlreadyConsumed: true );
 	}
 
-	void CarveForUnitTaken( Vector3 worldPos, bool refresh, int units = 1 )
+	public void CarveForUnitTaken( Vector3 worldPos, GoldPileCarveSettings settings )
+	{
+		CarveForUnitTaken( worldPos, refresh: true, units: 1, settings: settings, inventoryAlreadyConsumed: true );
+	}
+
+	void CarveForUnitTaken(
+		Vector3 worldPos,
+		bool refresh,
+		int units,
+		GoldPileCarveSettings settings,
+		bool inventoryAlreadyConsumed )
 	{
 		if ( units <= 0 || _emptied || _heightfield == null || !_heightfield.IsInitialized )
 			return;
 
-		// HeightPerCoin is total mound volume / units. Spread a tiny fraction of that
-		// across a soft brush so each pick is a barely-visible blended dent.
-		float volumePerUnit = _heightfield.HeightPerCoin( Mathf.Max( 1, _totalUnits ) );
-		float volume = volumePerUnit * _carveVolumeScale * units;
-		_heightfield.CarveAtWorld( worldPos, transform, _carveRadius, volume );
-		NotifySurfaceHeightChanged( worldPos, _carveRadius * 2f );
+		GoldPileCarveSettings resolved = ResolveCarveSettings( settings );
+		_carveSettings = resolved;
+
+		int coinCount = inventoryAlreadyConsumed
+			? ResolveCoinCountForCarveVolume( units )
+			: Mathf.Max( 1, ResolveRemainingCoinCount() );
+		float volumePerUnit = _heightfield.VolumePerCoin( coinCount );
+
+		GoldPileEditTiming.BeginCarve(
+			units,
+			this,
+			$"r={resolved.radius:0.##} volPerCoin={volumePerUnit:0.####} coins={coinCount} blurPad={resolved.blurPadCells} passes={resolved.blurPasses} str={resolved.blurStrength:0.##} fall={resolved.falloffSharpness:0.##}" );
+
+		// Live mound volume / remaining coins — each dig removes that share × units.
+		float volume = volumePerUnit * units;
+		_heightfield.CarveAtWorld( worldPos, transform, resolved.radius, volume, resolved );
+
+		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
+		NotifySurfaceHeightChanged( worldPos, ResolveStampRadius( resolved ) );
+		if ( phaseSw != null )
+		{
+			phaseSw.Stop();
+			GoldPileEditTiming.Record( "notify.surface", phaseSw.Elapsed.TotalMilliseconds );
+		}
+
 		if ( refresh )
 			RefreshVisuals( worldPos );
+
+		GoldPileEditTiming.EndCarveImmediate();
 	}
 
 	/// <summary>Grows the mound when treasure is returned (inverse of carve).</summary>
 	public void DepositForUnitReturned( Vector3 worldPos )
 	{
-		DepositForUnitReturned( worldPos, refresh: true );
+		DepositForUnitReturned( worldPos, refresh: true, ResolveGlobalCarveSettings() );
+	}
+
+	public void DepositForUnitReturned( Vector3 worldPos, GoldPileCarveSettings settings )
+	{
+		DepositForUnitReturned( worldPos, refresh: true, settings );
 	}
 
 	void DepositForUnitReturned( Vector3 worldPos, bool refresh )
+	{
+		DepositForUnitReturned( worldPos, refresh, ResolveGlobalCarveSettings() );
+	}
+
+	void DepositForUnitReturned( Vector3 worldPos, bool refresh, GoldPileCarveSettings settings )
 	{
 		if ( _heightfield == null || !_heightfield.IsInitialized )
 			return;
@@ -468,12 +613,63 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		if ( artifactProps != null )
 			artifactProps.enabled = true;
 
-		float volumePerUnit = _heightfield.HeightPerCoin( Mathf.Max( 1, _totalUnits ) );
-		float volume = volumePerUnit * _carveVolumeScale;
-		_heightfield.DepositAtWorld( worldPos, transform, _carveRadius, volume );
-		NotifySurfaceHeightChanged( worldPos, _carveRadius * 2f );
+		GoldPileCarveSettings resolved = ResolveCarveSettings( settings );
+		_carveSettings = resolved;
+
+		int coinCount = Mathf.Max( 1, ResolveRemainingCoinCount() );
+		float volumePerUnit = _heightfield.VolumePerCoin( coinCount );
+		_heightfield.DepositAtWorld( worldPos, transform, resolved.radius, volumePerUnit, resolved );
+		NotifySurfaceHeightChanged( worldPos, ResolveStampRadius( resolved ) );
 		if ( refresh )
 			RefreshVisuals( worldPos );
+	}
+
+	/// <summary>
+	/// Surface stamp radius = brush radius + blur pad in world space (not 2R).
+	/// </summary>
+	float ResolveStampRadius( GoldPileCarveSettings settings )
+	{
+		float radius = Mathf.Max( 0.05f, settings.radius );
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+			return radius;
+
+		float cell = _heightfield.WorldSize / Mathf.Max( 1, _heightfield.Resolution - 1 );
+		int pad = settings.blurPadCells <= 0
+			? 0
+			: Mathf.Min( settings.blurPadCells, Mathf.Max( 1, Mathf.CeilToInt( radius / cell ) ) );
+		return radius + pad * cell;
+	}
+
+	GoldPileCarveSettings ResolveCarveSettings( GoldPileCarveSettings settings )
+	{
+		float worldSize = _heightfield != null && _heightfield.IsInitialized
+			? _heightfield.WorldSize
+			: ( _definition != null ? _definition.worldSize : DefaultWorldSize );
+		return settings.ResolvedForPile( worldSize );
+	}
+
+	GoldPileCarveSettings ResolveGlobalCarveSettings()
+	{
+		return GoldPileCarveSettings.FromGlobalDefinition();
+	}
+
+	/// <summary>
+	/// Remaining coin inventory. Dig consume happens before carve, so callers that already
+	/// removed <paramref name="unitsBeingCarved"/> should pass that count to restore the pre-dig divisor.
+	/// </summary>
+	int ResolveRemainingCoinCount()
+	{
+		if ( lootInstances != null )
+			return lootInstances.TotalRemainingCoins;
+		if ( _definition != null )
+			return Mathf.Max( 0, _definition.TotalCoinUnits() );
+		return 0;
+	}
+
+	int ResolveCoinCountForCarveVolume( int unitsBeingCarved )
+	{
+		// Inventory already lost these units; include them so volume = SumHeights / preDigCoins.
+		return Mathf.Max( 1, ResolveRemainingCoinCount() + Mathf.Max( 0, unitsBeingCarved ) );
 	}
 
 	public bool TryDepositTreasure(
@@ -640,27 +836,41 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 	public TreasureDefinition GetAnyRemainingDefinition()
 	{
-		if ( lootInstances == null || _definition == null || _definition.contents == null )
+		if ( lootInstances == null || _definition == null )
 			return _definition != null ? _definition.GetPrimaryTreasure() : null;
 
 		// Prefer coins for blank-mound dig / interact probes; gems require aiming an instance.
-		for ( int i = 0; i < _definition.contents.Length; i++ )
-		{
-			TreasureDefinition def = _definition.contents[ i ].treasure;
-			if ( def != null
-				&& def.category == TreasureCategory.Coin
-				&& lootInstances.GetRemaining( def ) > 0 )
-				return def;
-		}
+		TreasureDefinition coin = FirstRemaining( _definition.coinContents, coinsOnly: true );
+		if ( coin != null )
+			return coin;
 
-		for ( int i = 0; i < _definition.contents.Length; i++ )
-		{
-			TreasureDefinition def = _definition.contents[ i ].treasure;
-			if ( def != null && lootInstances.GetRemaining( def ) > 0 )
-				return def;
-		}
+		TreasureDefinition any = FirstRemaining( _definition.coinContents, coinsOnly: false );
+		if ( any != null )
+			return any;
+		any = FirstRemaining( _definition.treasureContents, coinsOnly: false );
+		if ( any != null )
+			return any;
 
 		return _definition.GetPrimaryTreasure();
+	}
+
+	TreasureDefinition FirstRemaining( TreasurePileEntry[] entries, bool coinsOnly )
+	{
+		if ( entries == null || lootInstances == null )
+			return null;
+
+		for ( int i = 0; i < entries.Length; i++ )
+		{
+			TreasureDefinition def = entries[ i ].treasure;
+			if ( def == null )
+				continue;
+			if ( coinsOnly && def.category != TreasureCategory.Coin )
+				continue;
+			if ( lootInstances.GetRemaining( def ) > 0 )
+				return def;
+		}
+
+		return null;
 	}
 
 	public void SetLastInteractPoint( Vector3 worldPoint )
@@ -671,18 +881,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 	void ApplyDefinitionTuning()
 	{
-		_carveRadius = DefaultCarveRadius;
-		_carveVolumeScale = DefaultCarveVolumeScale;
+		_carveSettings = ResolveGlobalCarveSettings();
 		_totalUnits = 1;
 
 		if ( _definition == null )
 			return;
 
-		float worldSize = Mathf.Max( 0.5f, _definition.worldSize );
-		// Keep the brush wide enough to blend; tiny radii dig pinholes on large piles.
-		_carveRadius = Mathf.Max( _definition.carveRadius, worldSize * 0.06f );
-		_carveVolumeScale = Mathf.Clamp( _definition.carveVolumeScale, 0.0001f, 1f );
-		_totalUnits = Mathf.Max( 1, _definition.TotalUnits() );
+		_totalUnits = Mathf.Max( 1, _definition.TotalCoinUnits() );
 		if ( _definition.pileMaterial != null )
 			pileMaterial = _definition.pileMaterial;
 	}
@@ -706,21 +911,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 		if ( GetComponent<GoldPileLootStreamDebug>() == null )
 			gameObject.AddComponent<GoldPileLootStreamDebug>();
-
-		GoldPilePhysicsPool physics = GetComponent<GoldPilePhysicsPool>();
-		if ( physics != null )
-			physics.enabled = false;
-
-		GoldPileEdgeProps edges = GetComponent<GoldPileEdgeProps>();
-		if ( edges != null )
-		{
-			edges.ClearAll();
-			edges.enabled = false;
-		}
-
-		GoldPileInstanceScatter scatter = GetComponent<GoldPileInstanceScatter>();
-		if ( scatter != null )
-			scatter.enabled = false;
 	}
 
 	void InitializeHeightfield()
@@ -742,7 +932,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 		_heightfield.UploadIfDirty();
 		_totalUnits = _definition != null
-			? Mathf.Max( 1, _definition.TotalUnits() )
+			? Mathf.Max( 1, _definition.TotalCoinUnits() )
 			: Mathf.Max( 1, _pile != null ? _pile.TotalCount : 1 );
 	}
 
@@ -784,6 +974,21 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		if ( definition != null )
 			return definition.ResolveMeshResolution();
 		return Mathf.Max( 8, heightRes );
+	}
+
+	static void ConfigureTerrainMesh(
+		GoldPileTerrainMesh mesh,
+		Material material,
+		int heightRes,
+		TreasurePileDefinition definition )
+	{
+		if ( mesh == null )
+			return;
+
+		int meshRes = ResolveMeshResolution( definition, heightRes );
+		float soften = definition != null ? definition.meshDeformNormalSoften : 0f;
+		float blur = definition != null ? definition.meshDeformSampleBlur : 4f;
+		mesh.Configure( material, heightRes, meshRes, soften, blur );
 	}
 
 	public void EnsureAuthoredBuffers()
@@ -845,7 +1050,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 	public void ClearAuthoredHeight()
 	{
 		authoredHeights = null;
-		authoredHeights8 = null;
 		authoredRes = 0;
 		authoredWorldSize = 0f;
 		authoredMaxHeight = 0f;
@@ -865,30 +1069,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 		authoredWorldSize = size;
 		authoredMaxHeight = height;
 		authoredRevision++;
-	}
-
-	public void OnBeforeSerialize()
-	{
-	}
-
-	public void OnAfterDeserialize()
-	{
-		MigrateAuthoredHeights8To16();
-	}
-
-	void MigrateAuthoredHeights8To16()
-	{
-		if ( authoredHeights8 == null || authoredHeights8.Length == 0 )
-			return;
-
-		if ( authoredHeights == null || authoredHeights.Length != authoredHeights8.Length )
-		{
-			authoredHeights = new ushort[ authoredHeights8.Length ];
-			for ( int i = 0; i < authoredHeights8.Length; i++ )
-				authoredHeights[ i ] = ( ushort )( authoredHeights8[ i ] * 257 );
-		}
-
-		authoredHeights8 = null;
 	}
 
 	/// <summary>
@@ -945,10 +1125,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 
 		_heightfield.UploadIfDirty();
 
-		int meshRes = ResolveMeshResolution( _definition, res );
 		if ( terrainMesh != null )
 		{
-			terrainMesh.Configure( pileMaterial, res, meshRes );
+			ConfigureTerrainMesh( terrainMesh, pileMaterial, res, _definition );
 			terrainMesh.Bind( _heightfield, syncCollider: false );
 			terrainMesh.SetVisible( true );
 		}
@@ -1111,51 +1290,79 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner, ISerializationC
 				continue;
 
 			renderer.enabled = false;
-			MeshCollider col = renderer.GetComponent<MeshCollider>();
-			if ( col != null )
-				col.enabled = false;
 		}
 
-		Collider[] rootColliders = GetComponents<Collider>();
-		for ( int i = 0; i < rootColliders.Length; i++ )
+		StripLegacyMeshColliders();
+	}
+
+	/// <summary>
+	/// Removes old static MeshColliders on the pile root / art meshes.
+	/// Dig collision comes from <see cref="GoldPileColliderTiles"/> only.
+	/// </summary>
+	void StripLegacyMeshColliders()
+	{
+		MeshCollider[] colliders = GetComponentsInChildren<MeshCollider>( true );
+		for ( int i = 0; i < colliders.Length; i++ )
 		{
-			if ( rootColliders[ i ] != null )
-				rootColliders[ i ].enabled = false;
+			MeshCollider col = colliders[ i ];
+			if ( col == null )
+				continue;
+
+			Transform t = col.transform;
+			if ( t.name.StartsWith( "ColliderTile_" )
+				|| t.name == "GoldPileColliders"
+				|| t.name == "~GoldPileColliders" )
+				continue;
+
+			if ( Application.isPlaying )
+				Destroy( col );
+			else
+				DestroyImmediate( col );
 		}
 	}
 
 	void RefreshVisuals( Vector3 worldCenter )
 	{
 		GoldPileEditTiming.Begin( "GoldPile.RefreshVisuals" );
-		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
-		long terrainTicks = 0;
+		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
 
 		if ( terrainMesh != null )
 		{
 			terrainMesh.RefreshFromHeightfield();
-			if ( sw != null )
-				terrainTicks = sw.ElapsedTicks;
+			if ( phaseSw != null )
+			{
+				phaseSw.Stop();
+				GoldPileEditTiming.Record( "refresh.queueTerrain", phaseSw.Elapsed.TotalMilliseconds );
+				phaseSw.Restart();
+			}
 		}
 
-		float lootRadius = _carveRadius * 4f;
+		float lootRadius = _carveSettings.radius * 2.5f;
 		if ( lootInstances != null )
 			lootInstances.RefreshAfterCarve( worldCenter, lootRadius );
 
-		if ( artifactProps != null
-			&& artifactProps.MightRevealNear( worldCenter, lootRadius ) )
+		if ( phaseSw != null )
 		{
-			artifactProps.RefreshAfterCarve();
+			phaseSw.Stop();
+			GoldPileEditTiming.Record( "refresh.queueLoot", phaseSw.Elapsed.TotalMilliseconds );
+			phaseSw.Restart();
 		}
 
-		if ( sw != null )
+		bool artifacts = false;
+		if ( artifactProps != null
+			&& artifactProps.NeedsCarveUpdateNear( worldCenter, lootRadius ) )
 		{
-			sw.Stop();
-			double tickMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-			double terrainMs = terrainTicks * tickMs;
-			double lootMs = ( sw.ElapsedTicks - terrainTicks ) * tickMs;
-			GoldPileEditTiming.LogIfEnabled(
-				$"[GoldPileEdit] refresh queue={terrainMs:F2}ms loot+artifacts={lootMs:F2}ms total={sw.Elapsed.TotalMilliseconds:F2}ms (densify+stamp deferred)",
-				this );
+			artifactProps.QueueRevealAfterCarve( worldCenter, lootRadius );
+			artifacts = true;
+		}
+
+		if ( phaseSw != null )
+		{
+			phaseSw.Stop();
+			GoldPileEditTiming.Record(
+				"refresh.artifacts",
+				phaseSw.Elapsed.TotalMilliseconds,
+				artifacts ? "queued" : "skip" );
 		}
 
 		GoldPileEditTiming.End();

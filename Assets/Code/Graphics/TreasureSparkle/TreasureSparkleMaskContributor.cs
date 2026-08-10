@@ -53,7 +53,9 @@ public sealed class TreasureSparkleMaskContributor : MonoBehaviour
 		for ( int i = 0; i < _renderers.Length; i++ )
 		{
 			Renderer renderer = _renderers[ i ];
-			if ( renderer == null || !renderer.enabled )
+			// Register even when disabled — CollectEntries filters by enabled each frame.
+			// Skipping here leaves stacks unmasked after SetStack re-enables the mesh.
+			if ( renderer == null )
 				continue;
 
 			Scratch.Add( renderer );

@@ -69,6 +69,18 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Min( 0.5f )]
 	public float maxSlideSpeed = 14f;
 
+	[Tooltip( "Seconds for pile-released coins/gems to ramp from rest to full flow acceleration." )]
+	[Min( 0.05f )]
+	public float pileReleaseAccelRampTime = 1f;
+
+	[Tooltip( "Soft edge deflect strength multiplier applied to material bounce (coins/gems)." )]
+	[Range( 0.1f, 1.5f )]
+	public float softEdgeDeflectScale = 0.6f;
+
+	[Tooltip( "When a nearly-stopped artifact is farther than this from surface contact Y, snap it down." )]
+	[Min( 0.01f )]
+	public float artifactSurfaceSnapDistance = 0.07f;
+
 	[Header( "Throw To Surface" )]
 	[Tooltip( "Ballistic gravity used to predict throw landing on the surface." )]
 	[Min( 1f )]
@@ -78,13 +90,25 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Range( 0f, 1f )]
 	public float throwLandingSpeedScale = 0.85f;
 
-	[Tooltip( "Extra arc height scale for coin throw flight (1 = CoinFlip default)." )]
+	[Tooltip( "Reserved / unused by ballistic throw flight (kept for asset continuity)." )]
 	[Min( 0.1f )]
 	public float throwCoinArcScale = 1.35f;
 
-	[Tooltip( "Extra arc height scale for gem/artifact throw flight." )]
+	[Tooltip( "Reserved / unused by ballistic throw flight (kept for asset continuity)." )]
 	[Min( 0.1f )]
 	public float throwItemArcScale = 1f;
+
+	[Tooltip( "End-over-end revolutions during coin throw flight." )]
+	[Min( 0f )]
+	public float throwCoinSpins = 1.25f;
+
+	[Tooltip( "End-over-end revolutions during gem throw flight." )]
+	[Min( 0f )]
+	public float throwGemSpins = 0.55f;
+
+	[Tooltip( "End-over-end revolutions during artifact throw flight." )]
+	[Min( 0f )]
+	public float throwArtifactSpins = 1f;
 
 	[Header( "Auto Stack" )]
 	[Tooltip( "XZ radius to seek a nearby coin to stack onto when settling." )]
@@ -94,6 +118,47 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Tooltip( "Max vertical difference when considering another coin as a stack base." )]
 	[Min( 0.01f )]
 	public float autoStackHeightTolerance = 0.65f;
+
+	[Header( "Auto Stack Anim" )]
+	[Tooltip( "Duration of the hop-then-arc flip onto a nearby stack." )]
+	[Min( 0.05f )]
+	public float autoStackFlipDuration = 0.4f;
+
+	[Tooltip( "How high the coin rises above max(start,end) before arcing to the stack." )]
+	[Min( 0f )]
+	public float autoStackHopHeight = 0.7f;
+
+	[Tooltip( "Fraction of the anim spent rising in place before the lateral arc (0-1)." )]
+	[Range( 0.05f, 0.6f )]
+	public float autoStackRiseFraction = 0.35f;
+
+	[Tooltip( "Extra arc height during the lateral hop-to-stack phase." )]
+	[Min( 0f )]
+	public float autoStackSecondaryArcHeight = 0.15f;
+
+	[Tooltip( "End-over-end revolutions during auto-stack flight." )]
+	[Min( 0f )]
+	public float autoStackFlipSpins = 1.25f;
+
+	[Tooltip( "Random ± fraction applied to hop height per coin (0.25 = ±25%)." )]
+	[Range( 0f, 0.75f )]
+	public float autoStackHopHeightVariance = 0.3f;
+
+	[Tooltip( "Random ± fraction applied to flip duration per coin." )]
+	[Range( 0f, 0.5f )]
+	public float autoStackDurationVariance = 0.2f;
+
+	[Tooltip( "Random ± fraction applied to rise fraction per coin." )]
+	[Range( 0f, 0.5f )]
+	public float autoStackRiseFractionVariance = 0.2f;
+
+	[Tooltip( "Random ± fraction applied to flip spins per coin." )]
+	[Range( 0f, 0.5f )]
+	public float autoStackSpinVariance = 0.25f;
+
+	[Tooltip( "Random ± meters of lateral apex offset so hops don't look identical." )]
+	[Min( 0f )]
+	public float autoStackApexJitter = 0.08f;
 
 	[Header( "Category Motion" )]
 	public float coinFrictionScale = 0.55f;
@@ -132,7 +197,15 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Min( 0f )]
 	public float coinPostBounceFlipSpins = 14f;
 
-	[Tooltip( "Min horizontal impact speed that triggers the first hop." )]
+	[Tooltip( "Min hop vertical velocity for coins." )]
+	[Min( 0f )]
+	public float coinHopMin = 0.8f;
+
+	[Tooltip( "Max hop vertical velocity for coins." )]
+	[Min( 0.01f )]
+	public float coinHopMax = 4.5f;
+
+	[Tooltip( "Min impact speed that triggers the first hop." )]
 	[Min( 0f )]
 	public float hopImpactSpeedThreshold = 0.35f;
 
@@ -142,6 +215,14 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Range( 0f, 1.5f )]
 	public float gemBounceRestitution = 0.45f;
 
+	[Tooltip( "Min hop vertical velocity for gems." )]
+	[Min( 0f )]
+	public float gemHopMin = 0.8f;
+
+	[Tooltip( "Max hop vertical velocity for gems." )]
+	[Min( 0.01f )]
+	public float gemHopMax = 4.5f;
+
 	[Tooltip( "How many low hops crowns/artifacts get after a throw landing." )]
 	[Min( 0 )]
 	public int artifactMaxBounces = 1;
@@ -149,6 +230,14 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Tooltip( "Heavy bounce damping for crowns/artifacts (much lower than coins/gems)." )]
 	[Range( 0f, 1.5f )]
 	public float artifactBounceRestitution = 0.08f;
+
+	[Tooltip( "Min hop vertical velocity for artifacts." )]
+	[Min( 0f )]
+	public float artifactHopMin = 2f;
+
+	[Tooltip( "Max hop vertical velocity for artifacts (small thud ~20cm at gravity 18)." )]
+	[Min( 0.01f )]
+	public float artifactHopMax = 3.2f;
 
 	[Tooltip( "Converts horizontal speed into gem roll angular velocity." )]
 	[Min( 0f )]
@@ -168,9 +257,29 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Min( 0.1f )]
 	public float gemVsCoinPushRadiusScale = 1.15f;
 
+	[Header( "Gem Pyramid" )]
+	[Tooltip( "Spacing as a multiple of gem push / estimate radius." )]
+	[Min( 0.5f )]
+	public float gemPyramidSpacingScale = 1.05f;
+
+	[Tooltip( "Extra XZ padding beyond the pyramid footprint used when deciding if a gem should join." )]
+	[Min( 0.05f )]
+	public float gemPyramidJoinRadius = 0.75f;
+
+	[Tooltip( "Duration of the gem tuck-arc when joining / collapsing." )]
+	[Min( 0.05f )]
+	public float gemPyramidTuckDuration = 0.28f;
+
+	[Tooltip( "Hop height of the gem tuck-arc." )]
+	[Min( 0f )]
+	public float gemPyramidTuckHopHeight = 0.12f;
+
 	[Header( "Seating" )]
 	[Tooltip( "Seat gems/artifacts using mesh bottom offset instead of pivot-on-plane." )]
 	public bool gemSeatUsesBottomOffset = true;
+
+	[Tooltip( "When true, gems snap yaw-upright on settle. When false, keep the rotation they stopped at." )]
+	public bool gemFlattenOnSettle = false;
 
 	[Header( "Materials" )]
 	public TreasureSurfaceMaterialParams[] materials;

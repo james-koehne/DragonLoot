@@ -5,13 +5,17 @@ using UnityEngine;
 
 /// <summary>
 /// Real MeshRenderer treasure objects for large pile props (artifacts, crowns, gems, etc.).
-/// Latent seeded volume poses spawn when bounds touch outside the mound;
-/// pickable once any of the probe is outside (visible from the pile).
+/// Latent seeded volume poses spawn when bounds touch outside the mound and are in stream range;
+/// out-of-range props lazy-despawn back to latent poses. Once stolen they leave the pile.
 /// </summary>
 [DisallowMultipleComponent]
 public class GoldPileArtifactProps : MonoBehaviour
 {
-	static readonly Plane[] FrustumPlanes = new Plane[ 6 ];
+	const int MaxStreamSpawnsPerFrame = 3;
+	const int MaxStreamDespawnsPerFrame = 3;
+	const int MaxStreamLatentChecksPerFrame = 64;
+	const float StreamPlayerMoveEpsilon = 0.25f;
+	const float StreamPlayerMoveEpsilonSqr = StreamPlayerMoveEpsilon * StreamPlayerMoveEpsilon;
 
 	struct LatentEntry
 	{
@@ -22,6 +26,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		public Bounds LocalBounds;
 		public bool Taken;
 		public bool Spawned;
+		public bool Exposed;
 		public int PropIndex;
 	}
 
@@ -36,6 +41,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		public int ChunkZ;
 		public bool RenderVisible;
 		public bool Pickable;
+		public Bounds WorldBounds;
+		public Collider CachedCollider;
 	}
 
 	readonly List<LatentEntry> _latent = new List<LatentEntry>( 64 );
@@ -47,15 +54,34 @@ public class GoldPileArtifactProps : MonoBehaviour
 	GoldPileHeightfield _heightfield;
 	Transform _pileRoot;
 	GoldPileLootInstances _loot;
+	GoldPileLootStreamSettings _streamSettings;
 	Camera _cachedCamera;
 	int _bindSerial;
+	int _revealGeneration;
 	float _placementRadiusFraction = 0.88f;
 	float _placementMinSpacing = 0.35f;
 	float _treasureRadialPower = 1.25f;
 	float _treasureHeightBias = 0.75f;
+	float _treasurePickupOutsideFraction = 0.4f;
+	float _treasureReleaseOutsideFraction = 0.9f;
 	int _pileLootSeed = 1;
+	bool _pendingReveal;
+	Vector3 _pendingRevealWorld;
+	float _pendingRevealRadius;
+	int _revealCursor;
+	int _streamSpawnBudget;
+	int _streamDespawnBudget;
+	int _streamLatentCursor;
+	bool _streamResidencyDirty;
+	bool _hasLastStreamPlayerPos;
+	Vector3 _lastStreamPlayerPos;
+	readonly List<TreasureItem> _pendingWorldReleases = new List<TreasureItem>( 8 );
 
 	public int PropCount => _props.Count;
+	public int LatentCount => _latent.Count;
+	public int ExposedLatentCount { get; private set; }
+	public int StreamedOutCount { get; private set; }
+	public int LivePropCount => _props.Count;
 
 	public void Bind(
 		TreasurePileVisual owner,
@@ -67,6 +93,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		int authoredLayoutSeed = 0 )
 	{
 		int bindId = ++_bindSerial;
+		_revealGeneration++;
 		ClearAll();
 
 		_owner = owner;
@@ -75,7 +102,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 		_pileRoot = pileRoot != null ? pileRoot : transform;
 		_loot = loot;
 		_cachedCamera = null;
-		_ = streamSettings;
+		_streamSettings = streamSettings;
+		_streamSpawnBudget = 0;
+		_streamDespawnBudget = 0;
+		_streamLatentCursor = 0;
+		_streamResidencyDirty = true;
+		_hasLastStreamPlayerPos = false;
 
 		if ( definition != null )
 		{
@@ -83,11 +115,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 			_placementMinSpacing = Mathf.Max( 0.05f, definition.placementMinSpacing );
 			_treasureRadialPower = Mathf.Clamp( definition.treasureRadialPower, 0.25f, 3f );
 			_treasureHeightBias = Mathf.Clamp( definition.treasureHeightBias, 0f, 3f );
+			_treasurePickupOutsideFraction = Mathf.Clamp( definition.treasurePickupOutsideFraction, 0.05f, 0.95f );
+			_treasureReleaseOutsideFraction = Mathf.Clamp( definition.treasureReleaseOutsideFraction, 0.5f, 1f );
 		}
 
 		_pileLootSeed = WorldLootSeed.GetPileEffectiveSeed( _pileRoot, authoredLayoutSeed );
 		BuildLatentEntries();
-		_ = RefreshRevealAsync( bindId );
+		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
 	}
 
 	public bool Contains( TreasureItem item )
@@ -116,6 +150,18 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	public bool CompleteSteal( TreasureItem item )
 	{
+		if ( !DetachStolenProp( item ) )
+			return false;
+
+		StartReveal( _bindSerial, spatialFilter: false, default, 0f, startIndex: 0 );
+		return true;
+	}
+
+	/// <summary>
+	/// Removes the prop from pile ownership and consumes inventory without queuing a reveal pass.
+	/// </summary>
+	bool DetachStolenProp( TreasureItem item )
+	{
 		int index = FindPropIndex( item );
 		if ( index < 0 )
 			return false;
@@ -123,7 +169,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		PropEntry prop = _props[ index ];
 		TreasureDefinition def = prop.Definition;
 		int latentIndex = prop.LatentIndex;
-		_props.RemoveAt( index );
+		RemovePropSwap( index );
+
 		if ( def != null )
 		{
 			int visible = GetVisibleCount( def );
@@ -143,7 +190,6 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _loot != null && def != null )
 			_loot.ConsumeFallbackDefinition( def );
 
-		_ = RefreshRevealAsync( _bindSerial );
 		return true;
 	}
 
@@ -173,10 +219,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		worldPos = _pileRoot.TransformPoint( latent.LocalPos );
 		worldRot = _pileRoot.rotation * latent.LocalRot;
 
-		if ( CountVisible( definition ) >= GetMaxVisible( definition ) )
-			return true;
-
-		float outside = GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds );
+		float outside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds ) ? 1f : 0f;
 		if ( outside <= 0f )
 			return true;
 
@@ -203,18 +246,14 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return true;
 		}
 
+		UpdateLatentPoseFromWorld( latentIndex, worldPos, item.transform.rotation );
+
 		LatentEntry latent = _latent[ latentIndex ];
 		latent.Taken = false;
 		_latent[ latentIndex ] = latent;
 
-		if ( CountVisible( item.Definition ) >= GetMaxVisible( item.Definition ) )
-		{
-			TreasureItemFactory.Despawn( item );
-			return true;
-		}
-
-		float outside = GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds );
-		if ( outside <= 0f )
+		float outside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds ) ? 1f : 0f;
+		if ( outside <= 0f || !IsLatentInStreamRange( latentIndex, currentlyResident: false ) )
 		{
 			TreasureItemFactory.Despawn( item );
 			return true;
@@ -225,12 +264,199 @@ public class GoldPileArtifactProps : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Evaluate latent poses after the mound carves — spawn when bounds touch outside;
-	/// update pickable state. Does not move spawned props.
+	/// World-cap reclaim: return a loose gem/artifact into the pile at a new pose near <paramref name="worldPos"/>.
+	/// Always succeeds (no visibility caps). Despawns the live item into latent.
+	/// </summary>
+	public bool AbsorbReclaim( TreasureItem item, Vector3 worldPos )
+	{
+		if ( item == null || item.Definition == null || !IsLargeProp( item.Definition ) )
+			return false;
+
+		WorldTreasurePersistence.CancelParkForItem( item );
+
+		if ( _loot != null )
+			_loot.AddRemaining( item.Definition );
+
+		int latentIndex = FindUnusedLatent( item.Definition );
+		if ( latentIndex < 0 )
+			latentIndex = AppendLatentFromWorld( item.Definition, worldPos );
+
+		if ( latentIndex < 0 )
+		{
+			TreasureItemFactory.Despawn( item );
+			return true;
+		}
+
+		UpdateLatentPoseFromWorld( latentIndex, worldPos, item.transform.rotation );
+		LatentEntry latent = _latent[ latentIndex ];
+		latent.Taken = false;
+		latent.Spawned = false;
+		latent.PropIndex = -1;
+		latent.Exposed = _heightfield != null
+			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		_latent[ latentIndex ] = latent;
+
+		TreasureItemFactory.Despawn( item );
+		return true;
+	}
+
+	/// <summary>
+	/// World-cap reclaim of a parked (already despawned) prop: seat as latent at <paramref name="worldPos"/>.
+	/// </summary>
+	public bool AbsorbParkedLatent( TreasureDefinition definition, Vector3 worldPos )
+	{
+		if ( definition == null || !IsLargeProp( definition ) )
+			return false;
+
+		if ( _loot != null )
+			_loot.AddRemaining( definition );
+
+		int latentIndex = FindUnusedLatent( definition );
+		if ( latentIndex < 0 )
+			latentIndex = AppendLatentFromWorld( definition, worldPos );
+
+		if ( latentIndex < 0 )
+			return true;
+
+		UpdateLatentPoseFromWorld( latentIndex, worldPos, Quaternion.identity );
+		LatentEntry latent = _latent[ latentIndex ];
+		latent.Taken = false;
+		latent.Spawned = false;
+		latent.PropIndex = -1;
+		latent.Exposed = _heightfield != null
+			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		_latent[ latentIndex ] = latent;
+		return true;
+	}
+
+	/// <summary>
+	/// Debug: seat one of each definition inside the mound volume and force-spawn live props
+	/// (ignores carve exposure and stream distance). Returns how many seats were started.
+	/// </summary>
+	public void DebugSpawnDefinitionsInside(
+		IReadOnlyList<TreasureDefinition> definitions,
+		System.Action<int, int> onComplete = null )
+	{
+		_ = DebugSpawnDefinitionsInsideAsync( definitions, onComplete );
+	}
+
+	/// <summary>
+	/// Debug: force-spawn every untaken latent gem/artifact already authored in this pile.
+	/// </summary>
+	public void DebugForceSpawnExistingInside( System.Action<int, int> onComplete = null )
+	{
+		_ = DebugForceSpawnExistingInsideAsync( onComplete );
+	}
+
+	async Task DebugSpawnDefinitionsInsideAsync(
+		IReadOnlyList<TreasureDefinition> definitions,
+		System.Action<int, int> onComplete )
+	{
+		int attempted = 0;
+		int spawned = 0;
+		if ( definitions == null || _heightfield == null || _pileRoot == null )
+		{
+			if ( onComplete != null )
+				onComplete( spawned, attempted );
+			return;
+		}
+
+		int bindId = _bindSerial;
+		for ( int i = 0; i < definitions.Count; i++ )
+		{
+			if ( this == null || bindId != _bindSerial )
+				break;
+
+			TreasureDefinition def = definitions[ i ];
+			if ( def == null || !IsLargeProp( def ) )
+				continue;
+			if ( def.category != TreasureCategory.Gem && def.category != TreasureCategory.Artifact )
+				continue;
+
+			attempted++;
+			int latentIndex = AppendLatentVolumeSample( def, unitSalt: attempted * 97 + 11 );
+			if ( latentIndex < 0 )
+				continue;
+
+			if ( _loot != null )
+				_loot.AddRemaining( def );
+
+			LatentEntry latent = _latent[ latentIndex ];
+			latent.Exposed = true;
+			_latent[ latentIndex ] = latent;
+
+			await SeatLatentAsync( latentIndex, null );
+			if ( this == null || bindId != _bindSerial )
+				break;
+
+			if ( latentIndex < _latent.Count && _latent[ latentIndex ].Spawned )
+				spawned++;
+		}
+
+		_streamResidencyDirty = true;
+		if ( onComplete != null )
+			onComplete( spawned, attempted );
+	}
+
+	async Task DebugForceSpawnExistingInsideAsync( System.Action<int, int> onComplete )
+	{
+		int attempted = 0;
+		int spawned = 0;
+		if ( _heightfield == null || _pileRoot == null )
+		{
+			if ( onComplete != null )
+				onComplete( spawned, attempted );
+			return;
+		}
+
+		int bindId = _bindSerial;
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			if ( this == null || bindId != _bindSerial )
+				break;
+
+			LatentEntry latent = _latent[ i ];
+			if ( latent.Taken || latent.Definition == null || latent.Spawned )
+				continue;
+
+			TreasureCategory cat = latent.Definition.category;
+			if ( cat != TreasureCategory.Gem && cat != TreasureCategory.Artifact )
+				continue;
+
+			attempted++;
+			latent.Exposed = true;
+			_latent[ i ] = latent;
+			await SeatLatentAsync( i, null );
+			if ( this == null || bindId != _bindSerial )
+				break;
+
+			if ( i < _latent.Count && _latent[ i ].Spawned )
+				spawned++;
+		}
+
+		_streamResidencyDirty = true;
+		if ( onComplete != null )
+			onComplete( spawned, attempted );
+	}
+
+	/// <summary>
+	/// Evaluate latent poses after the mound carves — spawn when bounds touch outside.
+	/// Prefer <see cref="QueueRevealAfterCarve"/> on dig frames.
 	/// </summary>
 	public void RefreshAfterCarve()
 	{
-		_ = RefreshRevealAsync( _bindSerial );
+		StartReveal( _bindSerial, spatialFilter: false, default, 0f, startIndex: 0 );
+	}
+
+	/// <summary>
+	/// Queue reveal + pick/release updates for LateUpdate so dig frame stays cheap.
+	/// </summary>
+	public void QueueRevealAfterCarve( Vector3 worldCenter, float radius )
+	{
+		_pendingRevealWorld = worldCenter;
+		_pendingRevealRadius = Mathf.Max( 0.05f, radius );
+		_pendingReveal = true;
+		_revealCursor = 0;
 	}
 
 	/// <summary>
@@ -260,6 +486,39 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return false;
 	}
 
+	/// <summary>
+	/// True when a spawned prop near the carve may need pickability / world-release updates.
+	/// </summary>
+	public bool MightUpdateSpawnedNear( Vector3 worldCenter, float radius )
+	{
+		if ( _props.Count == 0 || _pileRoot == null )
+			return false;
+
+		float radiusSq = radius * radius;
+		for ( int i = 0; i < _props.Count; i++ )
+		{
+			PropEntry prop = _props[ i ];
+			if ( prop.Item == null )
+				continue;
+
+			Vector3 worldPos = prop.Item.transform.position;
+			float dx = worldPos.x - worldCenter.x;
+			float dz = worldPos.z - worldCenter.z;
+			if ( dx * dx + dz * dz <= radiusSq )
+				return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// True when dig needs an artifact LateUpdate pass (new reveals and/or pick/release).
+	/// </summary>
+	public bool NeedsCarveUpdateNear( Vector3 worldCenter, float radius )
+	{
+		return MightRevealNear( worldCenter, radius ) || MightUpdateSpawnedNear( worldCenter, radius );
+	}
+
 	public void ClearAll()
 	{
 		for ( int i = 0; i < _props.Count; i++ )
@@ -271,14 +530,53 @@ public class GoldPileArtifactProps : MonoBehaviour
 		_props.Clear();
 		_latent.Clear();
 		_visibleByDef.Clear();
+		_pendingReveal = false;
+		_revealCursor = 0;
+		_streamLatentCursor = 0;
+		_streamResidencyDirty = true;
+		_hasLastStreamPlayerPos = false;
+		ExposedLatentCount = 0;
+		StreamedOutCount = 0;
+		_pendingWorldReleases.Clear();
 	}
 
 	void LateUpdate()
 	{
+		if ( _pendingReveal )
+			RunPendingReveal();
+
+		_streamSpawnBudget = MaxStreamSpawnsPerFrame;
+		_streamDespawnBudget = MaxStreamDespawnsPerFrame;
+		GoldPileEditTiming.Begin( "GoldPile.RefreshStreamResidency" );
+		RefreshStreamResidency();
+		GoldPileEditTiming.End();
+
 		if ( _props.Count == 0 )
 			return;
 
+		GoldPileEditTiming.Begin( "GoldPile.RefreshCulling" );
 		RefreshCulling();
+		GoldPileEditTiming.End();
+	}
+
+	void RunPendingReveal()
+	{
+		_pendingReveal = false;
+		Vector3 world = _pendingRevealWorld;
+		float radius = _pendingRevealRadius;
+		int start = _revealCursor;
+		StartReveal( _bindSerial, spatialFilter: true, world, radius, start );
+	}
+
+	void StartReveal(
+		int bindId,
+		bool spatialFilter,
+		Vector3 worldCenter,
+		float radius,
+		int startIndex )
+	{
+		int generation = ++_revealGeneration;
+		_ = RefreshRevealAsync( bindId, generation, spatialFilter, worldCenter, radius, startIndex );
 	}
 
 	void OnDisable()
@@ -288,22 +586,25 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	void OnDestroy()
 	{
+		_revealGeneration++;
 		ClearAll();
 	}
 
 	void BuildLatentEntries()
 	{
 		_latent.Clear();
-		if ( _definition == null || _definition.contents == null || _heightfield == null )
+		ExposedLatentCount = 0;
+		StreamedOutCount = 0;
+		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
 			return;
 
-		List<Vector3> occupied = new List<Vector3>( 128 );
+		List<Bounds> occupiedBounds = new List<Bounds>( 128 );
 		if ( _loot != null )
-			_loot.CollectVolumePoseOccupancy( occupied );
+			_loot.CollectVolumeBoundsOccupancy( occupiedBounds );
 
-		for ( int e = 0; e < _definition.contents.Length; e++ )
+		for ( int e = 0; e < _definition.treasureContents.Length; e++ )
 		{
-			TreasurePileEntry entry = _definition.contents[ e ];
+			TreasurePileEntry entry = _definition.treasureContents[ e ];
 			TreasureDefinition def = entry.treasure;
 			if ( def == null || !IsLargeProp( def ) || entry.count <= 0 )
 				continue;
@@ -311,7 +612,6 @@ public class GoldPileArtifactProps : MonoBehaviour
 			// Always author entry.count latent poses from the seed so layout is identical every run.
 			// Inventory remaining only gates how many can spawn/reveal later.
 			int count = entry.count;
-			int remaining = _loot != null ? _loot.GetRemaining( def ) : count;
 			for ( int i = 0; i < count; i++ )
 			{
 				int unitIndex = WorldLootSeed.StableUnitIndex( e, i );
@@ -321,7 +621,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 				float probe = Mathf.Max( 0.08f, scale * 0.35f );
 				float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
-				if ( !GoldPileTreasurePlacement.TrySampleVolumePose(
+				GoldPileTreasurePlacement.VolumePose pose;
+				Bounds localBounds;
+				bool placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
 					_heightfield,
 					_pileLootSeed,
 					unitIndex,
@@ -330,86 +632,326 @@ public class GoldPileArtifactProps : MonoBehaviour
 					probe,
 					_treasureRadialPower,
 					_treasureHeightBias,
-					occupied,
+					def.category,
+					occupiedBounds,
 					spacing,
-					out GoldPileTreasurePlacement.VolumePose pose ) )
+					null,
+					out pose,
+					out localBounds );
+				if ( !placed )
 				{
-					continue;
+					placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
+						_heightfield,
+						_pileLootSeed,
+						unitIndex + 5003,
+						_placementRadiusFraction,
+						scale,
+						probe,
+						_treasureRadialPower,
+						0f,
+						def.category,
+						null,
+						0f,
+						null,
+						out pose,
+						out localBounds );
 				}
 
-				Bounds localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
-					pose.LocalPos,
-					pose.LocalRot,
-					pose.Scale,
-					null );
-				// Inflate slightly so large authored meshes still reveal reasonably.
-				localBounds.Expand( probe );
+				if ( !placed )
+				{
+					// Last resort: more salts, no spacing — never drop authored treasure units.
+					for ( int attempt = 0; attempt < 8 && !placed; attempt++ )
+					{
+						placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
+							_heightfield,
+							_pileLootSeed,
+							unitIndex + 9001 + attempt * 137,
+							_placementRadiusFraction,
+							scale,
+							probe,
+							_treasureRadialPower,
+							0f,
+							def.category,
+							null,
+							0f,
+							null,
+							out pose,	
+							out localBounds );
+					}
+				}
 
-				GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
-					_heightfield,
-					ref pose.LocalPos,
-					ref localBounds,
-					probe );
-				occupied[ occupied.Count - 1 ] = pose.LocalPos;
+				if ( !placed )
+				{
+					Debug.LogWarning(
+						$"[GoldPileArtifactProps] Forced latent seat failed for {def.name} unit {i}; using mound center fallback.",
+						this );
+					float half = _heightfield.WorldSize * 0.25f;
+					float lx = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 3, -half, half );
+					float lz = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 5, -half, half );
+					float surface = _heightfield.SampleNormalized( lx, lz ) * _heightfield.MaxHeight;
+					float embed = Mathf.Max( 0.05f, probe );
+					pose = new GoldPileTreasurePlacement.VolumePose
+					{
+						LocalPos = new Vector3( lx, surface - embed, lz ),
+						LocalRot = GoldPileTreasurePlacement.HashRotation( _pileLootSeed, unitIndex ),
+						Scale = scale,
+						ProbeRadius = probe
+					};
+					localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
+						pose.LocalPos,
+						pose.LocalRot,
+						scale,
+						null );
+					placed = true;
+				}
 
+				occupiedBounds.Add( localBounds );
 				_latent.Add( new LatentEntry
 				{
 					Definition = def,
 					LocalPos = pose.LocalPos,
 					LocalRot = pose.LocalRot,
-					Scale = pose.Scale,
+					Scale = scale,
 					LocalBounds = localBounds,
-					// Extra seats beyond current inventory stay taken until deposited.
-					Taken = i >= remaining,
+					Taken = false,
 					Spawned = false,
+					Exposed = false,
 					PropIndex = -1
 				} );
 			}
 		}
 	}
 
-	async Task RefreshRevealAsync( int bindId )
+	async Task RefreshRevealAsync(
+		int bindId,
+		int generation,
+		bool spatialFilter,
+		Vector3 worldCenter,
+		float radius,
+		int startIndex )
 	{
 		if ( _definition == null || _heightfield == null || _pileRoot == null )
 			return;
 
-		for ( int i = 0; i < _latent.Count; i++ )
+		GoldPileEditTiming.Begin( "GoldPile.ArtifactReveal" );
+		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
+
+		int spawnsThisPass = 0;
+		// Dig frames budget a few spawns; full bind refresh is uncapped.
+		int maxSpawns = spatialFilter ? 3 : int.MaxValue;
+		int i = Mathf.Max( 0, startIndex );
+		bool budgetHit = false;
+
+		try
 		{
-			if ( bindId != _bindSerial || this == null )
-				return;
+			_pendingWorldReleases.Clear();
 
-			LatentEntry latent = _latent[ i ];
-			if ( latent.Taken || latent.Definition == null )
-				continue;
-
-			float outside = GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds );
-			bool touchesOutside = outside > 0f;
-			bool pickable = touchesOutside;
-
-			if ( latent.Spawned )
+			for ( ; i < _latent.Count; i++ )
 			{
-				int propIndex = FindPropByLatent( i );
-				if ( propIndex >= 0 )
+				if ( !IsRevealStillValid( bindId, generation ) )
 				{
-					PropEntry prop = _props[ propIndex ];
-					if ( prop.Pickable != pickable )
-					{
-						prop.Pickable = pickable;
-						_props[ propIndex ] = prop;
-						ApplyInteractableState( prop );
-					}
+					FlushPendingWorldReleases();
+					return;
 				}
-				continue;
+
+				LatentEntry latent = _latent[ i ];
+				if ( latent.Taken || latent.Definition == null )
+					continue;
+
+				if ( spatialFilter )
+				{
+					Vector3 worldPos = _pileRoot.TransformPoint( latent.LocalBounds.center );
+					float dx = worldPos.x - worldCenter.x;
+					float dz = worldPos.z - worldCenter.z;
+					float extent = latent.LocalBounds.extents.magnitude;
+					float reach = radius + extent;
+					if ( dx * dx + dz * dz > reach * reach )
+						continue;
+				}
+
+				bool touchesOutside = GoldPileTreasurePlacement.TouchesOutsideAabb(
+					_heightfield,
+					latent.LocalBounds );
+				float outsideFraction = GoldPileTreasurePlacement.OutsideFractionAabb(
+					_heightfield,
+					latent.LocalBounds );
+
+				if ( latent.Spawned )
+				{
+					if ( TryResolveProp( i, out int propIndex, out PropEntry prop ) )
+					{
+						if ( outsideFraction >= _treasureReleaseOutsideFraction && prop.Item != null )
+						{
+							_pendingWorldReleases.Add( prop.Item );
+							continue;
+						}
+
+						// Once revealed pickable, stay pickable — poses no longer re-bury.
+						bool pickable = prop.Pickable
+							|| IsNewlyPickable( latent.Definition, touchesOutside, outsideFraction );
+						if ( prop.Pickable != pickable )
+						{
+							prop.Pickable = pickable;
+							_props[ propIndex ] = prop;
+							ApplyInteractableState( prop );
+						}
+					}
+					continue;
+				}
+
+				if ( !touchesOutside )
+					continue;
+
+				latent.Exposed = true;
+				_latent[ i ] = latent;
+				_streamResidencyDirty = true;
+
+				if ( !IsLatentInStreamRange( i, currentlyResident: false ) )
+					continue;
+
+				// Exposed gems/artifacts spawn when in stream range — no maxVisible cap.
+				if ( spawnsThisPass >= maxSpawns )
+				{
+					budgetHit = true;
+					_streamResidencyDirty = true;
+					break;
+				}
+
+				await SeatLatentAsync( i, null );
+
+				if ( !IsRevealStillValid( bindId, generation ) )
+				{
+					FlushPendingWorldReleases();
+					return;
+				}
+
+				spawnsThisPass++;
+
+				// Freshly seated props may already qualify for pick / world release.
+				latent = _latent[ i ];
+				if ( latent.Spawned && TryResolveProp( i, out int seatedPropIndex, out PropEntry seatedProp ) )
+				{
+					outsideFraction = GoldPileTreasurePlacement.OutsideFractionAabb(
+						_heightfield,
+						latent.LocalBounds );
+					if ( outsideFraction >= _treasureReleaseOutsideFraction && seatedProp.Item != null )
+						_pendingWorldReleases.Add( seatedProp.Item );
+				}
 			}
 
-			if ( !touchesOutside )
-				continue;
+			if ( !IsRevealStillValid( bindId, generation ) )
+			{
+				FlushPendingWorldReleases();
+				return;
+			}
 
-			if ( CountVisible( latent.Definition ) >= GetMaxVisible( latent.Definition ) )
-				continue;
+			FlushPendingWorldReleases();
 
-			await SeatLatentAsync( i, null );
+			if ( budgetHit )
+			{
+				_revealCursor = i;
+				_pendingRevealWorld = worldCenter;
+				_pendingRevealRadius = radius;
+				_pendingReveal = true;
+			}
+			else
+				_revealCursor = 0;
 		}
+		finally
+		{
+			if ( sw != null )
+			{
+				sw.Stop();
+				GoldPileEditTiming.Record(
+					"artifacts.reveal",
+					sw.Elapsed.TotalMilliseconds,
+					$"spawns={spawnsThisPass} budgetHit={budgetHit} spatial={spatialFilter}" );
+			}
+
+			GoldPileEditTiming.End();
+		}
+	}
+
+	bool IsRevealStillValid( int bindId, int generation )
+	{
+		return this != null
+			&& bindId == _bindSerial
+			&& generation == _revealGeneration
+			&& _heightfield != null
+			&& _pileRoot != null;
+	}
+
+	bool IsNewlyPickable( TreasureDefinition definition, bool touchesOutside, float outsideFraction )
+	{
+		if ( definition == null || !touchesOutside )
+			return false;
+
+		// Gems: any outside contact. Artifacts / other large props: fraction threshold.
+		if ( definition.category == TreasureCategory.Gem )
+			return true;
+
+		return outsideFraction >= _treasurePickupOutsideFraction;
+	}
+
+	void FlushPendingWorldReleases()
+	{
+		if ( _pendingWorldReleases.Count == 0 )
+			return;
+
+		for ( int i = 0; i < _pendingWorldReleases.Count; i++ )
+		{
+			TreasureItem item = _pendingWorldReleases[ i ];
+			if ( item == null )
+				continue;
+
+			ReleasePropToWorld( item );
+		}
+
+		_pendingWorldReleases.Clear();
+	}
+
+	void ReleasePropToWorld( TreasureItem item )
+	{
+		if ( item == null || FindPropIndex( item ) < 0 )
+			return;
+
+		Vector3 worldPos = item.transform.position;
+		Quaternion worldRot = item.transform.rotation;
+		TreasureDefinition def = item.Definition;
+
+		if ( !DetachStolenProp( item ) )
+			return;
+
+		Vector3 velocity = Vector3.zero;
+		if ( TreasureItem.UsesSurfaceSimulation( def ) )
+		{
+			TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+			if ( world == null )
+				world = TreasureSurfaceWorld.EnsureExists();
+
+			if ( world != null
+				&& world.Sampler != null
+				&& world.Sampler.TrySample( worldPos, out TreasureSurfaceSample sample )
+				&& sample.Valid )
+			{
+				TreasureSurfaceDefinition surfaceDef = world.Definition;
+				float seatLift = TreasureSurfaceSeat.GetStableContactLift( item );
+				float heightAbove = worldPos.y - ( sample.Height + seatLift );
+				if ( heightAbove > 0.05f && surfaceDef != null )
+				{
+					// Start falling immediately — small downward seed so gravity isn't delayed a frame.
+					velocity.y = -Mathf.Min( surfaceDef.gravity * 0.15f, 2.5f );
+				}
+			}
+
+			// From rest: no horizontal seed — surface sim ramps flow acceleration over time.
+			item.EnterSurface( worldPos, worldRot, velocity, snapToSeat: false, fromRest: true );
+		}
+		else
+			item.EnterPhysics( worldPos, worldRot, velocity );
+
+		if ( _owner != null )
+			_owner.NotifyPropReleasedToWorld( worldPos );
 	}
 
 	async Task SeatLatentAsync( int latentIndex, TreasureItem reuse )
@@ -424,12 +966,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( latent.Spawned && reuse == null )
 			return;
 
+		TreasureDefinition definition = latent.Definition;
 		Vector3 worldPos = _pileRoot.TransformPoint( latent.LocalPos );
 		Quaternion worldRot = _pileRoot.rotation * latent.LocalRot;
 
 		TreasureItem item = reuse;
 		if ( item == null )
-			item = await TreasureItemFactory.SpawnAsync( latent.Definition, worldPos, worldRot, transform );
+			item = await TreasureItemFactory.SpawnAsync( definition, worldPos, worldRot, transform );
 
 		if ( item == null || this == null || _pileRoot == null )
 		{
@@ -438,9 +981,18 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return;
 		}
 
-		if ( CountVisible( latent.Definition ) >= GetMaxVisible( latent.Definition ) && reuse == null && !latent.Spawned )
+		if ( latentIndex < 0 || latentIndex >= _latent.Count )
 		{
-			TreasureItemFactory.Despawn( item );
+			if ( reuse == null )
+				TreasureItemFactory.Despawn( item );
+			return;
+		}
+
+		latent = _latent[ latentIndex ];
+		if ( latent.Taken || latent.Definition == null || ( latent.Spawned && reuse == null ) )
+		{
+			if ( reuse == null )
+				TreasureItemFactory.Despawn( item );
 			return;
 		}
 
@@ -468,10 +1020,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 	{
 		if ( item == null || definition == null )
 			return;
+		if ( latentIndex < 0 || latentIndex >= _latent.Count )
+			return;
 
 		LatentEntry latent = _latent[ latentIndex ];
-		float outside = GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds );
-		bool pickable = outside > 0f;
+		bool touchesOutside = _heightfield != null
+			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		float outsideFraction = _heightfield != null
+			? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
+			: 0f;
+		bool pickable = IsNewlyPickable( definition, touchesOutside, outsideFraction );
 
 		int existing = FindPropIndex( item );
 		if ( existing >= 0 )
@@ -482,10 +1040,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 			updated.LatentIndex = latentIndex;
 			updated.Pickable = pickable;
 			AssignChunk( ref updated );
-			_props[ existing ] = updated;
 			ApplyFixedPose( item, latent );
+			CachePropCullData( ref updated, item );
+			_props[ existing ] = updated;
 			ApplyInteractableState( updated );
 			latent.Spawned = true;
+			latent.Exposed = true;
 			latent.PropIndex = existing;
 			_latent[ latentIndex ] = latent;
 			return;
@@ -501,20 +1061,57 @@ public class GoldPileArtifactProps : MonoBehaviour
 		// Refine latent AABB from the real prop for carve reveal / pick thresholds.
 		Bounds worldBounds = GetItemBounds( item );
 		latent.LocalBounds = WorldBoundsToLocal( worldBounds );
-		if ( _heightfield != null && latent.LocalBounds.min.y < _heightfield.GroundLevel )
+		float probe = Mathf.Max( 0.08f, latent.Scale * 0.35f );
+		float maxEmbed = GoldPileTreasurePlacement.GetMaxGroundEmbedFraction( definition.category );
+		if ( _heightfield != null
+			&& GoldPileTreasurePlacement.ViolatesGroundEmbed(
+				latent.LocalBounds,
+				_heightfield.GroundLevel,
+				maxEmbed ) )
 		{
-			float probe = Mathf.Max( 0.08f, latent.Scale * 0.35f );
+			if ( TryResampleLatentSeat( latentIndex, probe ) )
+				latent = _latent[ latentIndex ];
+			else
+			{
+				Vector3 seatedPos = latent.LocalPos;
+				Bounds seatedBounds = latent.LocalBounds;
+				GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
+					_heightfield,
+					ref seatedPos,
+					ref seatedBounds,
+					probe,
+					maxEmbed );
+				latent.LocalPos = seatedPos;
+				latent.LocalBounds = seatedBounds;
+			}
+
+			ApplyFixedPose( item, latent );
+			worldBounds = GetItemBounds( item );
+			latent.LocalBounds = WorldBoundsToLocal( worldBounds );
+		}
+
+		if ( _heightfield != null )
+		{
 			Vector3 seatedPos = latent.LocalPos;
 			Bounds seatedBounds = latent.LocalBounds;
-			GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
+			GoldPileTreasurePlacement.ClampMaxProtrusion(
 				_heightfield,
 				ref seatedPos,
-				ref seatedBounds,
-				probe );
-			latent.LocalPos = seatedPos;
-			latent.LocalBounds = seatedBounds;
-			ApplyFixedPose( item, latent );
+				ref seatedBounds );
+			if ( ( seatedPos - latent.LocalPos ).sqrMagnitude > 1e-8f )
+			{
+				latent.LocalPos = seatedPos;
+				latent.LocalBounds = seatedBounds;
+				ApplyFixedPose( item, latent );
+			}
 		}
+
+		touchesOutside = _heightfield != null
+			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		outsideFraction = _heightfield != null
+			? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
+			: 0f;
+		pickable = IsNewlyPickable( definition, touchesOutside, outsideFraction );
 
 		PropEntry entry = new PropEntry
 		{
@@ -524,16 +1121,100 @@ public class GoldPileArtifactProps : MonoBehaviour
 			LocalRot = latent.LocalRot,
 			LatentIndex = latentIndex,
 			RenderVisible = true,
-			Pickable = GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds ) > 0f
+			Pickable = pickable
 		};
 		AssignChunk( ref entry );
+		CachePropCullData( ref entry, item );
 		_props.Add( entry );
 		_visibleByDef[ definition ] = GetVisibleCount( definition ) + 1;
 
 		latent.Spawned = true;
+		latent.Exposed = true;
 		latent.PropIndex = _props.Count - 1;
 		_latent[ latentIndex ] = latent;
 		ApplyInteractableState( entry );
+	}
+
+	bool TryResampleLatentSeat( int latentIndex, float probe )
+	{
+		if ( latentIndex < 0 || latentIndex >= _latent.Count || _heightfield == null )
+			return false;
+
+		LatentEntry latent = _latent[ latentIndex ];
+		if ( latent.Definition == null )
+			return false;
+
+		List<Bounds> occupiedBounds = new List<Bounds>( _latent.Count );
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			if ( i == latentIndex )
+				continue;
+			if ( _latent[ i ].Taken )
+				continue;
+			occupiedBounds.Add( _latent[ i ].LocalBounds );
+		}
+
+		float scale = latent.Scale;
+		float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
+		int unitIndex = latentIndex * 17 + 3;
+		TreasureCategory category = latent.Definition.category;
+		if ( !GoldPileTreasurePlacement.TrySampleValidVolumePose(
+			_heightfield,
+			_pileLootSeed,
+			unitIndex,
+			_placementRadiusFraction,
+			scale,
+			probe,
+			_treasureRadialPower,
+			_treasureHeightBias,
+			category,
+			occupiedBounds,
+			spacing,
+			null,
+			out GoldPileTreasurePlacement.VolumePose pose,
+			out Bounds localBounds ) )
+		{
+			return false;
+		}
+
+		latent.LocalPos = pose.LocalPos;
+		latent.LocalRot = pose.LocalRot;
+		latent.LocalBounds = localBounds;
+		_latent[ latentIndex ] = latent;
+		return true;
+	}
+
+	void CachePropCullData( ref PropEntry entry, TreasureItem item )
+	{
+		if ( item == null )
+			return;
+
+		entry.CachedCollider = item.GetComponent<Collider>();
+		if ( entry.CachedCollider != null )
+			entry.WorldBounds = entry.CachedCollider.bounds;
+		else
+			entry.WorldBounds = GetItemBounds( item );
+	}
+
+	void RefreshPropWorldBoundsIfNeeded()
+	{
+		if ( _pileRoot == null || !_pileRoot.hasChanged )
+			return;
+
+		_pileRoot.hasChanged = false;
+		for ( int i = 0; i < _props.Count; i++ )
+		{
+			PropEntry entry = _props[ i ];
+			if ( entry.Item == null )
+				continue;
+
+			if ( entry.CachedCollider != null )
+				entry.WorldBounds = entry.CachedCollider.bounds;
+			else
+				entry.WorldBounds = GetItemBounds( entry.Item );
+
+			_props[ i ] = entry;
+		}
 	}
 
 	void ApplyFixedPose( TreasureItem item, LatentEntry latent )
@@ -560,9 +1241,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( prop.Item == null )
 			return;
 
-		Collider col = prop.Item.GetComponent<Collider>();
-		if ( col != null )
-			col.enabled = prop.RenderVisible && prop.Pickable;
+		bool enabled = prop.RenderVisible && prop.Pickable;
+		Collider[] cols = prop.Item.GetComponentsInChildren<Collider>( true );
+		for ( int i = 0; i < cols.Length; i++ )
+		{
+			if ( cols[ i ] != null )
+				cols[ i ].enabled = enabled;
+		}
 	}
 
 	int FindUnusedLatent( TreasureDefinition definition )
@@ -581,6 +1266,82 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return -1;
 	}
 
+	int AppendLatentVolumeSample( TreasureDefinition definition, int unitSalt )
+	{
+		if ( definition == null || _pileRoot == null || _heightfield == null )
+			return -1;
+
+		float scale = definition.worldScale.x;
+		if ( scale < 0.01f )
+			scale = 1f;
+
+		float probe = Mathf.Max( 0.08f, scale * 0.35f );
+		float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
+		List<Bounds> occupiedBounds = new List<Bounds>( _latent.Count + 8 );
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			if ( _latent[ i ].Taken )
+				continue;
+			occupiedBounds.Add( _latent[ i ].LocalBounds );
+		}
+
+		if ( _loot != null )
+			_loot.CollectVolumeBoundsOccupancy( occupiedBounds );
+
+		GoldPileTreasurePlacement.VolumePose pose;
+		Bounds localBounds;
+		bool placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
+			_heightfield,
+			_pileLootSeed,
+			unitSalt,
+			_placementRadiusFraction,
+			scale,
+			probe,
+			_treasureRadialPower,
+			_treasureHeightBias,
+			definition.category,
+			occupiedBounds,
+			spacing,
+			null,
+			out pose,
+			out localBounds );
+		if ( !placed )
+		{
+			placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
+				_heightfield,
+				_pileLootSeed,
+				unitSalt + 5003,
+				_placementRadiusFraction,
+				scale,
+				probe,
+				_treasureRadialPower,
+				0f,
+				definition.category,
+				null,
+				0f,
+				null,
+				out pose,
+				out localBounds );
+		}
+
+		if ( !placed )
+			return -1;
+
+		_latent.Add( new LatentEntry
+		{
+			Definition = definition,
+			LocalPos = pose.LocalPos,
+			LocalRot = pose.LocalRot,
+			Scale = scale,
+			LocalBounds = localBounds,
+			Taken = false,
+			Spawned = false,
+			Exposed = false,
+			PropIndex = -1
+		} );
+		return _latent.Count - 1;
+	}
+
 	int AppendLatentFromWorld( TreasureDefinition definition, Vector3 preferredWorld )
 	{
 		if ( definition == null || _pileRoot == null || _heightfield == null )
@@ -596,7 +1357,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			scale = 1f;
 		float probe = Mathf.Max( 0.08f, scale * 0.35f );
 		float floorY = GoldPileTreasurePlacement.FloorClearanceY( _heightfield.GroundLevel, probe );
-		float yMax = Mathf.Max( floorY, surface );
+		float yMax = Mathf.Max( floorY, surface - probe * 0.35f );
 		local.y = Mathf.Clamp( local.y, floorY, yMax );
 		local = GoldPileTreasurePlacement.ClampAboveFloor( _heightfield, local, probe );
 
@@ -622,11 +1383,97 @@ public class GoldPileArtifactProps : MonoBehaviour
 		Quaternion rot = GoldPileTreasurePlacement.HashRotation( _pileLootSeed, _latent.Count + 17 );
 		Bounds bounds = GoldPileTreasurePlacement.LocalAabbFromPose( local, rot, scale, null );
 		bounds.Expand( probe );
-		GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
+		float maxEmbed = GoldPileTreasurePlacement.GetMaxGroundEmbedFraction( definition.category );
+
+		if ( GoldPileTreasurePlacement.IsInvalidFloorSeat(
 			_heightfield,
-			ref local,
-			ref bounds,
-			probe );
+			local,
+			bounds,
+			probe,
+			maxEmbed ) )
+		{
+			List<Bounds> occupiedBounds = new List<Bounds>( _latent.Count + 1 );
+			for ( int i = 0; i < _latent.Count; i++ )
+			{
+				if ( _latent[ i ].Taken )
+					continue;
+				occupiedBounds.Add( _latent[ i ].LocalBounds );
+			}
+
+			float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
+			if ( !GoldPileTreasurePlacement.TrySampleValidVolumePose(
+				_heightfield,
+				_pileLootSeed,
+				_latent.Count + 31,
+				_placementRadiusFraction,
+				scale,
+				probe,
+				_treasureRadialPower,
+				_treasureHeightBias,
+				definition.category,
+				occupiedBounds,
+				spacing,
+				null,
+				out GoldPileTreasurePlacement.VolumePose pose,
+				out Bounds validBounds ) )
+			{
+				return -1;
+			}
+
+			local = pose.LocalPos;
+			rot = pose.LocalRot;
+			bounds = validBounds;
+		}
+		else
+		{
+			GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
+				_heightfield,
+				ref local,
+				ref bounds,
+				probe,
+				maxEmbed );
+			if ( GoldPileTreasurePlacement.IsInvalidFloorSeat(
+				_heightfield,
+				local,
+				bounds,
+				probe,
+				maxEmbed ) )
+			{
+				List<Bounds> occupiedBounds = new List<Bounds>( _latent.Count + 1 );
+				for ( int i = 0; i < _latent.Count; i++ )
+				{
+					if ( _latent[ i ].Taken )
+						continue;
+					occupiedBounds.Add( _latent[ i ].LocalBounds );
+				}
+
+				float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
+				if ( !GoldPileTreasurePlacement.TrySampleValidVolumePose(
+					_heightfield,
+					_pileLootSeed,
+					_latent.Count + 47,
+					_placementRadiusFraction,
+					scale,
+					probe,
+					_treasureRadialPower,
+					_treasureHeightBias,
+					definition.category,
+					occupiedBounds,
+					spacing,
+					null,
+					out GoldPileTreasurePlacement.VolumePose pose,
+					out Bounds validBounds ) )
+				{
+					return -1;
+				}
+
+				local = pose.LocalPos;
+				rot = pose.LocalRot;
+				bounds = validBounds;
+			}
+		}
+
+		GoldPileTreasurePlacement.ClampMaxProtrusion( _heightfield, ref local, ref bounds );
 
 		_latent.Add( new LatentEntry
 		{
@@ -637,6 +1484,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			LocalBounds = bounds,
 			Taken = false,
 			Spawned = false,
+			Exposed = false,
 			PropIndex = -1
 		} );
 		return _latent.Count - 1;
@@ -656,10 +1504,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	void RefreshCulling()
 	{
+		RefreshPropWorldBoundsIfNeeded();
+
 		Camera camera = ResolveCamera();
-		bool hasFrustum = camera != null;
-		if ( hasFrustum )
-			GeometryUtility.CalculateFrustumPlanes( camera, FrustumPlanes );
+		bool hasFrustum = GoldPileFrustumCache.TryGet( camera, out Plane[] frustumPlanes );
+		bool useChunkFrustum = _loot != null
+			&& _loot.StreamingEnabled
+			&& _loot.Streamer != null
+			&& _loot.Streamer.HasTicked
+			&& _loot.ChunkGrid != null
+			&& _loot.ChunkGrid.ChunkCount > 0;
 
 		for ( int i = 0; i < _props.Count; i++ )
 		{
@@ -669,17 +1523,18 @@ public class GoldPileArtifactProps : MonoBehaviour
 				continue;
 
 			bool visible = true;
-			if ( hasFrustum )
+			if ( useChunkFrustum )
 			{
-				Bounds bounds = GetItemBounds( item );
-				visible = GeometryUtility.TestPlanesAABB( FrustumPlanes, bounds );
+				GoldPileChunk chunk = _loot.ChunkGrid.GetChunk( entry.ChunkX, entry.ChunkZ );
+				if ( chunk != null && !chunk.FrustumVisible )
+					visible = false;
 			}
 
+			if ( visible && hasFrustum )
+				visible = GeometryUtility.TestPlanesAABB( frustumPlanes, entry.WorldBounds );
+
 			if ( visible == entry.RenderVisible )
-			{
-				ApplyInteractableState( entry );
 				continue;
-			}
 
 			entry.RenderVisible = visible;
 			_props[ i ] = entry;
@@ -749,22 +1604,6 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return null;
 	}
 
-	int GetMaxVisible( TreasureDefinition definition )
-	{
-		if ( _definition == null || definition == null || _definition.contents == null )
-			return 4;
-
-		for ( int i = 0; i < _definition.contents.Length; i++ )
-		{
-			TreasurePileEntry entry = _definition.contents[ i ];
-			if ( entry.treasure != definition )
-				continue;
-			return _definition.GetMaxVisibleFor( entry );
-		}
-
-		return Mathf.Max( 1, _definition.defaultPerTypeVisible );
-	}
-
 	int CountVisible( TreasureDefinition definition )
 	{
 		return GetVisibleCount( definition );
@@ -777,6 +1616,262 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return _visibleByDef.TryGetValue( definition, out int n ) ? n : 0;
 	}
 
+	void RefreshStreamResidency()
+	{
+		if ( _pileRoot == null || _heightfield == null )
+			return;
+		if ( _loot != null && !_loot.StreamingEnabled )
+			return;
+
+		if ( !TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
+		{
+			Camera cam = ResolveCamera();
+			if ( cam == null )
+				return;
+			playerPos = cam.transform.position;
+		}
+
+		bool playerMoved = !_hasLastStreamPlayerPos
+			|| PlanarDistanceSqr( playerPos, _lastStreamPlayerPos ) >= StreamPlayerMoveEpsilonSqr;
+		if ( !playerMoved && !_streamResidencyDirty )
+			return;
+
+		_lastStreamPlayerPos = playerPos;
+		_hasLastStreamPlayerPos = true;
+
+		// Stream out live props past distance.
+		bool despawnBudgetHit = false;
+		for ( int i = _props.Count - 1; i >= 0 && _streamDespawnBudget > 0; i-- )
+		{
+			PropEntry prop = _props[ i ];
+			if ( prop.Item == null || prop.Definition == null )
+				continue;
+
+			int latentIndex = prop.LatentIndex;
+			if ( latentIndex < 0 || latentIndex >= _latent.Count )
+				continue;
+
+			LatentEntry latent = _latent[ latentIndex ];
+			if ( latent.Taken )
+				continue;
+
+			float distSqr = PlanarDistanceSqr( playerPos, prop.WorldBounds.center );
+			if ( IsCategoryInStreamRange( prop.Definition.category, distSqr, currentlyResident: true ) )
+				continue;
+
+			StreamDespawnProp( i );
+			_streamDespawnBudget--;
+			if ( _streamDespawnBudget <= 0 )
+				despawnBudgetHit = true;
+		}
+
+		int latentCount = _latent.Count;
+		if ( latentCount == 0 )
+		{
+			_streamLatentCursor = 0;
+			ExposedLatentCount = 0;
+			StreamedOutCount = 0;
+			_streamResidencyDirty = despawnBudgetHit;
+			return;
+		}
+
+		int cursor = _streamLatentCursor;
+		if ( cursor < 0 || cursor >= latentCount )
+			cursor = 0;
+
+		int checks = Mathf.Min( MaxStreamLatentChecksPerFrame, latentCount );
+		int seatsAttempted = 0;
+		bool wrapped = false;
+
+		for ( int checkedCount = 0; checkedCount < checks && _streamSpawnBudget > 0; checkedCount++ )
+		{
+			int i = cursor;
+			cursor++;
+			if ( cursor >= latentCount )
+			{
+				cursor = 0;
+				wrapped = true;
+			}
+
+			LatentEntry latent = _latent[ i ];
+			if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+				continue;
+
+			Vector3 worldCenter = _pileRoot.TransformPoint( latent.LocalBounds.center );
+			float spawnDistSqr = PlanarDistanceSqr( playerPos, worldCenter );
+			if ( !IsCategoryInStreamRange( latent.Definition.category, spawnDistSqr, currentlyResident: false ) )
+				continue;
+
+			_ = SeatLatentAsync( i, null );
+			_streamSpawnBudget--;
+			seatsAttempted++;
+		}
+
+		_streamLatentCursor = cursor;
+
+		if ( wrapped )
+			RecountStreamCounters( playerPos );
+
+		if ( wrapped && seatsAttempted == 0 && !despawnBudgetHit )
+			_streamResidencyDirty = false;
+		else
+			_streamResidencyDirty = true;
+	}
+
+	void RecountStreamCounters( Vector3 playerPos )
+	{
+		int exposed = 0;
+		int streamedOut = 0;
+
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			LatentEntry latent = _latent[ i ];
+			if ( latent.Taken || !latent.Exposed )
+				continue;
+
+			exposed++;
+			if ( latent.Spawned || latent.Definition == null )
+				continue;
+
+			Vector3 worldCenter = _pileRoot != null
+				? _pileRoot.TransformPoint( latent.LocalBounds.center )
+				: latent.LocalBounds.center;
+			float distSqr = PlanarDistanceSqr( playerPos, worldCenter );
+			if ( !IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident: false ) )
+				streamedOut++;
+		}
+
+		ExposedLatentCount = exposed;
+		StreamedOutCount = streamedOut;
+	}
+
+	void StreamDespawnProp( int propIndex )
+	{
+		if ( propIndex < 0 || propIndex >= _props.Count )
+			return;
+
+		PropEntry prop = _props[ propIndex ];
+		int latentIndex = prop.LatentIndex;
+		TreasureItem item = prop.Item;
+
+		if ( latentIndex >= 0 && latentIndex < _latent.Count )
+		{
+			LatentEntry latent = _latent[ latentIndex ];
+			latent.Spawned = false;
+			latent.PropIndex = -1;
+			latent.Exposed = true;
+			_latent[ latentIndex ] = latent;
+		}
+
+		DecrementVisible( prop.Definition );
+		RemovePropSwap( propIndex );
+		_streamResidencyDirty = true;
+
+		if ( item != null )
+			TreasureItemFactory.Despawn( item );
+	}
+
+	void RemovePropSwap( int propIndex )
+	{
+		if ( propIndex < 0 || propIndex >= _props.Count )
+			return;
+
+		int last = _props.Count - 1;
+		if ( propIndex != last )
+		{
+			PropEntry swapped = _props[ last ];
+			_props[ propIndex ] = swapped;
+
+			int swappedLatent = swapped.LatentIndex;
+			if ( swappedLatent >= 0 && swappedLatent < _latent.Count )
+			{
+				LatentEntry latent = _latent[ swappedLatent ];
+				latent.PropIndex = propIndex;
+				_latent[ swappedLatent ] = latent;
+			}
+		}
+
+		_props.RemoveAt( last );
+	}
+
+	bool IsLatentInStreamRange( int latentIndex, bool currentlyResident )
+	{
+		if ( !TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
+		{
+			Camera cam = ResolveCamera();
+			if ( cam == null )
+				return true;
+			playerPos = cam.transform.position;
+		}
+
+		return IsLatentInStreamRange( latentIndex, currentlyResident, playerPos );
+	}
+
+	bool IsLatentInStreamRange( int latentIndex, bool currentlyResident, Vector3 playerPos )
+	{
+		if ( _loot != null && !_loot.StreamingEnabled )
+			return true;
+
+		if ( latentIndex < 0 || latentIndex >= _latent.Count )
+			return false;
+
+		LatentEntry latent = _latent[ latentIndex ];
+		if ( latent.Definition == null )
+			return false;
+
+		Vector3 worldCenter = _pileRoot != null
+			? _pileRoot.TransformPoint( latent.LocalBounds.center )
+			: latent.LocalBounds.center;
+		float distSqr = PlanarDistanceSqr( playerPos, worldCenter );
+		return IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident );
+	}
+
+	bool IsCategoryInStreamRange( TreasureCategory category, float distanceMetersSqr, bool currentlyResident )
+	{
+		if ( _streamSettings == null )
+			return true;
+		return _streamSettings.IsPropInStreamRange( category, distanceMetersSqr, currentlyResident );
+	}
+
+	static float PlanarDistanceSqr( Vector3 a, Vector3 b )
+	{
+		float dx = a.x - b.x;
+		float dz = a.z - b.z;
+		return dx * dx + dz * dz;
+	}
+
+	void UpdateLatentPoseFromWorld( int latentIndex, Vector3 worldPos, Quaternion worldRot )
+	{
+		if ( latentIndex < 0 || latentIndex >= _latent.Count || _pileRoot == null )
+			return;
+
+		LatentEntry latent = _latent[ latentIndex ];
+		Vector3 localPos = _pileRoot.InverseTransformPoint( worldPos );
+		Quaternion localRot = Quaternion.Inverse( _pileRoot.rotation ) * worldRot;
+		float scale = latent.Scale > 0.01f ? latent.Scale : 1f;
+		Vector3 size = latent.LocalBounds.size;
+		if ( size.sqrMagnitude < 0.0001f )
+			size = Vector3.one * Mathf.Max( 0.1f, scale );
+
+		latent.LocalPos = localPos;
+		latent.LocalRot = localRot;
+		latent.LocalBounds = new Bounds( localPos, size );
+		_latent[ latentIndex ] = latent;
+	}
+
+	void DecrementVisible( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return;
+		if ( !_visibleByDef.TryGetValue( definition, out int n ) )
+			return;
+		n--;
+		if ( n <= 0 )
+			_visibleByDef.Remove( definition );
+		else
+			_visibleByDef[ definition ] = n;
+	}
+
 	int FindPropIndex( TreasureItem item )
 	{
 		for ( int i = 0; i < _props.Count; i++ )
@@ -786,6 +1881,33 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 
 		return -1;
+	}
+
+	bool TryResolveProp( int latentIndex, out int propIndex, out PropEntry prop )
+	{
+		propIndex = -1;
+		prop = default;
+		if ( latentIndex < 0 || latentIndex >= _latent.Count )
+			return false;
+
+		LatentEntry latent = _latent[ latentIndex ];
+		int idx = latent.PropIndex;
+		if ( idx >= 0 && idx < _props.Count && _props[ idx ].LatentIndex == latentIndex )
+		{
+			propIndex = idx;
+			prop = _props[ idx ];
+			return true;
+		}
+
+		idx = FindPropByLatent( latentIndex );
+		if ( idx < 0 )
+			return false;
+
+		propIndex = idx;
+		prop = _props[ idx ];
+		latent.PropIndex = idx;
+		_latent[ latentIndex ] = latent;
+		return true;
 	}
 
 	int FindPropByLatent( int latentIndex )

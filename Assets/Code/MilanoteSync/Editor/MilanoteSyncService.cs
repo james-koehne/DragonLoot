@@ -349,7 +349,7 @@ public static class MilanoteSyncService
 	}
 
 	/// <summary>
-	/// Deletes generated markdown and local Unity metadata. Keeps cookies / board ID / settings.
+	/// Deletes generated markdown and local Unity metadata. Keeps cookies / board ID / settings / Inbox.
 	/// </summary>
 	public static SyncResult ClearGeneratedData()
 	{
@@ -371,10 +371,11 @@ public static class MilanoteSyncService
 			deleted += DeletePath( Path.Combine( outputRoot, SyncManifest.FileName ) );
 			deleted += DeletePath( Path.Combine( outputRoot, ProjectTasksLocalStore.FileName ) );
 			deleted += DeletePath( Path.Combine( outputRoot, RawPullFileName ) );
+			// Intentionally keeps ProjectTasksInboxStore.FileName (.project-tasks-inbox.json).
 
 			result.Success = true;
 			result.Message = "Cleared generated data (" + deleted + " paths) under " + outputRoot
-				+ ". Auth settings kept.";
+				+ ". Auth settings and Inbox kept.";
 		}
 		catch ( Exception ex )
 		{

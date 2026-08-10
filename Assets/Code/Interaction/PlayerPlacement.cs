@@ -9,7 +9,6 @@ using UnityEngine;
 public class PlayerPlacement : MonoBehaviour
 {
 	PlayerPlacementDefinition _definition;
-	PlayerInteractionDefinition _pickableOutlineDefinition;
 	PlayerController _player;
 	PlayerInteraction _interaction;
 	FloorPlacementTarget _floorTarget;
@@ -23,13 +22,21 @@ public class PlayerPlacement : MonoBehaviour
 	Quaternion _smoothedPreviewRot = Quaternion.identity;
 	bool _hasSmoothedPreview;
 	static readonly List<Renderer> StackOutlineScratch = new List<Renderer>( 8 );
+	static readonly List<TreasureItem> StackOutlineColumnScratch = new List<TreasureItem>( 8 );
 
 	PlayerPlacementDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
 	public ITreasurePlacementTarget ActiveTarget => _activeTarget;
 	public bool HasValidPlacement => _hasPreview && _activePreview.IsValid && _activeTarget != null;
-	public bool HasActiveStackVolumePreview =>
-		_hasPreview && _activePreview.GhostStyle == PlacementGhostStyle.StackVolume;
+	public bool HasActiveStackOutlinePreview =>
+		_hasPreview && _activePreview.GhostStyle == PlacementGhostStyle.StackOutline;
+
+	/// <summary>
+	/// True when placement owns the shared hover-outline bus (stack outline or station/table mesh outline).
+	/// </summary>
+	public bool HasActivePlacementOutline =>
+		HasActiveStackOutlinePreview
+		|| ( _hasPreview && UsesWholeMeshPlacementOutline( _activeTarget ) );
 	public FloorPlacementTarget FloorTarget => _floorTarget;
 	public float PlacementArcHeight => RuntimeDefinition.Get( Definition, d => d.placementArcHeight, 0.12f );
 	public float CoinFlipSpeed => RuntimeDefinition.Get( Definition, d => d.coinFlipSpeed, 1f );
@@ -51,11 +58,7 @@ public class PlayerPlacement : MonoBehaviour
 	{
 		_player = player;
 		_interaction = interaction;
-		_floorTarget = new FloorPlacementTarget( DropUpBias );
-		_groundStackTarget = new GroundTreasureStackTarget(
-			GroundStackUpBias,
-			GroundStackReleaseSpeedScale,
-			GroundStackReleaseUpScale );
+		RefreshDefinitionTuning();
 	}
 
 	public void SetInputEnabled( bool enabled )
@@ -100,7 +103,14 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
-		RefreshGroundStackTuning();
+		// Prefer pickup outline over placement when aiming at a pickable non-coin.
+		if ( ShouldSuppressPlacementForPickableFocus( item ) )
+		{
+			ClearPreview();
+			return;
+		}
+
+		RefreshDefinitionTuning();
 		GroundTreasureStackTarget.ClearPreviewReservation();
 		PlacementQuery query = BuildQuery();
 		ITreasurePlacementTarget target = ResolveTarget( in query );
@@ -196,41 +206,71 @@ public class PlayerPlacement : MonoBehaviour
 
 		EnsureGhost();
 		ConfigureGhostVisuals();
-		_ghost.SetVisible( true );
 
-		if ( preview.GhostStyle == PlacementGhostStyle.StackVolume )
+		if ( preview.GhostStyle == PlacementGhostStyle.StackOutline )
 		{
-			_ghost.UpdateStackVolume(
-				preview.VolumeContact,
-				preview.Rotation,
-				preview.VolumeHeight,
-				preview.VolumeDiameter,
-				preview.IsValid );
+			_ghost.SetVisible( false );
 			UpdateStackHoverOutline( target );
+			return;
 		}
+
+		_ghost.SetVisible( true );
+		_ghost.SyncFromItem( item );
+		_ghost.UpdatePose( in preview );
+
+		if ( UsesWholeMeshPlacementOutline( target ) )
+			UpdatePlacementTargetOutline( target, preview.IsValid );
 		else
-		{
 			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
-			_ghost.SyncFromItem( item );
-			_ghost.UpdatePose( in preview );
-		}
+	}
+
+	static bool UsesWholeMeshPlacementOutline( ITreasurePlacementTarget target )
+	{
+		return target is CleaningStationInteractable
+			|| target is TypedDisplayTableInteractable
+			|| target is MixedDisplayTableInteractable
+			|| target is ArtifactPresentationTableInteractable
+			|| target is TableInteractable;
+	}
+
+	bool ShouldSuppressPlacementForPickableFocus( TreasureItem heldItem )
+	{
+		if ( _interaction == null || heldItem == null )
+			return false;
+
+		// Only coin placement yields to gem/artifact pickup outlines.
+		// Holding a gem/artifact must keep a floor ghost so place lands where aimed.
+		if ( !GroundCoinStack.IsGroundStackableCoin( heldItem ) )
+			return false;
+
+		IInteractable focus = _interaction.Current;
+		TreasureItemInteractable itemFocus = focus as TreasureItemInteractable;
+		if ( itemFocus == null )
+			return false;
+
+		TreasureItem focused = itemFocus.Item;
+		if ( !HoverOutlineTargetUtility.CanOutlineTreasureItem( focused ) )
+			return false;
+
+		// Stackable coins keep stack-join placement/outline instead of pickup.
+		if ( GroundCoinStack.IsGroundStackableCoin( focused ) )
+			return false;
+
+		return true;
 	}
 
 	void UpdateStackHoverOutline( ITreasurePlacementTarget target )
 	{
-		HoverOutlineVisualSettings settings = ResolvePickableOutlineSettings();
+		UpdatePlacementTargetOutline( target, _activePreview.IsValid );
+	}
+
+	void UpdatePlacementTargetOutline( ITreasurePlacementTarget target, bool valid )
+	{
+		HoverOutlineVisualSettings settings = ResolveStackOutlineSettings( valid );
 		List<Renderer> renderers = StackOutlineScratch;
 		renderers.Clear();
 
 		AppendStackTargetRenderers( target, renderers );
-
-		Renderer volumeRenderer;
-		HoverOutlineVisualSettings ignored;
-		if ( _ghost != null && _ghost.TryGetStackVolumeOutline( true, out volumeRenderer, out ignored )
-			&& volumeRenderer != null )
-		{
-			renderers.Add( volumeRenderer );
-		}
 
 		if ( renderers.Count == 0 )
 		{
@@ -244,17 +284,21 @@ public class PlayerPlacement : MonoBehaviour
 			settings );
 	}
 
-	HoverOutlineVisualSettings ResolvePickableOutlineSettings()
+	HoverOutlineVisualSettings ResolveStackOutlineSettings( bool valid )
 	{
-		PlayerInteractionDefinition def = RuntimeDefinition.Resolve( ref _pickableOutlineDefinition );
-		if ( def != null && def.pickableOutline != null )
-		{
-			HoverOutlineVisualSettings settings = def.pickableOutline.Clone();
-			settings.Validate();
-			return settings;
-		}
+		PlayerPlacementDefinition def = Definition;
+		HoverOutlineVisualSettings settings = def != null && def.stackOutline != null
+			? def.stackOutline.Clone()
+			: HoverOutlineVisualSettings.DefaultStack();
+		settings.Validate();
 
-		return HoverOutlineVisualSettings.DefaultPickable();
+		// Validity tint comes from ghost colors so SO tweaks apply to outline + mesh ghost alike.
+		Color ghost = valid
+			? ( def != null ? def.validGhostColor : PlacementFeedbackColors.ValidGhost )
+			: ( def != null ? def.invalidGhostColor : PlacementFeedbackColors.InvalidGhost );
+		Color rgb = new Color( ghost.r, ghost.g, ghost.b, 1f );
+		settings.outlineColor = new Color( rgb.r * 1.2f, rgb.g * 1.15f, rgb.b, 1f );
+		return settings;
 	}
 
 	static void AppendStackTargetRenderers( ITreasurePlacementTarget target, List<Renderer> renderers )
@@ -262,9 +306,33 @@ public class PlayerPlacement : MonoBehaviour
 		if ( target == null || renderers == null )
 			return;
 
+		CoinSortingHopper hopper = target as CoinSortingHopper;
+		if ( hopper != null )
+		{
+			AppendCoinSortingStationRenderers( hopper.Station, renderers );
+			return;
+		}
+
+		GroundTreasureStackTarget looseColumn = target as GroundTreasureStackTarget;
+		if ( looseColumn != null )
+		{
+			AppendLooseColumnRenderers( looseColumn.BaseItem, renderers );
+			return;
+		}
+
 		GroundCoinStack groundStack = target as GroundCoinStack;
 		if ( groundStack != null )
 		{
+			if ( groundStack.IsMachineBuffer )
+			{
+				CoinSortingStation station = groundStack.GetComponentInParent<CoinSortingStation>();
+				if ( station != null )
+				{
+					AppendCoinSortingStationRenderers( station, renderers );
+					return;
+				}
+			}
+
 			IReadOnlyList<Renderer> collected = HoverOutlineTargetUtility.CollectFromBehaviour( groundStack );
 			for ( int i = 0; i < collected.Count; i++ )
 				renderers.Add( collected[ i ] );
@@ -277,6 +345,94 @@ public class PlayerPlacement : MonoBehaviour
 			IReadOnlyList<Renderer> collected = HoverOutlineTargetUtility.CollectFromBehaviour( coinStack );
 			for ( int i = 0; i < collected.Count; i++ )
 				renderers.Add( collected[ i ] );
+			return;
+		}
+
+		TypedDisplayTableInteractable typedTable = target as TypedDisplayTableInteractable;
+		if ( typedTable != null )
+		{
+			AppendBehaviourRenderers( typedTable, renderers );
+			return;
+		}
+
+		MixedDisplayTableInteractable mixedTable = target as MixedDisplayTableInteractable;
+		if ( mixedTable != null )
+		{
+			AppendBehaviourRenderers( mixedTable, renderers );
+			return;
+		}
+
+		ArtifactPresentationTableInteractable presentationTable = target as ArtifactPresentationTableInteractable;
+		if ( presentationTable != null )
+		{
+			AppendBehaviourRenderers( presentationTable, renderers );
+			return;
+		}
+
+		TableInteractable sortingTable = target as TableInteractable;
+		if ( sortingTable != null )
+		{
+			AppendBehaviourRenderers( sortingTable, renderers );
+			return;
+		}
+
+		CleaningStationInteractable cleaningStation = target as CleaningStationInteractable;
+		if ( cleaningStation != null )
+			AppendBehaviourRenderers( cleaningStation, renderers );
+	}
+
+	static void AppendLooseColumnRenderers( TreasureItem seed, List<Renderer> renderers )
+	{
+		if ( seed == null || renderers == null )
+			return;
+
+		TreasureSupportStack.CollectColumn( seed, StackOutlineColumnScratch );
+		for ( int i = 0; i < StackOutlineColumnScratch.Count; i++ )
+		{
+			TreasureItem member = StackOutlineColumnScratch[ i ];
+			if ( member == null )
+				continue;
+
+			HoverOutlineTargetUtility.AppendEnabledMeshRenderers( member.gameObject, renderers );
+		}
+	}
+
+	static void AppendBehaviourRenderers( Component behaviour, List<Renderer> renderers )
+	{
+		if ( behaviour == null || renderers == null )
+			return;
+
+		IReadOnlyList<Renderer> collected = HoverOutlineTargetUtility.CollectFromBehaviour( behaviour );
+		for ( int i = 0; i < collected.Count; i++ )
+			renderers.Add( collected[ i ] );
+	}
+
+	static void AppendCoinSortingStationRenderers( CoinSortingStation station, List<Renderer> renderers )
+	{
+		if ( station == null || renderers == null )
+			return;
+
+		CoinSortingCrankInteractable crank = station.Crank;
+		Transform crankRoot = crank != null ? crank.transform : null;
+
+		Renderer[] all = station.GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < all.Length; i++ )
+		{
+			Renderer renderer = all[ i ];
+			if ( renderer == null || !renderer.enabled )
+				continue;
+
+			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+				continue;
+
+			if ( renderer.sharedMaterial == null )
+				continue;
+
+			if ( crankRoot != null
+				&& ( renderer.transform == crankRoot || renderer.transform.IsChildOf( crankRoot ) ) )
+				continue;
+
+			renderers.Add( renderer );
 		}
 	}
 
@@ -294,10 +450,6 @@ public class PlayerPlacement : MonoBehaviour
 		float pulseSpeed = def != null ? def.ghostPulseSpeed : 0.85f;
 		float rimIntensity = def != null ? def.ghostRimIntensity : 1.15f;
 		float coreIntensity = def != null ? def.ghostCoreIntensity : 0.28f;
-		float stackVolumeOversize = def != null ? def.stackVolumeOversize : 1.1f;
-		HoverOutlineVisualSettings stackOutline = def != null && def.stackOutline != null
-			? def.stackOutline
-			: HoverOutlineVisualSettings.DefaultStack();
 
 		_ghost.ConfigureVisuals(
 			valid,
@@ -307,9 +459,7 @@ public class PlayerPlacement : MonoBehaviour
 			pulseAmount,
 			pulseSpeed,
 			rimIntensity,
-			coreIntensity,
-			stackVolumeOversize,
-			stackOutline );
+			coreIntensity );
 	}
 
 	PlacementPreview SmoothPreview( in PlacementPreview preview )
@@ -319,32 +469,17 @@ public class PlayerPlacement : MonoBehaviour
 		float dt = Time.deltaTime;
 		if ( !_hasSmoothedPreview || speed <= 0.01f )
 		{
-			_smoothedPreviewPos = preview.GhostStyle == PlacementGhostStyle.StackVolume
-				? preview.VolumeContact
-				: preview.Position;
+			_smoothedPreviewPos = preview.Position;
 			_smoothedPreviewRot = preview.Rotation;
 			_hasSmoothedPreview = true;
-			if ( preview.GhostStyle == PlacementGhostStyle.StackVolume )
-			{
-				smoothed.VolumeContact = _smoothedPreviewPos;
-				smoothed.Position = preview.Position;
-			}
 			return smoothed;
 		}
 
 		float t = 1f - Mathf.Exp( -speed * dt );
-		Vector3 targetPos = preview.GhostStyle == PlacementGhostStyle.StackVolume
-			? preview.VolumeContact
-			: preview.Position;
-		_smoothedPreviewPos = Vector3.Lerp( _smoothedPreviewPos, targetPos, t );
+		_smoothedPreviewPos = Vector3.Lerp( _smoothedPreviewPos, preview.Position, t );
 		_smoothedPreviewRot = Quaternion.Slerp( _smoothedPreviewRot, preview.Rotation, t );
-		if ( preview.GhostStyle == PlacementGhostStyle.StackVolume )
-		{
-			smoothed.VolumeContact = _smoothedPreviewPos;
-			smoothed.Position = preview.Position;
-		}
-		else
-			smoothed.Position = _smoothedPreviewPos;
+		smoothed.Position = _smoothedPreviewPos;
+		smoothed.VolumeContact = _smoothedPreviewPos;
 		smoothed.Rotation = _smoothedPreviewRot;
 		return smoothed;
 	}
@@ -364,7 +499,7 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 		}
 
-		RefreshGroundStackTuning();
+		RefreshDefinitionTuning();
 		UpdatePreview();
 		if ( HasValidPlacement )
 			return TryPlaceFromActivePreview( item );
@@ -391,7 +526,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !carry.TryPeekActive( out TreasureItem item ) || item == null )
 			return false;
 
-		RefreshGroundStackTuning();
+		RefreshDefinitionTuning();
 		PlacementQuery query = BuildQuery();
 
 		// Empty space (no aim hit): throw Active item.
@@ -463,7 +598,9 @@ public class PlayerPlacement : MonoBehaviour
 	/// </summary>
 	static bool SupportsAutoFindValidSlot( ITreasurePlacementTarget target )
 	{
-		return target is TypedDisplayTableInteractable || target is MixedDisplayTableInteractable;
+		return target is TypedDisplayTableInteractable
+			|| target is MixedDisplayTableInteractable
+			|| target is MinecartInteractable;
 	}
 
 	bool TryPlaceWithAutoFindValidSlot( ITreasurePlacementTarget target, TreasureItem item )
@@ -486,7 +623,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		ITreasurePlacementTarget target = _activeTarget;
 
-		// Floor volume ghost for coins means create/join GroundCoinStack, not FloorPlacementTarget.
+		// Floor coin ItemMesh ghost seeds/joins GroundCoinStack, not FloorPlacementTarget.
 		if ( target == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
 			return TryPlaceOnFloor();
 
@@ -656,7 +793,7 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 		}
 
-		RefreshGroundStackTuning();
+		RefreshDefinitionTuning();
 		TreasureItem baseItem = ResolveGroundStackBase();
 		if ( baseItem == null )
 			return false;
@@ -726,7 +863,13 @@ public class PlayerPlacement : MonoBehaviour
 			|| cluster.Count == 0 )
 			return false;
 
-		GroundCoinStack stack = GroundCoinStack.CreateAt( preview.Position, preview.Rotation );
+		// Prefer animating onto an existing nearby stack rather than seeding a new contact
+		// that would reverse-merge the old tower.
+		float joinRadius = Mathf.Max( GroundStackSnapRadius, GroundCoinStack.ResolveJoinRadius( item.Definition ) );
+		GroundCoinStack stack = GroundCoinStack.FindNearest( preview.Position, joinRadius );
+		if ( stack == null || stack.IsFull )
+			stack = GroundCoinStack.CreateAt( preview.Position, preview.Rotation );
+
 		for ( int i = 0; i < cluster.Count; i++ )
 		{
 			TreasureItem member = cluster[ i ];
@@ -743,7 +886,8 @@ public class PlayerPlacement : MonoBehaviour
 		}
 
 		stack.AbsorbNearbyLooseCoins();
-		stack.TryMergeNearby();
+		if ( !stack.HasInFlight )
+			stack.TryMergeNearby();
 		return true;
 	}
 
@@ -848,6 +992,14 @@ public class PlayerPlacement : MonoBehaviour
 			return _floorTarget;
 		}
 
+		// Whole station (body / hopper / hopper stack) → hopper, ignoring the crank.
+		// Runs before floor / loose-stack resolution so the body mesh (not a placement target
+		// itself) still dumps into the hopper instead of seating as floor.
+		CoinSortingHopper sortingHopper =
+			CoinSortingStation.ResolveHopperPlacementFromCollider( query.Hit.collider );
+		if ( sortingHopper != null )
+			return sortingHopper;
+
 		// Never resolve floor placement onto coin piles — deposit uses ITreasurePlacementTarget above.
 		if ( !PlacementFloorSurface.IsFloorCollider( query.Hit.collider ) )
 		{
@@ -931,6 +1083,14 @@ public class PlayerPlacement : MonoBehaviour
 		float radius = GroundStackSnapRadius;
 		if ( radius <= 0.0001f )
 			radius = GroundCoinStack.DefaultJoinRadius;
+
+		// Match merge reach so placing beside a stack joins it instead of creating a twin.
+		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
+		TreasureItem held = null;
+		if ( carry != null )
+			carry.TryPeekActive( out held );
+		if ( held != null && held.Definition != null )
+			radius = Mathf.Max( radius, GroundCoinStack.ResolveJoinRadius( held.Definition ) );
 
 		Vector3 probe = query.HasHit ? query.Hit.point : default;
 		if ( !query.HasHit )
@@ -1254,8 +1414,11 @@ public class PlayerPlacement : MonoBehaviour
 		return TreasureSupportStack.FindColumnBottom( item );
 	}
 
-	void RefreshGroundStackTuning()
+	void RefreshDefinitionTuning()
 	{
+		EnsureFloorTarget();
+		_floorTarget.SetDropUpBias( DropUpBias );
+
 		if ( _groundStackTarget == null )
 		{
 			_groundStackTarget = new GroundTreasureStackTarget(

@@ -84,6 +84,40 @@ public class PlayerControllerDefinition : ScriptableObject
 	[Min( 0f )]
 	public float groundSnapSpeed = 12f;
 
+	[Header( "Climb" )]
+	[Tooltip( "When disabled, steep slopes never enter Climbing movement." )]
+	public bool climbingEnabled = true;
+
+	[Tooltip( "Planar speed while climbing steep surfaces." )]
+	[Min( 0f )]
+	public float climbSpeed = 3.5f;
+
+	[Tooltip( "Planar speed while climbing with sprint held." )]
+	[Min( 0f )]
+	public float climbSprintSpeed = 5f;
+
+	[Min( 0f )]
+	public float climbAcceleration = 35f;
+
+	[Min( 0f )]
+	public float climbDeceleration = 40f;
+
+	[Tooltip( "Into-surface pull velocity while climbing (hugs the slope)." )]
+	[Min( 0f )]
+	public float climbSurfacePull = 12f;
+
+	[Tooltip( "Impulse strength when jumping off a climb surface." )]
+	[Min( 0f )]
+	public float climbJumpForce = 9f;
+
+	[Tooltip( "Degrees below slideAngle before climb exits due to flattening." )]
+	[Min( 0f )]
+	public float climbExitHysteresis = 5f;
+
+	[Tooltip( "Seconds without move input before releasing climb back to walking." )]
+	[Min( 0f )]
+	public float climbReleaseHoldTime = 0.25f;
+
 	[Header( "Slide" )]
 	[Tooltip( "Slope angle (degrees) at which downhill sliding can begin." )]
 	[Range( 0f, 89f )]
@@ -177,6 +211,14 @@ public class PlayerControllerDefinition : ScriptableObject
 		groundCheckDistance = Mathf.Max( 0f, groundCheckDistance );
 		groundSnapDistance = Mathf.Max( 0f, groundSnapDistance );
 		groundSnapSpeed = Mathf.Max( 0f, groundSnapSpeed );
+		climbSpeed = Mathf.Max( 0f, climbSpeed );
+		climbSprintSpeed = Mathf.Max( 0f, climbSprintSpeed );
+		climbAcceleration = Mathf.Max( 0f, climbAcceleration );
+		climbDeceleration = Mathf.Max( 0f, climbDeceleration );
+		climbSurfacePull = Mathf.Max( 0f, climbSurfacePull );
+		climbJumpForce = Mathf.Max( 0f, climbJumpForce );
+		climbExitHysteresis = Mathf.Max( 0f, climbExitHysteresis );
+		climbReleaseHoldTime = Mathf.Max( 0f, climbReleaseHoldTime );
 		slideAngle = Mathf.Clamp( slideAngle, 0f, 89f );
 		slideGravityScale = Mathf.Max( 0f, slideGravityScale );
 		slideSteer = Mathf.Max( 0f, slideSteer );

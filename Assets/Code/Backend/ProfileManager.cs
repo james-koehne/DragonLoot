@@ -15,9 +15,30 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Nakama game user id that last wrote this blob when online; used to avoid applying another account's local save on the same machine.</summary>
 	public string CloudProfileOwnerUserId;
 
+	public const int AbilitySlotCount = 4;
+
+	/// <summary>Unlocked ability ids (true = unlocked). Missing / false = locked.</summary>
+	public Dictionary<string, bool> unlockedAbilities;
+
+	/// <summary>Equipped ability ids per hotbar slot. Null/empty entry = vacant. Length should be <see cref="AbilitySlotCount"/>.</summary>
+	public string[] equippedAbilityIds;
+
+	/// <summary>Unlocked upgrade ids (true = unlocked). Missing / false = locked.</summary>
+	public Dictionary<string, bool> unlockedUpgrades;
+
+	/// <summary>Applied upgrade levels by id. Missing / 0 = unlocked but not purchased (or locked).</summary>
+	public Dictionary<string, int> upgradeLevels;
+
+	/// <summary>Lifetime of chests opened this profile (drives skeleton key display case unlock).</summary>
+	public int chestsOpened;
+
+	/// <summary>True after the skeleton key has been claimed from its display case.</summary>
+	public bool skeletonKeyClaimed;
+
 	public ProfileSaveData()
 	{
 		UpdateTime = "INVALID";
+		EnsureProgressDictionaries();
 	}
 
 	public string GetUpdateTime()
@@ -25,14 +46,87 @@ public class ProfileSaveData : IGameStats
 		return UpdateTime;
 	}
 
-	private void EnsureProgressDictionaries()
+	public void EnsureProgressDictionaries()
 	{
+		if ( unlockedAbilities == null )
+			unlockedAbilities = new Dictionary<string, bool>();
 
+		if ( equippedAbilityIds == null || equippedAbilityIds.Length != AbilitySlotCount )
+		{
+			string[] next = new string[ AbilitySlotCount ];
+			if ( equippedAbilityIds != null )
+			{
+				int copy = Math.Min( equippedAbilityIds.Length, next.Length );
+				for ( int i = 0; i < copy; i++ )
+					next[ i ] = equippedAbilityIds[ i ];
+			}
+			equippedAbilityIds = next;
+		}
+
+		if ( unlockedUpgrades == null )
+			unlockedUpgrades = new Dictionary<string, bool>();
+
+		if ( upgradeLevels == null )
+			upgradeLevels = new Dictionary<string, int>();
 	}
 
+	/// <summary>
+	/// Union unlock flags and take max upgrade levels from <paramref name="other"/> into this profile.
+	/// Slot loadout stays on the primary.
+	/// </summary>
 	public bool MergeBooleanUnlockProgressFrom( ProfileSaveData other )
 	{
-		return false;
+		if ( other == null )
+			return false;
+
+		EnsureProgressDictionaries();
+		other.EnsureProgressDictionaries();
+
+		bool changed = false;
+		foreach ( KeyValuePair<string, bool> pair in other.unlockedAbilities )
+		{
+			if ( !pair.Value )
+				continue;
+			if ( unlockedAbilities.TryGetValue( pair.Key, out bool existing ) && existing )
+				continue;
+			unlockedAbilities[ pair.Key ] = true;
+			changed = true;
+		}
+
+		foreach ( KeyValuePair<string, bool> pair in other.unlockedUpgrades )
+		{
+			if ( !pair.Value )
+				continue;
+			if ( unlockedUpgrades.TryGetValue( pair.Key, out bool existing ) && existing )
+				continue;
+			unlockedUpgrades[ pair.Key ] = true;
+			changed = true;
+		}
+
+		foreach ( KeyValuePair<string, int> pair in other.upgradeLevels )
+		{
+			int incoming = pair.Value;
+			if ( incoming <= 0 )
+				continue;
+			if ( upgradeLevels.TryGetValue( pair.Key, out int existing ) && existing >= incoming )
+				continue;
+			upgradeLevels[ pair.Key ] = incoming;
+			changed = true;
+		}
+
+		if ( other.chestsOpened > chestsOpened )
+		{
+			chestsOpened = other.chestsOpened;
+			changed = true;
+		}
+
+		if ( other.skeletonKeyClaimed && !skeletonKeyClaimed )
+		{
+			skeletonKeyClaimed = true;
+			changed = true;
+		}
+
+		return changed;
 	}
 }
 
@@ -341,6 +435,9 @@ public class ProfileManager : MonoBehaviour
 
 	private void CheckForInvalidValues()
 	{
+		if ( profileSaveData != null )
+			profileSaveData.EnsureProgressDictionaries();
+
 		if ( profileSaveData.UpdateTime == "INVALID" )
 		{
 			profileSaveData.UpdateTime = FunkCloudUtils.GetISOEpochTime();

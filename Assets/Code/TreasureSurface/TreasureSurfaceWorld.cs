@@ -332,14 +332,38 @@ public class TreasureSurfaceWorld : MonoBehaviour
 				TreasureChunk chunk = EnsureChunkLoaded( coord );
 				float chunkOriginX = cx * definition.chunkSize;
 				float chunkOriginZ = cz * definition.chunkSize;
+				float chunkWorldMinX = definition.worldOrigin.x - halfX + chunkOriginX;
+				float chunkWorldMinZ = definition.worldOrigin.z - halfZ + chunkOriginZ;
+				int res = chunk.Resolution;
 
-				for ( int z = 0; z < chunk.Resolution; z++ )
+				// Clamp inner loops to the stamp AABB in cell space (centers at x+0.5).
+				int minX = Mathf.Clamp(
+					Mathf.FloorToInt( ( worldCenter.x - radius - chunkWorldMinX ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int maxX = Mathf.Clamp(
+					Mathf.CeilToInt( ( worldCenter.x + radius - chunkWorldMinX ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int minZ = Mathf.Clamp(
+					Mathf.FloorToInt( ( worldCenter.z - radius - chunkWorldMinZ ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int maxZ = Mathf.Clamp(
+					Mathf.CeilToInt( ( worldCenter.z + radius - chunkWorldMinZ ) / cell - 0.5f ),
+					0,
+					res - 1 );
+
+				if ( minX > maxX || minZ > maxZ )
+					continue;
+
+				for ( int z = minZ; z <= maxZ; z++ )
 				{
-					float wz = definition.worldOrigin.z - halfZ + chunkOriginZ + ( z + 0.5f ) * cell;
+					float wz = chunkWorldMinZ + ( z + 0.5f ) * cell;
 					float dz = wz - worldCenter.z;
-					for ( int x = 0; x < chunk.Resolution; x++ )
+					for ( int x = minX; x <= maxX; x++ )
 					{
-						float wx = definition.worldOrigin.x - halfX + chunkOriginX + ( x + 0.5f ) * cell;
+						float wx = chunkWorldMinX + ( x + 0.5f ) * cell;
 						float dx = wx - worldCenter.x;
 						float distSq = dx * dx + dz * dz;
 						if ( distSq > radiusSq )

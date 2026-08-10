@@ -320,7 +320,11 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 	bool EvaluateSlotForItem( int slotIndex, TreasureItem item )
 	{
-		return !IsSlotOccupied( slotIndex ) && AcceptsForSlot( slotIndex, item != null ? item.Definition : null );
+		if ( item == null || IsSlotOccupied( slotIndex ) )
+			return false;
+		if ( !item.IsClean )
+			return false;
+		return AcceptsForSlot( slotIndex, item.Definition );
 	}
 
 	bool TryResolvePlacementSlot( TreasureItem item, in PlacementQuery query, out int slotIndex, out bool valid )
@@ -362,6 +366,8 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		for ( int i = 0; i < slots.Count; i++ )
 		{
 			if ( IsSlotOccupied( i ) || !AcceptsForSlot( i, item.Definition ) )
+				continue;
+			if ( !item.IsClean )
 				continue;
 
 			if ( !TryGetSlotPlaneDistanceSq( reference, i, out float distSq ) )

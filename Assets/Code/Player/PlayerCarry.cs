@@ -12,7 +12,12 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		public int Token;
 		public int ClusterId;
 		public bool IsClusterAnchor;
+		public bool PoseSettled;
 	}
+
+	const float PoseSettlePosEpsilon = 0.0001f;
+	const float PoseSettleScaleEpsilon = 0.0001f;
+	const float PoseSettleAngleEpsilon = 0.05f;
 
 	readonly List<CarriedEntry> _held = new List<CarriedEntry>();
 	readonly List<CarriedEntry> _cycleBuffer = new List<CarriedEntry>();
@@ -238,6 +243,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	public bool CanAdd( TreasureDefinition treasure )
 	{
 		if ( treasure == null )
+			return false;
+
+		if ( treasure.category == TreasureCategory.Chest )
 			return false;
 
 		if ( !PassesMixingRules( treasure ) )
@@ -775,6 +783,56 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		return TryConsumeActive( out item );
 	}
 
+	/// <summary>
+	/// Snapshot of live carried items in dump/place order: Active first, then held bottom→top.
+	/// </summary>
+	public void CopyCarriedItemsInOrder( List<TreasureItem> buffer )
+	{
+		if ( buffer == null )
+			return;
+
+		buffer.Clear();
+		if ( _hasActive && _active.Item != null )
+			buffer.Add( _active.Item );
+
+		for ( int i = 0; i < _held.Count; i++ )
+		{
+			TreasureItem heldItem = _held[ i ].Item;
+			if ( heldItem != null )
+				buffer.Add( heldItem );
+		}
+	}
+
+	/// <summary>
+	/// Removes a specific carried item for transfer to another owner (place / dump).
+	/// </summary>
+	public bool TryDetachItem( TreasureItem item )
+	{
+		if ( item == null )
+			return false;
+
+		if ( _hasActive && _active.Item == item )
+			return TryConsumeActive( out _ );
+
+		for ( int i = 0; i < _held.Count; i++ )
+		{
+			if ( _held[ i ].Item != item )
+				continue;
+
+			CarriedEntry entry = _held[ i ];
+			TreasureItem live = ResolveLiveItem( entry, activeParent: false );
+			if ( live == null )
+				return false;
+
+			_held.RemoveAt( i );
+			DetachResolvedEntry( entry, live );
+			RestackPoses();
+			return true;
+		}
+
+		return false;
+	}
+
 	TreasureItem ResolveLiveItem( CarriedEntry entry, bool activeParent )
 	{
 		TreasureItem item = entry.Item;
@@ -1157,7 +1215,26 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	{
 		// Keep parents correct; slot motion is eased in SmoothCarryPoses so
 		// in-flight pickups are never snapped / aborted by a restack.
+		InvalidatePoseSettled();
 		EnsureCarryParents();
+	}
+
+	void InvalidatePoseSettled()
+	{
+		if ( _hasActive )
+		{
+			_active.PoseSettled = false;
+		}
+
+		for ( int i = 0; i < _held.Count; i++ )
+		{
+			CarriedEntry entry = _held[ i ];
+			if ( !entry.PoseSettled )
+				continue;
+
+			entry.PoseSettled = false;
+			_held[ i ] = entry;
+		}
 	}
 
 	void EnsureCarryParents()
@@ -1189,49 +1266,102 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	void SmoothCarryPoses()
 	{
+		if ( !_hasActive && _held.Count == 0 )
+			return;
+
 		CarryDefinition def = Definition;
 		float speed = def != null ? def.stackPoseSmoothSpeed : 16f;
 		float dt = Time.deltaTime;
 		float t = speed <= 0.01f ? 1f : 1f - Mathf.Exp( -speed * dt );
+		Vector3 heldBase = def != null ? def.heldStackOffset : Vector3.zero;
 
-		if ( _hasActive && _active.Item != null && !_holdTweens.ContainsKey( _active.Token ) )
-			SmoothItemTowardPose( _active.Item, active: true, heldIndex: -1, t );
+		if ( _hasActive && _active.Item != null && !_active.PoseSettled && !_holdTweens.ContainsKey( _active.Token ) )
+			SmoothItemTowardPose( _active.Item, active: true, heldIndex: -1, Vector3.zero, t );
 
+		// Single pass: accumulate stack height while easing each anchor (O(n)).
+		float y = 0f;
 		for ( int i = 0; i < _held.Count; i++ )
 		{
 			CarriedEntry entry = _held[ i ];
 			if ( entry.Item == null )
 				continue;
-			if ( _holdTweens.ContainsKey( entry.Token ) )
-				continue;
 			if ( entry.ClusterId != 0 && !entry.IsClusterAnchor )
 				continue;
 
-			SmoothItemTowardPose( entry.Item, active: false, heldIndex: i, t );
+			if ( !_holdTweens.ContainsKey( entry.Token ) && !entry.PoseSettled )
+			{
+				Vector3 targetPos = heldBase + GetHeldStackHorizontalOffset( i ) + new Vector3( 0f, y, 0f );
+				SmoothItemTowardPose( entry.Item, active: false, heldIndex: i, targetPos, t );
+			}
+
+			y += GetHeldStackStep( entry.Definition, def );
 		}
 	}
 
-	void SmoothItemTowardPose( TreasureItem item, bool active, int heldIndex, float t )
+	void SmoothItemTowardPose( TreasureItem item, bool active, int heldIndex, Vector3 targetPos, float t )
 	{
 		Transform parent = GetItemParent( active );
 		if ( item == null || parent == null )
+			return;
+
+		CarriedEntry entry = active ? _active : _held[ heldIndex ];
+		if ( entry.PoseSettled )
 			return;
 
 		Transform visual = item.transform;
 		if ( visual.parent != parent )
 			visual.SetParent( parent, true );
 
-		Vector3 targetPos = GetLocalPose( active, heldIndex );
 		Quaternion targetRot = item.GetHeldLocalRotation( active );
 		Vector3 targetScale = item.GetHeldScale();
-
-		CarriedEntry entry = active ? _active : _held[ heldIndex ];
 		if ( entry.ClusterId != 0 && entry.IsClusterAnchor )
 			targetScale = item.GetWorldScale();
+
+		if ( IsPoseNear( visual, targetPos, targetRot, targetScale ) )
+		{
+			SnapPose( visual, targetPos, targetRot, targetScale );
+			SetPoseSettled( active, heldIndex, settled: true );
+			return;
+		}
 
 		visual.localPosition = Vector3.Lerp( visual.localPosition, targetPos, t );
 		visual.localRotation = Quaternion.Slerp( visual.localRotation, targetRot, t );
 		visual.localScale = Vector3.Lerp( visual.localScale, targetScale, t );
+
+		if ( IsPoseNear( visual, targetPos, targetRot, targetScale ) )
+		{
+			SnapPose( visual, targetPos, targetRot, targetScale );
+			SetPoseSettled( active, heldIndex, settled: true );
+		}
+	}
+
+	void SetPoseSettled( bool active, int heldIndex, bool settled )
+	{
+		if ( active )
+		{
+			_active.PoseSettled = settled;
+			return;
+		}
+
+		CarriedEntry entry = _held[ heldIndex ];
+		entry.PoseSettled = settled;
+		_held[ heldIndex ] = entry;
+	}
+
+	static bool IsPoseNear( Transform visual, Vector3 targetPos, Quaternion targetRot, Vector3 targetScale )
+	{
+		if ( ( visual.localPosition - targetPos ).sqrMagnitude > PoseSettlePosEpsilon * PoseSettlePosEpsilon )
+			return false;
+		if ( ( visual.localScale - targetScale ).sqrMagnitude > PoseSettleScaleEpsilon * PoseSettleScaleEpsilon )
+			return false;
+		return Quaternion.Angle( visual.localRotation, targetRot ) <= PoseSettleAngleEpsilon;
+	}
+
+	static void SnapPose( Transform visual, Vector3 targetPos, Quaternion targetRot, Vector3 targetScale )
+	{
+		visual.localPosition = targetPos;
+		visual.localRotation = targetRot;
+		visual.localScale = targetScale;
 	}
 
 	Transform GetItemParent( bool active )

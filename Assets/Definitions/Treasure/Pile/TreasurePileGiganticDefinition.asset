@@ -13,113 +13,95 @@ MonoBehaviour:
   m_Name: TreasurePileGiganticDefinition
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileDefinition
   displayName: Treasure Pile
-  contents:
+  coinContents:
   - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     count: 2000
-    maxVisible: 500
   - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     count: 2000
-    maxVisible: 500
   - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     count: 10000
-    maxVisible: 3000
+  treasureContents:
   - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
     count: 120
-    maxVisible: 14
   - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
     count: 100
-    maxVisible: 12
   - treasure: {fileID: 11400000, guid: b6e1d4a8c2f53970e8a5b1d7c4f0e268, type: 2}
     count: 70
-    maxVisible: 8
   - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
     count: 50
-    maxVisible: 6
   - treasure: {fileID: 11400000, guid: 3f8a2d6c9e1b4570a4d8c2f6b0e5a937, type: 2}
     count: 30
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: 5252608b20a5b26478a15dc5c333597f, type: 2}
     count: 20
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 950345e010709da49a63b1fbdf37dd7a, type: 2}
     count: 40
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: 24a987b32945df74897fe318bdf5ec63, type: 2}
     count: 40
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: be8f4835c8bbc2442a00b08bb29ffc22, type: 2}
     count: 40
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: 05d5d2fd31947fe4ebeed539f39d7807, type: 2}
     count: 40
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: 9588dd1d013c528408e3b6fb631e0d17, type: 2}
     count: 35
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: 792b6a35dddfd4f46ba25841600e5188, type: 2}
     count: 35
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: ba4a35e32aef89647a1af12e0e4943d5, type: 2}
     count: 35
-    maxVisible: 4
   - treasure: {fileID: 11400000, guid: 3073ae38ac57d00409a1b67710e99118, type: 2}
     count: 25
-    maxVisible: 3
   - treasure: {fileID: 11400000, guid: 02e3d057e3793dd4cbae94217b2a8620, type: 2}
     count: 25
-    maxVisible: 3
   - treasure: {fileID: 11400000, guid: 47ad14e2b2115474d81361177437f397, type: 2}
     count: 25
-    maxVisible: 3
   - treasure: {fileID: 11400000, guid: 6241500a6033635408a00c4292cca732, type: 2}
     count: 18
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 9e6564c223ccf604a80295e7e8d81328, type: 2}
     count: 18
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 5d4d1e4e2999a704b8774dadd64afe64, type: 2}
     count: 18
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 708909205ca41f6458d828ac46dd70d6, type: 2}
     count: 12
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 3a43154c7a487c74f8e609fcf994a049, type: 2}
     count: 12
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 67c51721da18e6347b5216fcf9e0e018, type: 2}
     count: 12
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: 9f5e72d31aff7904cb448c492e72e20e, type: 2}
     count: 12
-    maxVisible: 2
   - treasure: {fileID: 11400000, guid: cd64ade1fb4d5ce48838d9808d5f6c52, type: 2}
     count: 10
-    maxVisible: 1
   - treasure: {fileID: 11400000, guid: b257758264e283847bc12dbe26874dc4, type: 2}
     count: 10
-    maxVisible: 1
   - treasure: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
     count: 10
-    maxVisible: 1
-  maxVisibleTotal: 16000
-  defaultPerTypeVisible: 80
+  - treasure: {fileID: 11400000, guid: b8ff7f56e1131614fa3ac882993c160d, type: 2}
+    count: 9
+  - treasure: {fileID: 11400000, guid: 1b45042b9e8c93a45aa79fa446b6c7cf, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 9fbccced7b04e6548be78a79e698ade1, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
+    count: 2
+  maxVisibleTotal: 9600
+  coinVisibleBufferFraction: 0.2
   heightResolution: 512
-  meshResolution: 256
   worldSize: 128
   maxHeight: 128
-  carveRadius: 2
-  carveVolumeScale: 0.1
+  groundLevelHeight: 0.01
+  meshResolution: 512
+  meshDeformNormalSoften: 0
+  meshDeformSampleBlur: 0
   pickRadius: 0.45
   buryDepth: 0.18
   initialRevealDepth: 0.06
   placementMinSpacing: 0.18
+  enforcePlacementSpacing: 1
   placementJitter: 0.3
   placementRadiusFraction: 0.68
   placementScaleJitter: 0.1
   coinSurfaceHeightFraction: 0.05
-  coinRadialPower: 1.1
   coinPullToCarveCount: 4
-  treasureRadialPower: 1.45
-  treasureHeightBias: 1
+  treasureRadialPower: 1.1
+  treasureHeightBias: 0.4
   treasurePickupOutsideFraction: 0.4
+  treasureReleaseOutsideFraction: 0.9
   pileMaterial: {fileID: 0}

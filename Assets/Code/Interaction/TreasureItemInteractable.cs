@@ -93,6 +93,9 @@ public class TreasureItemInteractable : InteractableBase
 		if ( !base.CanInteract( player ) || player == null || item == null )
 			return false;
 
+		if ( item.Definition != null && item.Definition.category == TreasureCategory.Chest )
+			return false;
+
 		item.TryRepairPickupState();
 
 		if ( item.State == TreasureItemState.Held
@@ -105,6 +108,13 @@ public class TreasureItemInteractable : InteractableBase
 
 		if ( item.State == TreasureItemState.Displayed
 			&& item.Owner is IPermanentTreasureDisplayOwner )
+			return false;
+
+		if ( item.Owner is CleaningStationInteractable cleaningStation
+			&& !cleaningStation.AllowsPickup )
+			return false;
+
+		if ( item.Owner != null && item.Owner.OwnerKind == TreasureOwnerKind.Minecart )
 			return false;
 
 		if ( UsesColumnPickup( item ) )
@@ -128,9 +138,16 @@ public class TreasureItemInteractable : InteractableBase
 		if ( player == null || item == null )
 			return;
 
+		if ( item.Definition != null && item.Definition.category == TreasureCategory.Chest )
+			return;
+
 		if ( item.State == TreasureItemState.Held
 			|| item.State == TreasureItemState.Stacked
 			|| item.IsReclaiming )
+			return;
+
+		if ( item.Owner is CleaningStationInteractable cleaningStation
+			&& !cleaningStation.AllowsPickup )
 			return;
 
 		if ( UsesColumnPickup( item ) )

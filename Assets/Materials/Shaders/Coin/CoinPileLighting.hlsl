@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_COIN_PILE_LIGHTING_INCLUDED
 #define DRAGONLOOT_COIN_PILE_LIGHTING_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "../Stylized/StylizedLightingCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 
 CBUFFER_START(UnityPerMaterial)
@@ -156,7 +156,7 @@ half4 CoinPileLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor);
 
-    half4 color = UniversalFragmentPBR(inputData, surfaceData);
+    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
     color.rgb = max(color.rgb, ambientFloor * metallic);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));

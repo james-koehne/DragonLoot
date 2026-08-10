@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 399d64c0bcdfb434483178497b41791f, type: 3}
+  m_Name: CoinSortingStationDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::CoinSortingStationDefinition
+  upgradeId: coin_sorting_station
+  baseHopperCapacity: 50
+  level4HopperCapacity: 150
+  baseCoinsPerSecond: 4
+  level3CoinsPerSecond: 10
+  crankHoldGrace: 0.35
+  fullStackLateralOffset: 0.35

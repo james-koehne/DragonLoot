@@ -47,6 +47,8 @@ static class TreasureSparkleRendererFeatureInstaller
 		Shader resolveShader = Shader.Find( "DragonLoot/Treasure Sparkle Mask Resolve" );
 		Shader fallbackShader = Shader.Find( "DragonLoot/Treasure Sparkle Fallback Mask" );
 		Shader sparkleShader = Shader.Find( "DragonLoot/Treasure Sparkle" );
+		ComputeShader discoverCompute = AssetDatabase.LoadAssetAtPath<ComputeShader>(
+			"Assets/Materials/Shaders/TreasureSparkle/TreasureSparkleDiscover.compute" );
 
 		for ( int i = 0; i < rendererData.rendererFeatures.Count; i++ )
 		{
@@ -57,6 +59,7 @@ static class TreasureSparkleRendererFeatureInstaller
 				SerializedProperty resolveProp = so.FindProperty( "maskResolveShader" );
 				SerializedProperty fallbackProp = so.FindProperty( "fallbackMaskShader" );
 				SerializedProperty sparkleProp = so.FindProperty( "sparkleShader" );
+				SerializedProperty discoverProp = so.FindProperty( "discoverCompute" );
 				bool dirty = false;
 				if ( defProp != null && defProp.objectReferenceValue == null && definition != null )
 				{
@@ -76,6 +79,16 @@ static class TreasureSparkleRendererFeatureInstaller
 				if ( sparkleProp != null && sparkleProp.objectReferenceValue == null && sparkleShader != null )
 				{
 					sparkleProp.objectReferenceValue = sparkleShader;
+					dirty = true;
+				}
+				if ( discoverProp != null && discoverProp.objectReferenceValue == null && discoverCompute != null )
+				{
+					discoverProp.objectReferenceValue = discoverCompute;
+					dirty = true;
+				}
+				else if ( discoverProp != null && discoverCompute != null && discoverProp.objectReferenceValue != discoverCompute )
+				{
+					discoverProp.objectReferenceValue = discoverCompute;
 					dirty = true;
 				}
 				if ( dirty )
@@ -99,6 +112,7 @@ static class TreasureSparkleRendererFeatureInstaller
 		SerializedProperty maskResolveProp = featureSo.FindProperty( "maskResolveShader" );
 		SerializedProperty fallbackMaskProp = featureSo.FindProperty( "fallbackMaskShader" );
 		SerializedProperty sparklePropNew = featureSo.FindProperty( "sparkleShader" );
+		SerializedProperty discoverPropNew = featureSo.FindProperty( "discoverCompute" );
 		if ( definitionProp != null )
 			definitionProp.objectReferenceValue = definition;
 		if ( maskResolveProp != null )
@@ -107,6 +121,8 @@ static class TreasureSparkleRendererFeatureInstaller
 			fallbackMaskProp.objectReferenceValue = fallbackShader;
 		if ( sparklePropNew != null )
 			sparklePropNew.objectReferenceValue = sparkleShader;
+		if ( discoverPropNew != null )
+			discoverPropNew.objectReferenceValue = discoverCompute;
 		featureSo.ApplyModifiedPropertiesWithoutUndo();
 
 		EditorUtility.SetDirty( rendererData );

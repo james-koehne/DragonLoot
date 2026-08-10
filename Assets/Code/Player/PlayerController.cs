@@ -4,6 +4,7 @@ public enum PlayerMovementState
 {
 	Walking,
 	Sprinting,
+	Climbing,
 	Sliding,
 	Airborne,
 	Gliding
@@ -28,6 +29,9 @@ public class PlayerController : MonoBehaviour
 	PlayerCarry _carry;
 	PlayerPlacement _placement;
 	PlayerTreasurePilePull _pilePull;
+	PlayerMinecartPush _minecartPush;
+	PlayerAbilities _abilities;
+	PlayerCleaning _cleaning;
 	CharacterController _characterController;
 	bool gameplayInputEnabled = true;
 	float _verticalVelocity;
@@ -39,6 +43,8 @@ public class PlayerController : MonoBehaviour
 	bool _hasGroundHit;
 	float _groundDistance;
 	bool _isSliding;
+	bool _isClimbing;
+	float _climbReleaseTimer;
 	float _slideEnterCharge;
 	bool _slideExitBoostActive;
 	float _slideExitBoostSpeed;
@@ -110,6 +116,15 @@ public class PlayerController : MonoBehaviour
 	float GroundCheckDistance => RuntimeDefinition.Get( Definition, d => d.groundCheckDistance, 0.2f );
 	float GroundSnapDistance => RuntimeDefinition.Get( Definition, d => d.groundSnapDistance, 0.35f );
 	float GroundSnapSpeed => RuntimeDefinition.Get( Definition, d => d.groundSnapSpeed, 12f );
+	bool ClimbingEnabled => RuntimeDefinition.Get( Definition, d => d.climbingEnabled, true );
+	float ClimbSpeed => RuntimeDefinition.Get( Definition, d => d.climbSpeed, 3.5f );
+	float ClimbSprintSpeed => RuntimeDefinition.Get( Definition, d => d.climbSprintSpeed, 5f );
+	float ClimbAcceleration => RuntimeDefinition.Get( Definition, d => d.climbAcceleration, 35f );
+	float ClimbDeceleration => RuntimeDefinition.Get( Definition, d => d.climbDeceleration, 40f );
+	float ClimbSurfacePull => RuntimeDefinition.Get( Definition, d => d.climbSurfacePull, 12f );
+	float ClimbJumpForce => RuntimeDefinition.Get( Definition, d => d.climbJumpForce, 9f );
+	float ClimbExitHysteresis => RuntimeDefinition.Get( Definition, d => d.climbExitHysteresis, 5f );
+	float ClimbReleaseHoldTime => RuntimeDefinition.Get( Definition, d => d.climbReleaseHoldTime, 0.25f );
 	float SlideAngle => RuntimeDefinition.Get( Definition, d => d.slideAngle, 45f );
 	float SlideGravityScale => RuntimeDefinition.Get( Definition, d => d.slideGravityScale, 1f );
 	float SlideSteer => RuntimeDefinition.Get( Definition, d => d.slideSteer, 12f );
@@ -134,6 +149,11 @@ public class PlayerController : MonoBehaviour
 	public PlayerCarry Carry => _carry;
 	public PlayerPlacement Placement => _placement;
 	public PlayerTreasurePilePull PilePull => _pilePull;
+
+	public PlayerMinecartPush MinecartPush => _minecartPush;
+	public PlayerAbilities Abilities => _abilities;
+	public PlayerCleaning Cleaning => _cleaning;
+
 	public bool IsGrounded { get; private set; }
 	public PlayerMovementState MovementState { get; private set; } = PlayerMovementState.Walking;
 	public bool WasLandingThisFrame { get; private set; }
@@ -157,6 +177,8 @@ public class PlayerController : MonoBehaviour
 		}
 	}
 	public bool IsSliding => _isSliding;
+	public bool IsClimbing => _isClimbing;
+	public bool IsClimbingEnabled => ClimbingEnabled;
 	public bool IsSlideExitBoostActive => _slideExitBoostActive;
 	public float SlideExitBoostSpeed => _slideExitBoostSpeed;
 	public bool IsGliding => _isGliding;
@@ -173,6 +195,24 @@ public class PlayerController : MonoBehaviour
 		ClearSlideExitBoost();
 		_planarVelocity = Vector3.zero;
 		UpdateMovementState();
+	}
+
+	void ClearClimb()
+	{
+		_isClimbing = false;
+		_climbReleaseTimer = 0f;
+	}
+
+	/// <summary>Enable or disable Climbing movement. Clears an active climb when turned off.</summary>
+	public void SetClimbingEnabled( bool enabled )
+	{
+		PlayerControllerDefinition definition = Definition;
+		if ( definition == null )
+			return;
+
+		definition.climbingEnabled = enabled;
+		if ( !enabled )
+			ClearClimb();
 	}
 
 	/// <summary>0–1 progress toward committed slide while entry conditions are held.</summary>
@@ -262,6 +302,10 @@ public class PlayerController : MonoBehaviour
 		EnsureCarry();
 		EnsurePlacement();
 		EnsurePilePull();
+		EnsureMinecartPush();
+		EnsureAbilities();
+		EnsureCleaning();
+		EnsureUpgrades();
 
 		if ( cameraMount == null )
 		{
@@ -269,6 +313,11 @@ public class PlayerController : MonoBehaviour
 			if ( existing != null )
 				cameraMount = existing;
 		}
+	}
+
+	void OnDestroy()
+	{
+		UpgradeSystem.ClearInstanceIfOwner( this );
 	}
 
 	public void Setup( FirstPersonCameraController cameraLook )
@@ -282,10 +331,19 @@ public class PlayerController : MonoBehaviour
 		EnsureCarry();
 		EnsurePlacement();
 		EnsurePilePull();
+		EnsureMinecartPush();
+		EnsureAbilities();
+		EnsureCleaning();
+		EnsureUpgrades();
 
 		_interaction.Setup( this, _cameraLook );
 		_placement.Setup( this, _interaction );
 		_carry.Setup( this, _cameraLook );
+		_abilities.Setup( this );
+		if ( _cleaning != null )
+			_cleaning.Setup( this );
+		if ( _minecartPush != null )
+			_minecartPush.Setup( this );
 	}
 
 	public bool CanReceiveInteractable( IInteractable interactable )
@@ -396,6 +454,35 @@ public class PlayerController : MonoBehaviour
 			_pilePull = gameObject.AddComponent<PlayerTreasurePilePull>();
 	}
 
+	void EnsureMinecartPush()
+	{
+		if ( _minecartPush == null )
+			_minecartPush = GetComponent<PlayerMinecartPush>();
+		if ( _minecartPush == null )
+			_minecartPush = gameObject.AddComponent<PlayerMinecartPush>();
+	}
+
+	void EnsureAbilities()
+	{
+		if ( _abilities == null )
+			_abilities = GetComponent<PlayerAbilities>();
+		if ( _abilities == null )
+			_abilities = gameObject.AddComponent<PlayerAbilities>();
+	}
+
+	void EnsureCleaning()
+	{
+		if ( _cleaning == null )
+			_cleaning = GetComponent<PlayerCleaning>();
+		if ( _cleaning == null )
+			_cleaning = gameObject.AddComponent<PlayerCleaning>();
+	}
+
+	void EnsureUpgrades()
+	{
+		UpgradeSystem.Ensure( this );
+	}
+
 	void Update()
 	{
 		ApplyGravityAndMove();
@@ -439,9 +526,10 @@ public class PlayerController : MonoBehaviour
 		if ( castHit && hit.distance <= checkDistance )
 			return true;
 
-		bool suppressSnap = hadPriorGround
-			&& _wasGrounded
-			&& HasSteepUphillFlatIntent( flatMoveIntent, priorGroundNormal );
+		bool suppressSnap = _isClimbing
+			|| ( hadPriorGround
+			     && _wasGrounded
+			     && HasSteepUphillFlatIntent( flatMoveIntent, priorGroundNormal ) );
 
 		bool wantsSnap = castHit
 			&& hit.distance <= snapDistance
@@ -503,6 +591,9 @@ public class PlayerController : MonoBehaviour
 		if ( !grounded && _isSliding )
 			ExitSlide( retainMomentum: true );
 
+		if ( !grounded )
+			ClearClimb();
+
 		if ( WasLandingThisFrame )
 		{
 			_jumpAvailable = true;
@@ -527,8 +618,16 @@ public class PlayerController : MonoBehaviour
 			if ( input != null )
 			{
 				bool canCoyoteJump = _coyoteTimer > 0f;
-				if ( _jumpAvailable
+				if ( _isClimbing
+				     && IsGrounded
 				     && !_isSliding
+				     && jumpPressed )
+				{
+					PerformClimbJumpOff();
+				}
+				else if ( _jumpAvailable
+				     && !_isSliding
+				     && !_isClimbing
 				     && ( IsGrounded || canCoyoteJump )
 				     && jumpPressed )
 				{
@@ -539,6 +638,7 @@ public class PlayerController : MonoBehaviour
 					IsGrounded = false;
 					_wasGrounded = false;
 					_isSliding = false;
+					ClearClimb();
 					ClearSlideExitBoost();
 					_hasGroundHit = false;
 				}
@@ -560,6 +660,7 @@ public class PlayerController : MonoBehaviour
 					_isGliding = true;
 					_ignoreGrounding = true;
 					_isSliding = false;
+					ClearClimb();
 					ClearSlideExitBoost();
 					_hasGroundHit = false;
 				}
@@ -577,13 +678,19 @@ public class PlayerController : MonoBehaviour
 		_debugFlatMoveIntent = flatMoveIntent;
 		_debugGroundMoveIntent = moveIntent;
 
-		if ( IsGrounded && _verticalVelocity < 0f )
+		if ( IsGrounded && !_isClimbing && _verticalVelocity < 0f )
 			_verticalVelocity = GroundStickVelocity;
 
 		if ( IsGrounded )
+		{
 			UpdateSlideState( flatMoveIntent, moveInput.y );
+			UpdateClimbState( flatMoveIntent );
+		}
 		else
+		{
 			_slideEnterCharge = 0f;
+			ClearClimb();
+		}
 
 		Vector3 velocity;
 		if ( _isSliding && IsGrounded )
@@ -592,6 +699,11 @@ public class PlayerController : MonoBehaviour
 			velocity = _planarVelocity;
 			if ( _verticalVelocity < 0f )
 				velocity += Vector3.up * _verticalVelocity;
+		}
+		else if ( _isClimbing && IsGrounded )
+		{
+			ApplyClimbMovement( flatMoveIntent, Time.deltaTime );
+			velocity = ComposeClimbMoveVelocity( _planarVelocity );
 		}
 		else
 		{
@@ -606,7 +718,7 @@ public class PlayerController : MonoBehaviour
 				_verticalVelocity += Gravity * Time.deltaTime;
 
 			if ( IsGrounded && _hasGroundHit )
-				velocity = ComposeGroundedMoveVelocity( _planarVelocity, moveIntent );
+				velocity = ComposeGroundedMoveVelocity( _planarVelocity );
 			else
 				velocity = new Vector3( _planarVelocity.x, _verticalVelocity, _planarVelocity.z );
 		}
@@ -645,9 +757,7 @@ public class PlayerController : MonoBehaviour
 
 	void ApplyStandardPlanarMovement( Vector3 moveIntent, float dt )
 	{
-		bool climbingSteep = HasSteepUphillMoveIntent( moveIntent );
-
-		if ( IsGrounded && _hasGroundHit && !climbingSteep )
+		if ( IsGrounded && _hasGroundHit )
 			_planarVelocity = Vector3.ProjectOnPlane( _planarVelocity, _groundNormal );
 		else if ( !IsGrounded )
 			_planarVelocity.y = 0f;
@@ -828,6 +938,7 @@ public class PlayerController : MonoBehaviour
 			{
 				_isSliding = true;
 				_slideEnterCharge = 0f;
+				ClearClimb();
 				ClearSlideExitBoost();
 			}
 		}
@@ -957,32 +1068,149 @@ public class PlayerController : MonoBehaviour
 		return Vector3.Dot( flatMoveIntent.normalized, -flatDownhill ) >= SlideExitDot;
 	}
 
-	bool HasSteepUphillMoveIntent( Vector3 moveIntent )
+	void UpdateClimbState( Vector3 flatMoveIntent )
 	{
-		if ( !_hasGroundHit || _groundAngle < SlideAngle )
-			return false;
+		if ( !ClimbingEnabled || _isSliding || !IsGrounded || !_hasGroundHit )
+		{
+			ClearClimb();
+			return;
+		}
 
-		if ( moveIntent.sqrMagnitude < 0.0001f )
-			return false;
+		float exitAngle = Mathf.Max( 0f, SlideAngle - ClimbExitHysteresis );
+		bool steepEnough = _isClimbing
+			? _groundAngle >= exitAngle
+			: _groundAngle >= SlideAngle;
+
+		if ( !steepEnough )
+		{
+			ClearClimb();
+			return;
+		}
+
+		bool hasMoveIntent = flatMoveIntent.sqrMagnitude > 0.0001f;
+
+		if ( _isClimbing )
+		{
+			if ( hasMoveIntent )
+			{
+				_climbReleaseTimer = 0f;
+				return;
+			}
+
+			_climbReleaseTimer += Time.deltaTime;
+			if ( _climbReleaseTimer >= ClimbReleaseHoldTime )
+				ClearClimb();
+			return;
+		}
+
+		if ( !hasMoveIntent )
+			return;
 
 		Vector3 downhill = GetDownhillDirection();
 		Vector3 flatDownhill = GetFlatDirection( downhill );
 		if ( flatDownhill.sqrMagnitude <= MinDownhillSqr )
-			return false;
+			return;
 
-		Vector3 flatIntent = moveIntent;
-		flatIntent.y = 0f;
-		if ( flatIntent.sqrMagnitude < 0.0001f )
-			return false;
-
-		return Vector3.Dot( flatIntent.normalized, -flatDownhill ) >= SlideExitDot;
+		float uphillDot = Vector3.Dot( flatMoveIntent.normalized, -flatDownhill );
+		if ( uphillDot >= SlideExitDot )
+		{
+			_isClimbing = true;
+			_climbReleaseTimer = 0f;
+			ClearSlideExitBoost();
+		}
 	}
 
-	Vector3 ComposeGroundedMoveVelocity( Vector3 slopeVelocity, Vector3 moveIntent )
+	void ApplyClimbMovement( Vector3 flatMoveIntent, float dt )
 	{
-		if ( HasSteepUphillMoveIntent( moveIntent ) )
-			return slopeVelocity;
+		if ( !_hasGroundHit )
+		{
+			ClearClimb();
+			ApplyStandardPlanarMovement( flatMoveIntent, dt );
+			return;
+		}
 
+		GetClimbSurfaceAxes( out Vector3 climbUp, out Vector3 climbRight );
+		Vector3 surfaceIntent = Vector3.zero;
+		if ( flatMoveIntent.sqrMagnitude > 0.0001f )
+		{
+			GetFlatAxes( out Vector3 flatForward, out Vector3 flatRight );
+			float forward = Vector3.Dot( flatMoveIntent, flatForward );
+			float right = Vector3.Dot( flatMoveIntent, flatRight );
+			surfaceIntent = climbUp * forward + climbRight * right;
+			if ( surfaceIntent.sqrMagnitude > 0.0001f )
+				surfaceIntent = surfaceIntent.normalized * flatMoveIntent.magnitude;
+			else
+				surfaceIntent = Vector3.ProjectOnPlane( flatMoveIntent, _groundNormal );
+		}
+
+		float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
+		float targetSpeed = ( _wantsSprint ? ClimbSprintSpeed : ClimbSpeed ) * carryScale;
+		Vector3 desired = surfaceIntent.sqrMagnitude > 0.0001f
+			? surfaceIntent.normalized * targetSpeed
+			: Vector3.zero;
+
+		float rate = desired.sqrMagnitude >= _planarVelocity.sqrMagnitude
+			? ClimbAcceleration
+			: ClimbDeceleration;
+		if ( desired.sqrMagnitude < 0.0001f )
+			rate = ClimbDeceleration;
+
+		_planarVelocity = Vector3.MoveTowards( _planarVelocity, desired, rate * dt );
+		_planarVelocity = Vector3.ProjectOnPlane( _planarVelocity, _groundNormal );
+	}
+
+	Vector3 ComposeClimbMoveVelocity( Vector3 slopeVelocity )
+	{
+		Vector3 alongSurface = Vector3.ProjectOnPlane( slopeVelocity, _groundNormal );
+		return alongSurface - _groundNormal * ClimbSurfacePull;
+	}
+
+	void GetClimbSurfaceAxes( out Vector3 climbUp, out Vector3 climbRight )
+	{
+		climbUp = Vector3.ProjectOnPlane( Vector3.up, _groundNormal );
+		if ( climbUp.sqrMagnitude < 0.0001f )
+		{
+			Vector3 downhill = GetDownhillDirection();
+			climbUp = downhill.sqrMagnitude > MinDownhillSqr ? -downhill : transform.forward;
+			climbUp = Vector3.ProjectOnPlane( climbUp, _groundNormal );
+		}
+
+		if ( climbUp.sqrMagnitude > 0.0001f )
+			climbUp.Normalize();
+		else
+			climbUp = Vector3.forward;
+
+		climbRight = Vector3.Cross( _groundNormal, climbUp );
+		if ( climbRight.sqrMagnitude > 0.0001f )
+			climbRight.Normalize();
+		else
+			climbRight = transform.right;
+	}
+
+	void PerformClimbJumpOff()
+	{
+		Vector3 jumpDir = _groundNormal + Vector3.up;
+		if ( jumpDir.sqrMagnitude < 0.0001f )
+			jumpDir = Vector3.up;
+		else
+			jumpDir.Normalize();
+
+		Vector3 impulse = jumpDir * ClimbJumpForce;
+		_planarVelocity = new Vector3( impulse.x, 0f, impulse.z );
+		_verticalVelocity = impulse.y;
+		_jumpAvailable = false;
+		_coyoteTimer = 0f;
+		_ignoreGrounding = true;
+		IsGrounded = false;
+		_wasGrounded = false;
+		_isSliding = false;
+		ClearClimb();
+		ClearSlideExitBoost();
+		_hasGroundHit = false;
+	}
+
+	Vector3 ComposeGroundedMoveVelocity( Vector3 slopeVelocity )
+	{
 		Vector3 alongSurface = Vector3.ProjectOnPlane( slopeVelocity, _groundNormal );
 		return alongSurface + Vector3.up * GroundStickVelocity;
 	}
@@ -1116,6 +1344,12 @@ public class PlayerController : MonoBehaviour
 			return;
 		}
 
+		if ( _isClimbing )
+		{
+			MovementState = PlayerMovementState.Climbing;
+			return;
+		}
+
 		if ( _wantsSprint && _planarVelocity.sqrMagnitude > 0.01f )
 		{
 			MovementState = PlayerMovementState.Sprinting;
@@ -1133,6 +1367,7 @@ public class PlayerController : MonoBehaviour
 		_planarVelocity = Vector3.zero;
 		_localPlanarVelocity = Vector3.zero;
 		_isSliding = false;
+		ClearClimb();
 		_slideEnterCharge = 0f;
 		ClearSlideExitBoost();
 		_wantsSprint = false;
@@ -1164,6 +1399,7 @@ public class PlayerController : MonoBehaviour
 		_planarVelocity = Vector3.zero;
 		_localPlanarVelocity = Vector3.zero;
 		_isSliding = false;
+		ClearClimb();
 		_slideEnterCharge = 0f;
 		ClearSlideExitBoost();
 		_wantsSprint = false;
@@ -1194,6 +1430,12 @@ public class PlayerController : MonoBehaviour
 
 		if ( _placement != null )
 			_placement.SetInputEnabled( enabled );
+
+		if ( _abilities != null )
+			_abilities.SetInputEnabled( enabled );
+
+		if ( _cleaning != null )
+			_cleaning.SetInputEnabled( enabled );
 	}
 
 	static GameInput GetGameInput()

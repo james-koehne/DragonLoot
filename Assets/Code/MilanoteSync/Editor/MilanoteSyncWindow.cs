@@ -22,7 +22,7 @@ public sealed class MilanoteSyncWindow : EditorWindow
 	string _boardId;
 	string _outputRelativePath;
 
-	[MenuItem( "Tools/MilanoteSync/Settings" )]
+	[MenuItem( DragonLootMenus.ToolsMilanoteSettings )]
 	public static void Open()
 	{
 		MilanoteSyncWindow window = GetWindow<MilanoteSyncWindow>( "Milanote Sync" );
@@ -173,7 +173,7 @@ public sealed class MilanoteSyncWindow : EditorWindow
 			+ "Loose items under a Category go to that Category's Bugs feature.\n"
 			+ "Use 'Import Latest dragon-loot*.md Export' after exporting from Milanote.\n"
 			+ "Clear Generated Data wipes FEATURES, CURRENT, INDEX, manifest, raw pull, and local Unity metadata "
-			+ "(keeps cookies/board settings).",
+			+ "(keeps Inbox, cookies, and board settings).",
 			MessageType.None );
 	}
 
@@ -225,7 +225,7 @@ public sealed class MilanoteSyncWindow : EditorWindow
 			"Delete all generated Milanote markdown and local Project Tasks metadata?\n\n"
 			+ "This removes FEATURES/, CURRENT.md, INDEX.md, .sync-manifest.json, "
 			+ ".raw-pull.json, and .unity-dev-metadata.json.\n\n"
-			+ "Cookies and Board ID are kept.",
+			+ "Inbox (.project-tasks-inbox.json), cookies, and Board ID are kept.",
 			"Clear",
 			"Cancel" );
 		if ( !confirmed )

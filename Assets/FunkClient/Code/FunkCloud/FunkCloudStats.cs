@@ -44,7 +44,7 @@ public class FunkCloudStats : MonoBehaviour
 		return $"userId={session.UserId} username={session.Username}";
 	}
 
-	/// <summary>Union unlock/campaign/deck <c>true</c> flags from <paramref name="secondary"/> into <paramref name="primary"/> when both are <see cref="ProfileSaveData"/>.</summary>
+	/// <summary>Union unlock flags and max upgrade levels from <paramref name="secondary"/> into <paramref name="primary"/> when both are <see cref="ProfileSaveData"/>.</summary>
 	/// <returns><c>true</c> if <paramref name="primary"/> was modified.</returns>
 	private static bool MergeProfileSaveUnlockProgressIfApplicable( IGameStats primary, IGameStats secondary )
 	{

@@ -9,5 +9,9 @@ public enum TreasureOwnerKind
 	GemTable,
 	CoinTable,
 	DisplayCabinet,
-	Table
+	Table,
+	Minecart,
+	Conveyor,
+	CoinSortingStation,
+	CleaningStation
 }

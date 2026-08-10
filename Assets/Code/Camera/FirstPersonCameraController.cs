@@ -78,6 +78,12 @@ public class FirstPersonCameraController : MonoBehaviour
 		ApplyCursorState( enabled );
 	}
 
+	public void SetPitch( float pitch )
+	{
+		_pitch = Mathf.Clamp( NormalizePitch( pitch ), MinPitch, MaxPitch );
+		transform.localRotation = Quaternion.Euler( _pitch, 0f, 0f );
+	}
+
 	public float AdjustLookSensitivity( float delta )
 	{
 		return SetLookSensitivity( CurrentLookSensitivity + delta );
