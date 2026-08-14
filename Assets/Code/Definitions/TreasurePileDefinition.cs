@@ -116,6 +116,36 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0.5f, 1f )]
 	public float treasureReleaseOutsideFraction = 0.9f;
 
+	[Header( "Artifact Latent Bind" )]
+	[Tooltip( "Prefer a TreasurePileLatentBake when fingerprint matches. Huge runtime win. Bake assets are per-pile on TreasurePileVisual." )]
+	public bool preferBakedLatents = true;
+
+	[Tooltip( "Volume sample rounds per latent during procedural bind (was 64)." )]
+	[Min( 1 )]
+	public int latentVolumeMaxAttempts = 24;
+
+	[Tooltip( "Extra no-occupancy retries after the primary sample pass fails completely." )]
+	[Min( 0 )]
+	public int latentRetryNoOccupancyPasses = 1;
+
+	[Tooltip( "Extra salted retries after no-occupancy fails (collapsed ladder; 0 = skip)." )]
+	[Min( 0 )]
+	public int latentRetrySaltPasses = 0;
+
+	[Tooltip( "Use a spatial hash for artifact-vs-artifact overlap/spacing (much faster)." )]
+	public bool latentUseSpatialHash = true;
+
+	[Tooltip( "When on, treat GPU coin seat AABBs as obstacles (expensive; default off)." )]
+	public bool latentAvoidCoinSeats = false;
+
+	[Tooltip( "CPU budget per frame while procedurally building latents (play mode)." )]
+	[Min( 1f )]
+	public float latentBuildBudgetMs = 12f;
+
+	[Tooltip( "Hard cap on latent placement attempts per frame during async build." )]
+	[Min( 1 )]
+	public int latentBuildMaxAttemptsPerFrame = 64;
+
 	[Header( "Visuals" )]
 	public Material pileMaterial;
 
@@ -246,6 +276,46 @@ public class TreasurePileDefinition : ScriptableObject
 		if ( primary != null )
 			return primary;
 		return FirstAny( treasureContents );
+	}
+
+	/// <summary>
+	/// Deterministic hash of large-prop treasure contents (ids + counts) for latent bake keys.
+	/// </summary>
+	public int HashLargePropContents()
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			if ( treasureContents == null )
+				return ( int )h;
+
+			for ( int i = 0; i < treasureContents.Length; i++ )
+			{
+				TreasurePileEntry entry = treasureContents[ i ];
+				TreasureDefinition def = entry.treasure;
+				if ( def == null || def.category == TreasureCategory.Coin || entry.count <= 0 )
+					continue;
+
+				h = MixStableString( h, def.name );
+				h = ( h ^ ( uint )( int )def.category ) * 16777619u;
+				h = ( h ^ ( uint )entry.count ) * 16777619u;
+			}
+
+			return ( int )h;
+		}
+	}
+
+	static uint MixStableString( uint h, string value )
+	{
+		unchecked
+		{
+			if ( value == null )
+				return h * 16777619u;
+
+			for ( int i = 0; i < value.Length; i++ )
+				h = ( h ^ value[ i ] ) * 16777619u;
+			return h;
+		}
 	}
 
 	static TreasureDefinition FirstWithCount( TreasurePileEntry[] entries )

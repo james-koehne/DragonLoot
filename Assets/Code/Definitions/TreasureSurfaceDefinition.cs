@@ -77,6 +77,10 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Range( 0.1f, 1.5f )]
 	public float softEdgeDeflectScale = 0.6f;
 
+	[Tooltip( "Sheer height delta (m): step-ups above this are blocked; step-downs above this go airborne and bounce." )]
+	[Min( 0.01f )]
+	public float sheerStepHeight = 0.5f;
+
 	[Tooltip( "When a nearly-stopped artifact is farther than this from surface contact Y, snap it down." )]
 	[Min( 0.01f )]
 	public float artifactSurfaceSnapDistance = 0.07f;
@@ -227,6 +231,14 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Min( 0 )]
 	public int artifactMaxBounces = 1;
 
+	[Tooltip( "Max times a throw can bounce off a gold pile before seating into surface flow." )]
+	[Min( 0 )]
+	public int throwPileMaxBounces = 3;
+
+	[Tooltip( "Restitution when throws bounce off a gold pile mound." )]
+	[Range( 0f, 1.5f )]
+	public float throwPileBounceRestitution = 0.45f;
+
 	[Tooltip( "Heavy bounce damping for crowns/artifacts (much lower than coins/gems)." )]
 	[Range( 0f, 1.5f )]
 	public float artifactBounceRestitution = 0.08f;
@@ -256,6 +268,19 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Tooltip( "Scales push radius when separating gems from coins / coin stacks." )]
 	[Min( 0.1f )]
 	public float gemVsCoinPushRadiusScale = 1.15f;
+
+	[Header( "Artifact Push" )]
+	[Tooltip( "Minimum XZ radius floor when mesh bounds are tiny (place reject + throw separation)." )]
+	[Min( 0.01f )]
+	public float artifactPushRadius = 0.22f;
+
+	[Tooltip( "Scales push radius when separating artifacts from coins / coin stacks." )]
+	[Min( 0.1f )]
+	public float artifactVsCoinPushRadiusScale = 1.15f;
+
+	[Tooltip( "Extra world-space padding around the artifact mesh bounds for place reject / throw separation." )]
+	[Min( 0f )]
+	public float artifactPlaceMeshLeeway = 0.04f;
 
 	[Header( "Gem Pyramid" )]
 	[Tooltip( "Spacing as a multiple of gem push / estimate radius." )]

@@ -21,7 +21,8 @@ using UnityEditor;
 public class TreasureSurfacePaintAsset : ScriptableObject
 {
 	const int FileMagic = 0x42505354; // 'TSPB' little-endian
-	const int FileVersion = 1;
+	const int FileVersion = 2;
+	const int FileVersionV1 = 1;
 	public const string SidecarExtension = ".paintbin";
 
 	[SerializeField]
@@ -46,6 +47,9 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 	byte[] _materialPaint;
 
 	[NonSerialized]
+	float[] _heightPaint;
+
+	[NonSerialized]
 	bool _loaded;
 
 	[NonSerialized]
@@ -67,6 +71,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		public int CellsZ;
 		public byte[] Trav;
 		public byte[] Mat;
+		public float[] Height;
 	}
 #endif
 
@@ -90,6 +95,15 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		}
 	}
 
+	public float[] HeightPaint
+	{
+		get
+		{
+			EnsureLoaded();
+			return _heightPaint;
+		}
+	}
+
 	public bool HasBuffers
 	{
 		get
@@ -97,10 +111,12 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			EnsureLoaded();
 			return _traversablePaint != null
 				&& _materialPaint != null
+				&& _heightPaint != null
 				&& cellsX > 0
 				&& cellsZ > 0
 				&& _traversablePaint.Length == cellsX * cellsZ
-				&& _materialPaint.Length == cellsX * cellsZ;
+				&& _materialPaint.Length == cellsX * cellsZ
+				&& _heightPaint.Length == cellsX * cellsZ;
 		}
 	}
 
@@ -126,7 +142,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 	/// <summary>
 	/// Ensures buffers match the requested cell grid. Copies overlapping cells on resize.
 	/// </summary>
-	public void EnsureBuffers( int wantCellsX, int wantCellsZ, bool defaultNonTraversable )
+	public void EnsureBuffers( int wantCellsX, int wantCellsZ, bool defaultNonTraversable, float defaultHeight )
 	{
 		EnsureLoaded();
 
@@ -140,22 +156,36 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			&& cellsZ == wantCellsZ
 			&& _traversablePaint.Length == count
 			&& _materialPaint.Length == count )
+		{
+			if ( _heightPaint != null && _heightPaint.Length == count )
+				return;
+
+			float[] heights = new float[ count ];
+			for ( int i = 0; i < count; i++ )
+				heights[ i ] = defaultHeight;
+			_heightPaint = heights;
+			_loaded = true;
+			MarkDirty();
 			return;
+		}
 
 		byte[] newTrav = new byte[ count ];
 		byte[] newMat = new byte[ count ];
+		float[] newHeight = new float[ count ];
 		byte fillTrav = defaultNonTraversable ? ( byte )0 : ( byte )1;
 
 		for ( int i = 0; i < count; i++ )
 		{
 			newTrav[ i ] = fillTrav;
 			newMat[ i ] = ( byte )TreasureSurfaceMaterial.Stone;
+			newHeight[ i ] = defaultHeight;
 		}
 
 		if ( _traversablePaint != null && _materialPaint != null && cellsX > 0 && cellsZ > 0 )
 		{
 			int copyX = Mathf.Min( cellsX, wantCellsX );
 			int copyZ = Mathf.Min( cellsZ, wantCellsZ );
+			bool hasHeight = _heightPaint != null && _heightPaint.Length >= cellsX * cellsZ;
 			for ( int z = 0; z < copyZ; z++ )
 			{
 				for ( int x = 0; x < copyX; x++ )
@@ -164,20 +194,47 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 					int ni = z * wantCellsX + x;
 					newTrav[ ni ] = _traversablePaint[ oi ];
 					newMat[ ni ] = _materialPaint[ oi ];
+					if ( hasHeight )
+						newHeight[ ni ] = _heightPaint[ oi ];
 				}
 			}
 		}
 
 		_traversablePaint = newTrav;
 		_materialPaint = newMat;
+		_heightPaint = newHeight;
 		cellsX = wantCellsX;
 		cellsZ = wantCellsZ;
 		_loaded = true;
 		MarkDirty();
 	}
 
+	/// <summary>Legacy overload — fills heights with 0.</summary>
+	public void EnsureBuffers( int wantCellsX, int wantCellsZ, bool defaultNonTraversable )
+	{
+		EnsureBuffers( wantCellsX, wantCellsZ, defaultNonTraversable, 0f );
+	}
+
+	/// <summary>Fills any missing height cells with <paramref name="defaultHeight"/> (v1 migrate).</summary>
+	public void EnsureHeightDefaults( float defaultHeight )
+	{
+		EnsureLoaded();
+		if ( _traversablePaint == null || cellsX <= 0 || cellsZ <= 0 )
+			return;
+
+		int count = cellsX * cellsZ;
+		if ( _heightPaint != null && _heightPaint.Length == count )
+			return;
+
+		float[] heights = new float[ count ];
+		for ( int i = 0; i < count; i++ )
+			heights[ i ] = defaultHeight;
+		_heightPaint = heights;
+		MarkDirty();
+	}
+
 	/// <summary>Replaces buffers with a copy of legacy scene-serialized paint.</summary>
-	public void ImportLegacy( byte[] trav, byte[] mat, int legacyCellsX, int legacyCellsZ )
+	public void ImportLegacy( byte[] trav, byte[] mat, int legacyCellsX, int legacyCellsZ, float defaultHeight )
 	{
 		if ( trav == null || mat == null || legacyCellsX <= 0 || legacyCellsZ <= 0 )
 			return;
@@ -190,13 +247,21 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		cellsZ = legacyCellsZ;
 		_traversablePaint = new byte[ count ];
 		_materialPaint = new byte[ count ];
+		_heightPaint = new float[ count ];
 		Array.Copy( trav, _traversablePaint, count );
 		Array.Copy( mat, _materialPaint, count );
+		for ( int i = 0; i < count; i++ )
+			_heightPaint[ i ] = defaultHeight;
 		_loaded = true;
 		MarkDirty();
 #if UNITY_EDITOR
 		EditorSaveToDisk();
 #endif
+	}
+
+	public void ImportLegacy( byte[] trav, byte[] mat, int legacyCellsX, int legacyCellsZ )
+	{
+		ImportLegacy( trav, mat, legacyCellsX, legacyCellsZ, 0f );
 	}
 
 	public void MarkDirty()
@@ -233,6 +298,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 
 		_traversablePaint = null;
 		_materialPaint = null;
+		_heightPaint = null;
 		_loaded = true;
 	}
 
@@ -241,13 +307,20 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		if ( bakedPaint == null || bakedPaint.bytes == null || bakedPaint.bytes.Length < 16 )
 			return false;
 
-		if ( !TryReadPaintBytes( bakedPaint.bytes, out int x, out int z, out byte[] trav, out byte[] mat ) )
+		if ( !TryReadPaintBytes(
+			bakedPaint.bytes,
+			out int x,
+			out int z,
+			out byte[] trav,
+			out byte[] mat,
+			out float[] height ) )
 			return false;
 
 		cellsX = x;
 		cellsZ = z;
 		_traversablePaint = trav;
 		_materialPaint = mat;
+		_heightPaint = height;
 		_dirty = false;
 		return true;
 	}
@@ -275,7 +348,11 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 	{
 		EnsureLoaded();
 
-		if ( _traversablePaint == null || _materialPaint == null || cellsX <= 0 || cellsZ <= 0 )
+		if ( _traversablePaint == null
+			|| _materialPaint == null
+			|| _heightPaint == null
+			|| cellsX <= 0
+			|| cellsZ <= 0 )
 			return false;
 
 		string abs = EditorSidecarAbsolutePath();
@@ -287,7 +364,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		if ( !string.IsNullOrEmpty( folder ) && !Directory.Exists( folder ) )
 			Directory.CreateDirectory( folder );
 
-		WritePaintFile( abs, cellsX, cellsZ, _traversablePaint, _materialPaint );
+		WritePaintFile( abs, cellsX, cellsZ, _traversablePaint, _materialPaint, _heightPaint );
 		_dirty = false;
 
 		AssetDatabase.ImportAsset( assetPath, ImportAssetOptions.ForceUpdate );
@@ -300,6 +377,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		_loaded = false;
 		_traversablePaint = null;
 		_materialPaint = null;
+		_heightPaint = null;
 		_dirty = false;
 		EnsureLoaded();
 		return HasBuffers;
@@ -311,13 +389,14 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		if ( string.IsNullOrEmpty( abs ) || !File.Exists( abs ) )
 			return false;
 
-		if ( !TryReadPaintFile( abs, out int x, out int z, out byte[] trav, out byte[] mat ) )
+		if ( !TryReadPaintFile( abs, out int x, out int z, out byte[] trav, out byte[] mat, out float[] height ) )
 			return false;
 
 		cellsX = x;
 		cellsZ = z;
 		_traversablePaint = trav;
 		_materialPaint = mat;
+		_heightPaint = height;
 		_dirty = false;
 		return true;
 	}
@@ -388,7 +467,8 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			CellsX = cellsX,
 			CellsZ = cellsZ,
 			Trav = null,
-			Mat = null
+			Mat = null,
+			Height = null
 		};
 
 		if ( _traversablePaint != null )
@@ -403,6 +483,12 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			Array.Copy( _materialPaint, snap.Mat, _materialPaint.Length );
 		}
 
+		if ( _heightPaint != null )
+		{
+			snap.Height = new float[ _heightPaint.Length ];
+			Array.Copy( _heightPaint, snap.Height, _heightPaint.Length );
+		}
+
 		return snap;
 	}
 
@@ -412,12 +498,19 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		cellsZ = snap.CellsZ;
 		_traversablePaint = snap.Trav;
 		_materialPaint = snap.Mat;
+		_heightPaint = snap.Height;
 		_loaded = true;
 		_dirty = true;
 	}
 #endif
 
-	static void WritePaintFile( string absolutePath, int x, int z, byte[] trav, byte[] mat )
+	static void WritePaintFile(
+		string absolutePath,
+		int x,
+		int z,
+		byte[] trav,
+		byte[] mat,
+		float[] height )
 	{
 		int count = x * z;
 		using ( FileStream fs = File.Create( absolutePath ) )
@@ -429,6 +522,8 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			bw.Write( z );
 			bw.Write( trav, 0, count );
 			bw.Write( mat, 0, count );
+			for ( int i = 0; i < count; i++ )
+				bw.Write( height[ i ] );
 		}
 	}
 
@@ -437,17 +532,19 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		out int x,
 		out int z,
 		out byte[] trav,
-		out byte[] mat )
+		out byte[] mat,
+		out float[] height )
 	{
 		x = 0;
 		z = 0;
 		trav = null;
 		mat = null;
+		height = null;
 
 		try
 		{
 			byte[] data = File.ReadAllBytes( absolutePath );
-			return TryReadPaintBytes( data, out x, out z, out trav, out mat );
+			return TryReadPaintBytes( data, out x, out z, out trav, out mat, out height );
 		}
 		catch ( Exception )
 		{
@@ -460,12 +557,14 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		out int x,
 		out int z,
 		out byte[] trav,
-		out byte[] mat )
+		out byte[] mat,
+		out float[] height )
 	{
 		x = 0;
 		z = 0;
 		trav = null;
 		mat = null;
+		height = null;
 
 		if ( data == null || data.Length < 16 )
 			return false;
@@ -476,7 +575,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			if ( br.ReadInt32() != FileMagic )
 				return false;
 			int version = br.ReadInt32();
-			if ( version != FileVersion )
+			if ( version != FileVersion && version != FileVersionV1 )
 				return false;
 
 			x = br.ReadInt32();
@@ -485,12 +584,30 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 				return false;
 
 			int count = x * z;
-			if ( data.Length < 16 + count * 2 )
+			int minBytes = 16 + count * 2;
+			if ( version >= FileVersion )
+				minBytes += count * 4;
+			if ( data.Length < minBytes )
 				return false;
 
 			trav = br.ReadBytes( count );
 			mat = br.ReadBytes( count );
-			return trav.Length == count && mat.Length == count;
+			if ( trav.Length != count || mat.Length != count )
+				return false;
+
+			height = new float[ count ];
+			if ( version >= FileVersion )
+			{
+				for ( int i = 0; i < count; i++ )
+					height[ i ] = br.ReadSingle();
+			}
+			else
+			{
+				// v1: no heights in file — leave null so EnsureBuffers fills baseHeight.
+				height = null;
+			}
+
+			return true;
 		}
 	}
 }

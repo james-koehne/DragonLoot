@@ -86,10 +86,10 @@ Lifecycle you may override: `Initialize()`, `Play()`, `Stop()`, `Reset()`, `GetH
 
 ## Built-in feedbacks
 
-- **Audio:** Play SFX, Play Random SFX (optional `AudioSource`, otherwise pooled one-shots)
+- **Audio:** Play SFX, Play Random SFX (optional `AudioSource`, otherwise pooled one-shots; each play rolls volume/pitch in `VolumeMin`/`VolumeMax` and `PitchMin`/`PitchMax`)
 - **Particles:** Play Particles, Particle Burst (`Emit`)
 - **GameObjects:** Set Active, Instantiate, Destroy
-- **Transforms:** Set Position / Rotation / Scale, Move, Punch Scale, Shake
+- **Transforms:** Set Position / Rotation / Scale, Move, Punch Scale, Punch Rotation, Shake
 - **Animation:** Play Animation, Set Animator Trigger
 - **Visual:** Set Renderer Enabled, Set Color (`MaterialPropertyBlock`, configurable property name)
 - **Utility:** Delay, Unity Event

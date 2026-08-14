@@ -103,6 +103,34 @@ public sealed class GoldPileHeightfield
 	public bool IsDirty => _dirty;
 	public bool IsInitialized => _heights != null && _texture != null;
 
+	/// <summary>
+	/// Deterministic fingerprint of layout params + initial height samples (for latent bake keys).
+	/// </summary>
+	public int ComputeLayoutFingerprint()
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			h = ( h ^ ( uint )_resolution ) * 16777619u;
+			h = ( h ^ ( uint )FloatToBits( _worldSize ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatToBits( _maxHeight ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatToBits( _groundLevel ) ) * 16777619u;
+			if ( _heights == null )
+				return ( int )h;
+
+			h = ( h ^ ( uint )_heights.Length ) * 16777619u;
+			int step = Mathf.Max( 1, _heights.Length / 4096 );
+			for ( int i = 0; i < _heights.Length; i += step )
+				h = ( h ^ ( uint )FloatToBits( _heights[ i ] ) ) * 16777619u;
+			return ( int )h;
+		}
+	}
+
+	static int FloatToBits( float value )
+	{
+		return System.BitConverter.SingleToInt32Bits( value );
+	}
+
 	public void Initialize( int res, float size, float height )
 	{
 		Initialize( res, size, height, groundLevel: 0.01f );

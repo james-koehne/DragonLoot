@@ -201,6 +201,68 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		return false;
 	}
 
+	public bool TryGetSlotIndex( TreasureItem selected, out int slotIndex )
+	{
+		slotIndex = -1;
+		if ( selected == null || _occupants == null )
+			return false;
+
+		for ( int i = 0; i < _occupants.Length; i++ )
+		{
+			if ( _occupants[ i ] != selected )
+				continue;
+
+			slotIndex = i;
+			return true;
+		}
+
+		return false;
+	}
+
+	public int GetSlotCount( int slotIndex )
+	{
+		if ( _occupants == null || slotIndex < 0 || slotIndex >= _occupants.Length )
+			return 0;
+
+		return _occupants[ slotIndex ] != null ? 1 : 0;
+	}
+
+	public void AppendSlotOutlineRenderers( TreasureItem selected, List<Renderer> renderers )
+	{
+		if ( selected == null || renderers == null )
+			return;
+
+		HoverOutlineTargetUtility.AppendEnabledMeshRenderers( selected.gameObject, renderers );
+	}
+
+	public bool TryConsumeSlotDefinitions(
+		int slotIndex,
+		List<TreasureDefinition> into,
+		out Vector3 contact,
+		out Quaternion rotation )
+	{
+		contact = transform.position;
+		rotation = transform.rotation;
+		return false;
+	}
+
+	public int GetSlotCoinAppendCapacity( int slotIndex, TreasureDefinition probe )
+	{
+		return 0;
+	}
+
+	public bool TryGetSlotAppendPose( int slotIndex, out Vector3 contact, out Quaternion rotation )
+	{
+		contact = transform.position;
+		rotation = transform.rotation;
+		return false;
+	}
+
+	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
+	{
+		return 0;
+	}
+
 	public void Remove( TreasureItem item )
 	{
 		if ( item == null || _occupants == null )
@@ -574,6 +636,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		{
 			GetSlotWorldPose( slotIndex, out endWorldPos, out endWorldRot );
 			item.EnterDisplayed( this, GetSlotParent( slotIndex ), endWorldPos, endWorldRot );
+			TreasureInteractSfx.PlayPlace( item.Definition, endWorldPos );
 		}
 
 		PlayPlaceFx();

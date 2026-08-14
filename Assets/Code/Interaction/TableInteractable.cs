@@ -6,11 +6,10 @@ using UnityEngine;
 /// Freeform sorting surface: place carried treasure at the look hit with Physics,
 /// track resting items, accept any treasure type.
 /// </summary>
-[RequireComponent( typeof( Collider ) )]
 public class TableInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget
 {
 	[SerializeField]
-	[Tooltip( "Optional explicit placement surface collider. Defaults to this object's collider." )]
+	[Tooltip( "Optional explicit placement surface collider. Defaults to this object's collider (or a child)." )]
 	Collider placementSurface;
 
 	[SerializeField]
@@ -25,6 +24,7 @@ public class TableInteractable : InteractableBase, ITreasureOwner, ITreasurePlac
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.SortingTable;
 
 	public IReadOnlyList<TreasureItem> ItemsOnTable => _itemsOnTable;
+	public Collider TableCollider => placementSurface;
 
 	void Reset()
 	{
@@ -234,6 +234,15 @@ public class TableInteractable : InteractableBase, ITreasureOwner, ITreasurePlac
 	{
 		if ( placementSurface == null )
 			placementSurface = GetComponent<Collider>();
+		if ( placementSurface == null )
+			placementSurface = GetComponentInChildren<Collider>( true );
+
+		if ( placementSurface == null )
+		{
+			Debug.LogError(
+				"TableInteractable on '" + name + "' requires a Collider on this object or a child.",
+				this );
+		}
 
 		if ( surfaceBounds == null )
 			surfaceBounds = placementSurface;

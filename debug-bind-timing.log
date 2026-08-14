@@ -1,0 +1,160 @@
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile","frame":59,"timestamp":1786506834389}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile cpuMs=11.06","frame":59,"timestamp":1786506834400}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile maxVisible=2400 steady=2160 playing=True","frame":59,"timestamp":1786506834401}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=1.12","frame":59,"timestamp":1786506834403}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile (6)","frame":59,"timestamp":1786506834424}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile (6) cpuMs=1.46","frame":59,"timestamp":1786506834426}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile (6) maxVisible=2400 steady=2160 playing=True","frame":59,"timestamp":1786506834427}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=0.03","frame":59,"timestamp":1786506834427}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile (5)","frame":59,"timestamp":1786506834444}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile (5) cpuMs=22.55","frame":59,"timestamp":1786506834466}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile (5) maxVisible=9600 steady=7680 playing=True","frame":59,"timestamp":1786506834468}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=0.04","frame":59,"timestamp":1786506834468}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile (1)","frame":59,"timestamp":1786506834516}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile (1) cpuMs=7.73","frame":59,"timestamp":1786506834525}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile (1) maxVisible=2400 steady=2160 playing=True","frame":59,"timestamp":1786506834525}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=0.04","frame":59,"timestamp":1786506834526}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=946.31 visualCount=3","frame":80,"timestamp":1786506835350}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=1.77 chunks=64","frame":80,"timestamp":1786506835352}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=944.90 visualCount=3","frame":80,"timestamp":1786506835372}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=0.02 chunks=1","frame":80,"timestamp":1786506835373}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=918.95 visualCount=3","frame":80,"timestamp":1786506835388}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=1.73 chunks=256","frame":80,"timestamp":1786506835390}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=877.97 visualCount=3","frame":80,"timestamp":1786506835405}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=0.43 chunks=64","frame":80,"timestamp":1786506835406}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile yield=1 gapMs=62.74 framesAdvanced=1 slotsSoFar=509","frame":81,"timestamp":1786506835433}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (6) yield=1 gapMs=57.98 framesAdvanced=1 slotsSoFar=689","frame":81,"timestamp":1786506835445}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=1 gapMs=53.61 framesAdvanced=1 slotsSoFar=679","frame":81,"timestamp":1786506835458}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (1) yield=1 gapMs=50.71 framesAdvanced=1 slotsSoFar=726","frame":81,"timestamp":1786506835470}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile yield=2 gapMs=54.17 framesAdvanced=1 slotsSoFar=1211","frame":82,"timestamp":1786506835499}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (6) yield=2 gapMs=54.40 framesAdvanced=1 slotsSoFar=1376","frame":82,"timestamp":1786506835513}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=2 gapMs=54.42 framesAdvanced=1 slotsSoFar=1546","frame":82,"timestamp":1786506835524}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (1) yield=2 gapMs=54.32 framesAdvanced=1 slotsSoFar=1410","frame":82,"timestamp":1786506835538}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=213.57 frames=3 placementCpuMs=42.82 shallowCpuMs=37.73 volumeCpuMs=1.95 shallowCalls=2161 shallowHits=2154 volumeCalls=246 volumeHits=246 commitCpuMs=8.76 assignCpuMs=1.14 rebuildCpuMs=7.13 yields=3 rebuildCommits=2 lightCommits=0 attempts=2400 placed=2400 slots=2400","frame":83,"timestamp":1786506835569}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=43.60 topUpCpuMs=38.66 rebuildCpuMs=4.85 passes=1 spawned=128 drawnStart=1032 drawnEnd=1032 steady=2160 stoppedNoProgress=True","frame":83,"timestamp":1786506835614}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=1212.64 frames=24 slots=2400 drawn=1032 steady=2160 maxVisible=2400","frame":83,"timestamp":1786506835614}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile wallMs=1214.80","frame":83,"timestamp":1786506835616}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile","frame":83,"timestamp":1786506835616}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile cpuMs=0.53","frame":83,"timestamp":1786506835617}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile cpuMs=9147.93 latent=1259","frame":83,"timestamp":1786506844766}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile revealCpuMs=9.20 totalCpuMs=9159.34 props=0","frame":83,"timestamp":1786506844776}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile cpuMs=9160.30","frame":83,"timestamp":1786506844776}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile cpuMs=76.81 worldSize=32.0","frame":83,"timestamp":1786506844854}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile restampCpuMs=77.63 totalWallMs=10465.94","frame":83,"timestamp":1786506844855}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (6) yield=3 gapMs=9330.32 framesAdvanced=1 slotsSoFar=2057","frame":83,"timestamp":1786506844856}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=9493.49 frames=3 placementCpuMs=40.97 shallowCpuMs=36.36 volumeCpuMs=3.18 shallowCalls=2161 shallowHits=2095 volumeCalls=305 volumeHits=305 commitCpuMs=8.02 assignCpuMs=1.03 rebuildCpuMs=6.76 yields=3 rebuildCommits=2 lightCommits=0 attempts=2400 placed=2400 slots=2400","frame":83,"timestamp":1786506844867}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=43.84 topUpCpuMs=38.44 rebuildCpuMs=5.36 passes=1 spawned=123 drawnStart=1213 drawnEnd=1213 steady=2160 stoppedNoProgress=True","frame":83,"timestamp":1786506844912}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=10486.48 frames=24 slots=2400 drawn=1213 steady=2160 maxVisible=2400","frame":83,"timestamp":1786506844913}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile (6) wallMs=10487.43","frame":83,"timestamp":1786506844914}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile (6)","frame":83,"timestamp":1786506844915}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile (6) cpuMs=0.74","frame":83,"timestamp":1786506844915}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile (6) cpuMs=14984.64 latent=1259","frame":83,"timestamp":1786506859900}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile (6) revealCpuMs=5.32 totalCpuMs=14992.66 props=0","frame":83,"timestamp":1786506859907}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile (6) cpuMs=14993.28","frame":83,"timestamp":1786506859907}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile (6) cpuMs=1.26 worldSize=4.0","frame":83,"timestamp":1786506859910}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile (6) restampCpuMs=1.81 totalWallMs=25485.68","frame":83,"timestamp":1786506859910}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=3 gapMs=24373.08 framesAdvanced=1 slotsSoFar=2196","frame":83,"timestamp":1786506859911}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (1) yield=3 gapMs=24372.99 framesAdvanced=1 slotsSoFar=2094","frame":83,"timestamp":1786506859924}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=24526.86 frames=3 placementCpuMs=39.53 shallowCpuMs=36.82 volumeCpuMs=1.32 shallowCalls=2161 shallowHits=2159 volumeCalls=241 volumeHits=241 commitCpuMs=7.51 assignCpuMs=1.01 rebuildCpuMs=6.27 yields=3 rebuildCommits=2 lightCommits=0 attempts=2400 placed=2400 slots=2400","frame":83,"timestamp":1786506859933}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=4 gapMs=92.64 framesAdvanced=1 slotsSoFar=3068","frame":84,"timestamp":1786506860016}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=5 gapMs=8476.45 framesAdvanced=1 slotsSoFar=3683","frame":85,"timestamp":1786506868504}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=8626.82 topUpCpuMs=115.42 rebuildCpuMs=14.96 passes=3 spawned=384 drawnStart=1004 drawnEnd=1006 steady=2160 stoppedNoProgress=True","frame":85,"timestamp":1786506868560}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=34035.71 frames=26 slots=2400 drawn=1006 steady=2160 maxVisible=2400","frame":85,"timestamp":1786506868561}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile (1) wallMs=34036.45","frame":85,"timestamp":1786506868562}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile (1)","frame":85,"timestamp":1786506868562}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile (1) cpuMs=0.57","frame":85,"timestamp":1786506868563}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile (1) cpuMs=8924.85 latent=1259","frame":85,"timestamp":1786506877489}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile (1) revealCpuMs=5.58 totalCpuMs=8932.53 props=0","frame":85,"timestamp":1786506877495}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile (1) cpuMs=8933.20","frame":85,"timestamp":1786506877496}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile (1) cpuMs=75.00 worldSize=32.0","frame":85,"timestamp":1786506877572}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile (1) restampCpuMs=75.56 totalWallMs=43054.79","frame":85,"timestamp":1786506877572}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=6 gapMs=9094.83 framesAdvanced=1 slotsSoFar=4339","frame":86,"timestamp":1786506877613}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=42436.74 frames=12 placementCpuMs=148.28 shallowCpuMs=131.59 volumeCpuMs=10.57 shallowCalls=7681 shallowHits=7422 volumeCalls=2178 volumeHits=2178 commitCpuMs=29.02 assignCpuMs=3.16 rebuildCpuMs=25.10 yields=12 rebuildCommits=2 lightCommits=0 attempts=9600 placed=9600 slots=9600","frame":92,"timestamp":1786506877827}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=163.62 topUpCpuMs=139.87 rebuildCpuMs=23.66 passes=1 spawned=123 drawnStart=4707 drawnEnd=4707 steady=7680 stoppedNoProgress=True","frame":92,"timestamp":1786506877992}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=43525.08 frames=33 slots=9600 drawn=4707 steady=7680 maxVisible=9600","frame":92,"timestamp":1786506877993}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile (5) wallMs=43525.88","frame":92,"timestamp":1786506877994}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile (5)","frame":92,"timestamp":1786506877994}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile (5) cpuMs=0.71","frame":92,"timestamp":1786506877995}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile (5) cpuMs=2122.55 latent=882","frame":92,"timestamp":1786506880117}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile (5) revealCpuMs=8.59 totalCpuMs=2133.36 props=1","frame":92,"timestamp":1786506880128}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile (5) cpuMs=2134.05","frame":92,"timestamp":1786506880128}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile (5) cpuMs=292.08 worldSize=64.0","frame":92,"timestamp":1786506880421}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile (5) restampCpuMs=293.16 totalWallMs=45977.65","frame":92,"timestamp":1786506880422}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile","frame":41,"timestamp":1786507090904}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile cpuMs=10.90","frame":41,"timestamp":1786507090915}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile maxVisible=2400 steady=2160 playing=True","frame":41,"timestamp":1786507090917}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=1.30","frame":41,"timestamp":1786507090918}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile (6)","frame":41,"timestamp":1786507090942}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile (6) cpuMs=1.56","frame":41,"timestamp":1786507090944}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile (6) maxVisible=32 steady=28 playing=True","frame":41,"timestamp":1786507090944}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=0.02","frame":41,"timestamp":1786507090944}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile (5)","frame":41,"timestamp":1786507090962}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile (5) cpuMs=22.48","frame":41,"timestamp":1786507090985}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile (5) maxVisible=9600 steady=7680 playing=True","frame":41,"timestamp":1786507090986}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=0.04","frame":41,"timestamp":1786507090987}
+{"phase":"wire","location":"WireSystemsAsync:start","detail":"name=CoinPile (1)","frame":41,"timestamp":1786507091036}
+{"phase":"wire","location":"WireSystemsAsync:terrain","detail":"name=CoinPile (1) cpuMs=6.43","frame":41,"timestamp":1786507091042}
+{"phase":"bind","location":"BindAsync:start","detail":"bindId=1 name=CoinPile (1) maxVisible=2400 steady=2160 playing=True","frame":41,"timestamp":1786507091043}
+{"phase":"bind","location":"BindAsync:fallback","detail":"cpuMs=0.04","frame":41,"timestamp":1786507091043}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=565663.19 visualCount=3","frame":52,"timestamp":1786507656583}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=1.72 chunks=64","frame":52,"timestamp":1786507656586}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=565660.47 visualCount=3","frame":52,"timestamp":1786507656605}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=0.03 chunks=1","frame":52,"timestamp":1786507656606}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=0.75 frames=0 placementCpuMs=0.60 shallowCpuMs=0.46 volumeCpuMs=0.07 shallowCalls=28 shallowHits=27 volumeCalls=5 volumeHits=5 commitCpuMs=0.15 assignCpuMs=0.07 rebuildCpuMs=0.08 yields=0 rebuildCommits=1 lightCommits=0 attempts=32 placed=32 slots=32","frame":52,"timestamp":1786507656608}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=1.45 topUpCpuMs=1.28 rebuildCpuMs=0.08 passes=1 spawned=11 drawnStart=17 drawnEnd=17 steady=28 stoppedNoProgress=True","frame":52,"timestamp":1786507656611}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=565667.13 frames=11 slots=32 drawn=17 steady=28 maxVisible=32","frame":52,"timestamp":1786507656611}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile (6) wallMs=565668.50","frame":52,"timestamp":1786507656613}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile (6)","frame":52,"timestamp":1786507656614}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile (6) cpuMs=0.71","frame":52,"timestamp":1786507656615}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile (6) cpuMs=2.33 latent=11","frame":52,"timestamp":1786507656618}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile (6) revealCpuMs=2.85 totalCpuMs=7.44 props=0","frame":52,"timestamp":1786507656621}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile (6) cpuMs=8.57","frame":52,"timestamp":1786507656622}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile (6) cpuMs=1.57 worldSize=4.0","frame":52,"timestamp":1786507656625}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile (6) restampCpuMs=2.36 totalWallMs=565682.79","frame":52,"timestamp":1786507656625}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=565638.84 visualCount=3","frame":52,"timestamp":1786507656626}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=1.79 chunks=256","frame":52,"timestamp":1786507656628}
+{"phase":"bind","location":"BindAsync:visuals","detail":"wallMs=565599.38 visualCount=3","frame":52,"timestamp":1786507656643}
+{"phase":"bind","location":"BindAsync:chunkGrid","detail":"cpuMs=0.44 chunks=64","frame":52,"timestamp":1786507656644}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile yield=1 gapMs=76.90 framesAdvanced=1 slotsSoFar=460","frame":53,"timestamp":1786507656680}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=1 gapMs=50.09 framesAdvanced=1 slotsSoFar=670","frame":53,"timestamp":1786507656692}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile yield=2 gapMs=50.45 framesAdvanced=1 slotsSoFar=1163","frame":54,"timestamp":1786507656743}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=2 gapMs=50.59 framesAdvanced=1 slotsSoFar=1521","frame":54,"timestamp":1786507656756}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (1) yield=2 gapMs=51.34 framesAdvanced=1 slotsSoFar=1393","frame":54,"timestamp":1786507656769}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=223.16 frames=3 placementCpuMs=44.85 shallowCpuMs=39.49 volumeCpuMs=2.04 shallowCalls=2161 shallowHits=2154 volumeCalls=246 volumeHits=246 commitCpuMs=8.87 assignCpuMs=1.25 rebuildCpuMs=7.08 yields=3 rebuildCommits=2 lightCommits=0 attempts=2400 placed=2400 slots=2400","frame":55,"timestamp":1786507656812}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=45.51 topUpCpuMs=40.46 rebuildCpuMs=5.02 passes=1 spawned=128 drawnStart=1032 drawnEnd=1032 steady=2160 stoppedNoProgress=True","frame":55,"timestamp":1786507656857}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=565941.91 frames=14 slots=2400 drawn=1032 steady=2160 maxVisible=2400","frame":55,"timestamp":1786507656859}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile wallMs=565943.84","frame":55,"timestamp":1786507656860}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile","frame":55,"timestamp":1786507656860}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile cpuMs=0.58","frame":55,"timestamp":1786507656860}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile cpuMs=9329.63 latent=1259","frame":55,"timestamp":1786507666191}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile revealCpuMs=6.90 totalCpuMs=9338.86 props=0","frame":55,"timestamp":1786507666199}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile cpuMs=9340.29","frame":55,"timestamp":1786507666201}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile cpuMs=83.81 worldSize=32.0","frame":55,"timestamp":1786507666285}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile restampCpuMs=84.97 totalWallMs=575382.49","frame":55,"timestamp":1786507666286}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=3 gapMs=9518.70 framesAdvanced=1 slotsSoFar=2191","frame":55,"timestamp":1786507666287}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (1) yield=3 gapMs=9518.83 framesAdvanced=1 slotsSoFar=2062","frame":55,"timestamp":1786507666301}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=9667.16 frames=3 placementCpuMs=40.41 shallowCpuMs=37.58 volumeCpuMs=1.38 shallowCalls=2161 shallowHits=2159 volumeCalls=241 volumeHits=241 commitCpuMs=8.33 assignCpuMs=1.02 rebuildCpuMs=7.07 yields=3 rebuildCommits=2 lightCommits=0 attempts=2400 placed=2400 slots=2400","frame":55,"timestamp":1786507666312}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=4 gapMs=114.64 framesAdvanced=1 slotsSoFar=2961","frame":56,"timestamp":1786507666414}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=5 gapMs=137605.16 framesAdvanced=1 slotsSoFar=3589","frame":57,"timestamp":1786507804033}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=137776.37 topUpCpuMs=126.59 rebuildCpuMs=16.05 passes=3 spawned=384 drawnStart=1004 drawnEnd=1006 steady=2160 stoppedNoProgress=True","frame":57,"timestamp":1786507804090}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=713048.23 frames=16 slots=2400 drawn=1006 steady=2160 maxVisible=2400","frame":57,"timestamp":1786507804091}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile (1) wallMs=713049.04","frame":57,"timestamp":1786507804091}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile (1)","frame":57,"timestamp":1786507804093}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile (1) cpuMs=0.61","frame":57,"timestamp":1786507804093}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile (1) cpuMs=9176.88 latent=1259","frame":57,"timestamp":1786507813269}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile (1) revealCpuMs=5.60 totalCpuMs=9184.70 props=0","frame":57,"timestamp":1786507813277}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile (1) cpuMs=9185.54","frame":57,"timestamp":1786507813278}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile (1) cpuMs=75.64 worldSize=32.0","frame":57,"timestamp":1786507813354}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile (1) restampCpuMs=76.67 totalWallMs=722319.75","frame":57,"timestamp":1786507813354}
+{"phase":"slots","location":"BuildSlots:yieldGap","detail":"name=CoinPile (5) yield=6 gapMs=9384.04 framesAdvanced=1 slotsSoFar=4206","frame":58,"timestamp":1786507813430}
+{"phase":"slots","location":"BuildSlots:done","detail":"wallMs=157035.28 frames=12 placementCpuMs=152.23 shallowCpuMs=135.52 volumeCpuMs=10.64 shallowCalls=7681 shallowHits=7422 volumeCalls=2178 volumeHits=2178 commitCpuMs=29.64 assignCpuMs=3.18 rebuildCpuMs=25.62 yields=12 rebuildCommits=2 lightCommits=0 attempts=9600 placed=9600 slots=9600","frame":64,"timestamp":1786507813664}
+{"phase":"seed","location":"SeedSteady:done","detail":"wallMs=167.75 topUpCpuMs=141.79 rebuildCpuMs=25.87 passes=1 spawned=123 drawnStart=4707 drawnEnd=4707 steady=7680 stoppedNoProgress=True","frame":64,"timestamp":1786507813833}
+{"phase":"bind","location":"BindAsync:done","detail":"wallMs=722848.18 frames=23 slots=9600 drawn=4707 steady=7680 maxVisible=9600","frame":64,"timestamp":1786507813833}
+{"phase":"wire","location":"WireSystemsAsync:afterLoot","detail":"name=CoinPile (5) wallMs=722849.01","frame":64,"timestamp":1786507813835}
+{"phase":"artifact","location":"ArtifactProps:Bind:start","detail":"name=CoinPile (5)","frame":64,"timestamp":1786507813835}
+{"phase":"artifact","location":"ArtifactProps:ClearAll","detail":"name=CoinPile (5) cpuMs=0.52","frame":64,"timestamp":1786507813836}
+{"phase":"artifact","location":"ArtifactProps:BuildLatent","detail":"name=CoinPile (5) cpuMs=2169.27 latent=882","frame":64,"timestamp":1786507816006}
+{"phase":"artifact","location":"ArtifactProps:Bind:done","detail":"name=CoinPile (5) revealCpuMs=9.21 totalCpuMs=2180.90 props=1","frame":64,"timestamp":1786507816015}
+{"phase":"wire","location":"WireSystemsAsync:afterArtifacts","detail":"name=CoinPile (5) cpuMs=2181.69","frame":64,"timestamp":1786507816017}
+{"phase":"surface","location":"SurfaceBridge:RestampFull","detail":"name=CoinPile (5) cpuMs=297.02 worldSize=64.0","frame":64,"timestamp":1786507816315}
+{"phase":"wire","location":"WireSystemsAsync:done","detail":"name=CoinPile (5) restampCpuMs=298.29 totalWallMs=725353.47","frame":64,"timestamp":1786507816315}

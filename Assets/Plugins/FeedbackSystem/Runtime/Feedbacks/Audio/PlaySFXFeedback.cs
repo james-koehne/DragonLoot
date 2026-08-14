@@ -1,6 +1,7 @@
 using System;
 
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace FeedbackSystem
 {
@@ -11,30 +12,55 @@ namespace FeedbackSystem
 		public AudioClip Clip;
 
 		[Range( 0f, 1f )]
-		public float Volume = 1f;
+		public float VolumeMin = 1f;
+
+		[Range( 0f, 1f )]
+		[FormerlySerializedAs( "Volume" )]
+		public float VolumeMax = 1f;
 
 		[Range( -3f, 3f )]
-		public float Pitch = 1f;
+		public float PitchMin = 1f;
+
+		[Range( -3f, 3f )]
+		[FormerlySerializedAs( "Pitch" )]
+		public float PitchMax = 1f;
+
+		[Range( 0f, 1f )]
+		[Tooltip( "0 = 2D, 1 = full 3D at the play position." )]
+		public float SpatialBlend;
+
+		[Min( 0.01f )]
+		public float MinDistance = 1f;
+
+		[Min( 0.01f )]
+		public float MaxDistance = 20f;
 
 		public AudioSource AudioSource;
 
 		public override void Play()
 		{
-			if ( Clip == null )
-				return;
+			FeedbackSfxPlayback.Play(
+				Clip,
+				VolumeMin,
+				VolumeMax,
+				PitchMin,
+				PitchMax,
+				AudioSource,
+				ResolvePosition(),
+				SpatialBlend,
+				MinDistance,
+				MaxDistance );
+		}
 
-			if ( AudioSource != null )
-			{
-				AudioSource.pitch = Pitch <= 0f ? 1f : Pitch;
-				AudioSource.PlayOneShot( Clip, Volume );
-				return;
-			}
+		Vector3 ResolvePosition()
+		{
+			if ( Context != null )
+				return Context.Position;
 
-			Vector3 position = Vector3.zero;
 			if ( Owner != null )
-				position = Owner.transform.position;
+				return Owner.transform.position;
 
-			FeedbackAudioPool.Play( Clip, Volume, Pitch, position );
+			return Vector3.zero;
 		}
 	}
 }

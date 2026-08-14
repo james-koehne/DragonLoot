@@ -205,7 +205,14 @@ public class FeedbackDemoController : MonoBehaviour
 		GameObject audioHost = new GameObject( "Audio Host" );
 		audioHost.transform.SetParent( transform, false );
 		Feedbacks sfx = audioHost.AddComponent<Feedbacks>();
-		sfx.AddFeedback( new PlaySFXFeedback { Clip = beepA, Volume = 0.8f, Pitch = 1f } );
+		sfx.AddFeedback( new PlaySFXFeedback
+		{
+			Clip = beepA,
+			VolumeMin = 0.75f,
+			VolumeMax = 0.85f,
+			PitchMin = 0.95f,
+			PitchMax = 1.05f
+		} );
 		AddButton( "Play SFX", sfx );
 
 		GameObject randomAudioHost = new GameObject( "Random Audio Host" );
@@ -214,8 +221,10 @@ public class FeedbackDemoController : MonoBehaviour
 		randomSfx.AddFeedback( new PlayRandomSFXFeedback
 		{
 			Clips = new[] { beepA, beepB, beepC },
-			Volume = 0.8f,
-			Pitch = 1f
+			VolumeMin = 0.75f,
+			VolumeMax = 0.85f,
+			PitchMin = 0.95f,
+			PitchMax = 1.05f
 		} );
 		AddButton( "Play Random SFX", randomSfx );
 
@@ -226,8 +235,10 @@ public class FeedbackDemoController : MonoBehaviour
 		comboFeedbacks.AddFeedback( new PlayRandomSFXFeedback
 		{
 			Clips = new[] { beepA, beepB, beepC },
-			Volume = 0.7f,
-			Pitch = 1f
+			VolumeMin = 0.65f,
+			VolumeMax = 0.75f,
+			PitchMin = 0.95f,
+			PitchMax = 1.05f
 		} );
 		ParallelFeedback parallel = new ParallelFeedback();
 		parallel.Feedbacks.Add( new PlayParticlesFeedback { ParticleSystem = comboParticles } );

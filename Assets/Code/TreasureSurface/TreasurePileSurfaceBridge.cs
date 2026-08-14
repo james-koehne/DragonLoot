@@ -24,6 +24,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 
 	public static IReadOnlyList<TreasurePileSurfaceBridge> Active => ActiveBridges;
 
+	public TreasurePileVisual Visual => _visual;
+
 	void OnEnable()
 	{
 		if ( !ActiveBridges.Contains( this ) )

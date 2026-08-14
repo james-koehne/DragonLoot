@@ -63,11 +63,45 @@ static class CoinSortingStationDefinitionInstaller
 			dirty = true;
 		}
 
+		if ( definition.crankLoopClips == null || definition.crankLoopClips.Length == 0 )
+		{
+			definition.crankLoopClips = LoadCrankLoopClips();
+			if ( definition.crankLoopClips != null && definition.crankLoopClips.Length > 0 )
+				dirty = true;
+		}
+
 		if ( dirty )
 			EditorUtility.SetDirty( definition );
 
 		AssetDatabase.SaveAssets();
 		RegisterDefinitionAddressable( DefinitionPath, definition.name );
+	}
+
+	static readonly string[] DefaultCrankClipPaths =
+	{
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 1.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 2.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 3.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 4.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 5.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 6.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 7.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 8.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 9.wav",
+		"Assets/Audio/SFX/Coin Sorter/Prize wheel spin 10.wav"
+	};
+
+	static AudioClip[] LoadCrankLoopClips()
+	{
+		var clips = new System.Collections.Generic.List<AudioClip>( DefaultCrankClipPaths.Length );
+		for ( int i = 0; i < DefaultCrankClipPaths.Length; i++ )
+		{
+			AudioClip clip = AssetDatabase.LoadAssetAtPath<AudioClip>( DefaultCrankClipPaths[i] );
+			if ( clip != null )
+				clips.Add( clip );
+		}
+
+		return clips.ToArray();
 	}
 
 	static void EnsureFolder( string path )

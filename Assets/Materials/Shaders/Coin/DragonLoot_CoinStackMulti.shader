@@ -41,6 +41,7 @@ Shader "DragonLoot/Coin Stack Multi"
         [Header(Instance Variation)]
         _TintVariation("Tint Variation", Range(0, 0.2)) = 0.04
         _ValueVariation("Value Variation", Range(0, 0.2)) = 0.04
+        [HideInInspector] _VariationSeed("Variation Seed", Float) = 1
 
         [Header(Stack Bands)]
         _CoinCount("Coin Count", Float) = 1

@@ -75,7 +75,7 @@ Material:
     - _Smoothness: 0.75
     - _SparkleCoverage: 0.3
     - _SparkleDensity: 14
-    - _SparkleEnabled: 1
+    - _SparkleEnabled: 0
     - _SparkleFlicker: 0.45
     - _SparkleIntensity: 1.5
     - _SparkleSharpness: 48

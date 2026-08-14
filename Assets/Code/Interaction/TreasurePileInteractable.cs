@@ -12,6 +12,7 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 	TreasurePileVisual pileVisual;
 
 	bool _bound;
+	bool _emptiedEventPublished;
 
 	static readonly List<TreasureDefinition> StealDefs = new List<TreasureDefinition>( 128 );
 
@@ -240,6 +241,26 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 			return;
 		}
 
+		if ( StealDefs[ 0 ] != null && StealDefs[ 0 ].category == TreasureCategory.Coin )
+		{
+			int granted = StealDefs.Count;
+			pileVisual.CarveForUnitsTaken( carvePos, granted );
+			NotifyCollected( StealDefs[ granted - 1 ], granted );
+			SyncRemainingFromVisual();
+			if ( RemainingCount <= 0 )
+				OnEmptied();
+
+			List<TreasureDefinition> flightDefs = new List<TreasureDefinition>( StealDefs.Count );
+			for ( int i = 0; i < StealDefs.Count; i++ )
+			{
+				if ( StealDefs[ i ] != null )
+					flightDefs.Add( StealDefs[ i ] );
+			}
+
+			TreasureMotionHost.Run( StealCoinBatchFlightsRoutine( carry, flightDefs, carvePos ) );
+			return;
+		}
+
 		taken = carry.TryAddMany( StealDefs );
 		if ( taken <= 0 )
 		{
@@ -252,6 +273,163 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		SyncRemainingFromVisual();
 		if ( RemainingCount <= 0 )
 			OnEmptied();
+	}
+
+	IEnumerator StealCoinBatchFlightsRoutine(
+		PlayerCarry carry,
+		List<TreasureDefinition> defs,
+		Vector3 carvePos )
+	{
+		if ( carry == null || defs == null || defs.Count == 0 )
+			yield break;
+
+		CarryDefinition carryDef = null;
+		carryDef = RuntimeDefinition.Resolve( ref carryDef );
+		float stagger = carryDef != null ? carryDef.pileStealStaggerSeconds : 0.06f;
+		int poolCap = carryDef != null ? Mathf.Max( 4, carryDef.coinVisualPoolSize ) : 24;
+		int inFlight = 0;
+		int completed = 0;
+		int total = defs.Count;
+
+		for ( int i = 0; i < defs.Count; i++ )
+		{
+			TreasureDefinition def = defs[ i ];
+			if ( def == null )
+			{
+				completed++;
+				continue;
+			}
+
+			while ( inFlight >= poolCap )
+				yield return null;
+
+			int index = i;
+			bool isFirst = index == 0;
+			Vector3 startPos = carvePos + Vector3.up * ( 0.01f * index );
+			inFlight++;
+			TreasureMotionHost.Run( FlyStolenCoinRoutine(
+				carry,
+				def,
+				startPos,
+				isFirst,
+				() =>
+				{
+					inFlight--;
+					completed++;
+				} ) );
+
+			if ( stagger > 0.0001f && i < defs.Count - 1 )
+				yield return new WaitForSeconds( stagger );
+		}
+
+		while ( completed < total )
+			yield return null;
+	}
+
+	IEnumerator FlyStolenCoinRoutine(
+		PlayerCarry carry,
+		TreasureDefinition def,
+		Vector3 startPos,
+		bool asActive,
+		System.Action onDone )
+	{
+		if ( carry == null || def == null )
+		{
+			if ( onDone != null )
+				onDone();
+			yield break;
+		}
+
+		TreasureItem rented = TreasureItemFactory.RentVisualCoin( def, startPos, Quaternion.identity );
+		if ( rented == null )
+		{
+			if ( asActive )
+				carry.TryAbsorbDefinitionsAtHeldBottom(
+					new List<TreasureDefinition> { def },
+					CarryBucketKind.Coin,
+					promoteIfEmpty: true );
+			else
+				carry.TryAbsorbDefinitionsAtHeldBottom(
+					new List<TreasureDefinition> { def },
+					CarryBucketKind.Coin,
+					promoteIfEmpty: false );
+			if ( onDone != null )
+				onDone();
+			yield break;
+		}
+
+		rented.SetOriginPile( pileVisual );
+		rented.ApplyWorldScale();
+
+		if ( asActive )
+		{
+			if ( !carry.TryReceiveActiveCoinFromWorld( rented ) )
+			{
+				carry.TryAbsorbDefinitionsAtHeldBottom(
+					new List<TreasureDefinition> { def },
+					CarryBucketKind.Coin,
+					promoteIfEmpty: true );
+				TreasureItemFactory.ReturnVisualCoin( rented );
+			}
+
+			if ( onDone != null )
+				onDone();
+			yield break;
+		}
+
+		Transform holdRoot = carry.GetHoldRoot( CarryBucketKind.Coin );
+		CarryDefinition carryDef = null;
+		carryDef = RuntimeDefinition.Resolve( ref carryDef );
+		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
+		Vector3 endLocal = carryDef != null ? carryDef.heldStackOffset : Vector3.zero;
+
+		if ( holdRoot == null )
+		{
+			carry.TryAbsorbDefinitionsAtHeldBottom(
+				new List<TreasureDefinition> { def },
+				CarryBucketKind.Coin,
+				promoteIfEmpty: false );
+			TreasureItemFactory.ReturnVisualCoin( rented );
+			if ( onDone != null )
+				onDone();
+			yield break;
+		}
+
+		Vector3 start = rented.transform.position;
+		Quaternion startRot = rented.transform.rotation;
+		float elapsed = 0f;
+		duration = Mathf.Max( 0.05f, duration );
+		rented.BeginFlight();
+
+		while ( elapsed < duration )
+		{
+			if ( rented == null || holdRoot == null )
+				break;
+
+			elapsed += Time.deltaTime;
+			float u = Mathf.Clamp01( elapsed / duration );
+			float ease = CoinFlipMotion.SmoothStep( u );
+			Vector3 end = holdRoot.TransformPoint( endLocal );
+			rented.transform.SetPositionAndRotation(
+				Vector3.Lerp( start, end, ease ),
+				Quaternion.Slerp( startRot, holdRoot.rotation, ease ) );
+			yield return null;
+		}
+
+		if ( rented != null )
+		{
+			rented.EndFlight();
+			TreasureItemFactory.ReturnVisualCoin( rented );
+		}
+
+		if ( carry != null )
+			carry.TryAbsorbDefinitionsAtHeldBottom(
+				new List<TreasureDefinition> { def },
+				CarryBucketKind.Coin,
+				promoteIfEmpty: false );
+
+		if ( onDone != null )
+			onDone();
 	}
 
 	async System.Threading.Tasks.Task StealSingleInstanceAsync(
@@ -273,6 +451,33 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 
 		if ( takenDef != null )
 			def = takenDef;
+
+		if ( def.category == TreasureCategory.Coin )
+		{
+			TreasureItem rented = TreasureItemFactory.RentVisualCoin( def, worldPos, worldRot );
+			if ( rented == null )
+			{
+				SyncRemainingFromVisual();
+				return;
+			}
+
+			rented.SetOriginPile( pileVisual );
+			rented.ApplyWorldScale();
+
+			if ( !carry.TryReceiveActiveCoinFromWorld( rented ) )
+			{
+				TreasureItemFactory.ReturnVisualCoin( rented );
+				SyncRemainingFromVisual();
+				return;
+			}
+
+			pileVisual.CarveForUnitsTaken( worldPos, 1 );
+			NotifyCollected( def, 1 );
+			SyncRemainingFromVisual();
+			if ( RemainingCount <= 0 )
+				OnEmptied();
+			return;
+		}
 
 		TreasureItem spawned = await TreasureItemFactory.SpawnAsync( def, worldPos, worldRot, null );
 		if ( spawned == null )
@@ -334,6 +539,10 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 
 	protected override void OnEmptied()
 	{
+		if ( _emptiedEventPublished )
+			return;
+		_emptiedEventPublished = true;
+
 		if ( pileVisual != null )
 			pileVisual.OnPileEmptied();
 

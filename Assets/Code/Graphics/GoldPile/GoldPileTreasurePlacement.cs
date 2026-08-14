@@ -395,6 +395,43 @@ public static class GoldPileTreasurePlacement
 		out VolumePose pose,
 		out Bounds localBounds )
 	{
+		return TrySampleValidVolumePose(
+			heightfield,
+			pileSeed,
+			unitIndex,
+			placementRadiusFraction,
+			scale,
+			probeRadius,
+			treasureRadialPower,
+			treasureHeightBias,
+			category,
+			occupiedBounds,
+			minSpacing,
+			mesh,
+			out pose,
+			out localBounds,
+			maxAttempts: -1,
+			occupancyGrid: null );
+	}
+
+	public static bool TrySampleValidVolumePose(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		float placementRadiusFraction,
+		float scale,
+		float probeRadius,
+		float treasureRadialPower,
+		float treasureHeightBias,
+		TreasureCategory category,
+		List<Bounds> occupiedBounds,
+		float minSpacing,
+		Mesh mesh,
+		out VolumePose pose,
+		out Bounds localBounds,
+		int maxAttempts,
+		VolumeOccupancyGrid occupancyGrid )
+	{
 		pose = default;
 		localBounds = default;
 		if ( heightfield == null || scale < 0.01f )
@@ -404,6 +441,7 @@ public static class GoldPileTreasurePlacement
 		float maxEmbed = GetMaxGroundEmbedFraction( category );
 		float spacing = Mathf.Max( 0f, minSpacing );
 		float spacingSq = spacing * spacing;
+		int attempts = maxAttempts > 0 ? maxAttempts : VolumeAttempts;
 
 		VolumeCandidate bestStrict = default;
 		VolumeCandidate bestNoOverlap = default;
@@ -412,7 +450,7 @@ public static class GoldPileTreasurePlacement
 		bool hasNoOverlap = false;
 		bool hasAny = false;
 
-		for ( int round = 0; round < VolumeAttempts; round++ )
+		for ( int round = 0; round < attempts; round++ )
 		{
 			int saltUnit = unitIndex + round * 7919;
 			if ( !TrySampleVolumePose(
@@ -466,8 +504,12 @@ public static class GoldPileTreasurePlacement
 
 			ClampMaxProtrusion( heightfield, ref candidatePose.LocalPos, ref candidateBounds );
 
-			float overlap = ComputeBoundsOverlapScore( candidateBounds, occupiedBounds );
-			bool spacingOk = !IsTooClose( candidatePose.LocalPos, spacingSq, occupiedBounds );
+			float overlap = occupancyGrid != null
+				? occupancyGrid.OverlapScore( candidateBounds )
+				: ComputeBoundsOverlapScore( candidateBounds, occupiedBounds );
+			bool spacingOk = occupancyGrid != null
+				? !occupancyGrid.IsTooClose( candidatePose.LocalPos, spacingSq )
+				: !IsTooClose( candidatePose.LocalPos, spacingSq, occupiedBounds );
 
 			VolumeCandidate candidate = new VolumeCandidate
 			{

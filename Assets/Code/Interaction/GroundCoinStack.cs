@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
 
+using FeedbackSystem;
+
 using UnityEngine;
 
 /// <summary>
@@ -39,6 +41,13 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	int _maxCountOverride;
 	CoinSortingStation _machineStation;
 	int _visualGeneration;
+	float _variationSeed;
+
+	[SerializeField]
+	Feedbacks onLandFeedback;
+
+	[SerializeField]
+	Feedbacks onRemoveFeedback;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.GroundCoinStack;
 
@@ -48,6 +57,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public bool HasInFlight => _inFlight.Count > 0 || _blockMergeAsTarget;
 	public bool IsHomogeneous => TryGetHomogeneousDefinition( out _ );
 	public bool IsMachineBuffer => _machineBuffer;
+	public CoinSortingStation MachineStation => _machineStation;
 	public int MaxHeight
 	{
 		get
@@ -67,11 +77,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public Vector3 ContactPosition => transform.position;
 	public float SettledHeight => MeasureSlotsHeight( _slots.Count );
 	public float TotalHeight => SettledHeight;
+	public float VariationSeed => _variationSeed > 0.0001f ? _variationSeed : 1f;
 
 	/// <summary>XZ footprint radius used for gem push-apart and merge queries.</summary>
 	public float FootprintRadius => ResolveDiameter() * 0.5f;
 
-	public const float DefaultJoinRadius = 0.25f;
+	public const float DefaultJoinRadius = 0.11f;
 
 	/// <summary>
 	/// XZ radius used to join/create near an existing stack (at least DefaultJoinRadius,
@@ -124,6 +135,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			go.layer = layer;
 		GroundCoinStack stack = go.AddComponent<GroundCoinStack>();
 		stack.EnsureCollider();
+		stack.EnsureVariationSeed();
 		return stack;
 	}
 
@@ -240,7 +252,25 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( !All.Contains( this ) )
 			All.Add( this );
 		EnsureCollider();
+		EnsureVariationSeed();
+		EnsureCountFeedback();
 		SetInteractionName( "Coin Stack" );
+	}
+
+	void EnsureVariationSeed()
+	{
+		if ( _variationSeed > 0.0001f )
+			return;
+
+		int id = Mathf.Abs( GetInstanceID() );
+		_variationSeed = ( id % 9973 ) + 1;
+	}
+
+	public void ApplyCylinderVariationSeed()
+	{
+		EnsureVariationSeed();
+		if ( _cylinderVisual != null )
+			_cylinderVisual.SetVariationSeed( _variationSeed );
 	}
 
 	void OnDisable()
@@ -286,6 +316,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			RefreshCollider();
 			if ( Count <= 0 )
 				DestroyIfEmpty();
+			else
+				PlayRemoveFeedback();
 			return;
 		}
 	}
@@ -307,13 +339,11 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return false;
 
 		Vector3 scale = item.GetWorldScale();
-		preview.SetStackOutline(
-			ContactPosition,
+		preview.SetItemMesh(
+			GetSlotWorldPosition( Count ),
 			transform.rotation,
 			scale,
 			CanPlace( item, in query ) );
-		// Keep slot tip as Position for event/debug consumers.
-		preview.Position = GetSlotWorldPosition( Count );
 		return true;
 	}
 
@@ -332,9 +362,20 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		if ( _machineBuffer )
 		{
-			if ( _machineStation != null )
-				return _machineStation.TryDumpCarryIntoHopper( carry );
-			return false;
+			if ( _machineStation == null )
+				return false;
+
+			if ( !carry.TryConsumeActive( out TreasureItem one ) || one == null )
+				return false;
+
+			if ( !CanAccept( one.Definition ) )
+			{
+				one.EnterPhysics( one.transform.position, one.transform.rotation );
+				return false;
+			}
+
+			BeginAppendFlight( one, transform.rotation );
+			return true;
 		}
 
 		if ( !carry.TryRemoveBottomCluster( out List<TreasureItem> cluster ) || cluster == null || cluster.Count == 0 )
@@ -365,6 +406,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return false;
 
 		AbsorbSettledImmediate( item );
+		PlayLandFeedback();
 		if ( !_machineBuffer )
 		{
 			AbsorbNearbyLooseCoins();
@@ -577,14 +619,21 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		// Block merge-as-target across finalize so RefreshVisuals sees a settled slot.
 		_blockMergeAsTarget = true;
-		FinalizeSlot( slotIndex, item );
+		FinalizeSlot( slotIndex, item, playCoinPlaceFeedback: true );
 		_blockMergeAsTarget = false;
+
+		TreasureInteractSfx.PlayPlace( item.Definition, endPos );
 
 		TryMergeNearby();
 		AbsorbNearbyLooseCoins();
 	}
 
 	void FinalizeSlot( int slotIndex, TreasureItem item )
+	{
+		FinalizeSlot( slotIndex, item, playCoinPlaceFeedback: false );
+	}
+
+	void FinalizeSlot( int slotIndex, TreasureItem item, bool playCoinPlaceFeedback )
 	{
 		if ( item == null || item.Definition == null )
 			return;
@@ -602,19 +651,110 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			_settledLive.Add( null );
 
 		_settledLive[ slotIndex ] = item;
+
+		if ( playCoinPlaceFeedback )
+			CoinGemInteractFeedback.PlayPlace( item );
+
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 
-		// If the cylinder absorbed this slot, ensure no live leftover remains.
+		// If the cylinder absorbed this slot, keep the live coin briefly so place scale-pop can finish.
 		if ( slotIndex < _cylinderCovered.Length && _cylinderCovered[ slotIndex ]
 			&& slotIndex < _settledLive.Count
 			&& _settledLive[ slotIndex ] != null )
 		{
-			DespawnCoveredLive( slotIndex );
+			TreasureItem live = _settledLive[ slotIndex ];
+			if ( playCoinPlaceFeedback && live != null )
+				TreasureMotionHost.Run( DelayedDespawnCoveredLive( slotIndex, live ) );
+			else
+				DespawnCoveredLive( slotIndex );
 		}
 
 		if ( !_machineBuffer )
 			AbsorbNearbyLooseCoins();
+
+		PlayLandFeedback();
+	}
+
+	IEnumerator DelayedDespawnCoveredLive( int slotIndex, TreasureItem expected )
+	{
+		float wait = 0.22f;
+		CarryDefinition carryDef = null;
+		carryDef = RuntimeDefinition.Resolve( ref carryDef );
+		_ = carryDef;
+		yield return new WaitForSeconds( wait );
+
+		if ( _destroying )
+			yield break;
+
+		if ( slotIndex < 0 || slotIndex >= _settledLive.Count )
+			yield break;
+
+		if ( _settledLive[ slotIndex ] != expected )
+			yield break;
+
+		if ( slotIndex < _cylinderCovered.Length && _cylinderCovered[ slotIndex ] )
+			DespawnCoveredLive( slotIndex );
+	}
+
+	public void PlayLandFeedback()
+	{
+		EnsureCountFeedback();
+		if ( onRemoveFeedback != null )
+			onRemoveFeedback.Stop();
+		if ( onLandFeedback != null )
+			onLandFeedback.Play();
+	}
+
+	public void PlayRemoveFeedback()
+	{
+		if ( _machineBuffer )
+			return;
+
+		EnsureCountFeedback();
+		if ( onLandFeedback != null )
+			onLandFeedback.Stop();
+		if ( onRemoveFeedback != null )
+			onRemoveFeedback.Play();
+	}
+
+	void EnsureCountFeedback()
+	{
+		if ( onLandFeedback == null )
+			onLandFeedback = CreatePunchFeedback(
+				"OnAddFeedbacks",
+				new Vector3( 0.07f, -0.09f, 0.07f ),
+				0.18f );
+
+		if ( onRemoveFeedback == null )
+			onRemoveFeedback = CreatePunchFeedback(
+				"OnRemoveFeedbacks",
+				new Vector3( -0.045f, 0.05f, -0.045f ),
+				0.14f );
+	}
+
+	Feedbacks CreatePunchFeedback( string childName, Vector3 punch, float duration )
+	{
+		Transform existing = transform.Find( childName );
+		GameObject go = existing != null ? existing.gameObject : new GameObject( childName );
+		if ( existing == null )
+			go.transform.SetParent( transform, false );
+
+		Feedbacks feedbacks = go.GetComponent<Feedbacks>();
+		if ( feedbacks == null )
+			feedbacks = go.AddComponent<Feedbacks>();
+
+		feedbacks.Initialize();
+		if ( feedbacks.FeedbackList != null && feedbacks.FeedbackList.Count > 0 )
+			return feedbacks;
+
+		feedbacks.AddFeedback( new PunchScaleFeedback
+		{
+			Target = transform,
+			Punch = punch,
+			Duration = duration
+		} );
+		return feedbacks;
 	}
 
 	void DespawnCoveredLive( int index )
@@ -708,7 +848,39 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_settledLive.Add( null );
 		RefreshVisuals( snap: true );
 		RefreshCollider();
+		PlayLandFeedback();
 		return true;
+	}
+
+	/// <summary>
+	/// Append many logical coins without spawning individuals. Returns how many were accepted.
+	/// </summary>
+	public int TryAppendDefinitions( IReadOnlyList<TreasureDefinition> definitions )
+	{
+		if ( definitions == null || definitions.Count == 0 || _destroying )
+			return 0;
+
+		int added = 0;
+		for ( int i = 0; i < definitions.Count; i++ )
+		{
+			TreasureDefinition def = definitions[ i ];
+			if ( !IsGroundStackableCoin( def ) || IsFull )
+				break;
+
+			_slots.Add( def );
+			_settledLive.Add( null );
+			added++;
+		}
+
+		if ( added <= 0 )
+			return 0;
+
+		RefreshVisuals( snap: false );
+		RefreshCollider();
+		if ( !_machineBuffer )
+			TryMergeNearby();
+		PlayLandFeedback();
+		return added;
 	}
 
 	/// <summary>Peek the bottom (oldest) logical slot without removing it.</summary>
@@ -748,6 +920,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshCollider();
 		if ( Count <= 0 )
 			DestroyIfEmpty();
+		else
+			PlayRemoveFeedback();
 		return true;
 	}
 
@@ -861,7 +1035,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return;
 
 		int start = ResolvePickupStartIndex( player );
-		TryTakeFromIndexUp( player, start );
+		TryTakeSingleAtIndex( player, start );
 	}
 
 	int ResolvePickupStartIndex( PlayerController player )
@@ -939,111 +1113,56 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( carry == null )
 			return false;
 
-		return CountAffordableDefinitionsFromTop( carry, startIndex ) > 0;
+		TreasureDefinition def = _slots[ startIndex ];
+		return def != null && carry.CanAdd( def );
 	}
 
-	int CountAffordableDefinitionsFromTop( PlayerCarry carry, int startIndex )
+	/// <summary>LMB: take only the aimed coin into the right hand.</summary>
+	public bool TryTakeSingleAtIndex( PlayerController player, int index )
 	{
-		if ( carry == null )
-			return 0;
+		if ( player == null || player.Carry == null || _taking || HasInFlight )
+			return false;
+		if ( SettledCount <= 0 )
+			return false;
 
-		return carry.CountAffordableDefinitionSuffix( _slots, startIndex );
+		index = Mathf.Clamp( index, 0, SettledCount - 1 );
+		if ( !CanTakeFromIndex( player, index ) )
+			return false;
+
+		_taking = true;
+		TreasureDefinition aimedDef = _slots[ index ];
+		Vector3 aimPos = GetSlotWorldPosition( index );
+		Quaternion rot = transform.rotation;
+
+		DespawnCoveredLive( index );
+		_slots.RemoveAt( index );
+		if ( index < _settledLive.Count )
+			_settledLive.RemoveAt( index );
+		DecrementInFlightSlotIndicesAfter( index );
+
+		RefreshVisuals( snap: false );
+		RefreshCollider();
+
+		PlayerCarry carry = player.Carry;
+		carry.TrySetSelectedBucket( CarryBucketKind.Coin );
+
+		TreasureItem aimedCoin = TreasureItemFactory.RentVisualCoin( aimedDef, aimPos, rot );
+		bool receivedActive = aimedCoin != null && carry.TryReceiveActiveCoinFromWorld( aimedCoin );
+		if ( !receivedActive && aimedCoin != null )
+			TreasureItemFactory.ReturnVisualCoin( aimedCoin );
+
+		_taking = false;
+		if ( Count <= 0 )
+			DestroyIfEmpty();
+		else
+			PlayRemoveFeedback();
+		return receivedActive;
 	}
 
 	public bool TryTakeFromIndexUp( PlayerController player, int startIndex )
 	{
-		if ( !CanTakeFromIndex( player, startIndex ) || _taking || HasInFlight )
-			return false;
-
-		startIndex = Mathf.Clamp( startIndex, 0, SettledCount - 1 );
-		int takeCount = CountAffordableDefinitionsFromTop( player.Carry, startIndex );
-		if ( takeCount <= 0 )
-			return false;
-
-		_taking = true;
-		TryTakeSettledRangeAsync( player, startIndex, takeCount );
-		return true;
-	}
-
-	async void TryTakeSettledRangeAsync( PlayerController player, int startIndex, int takeCount )
-	{
-		TakeBuffer.Clear();
-		if ( player == null || takeCount <= 0 )
-		{
-			_taking = false;
-			return;
-		}
-
-		int firstTaken = SettledCount - takeCount;
-		if ( firstTaken < startIndex )
-			firstTaken = startIndex;
-		takeCount = SettledCount - firstTaken;
-		if ( takeCount <= 0 )
-		{
-			_taking = false;
-			return;
-		}
-
-		for ( int i = SettledCount - 1; i >= firstTaken; i-- )
-		{
-			TreasureDefinition def = _slots[ i ];
-			TreasureItem live = i < _settledLive.Count ? _settledLive[ i ] : null;
-
-			if ( live != null )
-			{
-				_settledLive[ i ] = null;
-				_slots.RemoveAt( i );
-				_settledLive.RemoveAt( i );
-				DecrementInFlightSlotIndicesAfter( i );
-				live.SetMeshVisible( true );
-				TakeBuffer.Insert( 0, live );
-				continue;
-			}
-
-			_slots.RemoveAt( i );
-			if ( i < _settledLive.Count )
-				_settledLive.RemoveAt( i );
-			DecrementInFlightSlotIndicesAfter( i );
-
-			Vector3 worldPos = GetSlotWorldPosition( i );
-			Quaternion worldRot = transform.rotation;
-			TreasureItem spawned = await TreasureItemFactory.SpawnAsync( def, worldPos, worldRot, null );
-			if ( spawned == null )
-				break;
-
-			spawned.ApplyWorldScale();
-			TakeBuffer.Insert( 0, spawned );
-		}
-
-		RefreshVisuals( snap: true );
-		RefreshCollider();
-
-		if ( TakeBuffer.Count == 0 )
-		{
-			_taking = false;
-			if ( Count <= 0 )
-				DestroyIfEmpty();
-			return;
-		}
-
-		if ( !player.TryReceiveSupportStack( TakeBuffer ) )
-		{
-			for ( int i = 0; i < TakeBuffer.Count; i++ )
-			{
-				TreasureItem failed = TakeBuffer[ i ];
-				if ( failed != null )
-					AbsorbSettledImmediate( failed );
-			}
-
-			TakeBuffer.Clear();
-			_taking = false;
-			return;
-		}
-
-		TakeBuffer.Clear();
-		_taking = false;
-		if ( Count <= 0 )
-			DestroyIfEmpty();
+		// Legacy name — LMB uses single-coin take only.
+		return TryTakeSingleAtIndex( player, startIndex );
 	}
 
 	public void TryMergeNearby()
@@ -1194,6 +1313,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			BindDefBuffer,
 			snap,
 			bindCovered );
+		ApplyCylinderVariationSeed();
 
 		for ( int b = 0; b < BindIndexMap.Count; b++ )
 		{

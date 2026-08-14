@@ -100,7 +100,6 @@ GameObject:
   m_Component:
   - component: {fileID: 7397722482236777411}
   - component: {fileID: 7581527068998621129}
-  - component: {fileID: 8340766832948483198}
   - component: {fileID: 1611365779365503038}
   m_Layer: 0
   m_Name: Hopper
@@ -146,33 +145,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1.2, y: 0.6, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!54 &8340766832948483198
-Rigidbody:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 968011265227635414}
-  serializedVersion: 5
-  m_Mass: 1
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
-  m_CenterOfMass: {x: 0, y: 0, z: 0}
-  m_InertiaTensor: {x: 1, y: 1, z: 1}
-  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ImplicitCom: 1
-  m_ImplicitTensor: 1
-  m_UseGravity: 0
-  m_IsKinematic: 1
-  m_Interpolate: 0
-  m_Constraints: 0
-  m_CollisionDetection: 0
 --- !u!114 &1611365779365503038
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -373,6 +345,136 @@ Transform:
   - {fileID: 4445499597274168283}
   m_Father: {fileID: 3464683518450801076}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2961697710293029224
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8378799133418760187}
+  - component: {fileID: 4478309158458843406}
+  m_Layer: 0
+  m_Name: OnSortedFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8378799133418760187
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2961697710293029224}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3464683518450801076}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4478309158458843406
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2961697710293029224}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 9170125181045440643
+  - rid: 9170125181045440644
+  references:
+    version: 2
+    RefIds:
+    - rid: 9170125181045440643
+      type: {class: PunchRotationFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 97733322870881400}
+        Punch: {x: 80, y: 0, z: 0}
+        Duration: 0.16
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.5
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+    - rid: 9170125181045440644
+      type: {class: PunchScaleFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 97733322870881400}
+        Punch: {x: 0.08, y: 0.08, z: 0.08}
+        Duration: 0.16
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.5
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
 --- !u!1 &3785216941764982963
 GameObject:
   m_ObjectHideFlags: 0
@@ -473,6 +575,9 @@ GameObject:
   m_Component:
   - component: {fileID: 3464683518450801076}
   - component: {fileID: 8653976260256665846}
+  - component: {fileID: 7743242534259797732}
+  - component: {fileID: 703558330312438265}
+  - component: {fileID: 5012843002134193286}
   m_Layer: 0
   m_Name: CoinSortingStation
   m_TagString: Untagged
@@ -499,6 +604,7 @@ Transform:
   - {fileID: 8662232993883556456}
   - {fileID: 8856304522161344078}
   - {fileID: 3788024075655472572}
+  - {fileID: 8378799133418760187}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8653976260256665846
@@ -515,6 +621,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CoinSortingStation
   hopper: {fileID: 1611365779365503038}
   crank: {fileID: 3475270011796391402}
+  moveInteractable: {fileID: 2452375652297784066}
   chutes:
   - coin: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     chute: {fileID: 8662232993883556456}
@@ -524,6 +631,64 @@ MonoBehaviour:
     chute: {fileID: 3788024075655472572}
   definitionOverride: {fileID: 0}
   hopperStackOffset: {x: 0, y: 0.02, z: 0}
+  onPlacedFeedback: {fileID: 0}
+  onSortedFeedback: {fileID: 4478309158458843406}
+--- !u!54 &7743242534259797732
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3858640962312582024}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 0
+  m_IsKinematic: 1
+  m_Interpolate: 1
+  m_Constraints: 0
+  m_CollisionDetection: 3
+--- !u!114 &703558330312438265
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3858640962312582024}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks: []
+  references:
+    version: 2
+    RefIds: []
+--- !u!114 &5012843002134193286
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3858640962312582024}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c76d259f0fa53746a14365e6f56a6eb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CoinSortingCrankAudio
+  _station: {fileID: 0}
 --- !u!1 &5761311447819771599
 GameObject:
   m_ObjectHideFlags: 0
@@ -536,6 +701,7 @@ GameObject:
   - component: {fileID: 4437881813368431268}
   - component: {fileID: 2316693413084251412}
   - component: {fileID: 6729481035827461201}
+  - component: {fileID: 2452375652297784066}
   m_Layer: 0
   m_Name: Body
   m_TagString: Untagged
@@ -558,27 +724,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 3464683518450801076}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!65 &6729481035827461201
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5761311447819771599}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 1, y: 1, z: 1}
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!33 &4437881813368431268
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -636,6 +781,41 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!65 &6729481035827461201
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5761311447819771599}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &2452375652297784066
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5761311447819771599}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4adc0f5482e6cf94c833df3a77bb0c77, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CoinSortingStationMoveInteractable
+  interactionName: Interactable
+  station: {fileID: 8653976260256665846}
 --- !u!1 &7008851585575885060
 GameObject:
   m_ObjectHideFlags: 0

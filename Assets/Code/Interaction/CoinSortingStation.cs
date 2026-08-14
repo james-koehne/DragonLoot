@@ -1,5 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+
+using FeedbackSystem;
 
 using UnityEngine;
 
@@ -19,12 +22,18 @@ public class CoinSortingStation : MonoBehaviour
 	static readonly List<CoinSortingStation> All = new List<CoinSortingStation>( 8 );
 	static readonly List<TreasureDefinition> ConsumeScratch = new List<TreasureDefinition>( 64 );
 	static readonly List<TreasureItem> CarryDumpScratch = new List<TreasureItem>( 64 );
+	static readonly List<Collider> ColliderScratch = new List<Collider>( 16 );
+	static readonly Collider[] OverlapScratch = new Collider[ 64 ];
+	static readonly RaycastHit[] FloorHits = new RaycastHit[ 16 ];
 
 	[SerializeField]
 	CoinSortingHopper hopper;
 
 	[SerializeField]
 	CoinSortingCrankInteractable crank;
+
+	[SerializeField]
+	CoinSortingStationMoveInteractable moveInteractable;
 
 	[SerializeField]
 	List<ChuteBinding> chutes = new List<ChuteBinding>();
@@ -37,6 +46,14 @@ public class CoinSortingStation : MonoBehaviour
 	[SerializeField]
 	Vector3 hopperStackOffset = new Vector3( 0f, 0.02f, 0f );
 
+	[Tooltip( "Played after the sorter settles into a placed pose." )]
+	[SerializeField]
+	Feedbacks onPlacedFeedback;
+
+	[Tooltip( "Played each time a coin is sorted, including automatic processing." )]
+	[SerializeField]
+	Feedbacks onSortedFeedback;
+
 	readonly Dictionary<TreasureDefinition, GroundCoinStack> _activeOutputByType =
 		new Dictionary<TreasureDefinition, GroundCoinStack>();
 	readonly Dictionary<TreasureDefinition, int> _fullStackIndexByType =
@@ -45,15 +62,25 @@ public class CoinSortingStation : MonoBehaviour
 
 	CoinSortingStationDefinition _definition;
 	GroundCoinStack _hopperStack;
+	Rigidbody _body;
 	float _processAccumulator;
 	float _crankActiveUntil;
 	bool _defaultLevelEnsured;
+	bool _isRepositioning;
 
 	public static IReadOnlyList<CoinSortingStation> ActiveStations => All;
 
 	public int BufferedCount => _hopperStack != null ? _hopperStack.Count : 0;
 
 	public int StationLevel => ResolveStationLevel();
+
+	public bool IsRepositioning => _isRepositioning;
+
+	public CoinSortingStationDefinition Definition => ResolveDefinition();
+
+	public Rigidbody Body => EnsureBody();
+
+	public CoinSortingStationMoveInteractable MoveInteractable => moveInteractable;
 
 	public int HopperCapacity
 	{
@@ -120,10 +147,17 @@ public class CoinSortingStation : MonoBehaviour
 		ResolveDefinition();
 		EnsureChildRefs();
 		EnsureBodyPlacementCollider();
+		EnsureBody();
+		StripNestedRigidbodies();
+		EnsureSettleFeedback();
+		EnsureSortedFeedback();
+		EnsureCrankAudio();
 		if ( hopper != null )
 			hopper.BindStation( this );
 		if ( crank != null )
 			crank.BindStation( this );
+		if ( moveInteractable != null )
+			moveInteractable.BindStation( this );
 	}
 
 	void Start()
@@ -136,7 +170,8 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		EnsureDefaultUpgradeLevel();
 		SyncHopperStackCapacity();
-		TickProcess( Time.deltaTime );
+		if ( !_isRepositioning )
+			TickProcess( Time.deltaTime );
 	}
 
 	void EnsureChildRefs()
@@ -145,6 +180,565 @@ public class CoinSortingStation : MonoBehaviour
 			hopper = GetComponentInChildren<CoinSortingHopper>( true );
 		if ( crank == null )
 			crank = GetComponentInChildren<CoinSortingCrankInteractable>( true );
+		if ( moveInteractable == null )
+			moveInteractable = GetComponentInChildren<CoinSortingStationMoveInteractable>( true );
+		if ( moveInteractable == null )
+		{
+			Transform body = transform.Find( "Body" );
+			GameObject host = body != null ? body.gameObject : gameObject;
+			moveInteractable = host.GetComponent<CoinSortingStationMoveInteractable>();
+			if ( moveInteractable == null )
+				moveInteractable = host.AddComponent<CoinSortingStationMoveInteractable>();
+		}
+	}
+
+	Rigidbody EnsureBody()
+	{
+		if ( _body != null )
+			return _body;
+
+		_body = GetComponent<Rigidbody>();
+		if ( _body == null )
+			_body = gameObject.AddComponent<Rigidbody>();
+
+		_body.isKinematic = true;
+		_body.useGravity = false;
+		_body.interpolation = RigidbodyInterpolation.Interpolate;
+		_body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+		return _body;
+	}
+
+	void StripNestedRigidbodies()
+	{
+		Rigidbody[] bodies = GetComponentsInChildren<Rigidbody>( true );
+		for ( int i = 0; i < bodies.Length; i++ )
+		{
+			Rigidbody nested = bodies[ i ];
+			if ( nested == null || nested == _body || nested.gameObject == gameObject )
+				continue;
+			Destroy( nested );
+		}
+	}
+
+	void EnsureSettleFeedback()
+	{
+		if ( onPlacedFeedback != null )
+			return;
+
+		onPlacedFeedback = GetComponent<Feedbacks>();
+		if ( onPlacedFeedback == null )
+			onPlacedFeedback = gameObject.AddComponent<Feedbacks>();
+
+		if ( onPlacedFeedback.FeedbackList != null && onPlacedFeedback.FeedbackList.Count > 0 )
+			return;
+
+		onPlacedFeedback.AddFeedback( new PunchScaleFeedback
+		{
+			Target = transform,
+			Punch = new Vector3( 0.06f, -0.08f, 0.06f ),
+			Duration = 0.22f
+		} );
+		onPlacedFeedback.AddFeedback( new ShakeTransformFeedback
+		{
+			Target = transform,
+			Duration = 0.18f,
+			Strength = 0.035f
+		} );
+	}
+
+	void EnsureSortedFeedback()
+	{
+		if ( onSortedFeedback == null )
+		{
+			Transform existing = transform.Find( "OnSortedFeedbacks" );
+			GameObject host = existing != null ? existing.gameObject : new GameObject( "OnSortedFeedbacks" );
+			if ( existing == null )
+				host.transform.SetParent( transform, false );
+
+			onSortedFeedback = host.GetComponent<Feedbacks>();
+			if ( onSortedFeedback == null )
+				onSortedFeedback = host.AddComponent<Feedbacks>();
+		}
+
+		onSortedFeedback.Initialize();
+		if ( onSortedFeedback.FeedbackList != null && onSortedFeedback.FeedbackList.Count > 0 )
+			return;
+
+		Transform crankTarget = crank != null ? crank.transform : transform;
+		onSortedFeedback.AddFeedback( new PunchRotationFeedback
+		{
+			Target = crankTarget,
+			Punch = new Vector3( 80f, 0f, 0f ),
+			Duration = 0.16f
+		} );
+		onSortedFeedback.AddFeedback( new PunchScaleFeedback
+		{
+			Target = crankTarget,
+			Punch = new Vector3( 0.08f, 0.08f, 0.08f ),
+			Duration = 0.16f
+		} );
+	}
+
+	void EnsureCrankAudio()
+	{
+		if ( GetComponent<CoinSortingCrankAudio>() == null )
+			gameObject.AddComponent<CoinSortingCrankAudio>();
+	}
+
+	public void BeginRepositioning()
+	{
+		_isRepositioning = true;
+		EnsureBody();
+	}
+
+	public void EndRepositioning()
+	{
+		_isRepositioning = false;
+	}
+
+	/// <summary>
+	/// Clears chute output bookkeeping so new emits create stacks at the current chute poses.
+	/// Existing world stacks are left where they are.
+	/// </summary>
+	public void ClearOutputStackBindings()
+	{
+		_activeOutputByType.Clear();
+		_fullStackIndexByType.Clear();
+	}
+
+	public void PlayPlacedFeedback()
+	{
+		EnsureSettleFeedback();
+		if ( onPlacedFeedback != null )
+			onPlacedFeedback.Play();
+	}
+
+	public void PlaySortedFeedback()
+	{
+		EnsureSortedFeedback();
+		if ( onSortedFeedback != null )
+			onSortedFeedback.Play();
+	}
+
+	public void CollectPhysicalColliders( List<Collider> destination )
+	{
+		if ( destination == null )
+			return;
+
+		destination.Clear();
+		Collider[] colliders = GetComponentsInChildren<Collider>( true );
+		for ( int i = 0; i < colliders.Length; i++ )
+		{
+			Collider col = colliders[ i ];
+			if ( col == null || !col.enabled || col.isTrigger )
+				continue;
+
+			// Hopper buffer / output stacks are Collectable and move with hopper when parented;
+			// skip Collectable so we validate machine body only.
+			if ( col.gameObject.layer == PhysicsLayers.CollectableLayer )
+				continue;
+
+			destination.Add( col );
+		}
+	}
+
+	public Bounds GetCombinedPhysicalBounds()
+	{
+		CollectPhysicalColliders( ColliderScratch );
+		if ( ColliderScratch.Count == 0 )
+			return new Bounds( transform.position, Vector3.one );
+
+		Bounds bounds = ColliderScratch[ 0 ].bounds;
+		for ( int i = 1; i < ColliderScratch.Count; i++ )
+			bounds.Encapsulate( ColliderScratch[ i ].bounds );
+		return bounds;
+	}
+
+	public void CollectOutlineRenderers( List<Renderer> destination )
+	{
+		if ( destination == null )
+			return;
+
+		destination.Clear();
+		CoinSortingCrankInteractable crankRef = crank;
+		Transform crankRoot = crankRef != null ? crankRef.transform : null;
+
+		Renderer[] all = GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < all.Length; i++ )
+		{
+			Renderer renderer = all[ i ];
+			if ( renderer == null || !renderer.enabled )
+				continue;
+
+			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+				continue;
+
+			if ( renderer.sharedMaterial == null )
+				continue;
+
+			if ( renderer.GetComponentInParent<GroundCoinStack>() != null )
+				continue;
+
+			int collectable = PhysicsLayers.CollectableLayer;
+			if ( collectable >= 0 && renderer.gameObject.layer == collectable )
+				continue;
+
+			if ( crankRoot != null
+				&& ( renderer.transform == crankRoot || renderer.transform.IsChildOf( crankRoot ) ) )
+				continue;
+
+			destination.Add( renderer );
+		}
+	}
+
+	/// <summary>
+	/// Validates a candidate root pose: walkable floor, slope, no obstruction overlap,
+	/// explicit gold-pile reject, and operator clearance.
+	/// </summary>
+	public bool EvaluatePlacementPose(
+		Vector3 rootPosition,
+		Quaternion rootRotation,
+		out Vector3 snappedPosition,
+		out Quaternion snappedRotation,
+		out RaycastHit floorHit )
+	{
+		snappedPosition = rootPosition;
+		snappedRotation = rootRotation;
+		floorHit = default;
+
+		CoinSortingStationDefinition def = ResolveDefinition();
+		float snapDist = def != null ? def.floorSnapDistance : 2.5f;
+		float minUpDot = def != null ? def.minFloorUpDot : 0.7f;
+		float shrink = def != null ? def.placementBoundsShrink : 0.1f;
+
+		Bounds localBounds = GetLocalPhysicalBounds();
+		Vector3 probeOrigin = rootPosition + rootRotation * new Vector3( 0f, localBounds.max.y + 0.05f, 0f );
+		float probeLength = snapDist + localBounds.size.y + 0.5f;
+
+		int hitCount = Physics.RaycastNonAlloc(
+			probeOrigin,
+			Vector3.down,
+			FloorHits,
+			probeLength,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Ignore );
+
+		if ( hitCount <= 0 )
+			return false;
+
+		bool foundFloor = false;
+		float bestDist = float.MaxValue;
+		for ( int i = 0; i < hitCount; i++ )
+		{
+			RaycastHit hit = FloorHits[ i ];
+			if ( hit.collider == null )
+				continue;
+			if ( IsOwnCollider( hit.collider ) )
+				continue;
+
+			if ( hit.distance < bestDist )
+			{
+				bestDist = hit.distance;
+				floorHit = hit;
+				foundFloor = true;
+			}
+		}
+
+		if ( !foundFloor )
+			return false;
+
+		if ( PlacementFloorSurface.IsHeightfieldPileCollider( floorHit.collider ) )
+			return false;
+
+		Vector3 normal = floorHit.normal.sqrMagnitude > 0.0001f
+			? floorHit.normal.normalized
+			: Vector3.up;
+		float upDot = Vector3.Dot( normal, Vector3.up );
+		if ( upDot < minUpDot )
+			return false;
+
+		if ( !PlacementFloorSurface.IsFloorCollider( floorHit.collider ) )
+			return false;
+
+		float bottomLocalY = localBounds.min.y;
+		snappedPosition = floorHit.point - rootRotation * new Vector3( 0f, bottomLocalY, 0f );
+
+		Quaternion upright = Quaternion.Euler( 0f, rootRotation.eulerAngles.y, 0f );
+		float align = def != null ? def.surfaceAlignStrength : 0.25f;
+		if ( align > 0.001f )
+		{
+			Quaternion fromTo = Quaternion.FromToRotation( Vector3.up, normal );
+			Quaternion tilted = fromTo * upright;
+			snappedRotation = Quaternion.Slerp( upright, tilted, align );
+		}
+		else
+		{
+			snappedRotation = upright;
+		}
+
+		if ( FootprintOverlapsGoldPile( snappedPosition, snappedRotation, localBounds, shrink ) )
+			return false;
+
+		if ( OverlapsObstruction( snappedPosition, snappedRotation, shrink ) )
+			return false;
+
+		if ( !HasOperationalClearance( snappedPosition, snappedRotation, def ) )
+			return false;
+
+		return true;
+	}
+
+	Bounds GetLocalPhysicalBounds()
+	{
+		CollectPhysicalColliders( ColliderScratch );
+		if ( ColliderScratch.Count == 0 )
+			return new Bounds( Vector3.up * 0.6f, new Vector3( 1.6f, 1.2f, 1.2f ) );
+
+		Bounds world = ColliderScratch[ 0 ].bounds;
+		for ( int i = 1; i < ColliderScratch.Count; i++ )
+			world.Encapsulate( ColliderScratch[ i ].bounds );
+
+		Vector3 localCenter = transform.InverseTransformPoint( world.center );
+		Vector3 lossy = transform.lossyScale;
+		Vector3 localSize = new Vector3(
+			SafeDiv( world.size.x, Mathf.Abs( lossy.x ) ),
+			SafeDiv( world.size.y, Mathf.Abs( lossy.y ) ),
+			SafeDiv( world.size.z, Mathf.Abs( lossy.z ) ) );
+		return new Bounds( localCenter, localSize );
+	}
+
+	bool FootprintOverlapsGoldPile(
+		Vector3 rootPosition,
+		Quaternion rootRotation,
+		Bounds localBounds,
+		float shrink )
+	{
+		Vector3 worldCenter = rootPosition + rootRotation * localBounds.center;
+		Vector3 halfExtents = Vector3.Scale( localBounds.extents, AbsVec( transform.lossyScale ) );
+		halfExtents = ShrinkExtents( halfExtents, shrink );
+
+		int hits = Physics.OverlapBoxNonAlloc(
+			worldCenter,
+			halfExtents,
+			OverlapScratch,
+			rootRotation,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Collide );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider other = OverlapScratch[ i ];
+			if ( other == null || IsOwnCollider( other ) )
+				continue;
+
+			if ( PlacementFloorSurface.IsHeightfieldPileCollider( other ) )
+				return true;
+
+			TreasurePileVisual pile = other.GetComponentInParent<TreasurePileVisual>();
+			if ( pile != null
+				&& ( pile.ContainsWorldPointXZ( worldCenter ) || pile.HasPileSurfaceAt( worldCenter ) ) )
+				return true;
+		}
+
+		// Corner samples against any nearby heightfield even when physics misses the mound mesh.
+		Vector3[] samples =
+		{
+			localBounds.center,
+			new Vector3( localBounds.min.x, localBounds.min.y, localBounds.min.z ),
+			new Vector3( localBounds.max.x, localBounds.min.y, localBounds.min.z ),
+			new Vector3( localBounds.min.x, localBounds.min.y, localBounds.max.z ),
+			new Vector3( localBounds.max.x, localBounds.min.y, localBounds.max.z ),
+		};
+
+		for ( int s = 0; s < samples.Length; s++ )
+		{
+			Vector3 world = rootPosition + rootRotation * samples[ s ];
+			if ( SampleHitsGoldPile( world ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool SampleHitsGoldPile( Vector3 world )
+	{
+		int hits = Physics.OverlapSphereNonAlloc(
+			world,
+			0.08f,
+			OverlapScratch,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Collide );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider other = OverlapScratch[ i ];
+			if ( other == null )
+				continue;
+			if ( PlacementFloorSurface.IsHeightfieldPileCollider( other ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	bool OverlapsObstruction( Vector3 rootPosition, Quaternion rootRotation, float shrink )
+	{
+		CollectPhysicalColliders( ColliderScratch );
+		Matrix4x4 current = Matrix4x4.TRS( transform.position, transform.rotation, Vector3.one );
+		Matrix4x4 target = Matrix4x4.TRS( rootPosition, rootRotation, Vector3.one );
+		Matrix4x4 delta = target * current.inverse;
+
+		for ( int i = 0; i < ColliderScratch.Count; i++ )
+		{
+			Collider col = ColliderScratch[ i ];
+			if ( col == null )
+				continue;
+
+			if ( !TryGetColliderWorldBox( col, delta, out Vector3 center, out Vector3 halfExtents, out Quaternion orientation ) )
+				continue;
+
+			halfExtents = ShrinkExtents( halfExtents, shrink );
+
+			int hits = Physics.OverlapBoxNonAlloc(
+				center,
+				halfExtents,
+				OverlapScratch,
+				orientation,
+				Physics.DefaultRaycastLayers,
+				QueryTriggerInteraction.Ignore );
+
+			for ( int h = 0; h < hits; h++ )
+			{
+				Collider other = OverlapScratch[ h ];
+				if ( other == null || IsOwnCollider( other ) )
+					continue;
+				if ( IsPlayerCollider( other ) )
+					continue;
+				// Loose coins / stacks shouldn't block machine placement.
+				if ( other.GetComponentInParent<GroundCoinStack>() != null
+					|| other.GetComponentInParent<TreasureItem>() != null )
+					continue;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool HasOperationalClearance(
+		Vector3 rootPosition,
+		Quaternion rootRotation,
+		CoinSortingStationDefinition def )
+	{
+		Vector3 size = def != null ? def.operationalClearanceSize : new Vector3( 0.85f, 1.6f, 0.6f );
+		Vector3 localCenter = def != null ? def.operationalClearanceCenter : new Vector3( 0f, 0.85f, 0.95f );
+		float shrink = def != null ? def.placementBoundsShrink : 0.1f;
+		Vector3 half = ShrinkExtents( size * 0.5f, shrink * 0.5f );
+		Vector3 center = rootPosition + rootRotation * localCenter;
+
+		int hits = Physics.OverlapBoxNonAlloc(
+			center,
+			half,
+			OverlapScratch,
+			rootRotation,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Ignore );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider other = OverlapScratch[ i ];
+			if ( other == null || IsOwnCollider( other ) )
+				continue;
+			if ( IsPlayerCollider( other ) )
+				continue;
+			if ( other.GetComponentInParent<GroundCoinStack>() != null
+				|| other.GetComponentInParent<TreasureItem>() != null )
+				continue;
+			return false;
+		}
+
+		return true;
+	}
+
+	static Vector3 ShrinkExtents( Vector3 halfExtents, float shrink )
+	{
+		if ( shrink <= 0f )
+			return halfExtents;
+
+		return new Vector3(
+			Mathf.Max( 0.05f, halfExtents.x - shrink ),
+			Mathf.Max( 0.05f, halfExtents.y - shrink ),
+			Mathf.Max( 0.05f, halfExtents.z - shrink ) );
+	}
+
+	static bool TryGetColliderWorldBox(
+		Collider col,
+		Matrix4x4 worldDelta,
+		out Vector3 center,
+		out Vector3 halfExtents,
+		out Quaternion orientation )
+	{
+		center = Vector3.zero;
+		halfExtents = Vector3.one * 0.5f;
+		orientation = Quaternion.identity;
+
+		BoxCollider box = col as BoxCollider;
+		if ( box != null )
+		{
+			Transform t = box.transform;
+			Vector3 worldCenter = t.TransformPoint( box.center );
+			center = worldDelta.MultiplyPoint3x4( worldCenter );
+			Vector3 lossy = t.lossyScale;
+			halfExtents = Vector3.Scale( box.size, AbsVec( lossy ) ) * 0.5f;
+			orientation = worldDelta.rotation * t.rotation;
+			return true;
+		}
+
+		SphereCollider sphere = col as SphereCollider;
+		if ( sphere != null )
+		{
+			Transform t = sphere.transform;
+			Vector3 worldCenter = t.TransformPoint( sphere.center );
+			center = worldDelta.MultiplyPoint3x4( worldCenter );
+			float maxScale = Mathf.Max( Mathf.Abs( t.lossyScale.x ), Mathf.Abs( t.lossyScale.y ), Mathf.Abs( t.lossyScale.z ) );
+			halfExtents = Vector3.one * ( sphere.radius * maxScale );
+			orientation = Quaternion.identity;
+			return true;
+		}
+
+		Bounds b = col.bounds;
+		center = worldDelta.MultiplyPoint3x4( b.center );
+		halfExtents = b.extents;
+		orientation = worldDelta.rotation;
+		return true;
+	}
+
+	public bool IsOwnCollider( Collider collider )
+	{
+		if ( collider == null )
+			return false;
+		return collider.transform == transform || collider.transform.IsChildOf( transform );
+	}
+
+	static bool IsPlayerCollider( Collider collider )
+	{
+		if ( collider == null )
+			return false;
+		int playerLayer = PhysicsLayers.PlayerLayer;
+		if ( playerLayer >= 0 && collider.gameObject.layer == playerLayer )
+			return true;
+		return collider.GetComponentInParent<PlayerController>() != null
+			|| collider.GetComponentInParent<CharacterController>() != null;
+	}
+
+	static Vector3 AbsVec( Vector3 v )
+	{
+		return new Vector3( Mathf.Abs( v.x ), Mathf.Abs( v.y ), Mathf.Abs( v.z ) );
+	}
+
+	static float SafeDiv( float a, float b )
+	{
+		return Mathf.Abs( b ) < 0.0001f ? a : a / b;
 	}
 
 	/// <summary>
@@ -254,9 +848,16 @@ public class CoinSortingStation : MonoBehaviour
 
 	public void NotifyCrankPulse()
 	{
+		if ( _isRepositioning )
+			return;
+
 		CoinSortingStationDefinition def = ResolveDefinition();
 		float grace = def != null ? def.crankHoldGrace : 0.35f;
 		_crankActiveUntil = Time.time + Mathf.Max( 0.05f, grace );
+
+		CoinSortingCrankAudio crankAudio = GetComponent<CoinSortingCrankAudio>();
+		if ( crankAudio != null )
+			crankAudio.NotifyPulse();
 	}
 
 	GroundCoinStack EnsureHopperStack()
@@ -333,44 +934,104 @@ public class CoinSortingStation : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Dump every stackable coin from <paramref name="carry"/> onto the hopper stack in one go.
-	/// Non-coins and capacity overflow stay in carry. Accepted coins append immediately (no flight).
+	/// Dump as many stackable coins from <paramref name="carry"/> as hopper capacity allows.
+	/// Uses logical coin definitions (Active + left held), not only live meshes.
 	/// </summary>
 	public bool TryDumpCarryIntoHopper( PlayerCarry carry )
 	{
-		if ( carry == null || carry.Count <= 0 )
+		return TryDumpCarryIntoHopperAnimated( carry );
+	}
+
+	/// <summary>
+	/// Consumes fitting coin defs from carry, flies the stack cylinder into the hopper, then appends.
+	/// </summary>
+	public bool TryDumpCarryIntoHopperAnimated( PlayerCarry carry )
+	{
+		if ( _isRepositioning )
+			return false;
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
 			return false;
 
-		CarryDumpScratch.Clear();
-		carry.CopyCarriedItemsInOrder( CarryDumpScratch );
-		if ( CarryDumpScratch.Count == 0 )
+		int room = RemainingCapacity;
+		if ( room <= 0 )
 			return false;
 
-		GroundCoinStack stack = EnsureHopperStack();
-		bool any = false;
-
-		for ( int i = 0; i < CarryDumpScratch.Count; i++ )
+		Vector3 startPos = carry.transform.position;
+		Quaternion startRot = carry.transform.rotation;
+		float seed = carry.CoinHandVariationSeed;
+		Transform hold = carry.GetHoldRoot( CarryBucketKind.Coin );
+		if ( hold != null )
 		{
-			if ( IsHopperFull || stack.IsFull )
-				break;
-
-			TreasureItem member = CarryDumpScratch[ i ];
-			if ( member == null || !GroundCoinStack.IsGroundStackableCoin( member ) )
-				continue;
-
-			TreasureDefinition definition = member.Definition;
-			if ( !carry.TryDetachItem( member ) )
-				continue;
-
-			TreasureItemFactory.Despawn( member );
-			if ( !stack.TryAppendDefinition( definition ) )
-				break;
-
-			any = true;
+			startPos = hold.position;
+			startRot = hold.rotation;
 		}
 
-		CarryDumpScratch.Clear();
-		return any;
+		ConsumeScratch.Clear();
+		int taken = carry.TryConsumeCoinDefinitions( room, ConsumeScratch );
+		if ( taken <= 0 )
+		{
+			ConsumeScratch.Clear();
+			return false;
+		}
+
+		List<TreasureDefinition> flying = new List<TreasureDefinition>( ConsumeScratch.Count );
+		for ( int i = 0; i < ConsumeScratch.Count; i++ )
+			flying.Add( ConsumeScratch[ i ] );
+		ConsumeScratch.Clear();
+
+		GroundCoinStack stack = EnsureHopperStack();
+		Vector3 endPos = stack.ContactPosition + Vector3.up * stack.SettledHeight;
+		Quaternion endRot = stack.transform.rotation;
+		CarryDefinition carryDef = null;
+		carryDef = RuntimeDefinition.Resolve( ref carryDef );
+		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
+
+		CoinStackFlight.FlyToWorld(
+			flying,
+			startPos,
+			startRot,
+			seed,
+			endPos,
+			endRot,
+			duration,
+			() =>
+			{
+				if ( stack == null )
+					return;
+
+				stack.TryAppendDefinitions( flying );
+				PlayHopperCoinPlaceFeedback( stack, flying );
+				CoinStackInteractSfx.PlayStackPlace( endPos );
+			} );
+
+		return true;
+	}
+
+	static void PlayHopperCoinPlaceFeedback( GroundCoinStack stack, List<TreasureDefinition> definitions )
+	{
+		if ( stack == null || definitions == null || definitions.Count == 0 )
+			return;
+
+		TreasureDefinition last = definitions[ definitions.Count - 1 ];
+		if ( last == null )
+			return;
+
+		Vector3 pos = stack.ContactPosition + Vector3.up * stack.SettledHeight;
+		Quaternion rot = stack.transform.rotation;
+		TreasureItem fx = TreasureItemFactory.RentVisualCoin( last, pos, rot );
+		if ( fx == null )
+			return;
+
+		fx.SetMeshVisible( true );
+		CoinGemInteractFeedback.PlayPlace( fx );
+		TreasureMotionHost.Run( ReturnHopperPlaceFx( fx ) );
+	}
+
+	static System.Collections.IEnumerator ReturnHopperPlaceFx( TreasureItem fx )
+	{
+		yield return new WaitForSeconds( 0.22f );
+		if ( fx != null )
+			TreasureItemFactory.ReturnVisualCoin( fx );
 	}
 
 	public bool TryAbsorbLooseCoin( TreasureItem item )
@@ -492,6 +1153,14 @@ public class CoinSortingStation : MonoBehaviour
 		}
 
 		_activeOutputByType[ definition ] = stack;
+
+		EventBus.Publish( new CoinSorterUsedEvent
+		{
+			Station = this,
+			Coin = definition
+		} );
+
+		PlaySortedFeedback();
 		return true;
 	}
 
@@ -583,6 +1252,16 @@ public class CoinSortingStation : MonoBehaviour
 	public void EditorSetCrank( CoinSortingCrankInteractable value )
 	{
 		crank = value;
+	}
+
+	public void EditorSetMoveInteractable( CoinSortingStationMoveInteractable value )
+	{
+		moveInteractable = value;
+	}
+
+	public void EditorSetSortedFeedback( Feedbacks value )
+	{
+		onSortedFeedback = value;
 	}
 #endif
 }

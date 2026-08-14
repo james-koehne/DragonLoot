@@ -92,6 +92,71 @@ public class GoldPileArtifactProps : MonoBehaviour
 		GoldPileLootStreamSettings streamSettings,
 		int authoredLayoutSeed = 0 )
 	{
+		int bindId = BeginBind( owner, definition, heightfield, pileRoot, loot, streamSettings, authoredLayoutSeed );
+		BuildLatentEntries();
+		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
+	}
+
+	public async Task BindAsync(
+		TreasurePileVisual owner,
+		TreasurePileDefinition definition,
+		GoldPileHeightfield heightfield,
+		Transform pileRoot,
+		GoldPileLootInstances loot,
+		GoldPileLootStreamSettings streamSettings,
+		int authoredLayoutSeed = 0 )
+	{
+		int bindId = BeginBind( owner, definition, heightfield, pileRoot, loot, streamSettings, authoredLayoutSeed );
+
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		bool appliedBake = false;
+		if ( settings.PreferBake )
+			appliedBake = TryApplyBakedLatents( settings );
+
+		if ( !appliedBake )
+		{
+			if ( Application.isPlaying )
+				await BuildLatentEntriesAsync( bindId, settings );
+			else
+				BuildLatentEntries();
+		}
+
+		if ( !IsBindStillValid( bindId ) )
+			return;
+
+		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
+	}
+
+	/// <summary>
+	/// Editor-only: procedural latent build into a pure-data bake asset (no reveal / no scene props).
+	/// </summary>
+	public void BakeLatentsInto(
+		TreasurePileVisual owner,
+		TreasurePileDefinition definition,
+		GoldPileHeightfield heightfield,
+		Transform pileRoot,
+		GoldPileLootInstances loot,
+		int authoredLayoutSeed,
+		TreasurePileLatentBake bake )
+	{
+		if ( bake == null || definition == null || heightfield == null )
+			return;
+
+		BeginBind( owner, definition, heightfield, pileRoot, loot, null, authoredLayoutSeed );
+		BuildLatentEntries();
+		WriteBakeAsset( bake, authoredLayoutSeed );
+		ClearAll();
+	}
+
+	int BeginBind(
+		TreasurePileVisual owner,
+		TreasurePileDefinition definition,
+		GoldPileHeightfield heightfield,
+		Transform pileRoot,
+		GoldPileLootInstances loot,
+		GoldPileLootStreamSettings streamSettings,
+		int authoredLayoutSeed )
+	{
 		int bindId = ++_bindSerial;
 		_revealGeneration++;
 		ClearAll();
@@ -120,8 +185,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 
 		_pileLootSeed = WorldLootSeed.GetPileEffectiveSeed( _pileRoot, authoredLayoutSeed );
-		BuildLatentEntries();
-		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
+		return bindId;
+	}
+
+	bool IsBindStillValid( int bindId )
+	{
+		return this != null && bindId == _bindSerial;
 	}
 
 	public bool Contains( TreasureItem item )
@@ -590,7 +659,138 @@ public class GoldPileArtifactProps : MonoBehaviour
 		ClearAll();
 	}
 
+	struct LatentBindSettings
+	{
+		public bool PreferBake;
+		public int VolumeMaxAttempts;
+		public int RetryNoOccupancyPasses;
+		public int RetrySaltPasses;
+		public bool UseSpatialHash;
+		public bool AvoidCoinSeats;
+		public float BudgetMs;
+		public int MaxAttemptsPerFrame;
+	}
+
+	LatentBindSettings ResolveLatentBindSettings()
+	{
+		LatentBindSettings s = new LatentBindSettings
+		{
+			PreferBake = true,
+			VolumeMaxAttempts = 24,
+			RetryNoOccupancyPasses = 1,
+			RetrySaltPasses = 0,
+			UseSpatialHash = true,
+			AvoidCoinSeats = false,
+			BudgetMs = 12f,
+			MaxAttemptsPerFrame = 64
+		};
+
+		if ( _definition == null )
+			return s;
+
+		s.PreferBake = _definition.preferBakedLatents;
+		s.VolumeMaxAttempts = Mathf.Max( 1, _definition.latentVolumeMaxAttempts );
+		s.RetryNoOccupancyPasses = Mathf.Max( 0, _definition.latentRetryNoOccupancyPasses );
+		s.RetrySaltPasses = Mathf.Max( 0, _definition.latentRetrySaltPasses );
+		s.UseSpatialHash = _definition.latentUseSpatialHash;
+		s.AvoidCoinSeats = _definition.latentAvoidCoinSeats;
+		s.BudgetMs = Mathf.Max( 1f, _definition.latentBuildBudgetMs );
+		s.MaxAttemptsPerFrame = Mathf.Max( 1, _definition.latentBuildMaxAttemptsPerFrame );
+		return s;
+	}
+
+	bool TryApplyBakedLatents( LatentBindSettings settings )
+	{
+		TreasurePileLatentBake bake = _owner != null ? _owner.LatentBake : null;
+		if ( bake == null || bake.poses == null || bake.poses.Length == 0 )
+			return false;
+		if ( _heightfield == null || _definition == null )
+			return false;
+
+		int heightFp = _heightfield.ComputeLayoutFingerprint();
+		int contentsFp = _definition.HashLargePropContents();
+		if ( !bake.MatchesFingerprint(
+			_pileLootSeed,
+			heightFp,
+			contentsFp,
+			settings.VolumeMaxAttempts,
+			settings.UseSpatialHash,
+			settings.AvoidCoinSeats ) )
+		{
+			return false;
+		}
+
+		_latent.Clear();
+		ExposedLatentCount = 0;
+		StreamedOutCount = 0;
+		for ( int i = 0; i < bake.poses.Length; i++ )
+		{
+			TreasurePileLatentBake.Pose pose = bake.poses[ i ];
+			TreasureDefinition def = pose.definition;
+			if ( def == null || !IsLargeProp( def ) )
+				continue;
+
+			float scale = pose.scale;
+			if ( scale < 0.01f )
+				scale = def.worldScale.x > 0.01f ? def.worldScale.x : 1f;
+
+			Bounds localBounds = new Bounds( pose.boundsCenter, pose.boundsSize );
+			_latent.Add( new LatentEntry
+			{
+				Definition = def,
+				LocalPos = pose.localPos,
+				LocalRot = pose.localRot,
+				Scale = scale,
+				LocalBounds = localBounds,
+				Taken = false,
+				Spawned = false,
+				Exposed = false,
+				PropIndex = -1
+			} );
+		}
+
+		return _latent.Count > 0;
+	}
+
+	void WriteBakeAsset( TreasurePileLatentBake bake, int authoredLayoutSeed )
+	{
+		if ( bake == null || _definition == null || _heightfield == null )
+			return;
+
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		bake.authoredLayoutSeed = authoredLayoutSeed;
+		bake.effectivePileSeed = _pileLootSeed;
+		bake.heightFingerprint = _heightfield.ComputeLayoutFingerprint();
+		bake.contentsFingerprint = _definition.HashLargePropContents();
+		bake.sourceDefinitionName = _definition.name;
+		bake.volumeMaxAttempts = settings.VolumeMaxAttempts;
+		bake.usedSpatialHash = settings.UseSpatialHash;
+		bake.avoidedCoinSeats = settings.AvoidCoinSeats;
+
+		TreasurePileLatentBake.Pose[] poses = new TreasurePileLatentBake.Pose[ _latent.Count ];
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			LatentEntry latent = _latent[ i ];
+			poses[ i ] = new TreasurePileLatentBake.Pose
+			{
+				definition = latent.Definition,
+				localPos = latent.LocalPos,
+				localRot = latent.LocalRot,
+				scale = latent.Scale,
+				boundsCenter = latent.LocalBounds.center,
+				boundsSize = latent.LocalBounds.size
+			};
+		}
+
+		bake.poses = poses;
+	}
+
 	void BuildLatentEntries()
+	{
+		BuildLatentEntriesSync( ResolveLatentBindSettings() );
+	}
+
+	async Task BuildLatentEntriesAsync( int bindId, LatentBindSettings settings )
 	{
 		_latent.Clear();
 		ExposedLatentCount = 0;
@@ -598,9 +798,60 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
 			return;
 
-		List<Bounds> occupiedBounds = new List<Bounds>( 128 );
-		if ( _loot != null )
-			_loot.CollectVolumeBoundsOccupancy( occupiedBounds );
+		CreateOccupancy(
+			settings,
+			out List<Bounds> occupiedBounds,
+			out VolumeOccupancyGrid occupancyGrid );
+
+		System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+		int attemptsThisFrame = 0;
+
+		for ( int e = 0; e < _definition.treasureContents.Length; e++ )
+		{
+			if ( !IsBindStillValid( bindId ) )
+				return;
+
+			TreasurePileEntry entry = _definition.treasureContents[ e ];
+			TreasureDefinition def = entry.treasure;
+			if ( def == null || !IsLargeProp( def ) || entry.count <= 0 )
+				continue;
+
+			int count = entry.count;
+			for ( int i = 0; i < count; i++ )
+			{
+				if ( !IsBindStillValid( bindId ) )
+					return;
+
+				if ( Application.isPlaying
+					&& ( sw.Elapsed.TotalMilliseconds >= settings.BudgetMs
+						|| attemptsThisFrame >= settings.MaxAttemptsPerFrame ) )
+				{
+					await Awaitable.NextFrameAsync();
+					if ( !IsBindStillValid( bindId ) )
+						return;
+					sw.Restart();
+					attemptsThisFrame = 0;
+				}
+
+				int unitIndex = WorldLootSeed.StableUnitIndex( e, i );
+				PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid );
+				attemptsThisFrame++;
+			}
+		}
+	}
+
+	void BuildLatentEntriesSync( LatentBindSettings settings )
+	{
+		_latent.Clear();
+		ExposedLatentCount = 0;
+		StreamedOutCount = 0;
+		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
+			return;
+
+		CreateOccupancy(
+			settings,
+			out List<Bounds> occupiedBounds,
+			out VolumeOccupancyGrid occupancyGrid );
 
 		for ( int e = 0; e < _definition.treasureContents.Length; e++ )
 		{
@@ -609,117 +860,179 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( def == null || !IsLargeProp( def ) || entry.count <= 0 )
 				continue;
 
-			// Always author entry.count latent poses from the seed so layout is identical every run.
-			// Inventory remaining only gates how many can spawn/reveal later.
 			int count = entry.count;
 			for ( int i = 0; i < count; i++ )
 			{
 				int unitIndex = WorldLootSeed.StableUnitIndex( e, i );
-				float scale = def.worldScale.x;
-				if ( scale < 0.01f )
-					scale = 1f;
-
-				float probe = Mathf.Max( 0.08f, scale * 0.35f );
-				float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
-				GoldPileTreasurePlacement.VolumePose pose;
-				Bounds localBounds;
-				bool placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
-					_heightfield,
-					_pileLootSeed,
-					unitIndex,
-					_placementRadiusFraction,
-					scale,
-					probe,
-					_treasureRadialPower,
-					_treasureHeightBias,
-					def.category,
-					occupiedBounds,
-					spacing,
-					null,
-					out pose,
-					out localBounds );
-				if ( !placed )
-				{
-					placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
-						_heightfield,
-						_pileLootSeed,
-						unitIndex + 5003,
-						_placementRadiusFraction,
-						scale,
-						probe,
-						_treasureRadialPower,
-						0f,
-						def.category,
-						null,
-						0f,
-						null,
-						out pose,
-						out localBounds );
-				}
-
-				if ( !placed )
-				{
-					// Last resort: more salts, no spacing — never drop authored treasure units.
-					for ( int attempt = 0; attempt < 8 && !placed; attempt++ )
-					{
-						placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
-							_heightfield,
-							_pileLootSeed,
-							unitIndex + 9001 + attempt * 137,
-							_placementRadiusFraction,
-							scale,
-							probe,
-							_treasureRadialPower,
-							0f,
-							def.category,
-							null,
-							0f,
-							null,
-							out pose,	
-							out localBounds );
-					}
-				}
-
-				if ( !placed )
-				{
-					Debug.LogWarning(
-						$"[GoldPileArtifactProps] Forced latent seat failed for {def.name} unit {i}; using mound center fallback.",
-						this );
-					float half = _heightfield.WorldSize * 0.25f;
-					float lx = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 3, -half, half );
-					float lz = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 5, -half, half );
-					float surface = _heightfield.SampleNormalized( lx, lz ) * _heightfield.MaxHeight;
-					float embed = Mathf.Max( 0.05f, probe );
-					pose = new GoldPileTreasurePlacement.VolumePose
-					{
-						LocalPos = new Vector3( lx, surface - embed, lz ),
-						LocalRot = GoldPileTreasurePlacement.HashRotation( _pileLootSeed, unitIndex ),
-						Scale = scale,
-						ProbeRadius = probe
-					};
-					localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
-						pose.LocalPos,
-						pose.LocalRot,
-						scale,
-						null );
-					placed = true;
-				}
-
-				occupiedBounds.Add( localBounds );
-				_latent.Add( new LatentEntry
-				{
-					Definition = def,
-					LocalPos = pose.LocalPos,
-					LocalRot = pose.LocalRot,
-					Scale = scale,
-					LocalBounds = localBounds,
-					Taken = false,
-					Spawned = false,
-					Exposed = false,
-					PropIndex = -1
-				} );
+				PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid );
 			}
 		}
+	}
+
+	void CreateOccupancy(
+		LatentBindSettings settings,
+		out List<Bounds> occupiedBounds,
+		out VolumeOccupancyGrid occupancyGrid )
+	{
+		occupiedBounds = new List<Bounds>( 128 );
+		occupancyGrid = null;
+
+		if ( settings.UseSpatialHash && _heightfield != null )
+		{
+			float cell = Mathf.Max( _placementMinSpacing, 0.25f );
+			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSize, cell );
+		}
+
+		if ( settings.AvoidCoinSeats && _loot != null )
+		{
+			_loot.CollectVolumeBoundsOccupancy( occupiedBounds );
+			if ( occupancyGrid != null )
+			{
+				for ( int i = 0; i < occupiedBounds.Count; i++ )
+					occupancyGrid.Add( occupiedBounds[ i ] );
+			}
+		}
+	}
+
+	void PlaceLatentUnit(
+		TreasureDefinition def,
+		int unitIndex,
+		LatentBindSettings settings,
+		List<Bounds> occupiedBounds,
+		VolumeOccupancyGrid occupancyGrid )
+	{
+		float scale = def.worldScale.x;
+		if ( scale < 0.01f )
+			scale = 1f;
+
+		float probe = Mathf.Max( 0.08f, scale * 0.35f );
+		float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
+		GoldPileTreasurePlacement.VolumePose pose;
+		Bounds localBounds;
+		bool placed = TrySampleLatentPose(
+			def,
+			unitIndex,
+			scale,
+			probe,
+			spacing,
+			_treasureHeightBias,
+			occupiedBounds,
+			occupancyGrid,
+			settings.VolumeMaxAttempts,
+			out pose,
+			out localBounds );
+
+		if ( !placed )
+		{
+			for ( int pass = 0; pass < settings.RetryNoOccupancyPasses && !placed; pass++ )
+			{
+				placed = TrySampleLatentPose(
+					def,
+					unitIndex + 5003 + pass * 17,
+					scale,
+					probe,
+					0f,
+					0f,
+					null,
+					null,
+					settings.VolumeMaxAttempts,
+					out pose,
+					out localBounds );
+			}
+		}
+
+		if ( !placed )
+		{
+			for ( int attempt = 0; attempt < settings.RetrySaltPasses && !placed; attempt++ )
+			{
+				placed = TrySampleLatentPose(
+					def,
+					unitIndex + 9001 + attempt * 137,
+					scale,
+					probe,
+					0f,
+					0f,
+					null,
+					null,
+					settings.VolumeMaxAttempts,
+					out pose,
+					out localBounds );
+			}
+		}
+
+		if ( !placed )
+		{
+			Debug.LogWarning(
+				$"[GoldPileArtifactProps] Forced latent seat failed for {def.name} unit {unitIndex}; using mound center fallback.",
+				this );
+			float half = _heightfield.WorldSize * 0.25f;
+			float lx = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 3, -half, half );
+			float lz = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 5, -half, half );
+			float surface = _heightfield.SampleNormalized( lx, lz ) * _heightfield.MaxHeight;
+			float embed = Mathf.Max( 0.05f, probe );
+			pose = new GoldPileTreasurePlacement.VolumePose
+			{
+				LocalPos = new Vector3( lx, surface - embed, lz ),
+				LocalRot = GoldPileTreasurePlacement.HashRotation( _pileLootSeed, unitIndex ),
+				Scale = scale,
+				ProbeRadius = probe
+			};
+			localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
+				pose.LocalPos,
+				pose.LocalRot,
+				scale,
+				null );
+		}
+
+		if ( occupancyGrid != null )
+			occupancyGrid.Add( localBounds );
+		else if ( occupiedBounds != null )
+			occupiedBounds.Add( localBounds );
+
+		_latent.Add( new LatentEntry
+		{
+			Definition = def,
+			LocalPos = pose.LocalPos,
+			LocalRot = pose.LocalRot,
+			Scale = scale,
+			LocalBounds = localBounds,
+			Taken = false,
+			Spawned = false,
+			Exposed = false,
+			PropIndex = -1
+		} );
+	}
+
+	bool TrySampleLatentPose(
+		TreasureDefinition def,
+		int unitIndex,
+		float scale,
+		float probe,
+		float spacing,
+		float heightBias,
+		List<Bounds> occupiedBounds,
+		VolumeOccupancyGrid occupancyGrid,
+		int maxAttempts,
+		out GoldPileTreasurePlacement.VolumePose pose,
+		out Bounds localBounds )
+	{
+		return GoldPileTreasurePlacement.TrySampleValidVolumePose(
+			_heightfield,
+			_pileLootSeed,
+			unitIndex,
+			_placementRadiusFraction,
+			scale,
+			probe,
+			_treasureRadialPower,
+			heightBias,
+			def.category,
+			occupiedBounds,
+			spacing,
+			null,
+			out pose,
+			out localBounds,
+			maxAttempts,
+			occupancyGrid );
 	}
 
 	async Task RefreshRevealAsync(
@@ -1145,13 +1458,25 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return false;
 
 		List<Bounds> occupiedBounds = new List<Bounds>( _latent.Count );
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		VolumeOccupancyGrid occupancyGrid = null;
+		if ( settings.UseSpatialHash )
+		{
+			float cell = Mathf.Max( _placementMinSpacing, 0.25f );
+			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSize, cell );
+		}
+
 		for ( int i = 0; i < _latent.Count; i++ )
 		{
 			if ( i == latentIndex )
 				continue;
 			if ( _latent[ i ].Taken )
 				continue;
-			occupiedBounds.Add( _latent[ i ].LocalBounds );
+			Bounds b = _latent[ i ].LocalBounds;
+			if ( occupancyGrid != null )
+				occupancyGrid.Add( b );
+			else
+				occupiedBounds.Add( b );
 		}
 
 		float scale = latent.Scale;
@@ -1172,7 +1497,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 			spacing,
 			null,
 			out GoldPileTreasurePlacement.VolumePose pose,
-			out Bounds localBounds ) )
+			out Bounds localBounds,
+			settings.VolumeMaxAttempts,
+			occupancyGrid ) )
 		{
 			return false;
 		}
@@ -1271,74 +1598,27 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( definition == null || _pileRoot == null || _heightfield == null )
 			return -1;
 
-		float scale = definition.worldScale.x;
-		if ( scale < 0.01f )
-			scale = 1f;
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		CreateOccupancy(
+			settings,
+			out List<Bounds> occupiedBounds,
+			out VolumeOccupancyGrid occupancyGrid );
 
-		float probe = Mathf.Max( 0.08f, scale * 0.35f );
-		float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
-		List<Bounds> occupiedBounds = new List<Bounds>( _latent.Count + 8 );
 		for ( int i = 0; i < _latent.Count; i++ )
 		{
 			if ( _latent[ i ].Taken )
 				continue;
-			occupiedBounds.Add( _latent[ i ].LocalBounds );
+			Bounds b = _latent[ i ].LocalBounds;
+			if ( occupancyGrid != null )
+				occupancyGrid.Add( b );
+			else
+				occupiedBounds.Add( b );
 		}
 
-		if ( _loot != null )
-			_loot.CollectVolumeBoundsOccupancy( occupiedBounds );
-
-		GoldPileTreasurePlacement.VolumePose pose;
-		Bounds localBounds;
-		bool placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
-			_heightfield,
-			_pileLootSeed,
-			unitSalt,
-			_placementRadiusFraction,
-			scale,
-			probe,
-			_treasureRadialPower,
-			_treasureHeightBias,
-			definition.category,
-			occupiedBounds,
-			spacing,
-			null,
-			out pose,
-			out localBounds );
-		if ( !placed )
-		{
-			placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
-				_heightfield,
-				_pileLootSeed,
-				unitSalt + 5003,
-				_placementRadiusFraction,
-				scale,
-				probe,
-				_treasureRadialPower,
-				0f,
-				definition.category,
-				null,
-				0f,
-				null,
-				out pose,
-				out localBounds );
-		}
-
-		if ( !placed )
+		int before = _latent.Count;
+		PlaceLatentUnit( definition, unitSalt, settings, occupiedBounds, occupancyGrid );
+		if ( _latent.Count <= before )
 			return -1;
-
-		_latent.Add( new LatentEntry
-		{
-			Definition = definition,
-			LocalPos = pose.LocalPos,
-			LocalRot = pose.LocalRot,
-			Scale = scale,
-			LocalBounds = localBounds,
-			Taken = false,
-			Spawned = false,
-			Exposed = false,
-			PropIndex = -1
-		} );
 		return _latent.Count - 1;
 	}
 
@@ -1384,6 +1664,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 		Bounds bounds = GoldPileTreasurePlacement.LocalAabbFromPose( local, rot, scale, null );
 		bounds.Expand( probe );
 		float maxEmbed = GoldPileTreasurePlacement.GetMaxGroundEmbedFraction( definition.category );
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		VolumeOccupancyGrid occupancyGrid = null;
+		if ( settings.UseSpatialHash )
+		{
+			float cell = Mathf.Max( _placementMinSpacing, 0.25f );
+			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSize, cell );
+		}
 
 		if ( GoldPileTreasurePlacement.IsInvalidFloorSeat(
 			_heightfield,
@@ -1397,7 +1684,11 @@ public class GoldPileArtifactProps : MonoBehaviour
 			{
 				if ( _latent[ i ].Taken )
 					continue;
-				occupiedBounds.Add( _latent[ i ].LocalBounds );
+				Bounds b = _latent[ i ].LocalBounds;
+				if ( occupancyGrid != null )
+					occupancyGrid.Add( b );
+				else
+					occupiedBounds.Add( b );
 			}
 
 			float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
@@ -1415,7 +1706,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 				spacing,
 				null,
 				out GoldPileTreasurePlacement.VolumePose pose,
-				out Bounds validBounds ) )
+				out Bounds validBounds,
+				settings.VolumeMaxAttempts,
+				occupancyGrid ) )
 			{
 				return -1;
 			}
@@ -1444,7 +1737,11 @@ public class GoldPileArtifactProps : MonoBehaviour
 				{
 					if ( _latent[ i ].Taken )
 						continue;
-					occupiedBounds.Add( _latent[ i ].LocalBounds );
+					Bounds b = _latent[ i ].LocalBounds;
+					if ( occupancyGrid != null )
+						occupancyGrid.Add( b );
+					else
+						occupiedBounds.Add( b );
 				}
 
 				float spacing = Mathf.Max( _placementMinSpacing, probe * 1.5f );
@@ -1462,7 +1759,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 					spacing,
 					null,
 					out GoldPileTreasurePlacement.VolumePose pose,
-					out Bounds validBounds ) )
+					out Bounds validBounds,
+					settings.VolumeMaxAttempts,
+					occupancyGrid ) )
 				{
 					return -1;
 				}

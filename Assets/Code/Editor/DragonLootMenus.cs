@@ -26,6 +26,13 @@ public static class DragonLootMenus
 
 	public const string GraphicsStylizedLightingInstall = Root + "/Graphics/Stylized Lighting/Install Definition";
 
+	public const string GraphicsLightFlickerInstall = Root + "/Graphics/Light Flicker/Install Definition";
+	public const string GraphicsLightFlickerResetPresets = Root + "/Graphics/Light Flicker/Reset Presets To Defaults";
+
+	// --- Audio ---
+	public const string AudioInstallDefinition = Root + "/Audio/Install Definition";
+	public const string AudioResetClipLists = Root + "/Audio/Reset Clip Lists To Defaults";
+
 	// --- Treasure content ---
 	public const string TreasureInstallArtifacts = Root + "/Treasure/Install Fantasy Pack Artifacts";
 	public const string TreasureInstallChests = Root + "/Treasure/Install Chests & Keys";
@@ -54,5 +61,9 @@ public static class DragonLootMenus
 	// --- Tools ---
 	public const string ToolsMilanoteSettings = Root + "/Tools/Milanote Sync Settings";
 	public const string ToolsMilanoteTasks = Root + "/Tools/Milanote Sync Tasks";
+
+	// --- Quests ---
+	public const string QuestsInstallCatalog = Root + "/Quests/Install Catalog & Content";
+	public const string QuestsWireLevel = Root + "/Quests/Create Standalone Level Setup Objects";
 }
 #endif

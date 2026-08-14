@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f99b73591a7b6c459e9c44d1b904580, type: 3}
+  m_Name: TreasurePileTinyDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileDefinition
+  displayName: Treasure Pile
+  coinContents:
+  - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    count: 100
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 100
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 500
+  treasureContents:
+  - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
+    count: 2
+  - treasure: {fileID: 11400000, guid: b6e1d4a8c2f53970e8a5b1d7c4f0e268, type: 2}
+    count: 2
+  - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
+    count: 1
+  maxVisibleTotal: 32
+  coinVisibleBufferFraction: 0.1
+  heightResolution: 32
+  worldSize: 4
+  maxHeight: 2
+  groundLevelHeight: 0.01
+  meshResolution: 32
+  meshDeformNormalSoften: 0
+  meshDeformSampleBlur: 0
+  pickRadius: 0.45
+  buryDepth: 0.18
+  initialRevealDepth: 0.06
+  placementMinSpacing: 0.18
+  enforcePlacementSpacing: 1
+  placementJitter: 0.3
+  placementRadiusFraction: 0.78
+  placementScaleJitter: 0.1
+  coinSurfaceHeightFraction: 0.01
+  coinPullToCarveCount: 2
+  treasureRadialPower: 1.1
+  treasureHeightBias: 0.4
+  treasurePickupOutsideFraction: 0.4
+  treasureReleaseOutsideFraction: 0.9
+  preferBakedLatents: 1
+  latentBake: {fileID: 11400000, guid: 6449a208ea6f2c54fbba683c0c65ad6d, type: 2}
+  latentVolumeMaxAttempts: 24
+  latentRetryNoOccupancyPasses: 1
+  latentRetrySaltPasses: 0
+  latentUseSpatialHash: 1
+  latentAvoidCoinSeats: 0
+  latentBuildBudgetMs: 12
+  latentBuildMaxAttemptsPerFrame: 64
+  pileMaterial: {fileID: 0}

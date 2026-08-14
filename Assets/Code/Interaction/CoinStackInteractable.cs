@@ -172,10 +172,11 @@ public class CoinStackInteractable : StackInteractable, ITreasureOwner, ITreasur
 
 		Transform root = StackRoot;
 		int slotIndex = CoinCount;
-		preview.Position = GetSlotWorldPosition( slotIndex );
-		preview.Rotation = root.rotation;
-		preview.Scale = item.GetWorldScale();
-		preview.IsValid = CanPlace( item, in query );
+		preview.SetItemMesh(
+			GetSlotWorldPosition( slotIndex ),
+			root.rotation,
+			item.GetWorldScale(),
+			CanPlace( item, in query ) );
 		return true;
 	}
 
@@ -418,7 +419,7 @@ public class CoinStackInteractable : StackInteractable, ITreasureOwner, ITreasur
 
 	protected virtual void PlayPlacementFx()
 	{
-		// SFX / sparkle hook — filled in a later block.
+		// Visual punch hook — place SFX is fired at land with stack-top position by callers.
 	}
 
 	IEnumerator PlaceTweenRoutine( TreasureItem item, Vector3 endLocalPos, Quaternion endLocalRot )
@@ -524,6 +525,8 @@ public class CoinStackInteractable : StackInteractable, ITreasureOwner, ITreasur
 					SyncCountsFromLogic();
 					RefreshVisualAndCollider( snap: false );
 					PlayPlacementFx();
+					if ( item.Definition != null )
+						TreasureInteractSfx.PlayPlace( item.Definition, endWorldPos );
 					TreasureItemFactory.Despawn( item );
 				}
 			}

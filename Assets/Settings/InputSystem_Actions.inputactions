@@ -638,6 +638,69 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "CategorySlot1",
+                    "type": "Button",
+                    "id": "19b7d3ec-3037-4e42-9ec9-d5d344c501e7",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CategorySlot2",
+                    "type": "Button",
+                    "id": "46ec92bc-29ff-4039-be0d-adbf1197475f",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CategorySlot3",
+                    "type": "Button",
+                    "id": "512dca2a-cd0a-4a32-abc7-52a2925513e6",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "WholeStackPickup",
+                    "type": "Button",
+                    "id": "a218db73-5a4f-4408-998b-691bebe01c7e",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "WholeStackPlace",
+                    "type": "Button",
+                    "id": "33134168-683c-4110-94ab-76e5517ab72a",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RotateLeft",
+                    "type": "Button",
+                    "id": "ecf33280-540c-43d0-9fb3-fdc33b3b15f7",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "RotateRight",
+                    "type": "Button",
+                    "id": "242a743e-b662-4493-8e7d-2c9b117ad713",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -813,7 +876,18 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "Clean",
+                    "action": "WholeStackPickup",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "46d00ce5-ea3a-4338-99e4-3c52b1fb84f9",
+                    "path": "<Keyboard>/f",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "WholeStackPlace",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -868,7 +942,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "AbilitySlot1",
+                    "action": "CategorySlot1",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -879,7 +953,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "AbilitySlot1",
+                    "action": "CategorySlot1",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -890,7 +964,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "AbilitySlot2",
+                    "action": "CategorySlot2",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -901,7 +975,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "AbilitySlot2",
+                    "action": "CategorySlot2",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -912,7 +986,7 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "AbilitySlot3",
+                    "action": "CategorySlot3",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -923,29 +997,29 @@
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "AbilitySlot3",
+                    "action": "CategorySlot3",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
                 {
                     "name": "",
-                    "id": "b1c2d3e4-f5a6-7890-abcd-ef1234567804",
-                    "path": "<Keyboard>/4",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "AbilitySlot4",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "c1d2e3f4-a5b6-7890-abcd-ef1234567804",
-                    "path": "<Gamepad>/dpad/left",
+                    "id": "1cb8b786-6f5a-4932-a12b-885b5cb38291",
+                    "path": "<Gamepad>/leftShoulder",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",
-                    "action": "AbilitySlot4",
+                    "action": "RotateLeft",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "ce5dee01-dbef-4317-818c-df82ae229281",
+                    "path": "<Gamepad>/rightShoulder",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "RotateRight",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

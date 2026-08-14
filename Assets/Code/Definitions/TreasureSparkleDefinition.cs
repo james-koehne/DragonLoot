@@ -25,7 +25,7 @@ public class TreasureSparkleDefinition : ScriptableObject
 	public const int DefaultMaxDiscoverCells = 65536;
 
 	[Header( "Feature" )]
-	public bool enableSparkles = true;
+	public bool enableSparkles = false;
 
 	[Tooltip( "Depth-tested redraw of registered treasure MeshRenderers / GPU instances into the mask." )]
 	public bool useFallbackRegistrar = true;

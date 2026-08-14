@@ -17,8 +17,8 @@ MonoBehaviour:
   useStencilResolve: 0
   maskResolutionScale: 0.25
   maskLootInstances: 1
-  sparkleOnPiles: 1
-  sparkleOnCoins: 1
+  sparkleOnPiles: 0
+  sparkleOnCoins: 0
   sparkleOnGems: 0
   sparkleOnArtifacts: 0
   cellSize: 2

@@ -73,6 +73,15 @@ public class TreasurePileVisualEditor : Editor
 
 		TreasurePileVisual visual = ( TreasurePileVisual )target;
 		EditorGUILayout.Space( 8f );
+		EditorGUILayout.LabelField( "Artifact Latent Bake", EditorStyles.boldLabel );
+		EditorGUILayout.HelpBox(
+			"Bakes deterministic latent poses from this pile's authored height + layout seed. "
+			+ "Each pile needs its own bake (heightmaps differ). Does not preview props.",
+			MessageType.None );
+		if ( GUILayout.Button( "Bake Latents For This Pile" ) )
+			BakeLatentsForVisual( visual );
+
+		EditorGUILayout.Space( 8f );
 		EditorGUILayout.LabelField( "Pile Sculpt (Edit Mode)", EditorStyles.boldLabel );
 
 		if ( Application.isPlaying )
@@ -288,6 +297,75 @@ public class TreasurePileVisualEditor : Editor
 		visual.EnsureEditorPreview();
 		_previewRevision = visual.AuthoredRevision;
 		SceneView.RepaintAll();
+	}
+
+	static void BakeLatentsForVisual( TreasurePileVisual visual )
+	{
+		if ( visual == null )
+			return;
+
+		visual.EnsureEditorPreview();
+		TreasurePileDefinition definition = visual.ResolveDefinitionForEditor();
+		if ( definition == null )
+		{
+			EditorUtility.DisplayDialog(
+				"Bake Latents",
+				"No TreasurePileDefinition on this visual / interactable.",
+				"OK" );
+			return;
+		}
+
+		if ( visual.Heightfield == null || !visual.Heightfield.IsInitialized )
+		{
+			EditorUtility.DisplayDialog( "Bake Latents", "Heightfield is not initialized.", "OK" );
+			return;
+		}
+
+		TreasurePileLatentBake bake = visual.LatentBake;
+		if ( bake == null )
+		{
+			string scenePath = visual.gameObject.scene.path;
+			string folder = "Assets";
+			if ( !string.IsNullOrEmpty( scenePath ) )
+			{
+				string sceneDir = System.IO.Path.GetDirectoryName( scenePath );
+				if ( !string.IsNullOrEmpty( sceneDir ) )
+					folder = sceneDir.Replace( '\\', '/' );
+			}
+
+			string safeName = visual.name.Replace( '/', '_' ).Replace( '\\', '_' );
+			string path = AssetDatabase.GenerateUniqueAssetPath(
+				$"{folder}/{safeName}_LatentBake.asset" );
+			bake = ScriptableObject.CreateInstance<TreasurePileLatentBake>();
+			AssetDatabase.CreateAsset( bake, path );
+			Undo.RecordObject( visual, "Assign Treasure Pile Latent Bake" );
+			visual.SetLatentBake( bake );
+			EditorUtility.SetDirty( visual );
+		}
+
+		GoldPileArtifactProps props = visual.ArtifactProps;
+		if ( props == null )
+		{
+			props = visual.GetComponent<GoldPileArtifactProps>();
+			if ( props == null )
+				props = visual.gameObject.AddComponent<GoldPileArtifactProps>();
+		}
+
+		Undo.RecordObject( bake, "Bake Treasure Pile Latents" );
+		props.BakeLatentsInto(
+			visual,
+			definition,
+			visual.Heightfield,
+			visual.transform,
+			visual.LootInstances,
+			visual.LootLayoutSeed,
+			bake );
+		EditorUtility.SetDirty( bake );
+		AssetDatabase.SaveAssets();
+		EditorUtility.DisplayDialog(
+			"Bake Latents",
+			$"Wrote {bake.PoseCount} poses to {bake.name} for pile '{visual.name}'.",
+			"OK" );
 	}
 
 	void ApplyOneShot( TreasurePileVisual visual, GoldPileEditorBrushMode mode, int iterations )

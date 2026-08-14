@@ -12,13 +12,16 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		None,
 		Traversable,
 		NonTraversable,
-		Material
+		Material,
+		Height
 	}
 
 	BoxBoundsHandle _boundsHandle;
 	PaintMode _paintMode = PaintMode.Traversable;
 	TreasureSurfaceMaterial _paintMaterial = TreasureSurfaceMaterial.Stone;
 	float _brushRadius = 0.5f;
+	float _paintHeight;
+	bool _paintHeightFromHit = true;
 	bool _showCellOverlay;
 	bool _painting;
 	bool _paintUndoRegistered;
@@ -28,16 +31,25 @@ public class TreasureSurfaceAuthoringEditor : Editor
 	void OnEnable()
 	{
 		_boundsHandle = new BoxBoundsHandle();
+		TreasureSurfaceAuthoring authoring = target as TreasureSurfaceAuthoring;
+		if ( authoring != null )
+			_paintHeight = authoring.BaseHeight;
+
+		_showCellOverlay = TreasureSurfaceAuthoringOverlay.GetSessionVisible();
+		if ( _showCellOverlay && authoring != null )
+			TreasureSurfaceAuthoringOverlay.Show( authoring );
 	}
 
 	void OnDisable()
 	{
 		TreasureSurfaceAuthoringOverlay.SetDeferTextureRebuild( false );
-		TreasureSurfaceAuthoringOverlay.Hide();
 
 		TreasureSurfaceAuthoring authoring = target as TreasureSurfaceAuthoring;
 		if ( authoring != null && _painting )
 			authoring.EndPaintNotifyBatch();
+
+		// Do not Hide here — inspector rebuilds would destroy the overlay.
+		// Visibility is owned by the toggle / SessionState.
 	}
 
 	public override void OnInspectorGUI()
@@ -68,21 +80,34 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		_brushRadius = EditorGUILayout.Slider( "Brush Radius (m)", _brushRadius, authoring.CellSize * 0.5f, 8f );
 		_paintMaterial = ( TreasureSurfaceMaterial )EditorGUILayout.EnumPopup( "Paint Material", _paintMaterial );
 
-		EditorGUI.BeginChangeCheck();
-		_showCellOverlay = EditorGUILayout.Toggle( "Show Traversable Overlay", _showCellOverlay );
-		if ( EditorGUI.EndChangeCheck() )
+		using ( new EditorGUI.DisabledScope( _paintMode != PaintMode.Height ) )
 		{
-			if ( _showCellOverlay )
-				TreasureSurfaceAuthoringOverlay.Show( authoring );
-			else
-				TreasureSurfaceAuthoringOverlay.Hide();
+			_paintHeightFromHit = EditorGUILayout.Toggle( "Height From Cursor Hit", _paintHeightFromHit );
+			_paintHeight = EditorGUILayout.FloatField( "Absolute Paint Height", _paintHeight );
+		}
+
+		EditorGUI.BeginChangeCheck();
+		_showCellOverlay = EditorGUILayout.Toggle( "Show Height Overlay", _showCellOverlay );
+		if ( EditorGUI.EndChangeCheck() )
+			TreasureSurfaceAuthoringOverlay.SetVisible( authoring, _showCellOverlay );
+
+		if ( _showCellOverlay )
+		{
+			TreasureSurfaceAuthoringOverlay.GetBuildStatus(
+				out int travChunks,
+				out int builtChunks,
+				out int pendingChunks,
+				out int paintTravCells );
+			EditorGUILayout.HelpBox(
+				$"Overlay: paintTrav={paintTravCells}  travChunks={travChunks}  built={builtChunks}  pending={pendingChunks}",
+				MessageType.None );
 		}
 
 		EditorGUILayout.HelpBox(
 			"Drag the green box handles to move/resize bounds.\n"
 			+ "Paint with LMB in the Scene view (snaps to cells).\n"
-			+ "Paint data is stored in a .paintbin sidecar (not in the ScriptableObject).\n"
-			+ "Overlay is a hidden textured mesh plane over the bounds.",
+			+ "Height mode sets absolute world Y. Bake raycasts traversable cells.\n"
+			+ "Overlay is a HideAndDontSave transparent green height mesh.",
 			MessageType.Info );
 
 		EditorGUILayout.BeginHorizontal();
@@ -106,6 +131,36 @@ public class TreasureSurfaceAuthoringEditor : Editor
 				TreasureSurfaceAuthoringOverlay.Show( authoring );
 		}
 		EditorGUILayout.EndHorizontal();
+
+		if ( GUILayout.Button( "Fill All Heights (Paint Height)" ) )
+		{
+			RecordPaintUndo( authoring, "Fill Treasure Surface Heights" );
+			authoring.FillAllHeights( _paintHeight );
+			MarkPaintDirty( authoring );
+			TreasureSurfaceAuthoringOverlay.Invalidate();
+			if ( _showCellOverlay )
+				TreasureSurfaceAuthoringOverlay.Show( authoring );
+		}
+
+		if ( GUILayout.Button( "Bake Heights From Raycasts" ) )
+		{
+			RecordPaintUndo( authoring, "Bake Treasure Surface Heights" );
+			authoring.ResolveBakeRay( out float startY, out float distance );
+			int hits = authoring.BakeHeightsFromRaycasts();
+			MarkPaintDirty( authoring );
+			TreasureSurfaceAuthoringOverlay.Invalidate();
+			if ( _showCellOverlay )
+				TreasureSurfaceAuthoringOverlay.Show( authoring );
+			Debug.Log(
+				"TreasureSurfaceAuthoring: baked heights for " + hits + " cell(s). "
+				+ "startY=" + startY.ToString( "0.###" )
+				+ " dist=" + distance.ToString( "0.###" )
+				+ " mask=" + authoring.HeightBakeMask.value );
+		}
+
+		EditorGUILayout.HelpBox(
+			"Height Overlay builds full-resolution chunk meshes across editor frames (Overlay Chunks Per Frame on the component).",
+			MessageType.None );
 
 		if ( GUILayout.Button( "Pull Layout From Definition" ) )
 		{
@@ -148,8 +203,6 @@ public class TreasureSurfaceAuthoringEditor : Editor
 			if ( e.type == EventType.Repaint )
 				TreasureSurfaceAuthoringOverlay.MaintainVisible( authoring );
 		}
-		else
-			TreasureSurfaceAuthoringOverlay.Hide();
 
 		HandlePaintInput( authoring );
 	}
@@ -214,7 +267,6 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		int controlId = GUIUtility.GetControlID( FocusType.Passive );
 		HandleUtility.AddDefaultControl( controlId );
 
-		// MouseMove alone does not repaint Scene view; request one so the brush cursor tracks.
 		if ( e.type == EventType.MouseMove || e.type == EventType.MouseDrag )
 			HandleUtility.Repaint();
 
@@ -224,7 +276,9 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		{
 			Handles.color = _paintMode == PaintMode.NonTraversable
 				? new Color( 1f, 0.2f, 0.2f, 0.4f )
-				: new Color( 0.2f, 1f, 0.35f, 0.4f );
+				: _paintMode == PaintMode.Height
+					? new Color( 0.35f, 0.85f, 1f, 0.4f )
+					: new Color( 0.2f, 1f, 0.35f, 0.4f );
 			Handles.DrawSolidDisc( _brushHit, Vector3.up, _brushRadius );
 			Handles.color = Color.white;
 			Handles.DrawWireDisc( _brushHit, Vector3.up, _brushRadius );
@@ -269,16 +323,33 @@ public class TreasureSurfaceAuthoringEditor : Editor
 				_paintUndoRegistered = true;
 			}
 
-			bool trav = _paintMode != PaintMode.NonTraversable;
-			bool paintTrav = _paintMode == PaintMode.Traversable || _paintMode == PaintMode.NonTraversable;
-			bool paintMat = _paintMode == PaintMode.Material || _paintMode == PaintMode.Traversable;
-			if ( e.shift )
+			if ( _paintMode == PaintMode.Height )
 			{
-				trav = false;
-				paintTrav = true;
+				float h = _paintHeightFromHit ? _brushHit.y : _paintHeight;
+				authoring.PaintBrush(
+					_brushHit,
+					_brushRadius,
+					true,
+					_paintMaterial,
+					paintTraversable: false,
+					paintMaterial: false,
+					paintHeight: true,
+					height: h );
+			}
+			else
+			{
+				bool trav = _paintMode != PaintMode.NonTraversable;
+				bool paintTrav = _paintMode == PaintMode.Traversable || _paintMode == PaintMode.NonTraversable;
+				bool paintMat = _paintMode == PaintMode.Material || _paintMode == PaintMode.Traversable;
+				if ( e.shift )
+				{
+					trav = false;
+					paintTrav = true;
+				}
+
+				authoring.PaintBrush( _brushHit, _brushRadius, trav, _paintMaterial, paintTrav, paintMat );
 			}
 
-			authoring.PaintBrush( _brushHit, _brushRadius, trav, _paintMaterial, paintTrav, paintMat );
 			e.Use();
 		}
 	}
@@ -286,6 +357,27 @@ public class TreasureSurfaceAuthoringEditor : Editor
 	void UpdateBrushHit( TreasureSurfaceAuthoring authoring, Vector2 guiPoint )
 	{
 		Ray ray = HandleUtility.GUIPointToWorldRay( guiPoint );
+
+		// Prefer physics hit so height paint can sample scene geometry Y.
+		if ( Physics.Raycast(
+			ray,
+			out RaycastHit hit,
+			5000f,
+			authoring.HeightBakeMask,
+			authoring.HeightBakeTriggerInteraction ) )
+		{
+			Vector3 p = hit.point;
+			if ( authoring.TryWorldToCell( p, out int cx, out int cz ) )
+			{
+				Vector3 cell = authoring.CellCenterWorld( cx, cz );
+				_brushHit = new Vector3( cell.x, p.y, cell.z );
+			}
+			else
+				_brushHit = p;
+			_hasBrushHit = true;
+			return;
+		}
+
 		Plane ground = new Plane( Vector3.up, new Vector3( 0f, authoring.BaseHeight, 0f ) );
 		if ( !ground.Raycast( ray, out float enter ) )
 		{
@@ -293,11 +385,11 @@ public class TreasureSurfaceAuthoringEditor : Editor
 			return;
 		}
 
-		Vector3 hit = ray.GetPoint( enter );
-		if ( authoring.TryWorldToCell( hit, out int cx, out int cz ) )
-			hit = authoring.CellCenterWorld( cx, cz );
+		Vector3 planeHit = ray.GetPoint( enter );
+		if ( authoring.TryWorldToCell( planeHit, out int cellX, out int cellZ ) )
+			planeHit = authoring.CellCenterWorld( cellX, cellZ );
 
-		_brushHit = hit;
+		_brushHit = planeHit;
 		_hasBrushHit = true;
 	}
 

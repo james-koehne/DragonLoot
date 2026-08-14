@@ -30,8 +30,10 @@ public class PlayerController : MonoBehaviour
 	PlayerPlacement _placement;
 	PlayerTreasurePilePull _pilePull;
 	PlayerMinecartPush _minecartPush;
+	PlayerSorterReposition _sorterReposition;
 	PlayerAbilities _abilities;
 	PlayerCleaning _cleaning;
+	PlayerWholeStackInteraction _wholeStack;
 	CharacterController _characterController;
 	bool gameplayInputEnabled = true;
 	float _verticalVelocity;
@@ -42,6 +44,7 @@ public class PlayerController : MonoBehaviour
 	float _groundAngle;
 	bool _hasGroundHit;
 	float _groundDistance;
+	Collider _groundCollider;
 	bool _isSliding;
 	bool _isClimbing;
 	float _climbReleaseTimer;
@@ -151,12 +154,16 @@ public class PlayerController : MonoBehaviour
 	public PlayerTreasurePilePull PilePull => _pilePull;
 
 	public PlayerMinecartPush MinecartPush => _minecartPush;
+	public PlayerSorterReposition SorterReposition => _sorterReposition;
 	public PlayerAbilities Abilities => _abilities;
 	public PlayerCleaning Cleaning => _cleaning;
+	public PlayerWholeStackInteraction WholeStack => _wholeStack;
 
 	public bool IsGrounded { get; private set; }
 	public PlayerMovementState MovementState { get; private set; } = PlayerMovementState.Walking;
 	public bool WasLandingThisFrame { get; private set; }
+	public bool WasJumpThisFrame { get; private set; }
+	public Collider GroundCollider => _groundCollider;
 	public Vector3 PlanarVelocity => _planarVelocity;
 	public float PlanarSpeed => _planarVelocity.magnitude;
 	public Vector3 LocalPlanarVelocity => _localPlanarVelocity;
@@ -183,6 +190,7 @@ public class PlayerController : MonoBehaviour
 	public float SlideExitBoostSpeed => _slideExitBoostSpeed;
 	public bool IsGliding => _isGliding;
 	public float GroundAngle => _groundAngle;
+	public bool GameplayInputEnabled => gameplayInputEnabled;
 
 	/// <summary>
 	/// Ends an active slide and kills residual slide/coast planar velocity.
@@ -303,8 +311,11 @@ public class PlayerController : MonoBehaviour
 		EnsurePlacement();
 		EnsurePilePull();
 		EnsureMinecartPush();
+		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
+		EnsureWholeStack();
+		EnsureFootsteps();
 		EnsureUpgrades();
 
 		if ( cameraMount == null )
@@ -332,8 +343,11 @@ public class PlayerController : MonoBehaviour
 		EnsurePlacement();
 		EnsurePilePull();
 		EnsureMinecartPush();
+		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
+		EnsureWholeStack();
+		EnsureFootsteps();
 		EnsureUpgrades();
 
 		_interaction.Setup( this, _cameraLook );
@@ -342,8 +356,12 @@ public class PlayerController : MonoBehaviour
 		_abilities.Setup( this );
 		if ( _cleaning != null )
 			_cleaning.Setup( this );
+		if ( _wholeStack != null )
+			_wholeStack.Setup( this, _interaction, _placement );
 		if ( _minecartPush != null )
 			_minecartPush.Setup( this );
+		if ( _sorterReposition != null )
+			_sorterReposition.Setup( this );
 	}
 
 	public bool CanReceiveInteractable( IInteractable interactable )
@@ -462,6 +480,14 @@ public class PlayerController : MonoBehaviour
 			_minecartPush = gameObject.AddComponent<PlayerMinecartPush>();
 	}
 
+	void EnsureSorterReposition()
+	{
+		if ( _sorterReposition == null )
+			_sorterReposition = GetComponent<PlayerSorterReposition>();
+		if ( _sorterReposition == null )
+			_sorterReposition = gameObject.AddComponent<PlayerSorterReposition>();
+	}
+
 	void EnsureAbilities()
 	{
 		if ( _abilities == null )
@@ -478,6 +504,20 @@ public class PlayerController : MonoBehaviour
 			_cleaning = gameObject.AddComponent<PlayerCleaning>();
 	}
 
+	void EnsureWholeStack()
+	{
+		if ( _wholeStack == null )
+			_wholeStack = GetComponent<PlayerWholeStackInteraction>();
+		if ( _wholeStack == null )
+			_wholeStack = gameObject.AddComponent<PlayerWholeStackInteraction>();
+	}
+
+	void EnsureFootsteps()
+	{
+		if ( GetComponent<PlayerFootsteps>() == null )
+			gameObject.AddComponent<PlayerFootsteps>();
+	}
+
 	void EnsureUpgrades()
 	{
 		UpgradeSystem.Ensure( this );
@@ -491,6 +531,7 @@ public class PlayerController : MonoBehaviour
 	bool ProbeGround( Vector3 flatMoveIntent, Vector3 priorGroundNormal, bool hadPriorGround )
 	{
 		_hasGroundHit = false;
+		_groundCollider = null;
 		_groundNormal = Vector3.up;
 		_groundAngle = 0f;
 		_groundDistance = float.MaxValue;
@@ -515,6 +556,7 @@ public class PlayerController : MonoBehaviour
 		if ( castHit )
 		{
 			_hasGroundHit = true;
+			_groundCollider = hit.collider;
 			_groundNormal = hit.normal.sqrMagnitude > 0.0001f ? hit.normal.normalized : Vector3.up;
 			_groundAngle = Vector3.Angle( _groundNormal, Vector3.up );
 			_groundDistance = hit.distance;
@@ -586,6 +628,7 @@ public class PlayerController : MonoBehaviour
 		bool hadPriorGround = _hasGroundHit;
 		bool grounded = ProbeGround( flatMoveIntent, priorGroundNormal, hadPriorGround );
 		WasLandingThisFrame = grounded && !_wasGrounded;
+		WasJumpThisFrame = false;
 		IsGrounded = grounded;
 
 		if ( !grounded && _isSliding )
@@ -641,6 +684,8 @@ public class PlayerController : MonoBehaviour
 					ClearClimb();
 					ClearSlideExitBoost();
 					_hasGroundHit = false;
+					_groundCollider = null;
+					WasJumpThisFrame = true;
 				}
 				else if ( _isGliding
 				          && !IsGrounded
@@ -663,6 +708,7 @@ public class PlayerController : MonoBehaviour
 					ClearClimb();
 					ClearSlideExitBoost();
 					_hasGroundHit = false;
+					_groundCollider = null;
 				}
 			}
 		}
@@ -1207,6 +1253,8 @@ public class PlayerController : MonoBehaviour
 		ClearClimb();
 		ClearSlideExitBoost();
 		_hasGroundHit = false;
+		_groundCollider = null;
+		WasJumpThisFrame = true;
 	}
 
 	Vector3 ComposeGroundedMoveVelocity( Vector3 slopeVelocity )
@@ -1380,6 +1428,7 @@ public class PlayerController : MonoBehaviour
 		_groundNormal = Vector3.up;
 		_groundAngle = 0f;
 		_hasGroundHit = false;
+		_groundCollider = null;
 		UpdateMovementState();
 
 		if ( _carry != null )
@@ -1412,6 +1461,7 @@ public class PlayerController : MonoBehaviour
 		_groundNormal = Vector3.up;
 		_groundAngle = 0f;
 		_hasGroundHit = false;
+		_groundCollider = null;
 		MovementState = PlayerMovementState.Airborne;
 
 		if ( _characterController != null )
@@ -1436,6 +1486,9 @@ public class PlayerController : MonoBehaviour
 
 		if ( _cleaning != null )
 			_cleaning.SetInputEnabled( enabled );
+
+		if ( _wholeStack != null )
+			_wholeStack.SetInputEnabled( enabled );
 	}
 
 	static GameInput GetGameInput()

@@ -17,10 +17,18 @@ struct CoinStackSeamView
     bool valid;
 };
 
-// Offset from quantized world-space coin center so adding coins on top
-// (mesh Y scale / origin shift) does not reshuffle lower coins.
+// Stable lateral seam offset from static instance seed + coin index (not world position),
+// so flying / relocating a stack does not reshuffle seams.
+float2 CoinStackCoinOffsetFromSeed(float coinIndex, float instanceSeed)
+{
+    float h0 = CoinStackHash11(instanceSeed * 12.9898 + coinIndex * 78.233);
+    float h1 = CoinStackHash11(instanceSeed * 37.719 + coinIndex * 19.19 + 17.13);
+    return (float2(h0, h1) - 0.5) * 2.0 * (float)_SeamWorldOffsetMax;
+}
+
 float2 CoinStackCoinOffsetFromWorldPos(float3 coinCenterWS)
 {
+    // Legacy helper kept for compatibility; prefer CoinStackCoinOffsetFromSeed.
     float qx = floor(coinCenterWS.x * 64.0 + 0.5);
     float qy = floor(coinCenterWS.y * 64.0 + 0.5);
     float qz = floor(coinCenterWS.z * 64.0 + 0.5);
@@ -84,7 +92,7 @@ CoinStackSeamView CoinStackEvaluateSeamView(
 
     seam.radialWS = toPixelXZ / radialLen;
 
-    float2 offsetWS = CoinStackCoinOffsetFromWorldPos(coinCenterWS);
+    float2 offsetWS = CoinStackCoinOffsetFromSeed(coinIndex, instanceSeed);
     float offLen = length(offsetWS);
 
     float2 viewXZ = _WorldSpaceCameraPos.xz - positionWS.xz;

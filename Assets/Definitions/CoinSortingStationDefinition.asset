@@ -17,5 +17,33 @@ MonoBehaviour:
   level4HopperCapacity: 150
   baseCoinsPerSecond: 4
   level3CoinsPerSecond: 10
-  crankHoldGrace: 0.35
+  crankHoldGrace: 1
+  crankLoopClips:
+  - {fileID: 8300000, guid: aee1a18694c8ca446bf97f2b59b15628, type: 3}
+  - {fileID: 8300000, guid: ed50aad8c656ef6498801d925258a525, type: 3}
+  crankVolume: 0.5
+  crankPitchMin: 0.9
+  crankPitchMax: 1.1
+  crankPlayInterval: 1
+  crankOverlapFadeSeconds: 0.12
+  crankStopFadeSeconds: 0.15
   fullStackLateralOffset: 0.35
+  moveHoldSeconds: 0.5
+  carryDistance: 3
+  minCarryDistance: 2
+  carryHeightOffset: 0.2
+  floorHoverClearance: 0.08
+  unstickSearchDistance: 1.1
+  followSmoothTime: 0.18
+  yawInertiaSmoothTime: 0.22
+  bobAmplitude: 0.04
+  bobFrequency: 1.6
+  bobFullSpeed: 5
+  rotateStepDegrees: 15
+  floorSnapDistance: 2.5
+  minFloorUpDot: 0.7
+  placementBoundsShrink: 0.1
+  operationalClearanceSize: {x: 0.85, y: 1.6, z: 0.6}
+  operationalClearanceCenter: {x: 0, y: 0.85, z: 0.95}
+  placeTweenSeconds: 0.28
+  surfaceAlignStrength: 0.25

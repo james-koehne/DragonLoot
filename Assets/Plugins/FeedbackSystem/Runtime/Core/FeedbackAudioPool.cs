@@ -14,6 +14,18 @@ namespace FeedbackSystem
 
 		public static void Play( AudioClip clip, float volume, float pitch, Vector3 position )
 		{
+			Play( clip, volume, pitch, position, spatialBlend: 0f, minDistance: 1f, maxDistance: 20f );
+		}
+
+		public static void Play(
+			AudioClip clip,
+			float volume,
+			float pitch,
+			Vector3 position,
+			float spatialBlend,
+			float minDistance,
+			float maxDistance )
+		{
 			if ( clip == null )
 				return;
 
@@ -23,6 +35,9 @@ namespace FeedbackSystem
 				return;
 
 			source.transform.position = position;
+			source.spatialBlend = Mathf.Clamp01( spatialBlend );
+			source.minDistance = Mathf.Max( 0.01f, minDistance );
+			source.maxDistance = Mathf.Max( source.minDistance, maxDistance );
 			source.pitch = pitch <= 0f ? 1f : pitch;
 			source.PlayOneShot( clip, volume );
 		}
@@ -50,6 +65,9 @@ namespace FeedbackSystem
 			AudioSource source = sourceObject.AddComponent<AudioSource>();
 			source.playOnAwake = false;
 			source.spatialBlend = 0f;
+			source.rolloffMode = AudioRolloffMode.Linear;
+			source.minDistance = 1f;
+			source.maxDistance = 20f;
 			source.volume = 1f;
 			return source;
 		}

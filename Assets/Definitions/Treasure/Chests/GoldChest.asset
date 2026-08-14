@@ -51,3 +51,13 @@ MonoBehaviour:
   canStack: 0
   coinThickness: 0.4
   cartGridSize: {x: 2, y: 2}
+  pickupClips: []
+  pickupVolumeMin: 1
+  pickupVolumeMax: 1
+  pickupPitchMin: 1
+  pickupPitchMax: 1
+  placeClips: []
+  placeVolumeMin: 1
+  placeVolumeMax: 1
+  placePitchMin: 1
+  placePitchMax: 1

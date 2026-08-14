@@ -117,6 +117,15 @@ public class TreasureItemInteractable : InteractableBase
 		if ( item.Owner != null && item.Owner.OwnerKind == TreasureOwnerKind.Minecart )
 			return false;
 
+		if ( UsesDisplayedCoinStackPickup( item ) )
+		{
+			PlayerCarry carry = player.Carry;
+			if ( carry == null )
+				return false;
+
+			return carry.CanAdd( item.Definition );
+		}
+
 		if ( UsesColumnPickup( item ) )
 		{
 			PlayerCarry carry = player.Carry;
@@ -150,6 +159,12 @@ public class TreasureItemInteractable : InteractableBase
 			&& !cleaningStation.AllowsPickup )
 			return;
 
+		if ( UsesDisplayedCoinStackPickup( item ) )
+		{
+			TryPickupDisplayedCoin( player, item );
+			return;
+		}
+
 		if ( UsesColumnPickup( item ) )
 		{
 			TryPickupSupportStack( player );
@@ -174,6 +189,20 @@ public class TreasureItemInteractable : InteractableBase
 
 		if ( pile != null )
 			pile.CompleteSteal( item );
+	}
+
+	static bool UsesDisplayedCoinStackPickup( TreasureItem item )
+	{
+		if ( item == null || item.Definition == null )
+			return false;
+
+		if ( item.State != TreasureItemState.Displayed )
+			return false;
+
+		if ( item.Definition.category != TreasureCategory.Coin )
+			return false;
+
+		return item.Owner is ITreasureDisplayStackOwner;
 	}
 
 	static bool UsesColumnPickup( TreasureItem item )
@@ -264,6 +293,19 @@ public class TreasureItemInteractable : InteractableBase
 
 		results.Add( selected );
 		return true;
+	}
+
+	static void TryPickupDisplayedCoin( PlayerController player, TreasureItem item )
+	{
+		if ( player == null || item == null )
+			return;
+
+		PlayerCarry carry = player.Carry;
+		if ( carry == null )
+			return;
+
+		carry.TrySetSelectedBucket( CarryBucketKind.Coin );
+		carry.TryReceiveActiveCoinFromWorld( item );
 	}
 
 	void TryPickupSupportStack( PlayerController player )

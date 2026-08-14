@@ -435,13 +435,16 @@ public sealed class TreasureSurfaceSimulator
 		next.x += velocity.x * dt;
 		next.z += velocity.z * dt;
 
+		TreasureSurfaceSample fromSample = sample;
+		float sheer = Mathf.Max( 0.01f, def.sheerStepHeight );
+
 		float edgeDeflect = bounce * Mathf.Max( 0.1f, def.softEdgeDeflectScale );
-		if ( !sampler.TrySample( next, out TreasureSurfaceSample nextSample ) || !nextSample.Traversable )
+		if ( !TryAcceptStep( sampler, fromSample, next, sheer, out TreasureSurfaceSample nextSample ) )
 		{
 			Vector3 slideX = new Vector3( next.x, pos.y, pos.z );
 			Vector3 slideZ = new Vector3( pos.x, pos.y, next.z );
-			bool okX = sampler.TrySample( slideX, out TreasureSurfaceSample sx ) && sx.Traversable;
-			bool okZ = sampler.TrySample( slideZ, out TreasureSurfaceSample sz ) && sz.Traversable;
+			bool okX = TryAcceptStep( sampler, fromSample, slideX, sheer, out TreasureSurfaceSample sx );
+			bool okZ = TryAcceptStep( sampler, fromSample, slideZ, sheer, out TreasureSurfaceSample sz );
 
 			if ( okX && !okZ )
 			{
@@ -467,7 +470,7 @@ public sealed class TreasureSurfaceSimulator
 			}
 			else
 			{
-				// Corner / dead-end: soft reverse along approach, stay put. Recover only if current sample is invalid.
+				// Corner / dead-end / sheer climb: soft reverse along approach, stay put.
 				next = pos;
 				Vector2 approach = new Vector2( velocity.x, velocity.z );
 				if ( approach.sqrMagnitude > 0.0001f )
@@ -488,6 +491,17 @@ public sealed class TreasureSurfaceSimulator
 			}
 		}
 
+		// Sheer drop: leave the high seat and fall with throw-style bounce on impact.
+		float stepDown = fromSample.Height - nextSample.Height;
+		if ( !airborne && stepDown > sheer )
+		{
+			body.HeightAboveSurface = Mathf.Max( body.HeightAboveSurface, stepDown );
+			if ( body.BouncesRemaining <= 0 )
+				body.BouncesRemaining = ResolveBounceCount( body.Category, def );
+			body.HasLandedOnce = false;
+			airborne = true;
+		}
+
 		sample = nextSample;
 		pos = next;
 
@@ -495,7 +509,15 @@ public sealed class TreasureSurfaceSimulator
 		{
 			ApplyGemPush( ref pos, ref velocity, item, def, sampler );
 			if ( sampler.TrySample( pos, out TreasureSurfaceSample pushedSample ) && pushedSample.Traversable )
-				sample = pushedSample;
+			{
+				if ( ( pushedSample.Height - sample.Height ) <= sheer )
+					sample = pushedSample;
+				else
+				{
+					pos.x = next.x;
+					pos.z = next.z;
+				}
+			}
 		}
 
 		float contactY = sample.Height + body.SeatLift;
@@ -538,8 +560,9 @@ public sealed class TreasureSurfaceSimulator
 			}
 		}
 
-		// Seat on stable lift only — rotation-dependent mesh bottoms float artifacts mid-air.
-		pos.y = Mathf.Max( sample.Height, contactY + Mathf.Max( 0f, body.HeightAboveSurface ) );
+		// Never seat below the sampled surface — contact lift may raise above it.
+		float seatedY = contactY + Mathf.Max( 0f, body.HeightAboveSurface );
+		pos.y = Mathf.Max( sample.Height, seatedY );
 
 		Quaternion rot = IntegrateRotation( ref body, t.rotation, sample.Normal, velocity, def, dt );
 		t.SetPositionAndRotation( pos, rot );
@@ -554,10 +577,12 @@ public sealed class TreasureSurfaceSimulator
 		bool stillAirborne = body.HeightAboveSurface > 0.001f || Mathf.Abs( body.VerticalVelocity ) > 0.05f;
 		float speedSq = velocity.sqrMagnitude + body.VerticalVelocity * body.VerticalVelocity;
 		float sleepSq = def.sleepSpeedThreshold * def.sleepSpeedThreshold;
+		// Settle when nearly stopped even on mild slopes; keep sliding on steep faces.
+		bool slopeTooSteep = sample.Slope >= def.steepSlopeThreshold;
 		bool canSleep = !stillAirborne
 			&& body.BouncesRemaining <= 0
 			&& speedSq <= sleepSq
-			&& sample.Stable
+			&& !slopeTooSteep
 			&& body.AngularVelocity.sqrMagnitude <= 0.25f;
 
 		if ( canSleep )
@@ -576,6 +601,23 @@ public sealed class TreasureSurfaceSimulator
 		}
 
 		body.Velocity = velocity;
+	}
+
+	static bool TryAcceptStep(
+		TreasureSurfaceSampler sampler,
+		TreasureSurfaceSample from,
+		Vector3 worldPos,
+		float sheerStepHeight,
+		out TreasureSurfaceSample sample )
+	{
+		if ( !sampler.TrySample( worldPos, out sample ) || !sample.Traversable )
+			return false;
+
+		// Block sheer climbs; mild slopes (below threshold) remain allowed.
+		if ( sample.Height - from.Height > sheerStepHeight )
+			return false;
+
+		return true;
 	}
 
 	void ApplySurfaceBounce(

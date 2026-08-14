@@ -121,6 +121,37 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "Cells this treasure occupies on a minecart cargo grid (X = columns, Y = rows). Minimum 1×1." )]
 	public Vector2Int cartGridSize = Vector2Int.one;
 
+	[Header( "Audio" )]
+	[Tooltip( "Random one-shots when this treasure is picked up into the hand." )]
+	public AudioClip[] pickupClips;
+
+	[Range( 0f, 1f )]
+	public float pickupVolumeMin = 1f;
+
+	[Range( 0f, 1f )]
+	public float pickupVolumeMax = 1f;
+
+	[Range( -3f, 3f )]
+	public float pickupPitchMin = 1f;
+
+	[Range( -3f, 3f )]
+	public float pickupPitchMax = 1f;
+
+	[Tooltip( "Random one-shots when this treasure is placed." )]
+	public AudioClip[] placeClips;
+
+	[Range( 0f, 1f )]
+	public float placeVolumeMin = 1f;
+
+	[Range( 0f, 1f )]
+	public float placeVolumeMax = 1f;
+
+	[Range( -3f, 3f )]
+	public float placePitchMin = 1f;
+
+	[Range( -3f, 3f )]
+	public float placePitchMax = 1f;
+
 	public float GetStackThickness()
 	{
 		if ( coinThickness > 0.0001f )

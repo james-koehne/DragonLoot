@@ -12,12 +12,15 @@ float CoinStackHash11(float p)
 
 float CoinStackInstanceSeed()
 {
-    float3 origin = float3(UNITY_MATRIX_M._m03, UNITY_MATRIX_M._m13, UNITY_MATRIX_M._m23);
-    float seed = dot(origin, float3(12.9898, 78.233, 37.719));
+	// Prefer an authored/static seed from C# (_VariationSeed). Never hash world position —
+	// stacks fly and must keep a stable look.
+	float seed = (float)_VariationSeed;
+	if ( abs( seed ) < 1e-5 )
+		seed = 1.0;
 #if defined(UNITY_INSTANCING_ENABLED)
-    seed += (float)unity_InstanceID * 19.19;
+	seed += (float)unity_InstanceID * 19.19;
 #endif
-    return CoinStackHash11(seed);
+	return CoinStackHash11( seed );
 }
 
 float CoinStackComputeStackY01(float positionYOS)

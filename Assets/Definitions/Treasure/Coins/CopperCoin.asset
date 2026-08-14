@@ -31,6 +31,9 @@ MonoBehaviour:
   physicsStabilizationDelay: 0.35
   pickupRadius: 0.35
   collideWithPlayerOnPile: 0
+  keyType: 0
+  isSkeletonKey: 0
+  chestDefinition: {fileID: 0}
   icon: {fileID: 0}
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
@@ -44,5 +47,37 @@ MonoBehaviour:
   heldScale: {x: 0.2, y: 0.2, z: 0.2}
   activeHeldLocalEuler: {x: 0, y: 0, z: 0}
   heldStackLocalEuler: {x: 0, y: 0, z: 0}
+  cleaningRequirement: 0
   canStack: 1
   coinThickness: 0.041
+  cartGridSize: {x: 1, y: 1}
+  pickupClips:
+  - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}
+  - {fileID: 8300000, guid: 449644be6cb6b8a43886fef376fec4e6, type: 3}
+  - {fileID: 8300000, guid: 28f2c21490ba0cc40843a1a97722c7ef, type: 3}
+  - {fileID: 8300000, guid: faa2798ac5e8c014fa5d4d6f87a8ed06, type: 3}
+  - {fileID: 8300000, guid: cb8c543b3a2d90844b9b1c746598bca9, type: 3}
+  - {fileID: 8300000, guid: 8864f521ef8c4064b87be3ddedb035cb, type: 3}
+  - {fileID: 8300000, guid: 3aaa4c9a5551771448d943bfde51b178, type: 3}
+  - {fileID: 8300000, guid: 0d205f7e56d7b914d9f4e55adc916957, type: 3}
+  - {fileID: 8300000, guid: 0e14a86851c6b7c498e2e14cd36c0b54, type: 3}
+  - {fileID: 8300000, guid: ed39b02063c6a124bac103dbddc777c5, type: 3}
+  pickupVolumeMin: 0.7
+  pickupVolumeMax: 0.8
+  pickupPitchMin: 0.9
+  pickupPitchMax: 1.1
+  placeClips:
+  - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}
+  - {fileID: 8300000, guid: 449644be6cb6b8a43886fef376fec4e6, type: 3}
+  - {fileID: 8300000, guid: 28f2c21490ba0cc40843a1a97722c7ef, type: 3}
+  - {fileID: 8300000, guid: faa2798ac5e8c014fa5d4d6f87a8ed06, type: 3}
+  - {fileID: 8300000, guid: cb8c543b3a2d90844b9b1c746598bca9, type: 3}
+  - {fileID: 8300000, guid: 8864f521ef8c4064b87be3ddedb035cb, type: 3}
+  - {fileID: 8300000, guid: 3aaa4c9a5551771448d943bfde51b178, type: 3}
+  - {fileID: 8300000, guid: 0d205f7e56d7b914d9f4e55adc916957, type: 3}
+  - {fileID: 8300000, guid: 0e14a86851c6b7c498e2e14cd36c0b54, type: 3}
+  - {fileID: 8300000, guid: ed39b02063c6a124bac103dbddc777c5, type: 3}
+  placeVolumeMin: 0.7
+  placeVolumeMax: 0.8
+  placePitchMin: 0.9
+  placePitchMax: 1.1

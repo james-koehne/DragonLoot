@@ -26,7 +26,7 @@ namespace FeedbackSystem
 			if ( _stateHash == 0 )
 				_stateHash = Animator.StringToHash( StateName );
 
-			Animator.Play( _stateHash );
+			Animator.Play( _stateHash, -1, 0f );
 		}
 	}
 }

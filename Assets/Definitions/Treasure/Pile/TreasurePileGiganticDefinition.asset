@@ -15,11 +15,11 @@ MonoBehaviour:
   displayName: Treasure Pile
   coinContents:
   - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    count: 2000
+    count: 250000
   - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
-    count: 2000
+    count: 250000
   - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    count: 10000
+    count: 1250000
   treasureContents:
   - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
     count: 120
@@ -84,8 +84,8 @@ MonoBehaviour:
   maxVisibleTotal: 9600
   coinVisibleBufferFraction: 0.2
   heightResolution: 512
-  worldSize: 128
-  maxHeight: 128
+  worldSize: 64
+  maxHeight: 90
   groundLevelHeight: 0.01
   meshResolution: 512
   meshDeformNormalSoften: 0
@@ -104,4 +104,12 @@ MonoBehaviour:
   treasureHeightBias: 0.4
   treasurePickupOutsideFraction: 0.4
   treasureReleaseOutsideFraction: 0.9
+  preferBakedLatents: 1
+  latentVolumeMaxAttempts: 24
+  latentRetryNoOccupancyPasses: 1
+  latentRetrySaltPasses: 0
+  latentUseSpatialHash: 1
+  latentAvoidCoinSeats: 0
+  latentBuildBudgetMs: 12
+  latentBuildMaxAttemptsPerFrame: 64
   pileMaterial: {fileID: 0}

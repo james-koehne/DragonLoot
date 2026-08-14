@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6e1a85d66101ca04e85342d7592dcce7, type: 3}
+  m_Name: AudioDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::AudioDefinition
+  musicTracks:
+  - {fileID: 8300000, guid: b27e5b1e9f7f37f4b8b43d39a432aead, type: 3}
+  - {fileID: 8300000, guid: a3efd02ea0d48cd4798a32206d4b29f3, type: 3}
+  - {fileID: 8300000, guid: 46a0a4232c8edb24c854c5d0ffe62486, type: 3}
+  - {fileID: 8300000, guid: 2f18e82f12f075247aa3a91b6cd183ad, type: 3}
+  - {fileID: 8300000, guid: b3ddbd6c0b375da41abf02ac13886d84, type: 3}
+  musicVolume: 0.4
+  musicPlaysPerTrack: 3
+  musicCrossfadeSeconds: 3
+  ambienceTracks:
+  - {fileID: 8300000, guid: 8b2d49def0589664b9cec269201cd694, type: 3}
+  - {fileID: 8300000, guid: 1d5b210e22a4e4444b6a63183d38b3e6, type: 3}
+  ambienceVolume: 0.2
+  ambiencePlaysPerTrack: 1
+  ambienceCrossfadeSeconds: 0
+  groundStepClips:
+  - {fileID: 8300000, guid: 80ad976df21697e4b9b5b10fe29c76a0, type: 3}
+  - {fileID: 8300000, guid: 9c09d330525a1444bb35a6e346ffc1a7, type: 3}
+  - {fileID: 8300000, guid: aae82a66e8e5cd641b6c55d083eb699c, type: 3}
+  - {fileID: 8300000, guid: d9d14cfb731935e459a4047e79ca2e1a, type: 3}
+  goldPileStepClips:
+  - {fileID: 8300000, guid: e24abe81ee7b1b842a23bc5d371e795a, type: 3}
+  - {fileID: 8300000, guid: 0ed3e9701e715ee40b53db07b7c14b8d, type: 3}
+  - {fileID: 8300000, guid: bb7e87d8133dedc47bce556dce6aff2b, type: 3}
+  - {fileID: 8300000, guid: 206cb49364b64c94e9f1dddc780e5753, type: 3}
+  - {fileID: 8300000, guid: 012f49ebfdc573a4596cbfe606672143, type: 3}
+  - {fileID: 8300000, guid: ecb182586270c4548ae529d8e8bb92c9, type: 3}
+  - {fileID: 8300000, guid: 6a9e30c557898854db4aa5d65978154c, type: 3}
+  - {fileID: 8300000, guid: 6a1e35e5146cae24a8e949f0ad981ffa, type: 3}
+  - {fileID: 8300000, guid: 49d0ed682f4fa99499ac80d3c9782e99, type: 3}
+  - {fileID: 8300000, guid: 932a63ca8e65b2e4cb644429d98f325c, type: 3}
+  stepStrideDistance: 2
+  stepVolumeMin: 0.1
+  stepVolumeMax: 0.2
+  landStepVolumeMin: 0.85
+  landStepVolumeMax: 1
+  stepPitchMin: 0.92
+  stepPitchMax: 1.08
+  jumpClips:
+  - {fileID: 8300000, guid: 2569b29d74101b742b94617f0a51ee59, type: 3}
+  - {fileID: 8300000, guid: 1676de0b9dac6d541aebb6543aa0c4a6, type: 3}
+  - {fileID: 8300000, guid: 071731cfbbdb2214ab9450bb1c5143af, type: 3}
+  - {fileID: 8300000, guid: 17d6f33a3f46c734dbc317e59e8a64aa, type: 3}
+  - {fileID: 8300000, guid: 4a35689d5ad697149b3afffe62159340, type: 3}
+  jumpVolumeMin: 0.2
+  jumpVolumeMax: 0.3
+  jumpPitchMin: 0.9
+  jumpPitchMax: 1.1

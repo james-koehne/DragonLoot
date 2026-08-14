@@ -48,6 +48,8 @@ public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlaceme
 	{
 		if ( station == null || _collider == null )
 			return;
+		if ( station.IsRepositioning )
+			return;
 		if ( Time.time < _nextScanTime )
 			return;
 
@@ -128,13 +130,15 @@ public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlaceme
 	{
 		if ( station == null || item == null )
 			return false;
+		if ( station.IsRepositioning )
+			return false;
 		if ( !GroundCoinStack.IsGroundStackableCoin( item ) )
 			return false;
 		if ( station.IsHopperFull )
 			return false;
 
 		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
-		if ( carry == null || carry.Count <= 0 )
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
 			return false;
 
 		return true;
@@ -160,8 +164,7 @@ public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlaceme
 		}
 
 		Quaternion rot = TreasureOrientation.FlattenUpright( transform.rotation );
-		preview.SetStackOutline( pos, rot, scale, valid );
-		preview.Position = pos;
+		preview.SetItemMesh( pos, rot, scale, valid );
 		return true;
 	}
 
@@ -178,6 +181,23 @@ public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlaceme
 		if ( carry == null )
 			return false;
 
-		return station.TryDumpCarryIntoHopper( carry );
+		if ( !carry.TryConsumeActive( out TreasureItem removed ) || removed == null )
+			return false;
+
+		if ( !GroundCoinStack.IsGroundStackableCoin( removed ) )
+		{
+			removed.EnterPhysics( removed.transform.position, removed.transform.rotation );
+			return false;
+		}
+
+		GroundCoinStack stack = station.HopperStack;
+		if ( stack == null || !stack.CanAccept( removed.Definition ) )
+		{
+			removed.EnterPhysics( removed.transform.position, removed.transform.rotation );
+			return false;
+		}
+
+		stack.BeginAppendFlight( removed, stack.transform.rotation );
+		return true;
 	}
 }

@@ -48,6 +48,51 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	[SerializeField]
 	bool defaultNonTraversable = true;
 
+	[Header( "Height Bake" )]
+	[SerializeField]
+	[Tooltip( "Layers included when baking per-cell authored heights (and height-paint cursor hits)." )]
+	LayerMask heightBakeMask = ~0;
+
+	[SerializeField]
+	[Tooltip( "World Y where bake rays start. Used when Start Mode is Absolute." )]
+	float heightBakeRayStartY = 32f;
+
+	[SerializeField]
+	[Tooltip( "How bake ray start Y is chosen." )]
+	HeightBakeRayStartMode heightBakeRayStartMode = HeightBakeRayStartMode.AboveMaxWorldY;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Extra height added above the chosen start reference (maxWorldY / baseHeight / absolute)." )]
+	float heightBakeRayPad = 2f;
+
+	[SerializeField]
+	[Min( 0.1f )]
+	[Tooltip( "Maximum downward cast distance from the ray start." )]
+	float heightBakeRayDistance = 64f;
+
+	[SerializeField]
+	[Tooltip( "Added to hit Y after a successful cast (e.g. sit slightly above collider)." )]
+	float heightBakeHitOffset = 0f;
+
+	[SerializeField]
+	[Tooltip( "When true, only traversable cells are sampled. When false, every cell is baked." )]
+	bool heightBakeTraversableOnly = true;
+
+	[SerializeField]
+	[Tooltip( "Height written on miss (cells are always marked non-traversable when the ray misses)." )]
+	HeightBakeMissBehavior heightBakeMissBehavior = HeightBakeMissBehavior.SetBaseHeight;
+
+	[SerializeField]
+	[Tooltip( "Whether bake rays hit triggers." )]
+	QueryTriggerInteraction heightBakeTriggerInteraction = QueryTriggerInteraction.Ignore;
+
+	[Header( "Height Overlay" )]
+	[SerializeField]
+	[Min( 1 )]
+	[Tooltip( "How many surface chunks of overlay mesh to build each editor frame." )]
+	int overlayChunksPerFrame = 8;
+
 	/// <summary>Legacy scene-inline paint. Migrated into <see cref="paintAsset"/> then cleared.</summary>
 	[SerializeField]
 	[HideInInspector]
@@ -83,6 +128,16 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	public int CellsPerChunk => cellsPerChunk;
 	public float BaseHeight => baseHeight;
 	public bool DefaultNonTraversable => defaultNonTraversable;
+	public LayerMask HeightBakeMask => heightBakeMask;
+	public float HeightBakeRayStartY => heightBakeRayStartY;
+	public HeightBakeRayStartMode HeightBakeStartMode => heightBakeRayStartMode;
+	public float HeightBakeRayPad => heightBakeRayPad;
+	public float HeightBakeRayDistance => heightBakeRayDistance;
+	public float HeightBakeHitOffset => heightBakeHitOffset;
+	public bool HeightBakeTraversableOnly => heightBakeTraversableOnly;
+	public HeightBakeMissBehavior HeightBakeMissMode => heightBakeMissBehavior;
+	public QueryTriggerInteraction HeightBakeTriggerInteraction => heightBakeTriggerInteraction;
+	public int OverlayChunksPerFrame => overlayChunksPerFrame;
 	public float CellSize => Mathf.Max( 0.01f, chunkSize / Mathf.Max( 1, cellsPerChunk ) );
 	public int ChunkCountX => Mathf.Max( 1, Mathf.CeilToInt( worldSizeX / Mathf.Max( 1f, chunkSize ) ) );
 	public int ChunkCountZ => Mathf.Max( 1, Mathf.CeilToInt( worldSizeZ / Mathf.Max( 1f, chunkSize ) ) );
@@ -185,7 +240,8 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		if ( paintAsset == null )
 			return;
 
-		paintAsset.EnsureBuffers( TotalCellsX, TotalCellsZ, defaultNonTraversable );
+		paintAsset.EnsureBuffers( TotalCellsX, TotalCellsZ, defaultNonTraversable, baseHeight );
+		paintAsset.EnsureHeightDefaults( baseHeight );
 		paintCellsX = paintAsset.CellsX;
 		paintCellsZ = paintAsset.CellsZ;
 	}
@@ -217,13 +273,19 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 #endif
 	}
 
-	bool TryGetPaintArrays( out byte[] traversable, out byte[] materials, out int cellsX, out int cellsZ )
+	bool TryGetPaintArrays(
+		out byte[] traversable,
+		out byte[] materials,
+		out float[] heights,
+		out int cellsX,
+		out int cellsZ )
 	{
 		EnsurePaintBuffers();
 		if ( paintAsset == null || !paintAsset.HasBuffers )
 		{
 			traversable = null;
 			materials = null;
+			heights = null;
 			cellsX = 0;
 			cellsZ = 0;
 			return false;
@@ -231,6 +293,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 		traversable = paintAsset.TraversablePaint;
 		materials = paintAsset.MaterialPaint;
+		heights = paintAsset.HeightPaint;
 		cellsX = paintAsset.CellsX;
 		cellsZ = paintAsset.CellsZ;
 		return true;
@@ -239,10 +302,21 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 #if UNITY_EDITOR
 	public void EditorGetPaintArrays( out byte[] traversable, out byte[] materials, out int cellsX, out int cellsZ )
 	{
-		if ( !TryGetPaintArrays( out traversable, out materials, out cellsX, out cellsZ ) )
+		EditorGetPaintArrays( out traversable, out materials, out _, out cellsX, out cellsZ );
+	}
+
+	public void EditorGetPaintArrays(
+		out byte[] traversable,
+		out byte[] materials,
+		out float[] heights,
+		out int cellsX,
+		out int cellsZ )
+	{
+		if ( !TryGetPaintArrays( out traversable, out materials, out heights, out cellsX, out cellsZ ) )
 		{
 			traversable = System.Array.Empty<byte>();
 			materials = System.Array.Empty<byte>();
+			heights = System.Array.Empty<float>();
 			cellsX = 0;
 			cellsZ = 0;
 		}
@@ -322,7 +396,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 			return;
 
 		// Legacy scene arrays are authoritative for a one-time migrate.
-		paintAsset.ImportLegacy( traversablePaint, materialPaint, paintCellsX, paintCellsZ );
+		paintAsset.ImportLegacy( traversablePaint, materialPaint, paintCellsX, paintCellsZ, baseHeight );
 
 		traversablePaint = null;
 		materialPaint = null;
@@ -355,7 +429,26 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		float cell = CellSize;
 		float wx = worldOrigin.x - halfX + ( cellX + 0.5f ) * cell;
 		float wz = worldOrigin.z - halfZ + ( cellZ + 0.5f ) * cell;
-		return new Vector3( wx, baseHeight, wz );
+		float wy = baseHeight;
+		if ( TryGetPaintArrays( out _, out _, out float[] heights, out int cellsX, out int cellsZ )
+			&& cellX >= 0
+			&& cellZ >= 0
+			&& cellX < cellsX
+			&& cellZ < cellsZ )
+		{
+			wy = heights[ cellZ * cellsX + cellX ];
+		}
+
+		return new Vector3( wx, wy, wz );
+	}
+
+	public float GetPaintHeight( int cellX, int cellZ )
+	{
+		if ( !TryGetPaintArrays( out _, out _, out float[] heights, out int cellsX, out int cellsZ ) )
+			return baseHeight;
+		if ( cellX < 0 || cellZ < 0 || cellX >= cellsX || cellZ >= cellsZ )
+			return baseHeight;
+		return heights[ cellZ * cellsX + cellX ];
 	}
 
 	public bool TryWorldToCell( Vector3 world, out int cellX, out int cellZ )
@@ -377,9 +470,20 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	public bool TryGetPaint( int cellX, int cellZ, out bool traversable, out TreasureSurfaceMaterial material )
 	{
+		return TryGetPaint( cellX, cellZ, out traversable, out material, out _ );
+	}
+
+	public bool TryGetPaint(
+		int cellX,
+		int cellZ,
+		out bool traversable,
+		out TreasureSurfaceMaterial material,
+		out float height )
+	{
 		traversable = !defaultNonTraversable;
 		material = TreasureSurfaceMaterial.Stone;
-		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+		height = baseHeight;
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out float[] heights, out int cellsX, out int cellsZ ) )
 			return false;
 		if ( cellX < 0 || cellZ < 0 || cellX >= cellsX || cellZ >= cellsZ )
 			return false;
@@ -387,6 +491,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		int i = cellZ * cellsX + cellX;
 		traversable = trav[ i ] != 0;
 		material = ( TreasureSurfaceMaterial )mats[ i ];
+		height = heights[ i ];
 		return true;
 	}
 
@@ -403,7 +508,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		fullyTraversable = false;
 		anyTraversable = false;
 		material = TreasureSurfaceMaterial.Stone;
-		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsXOut, out int cellsZOut ) )
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out _, out int cellsXOut, out int cellsZOut ) )
 			return false;
 
 		if ( chunkX < 0 || chunkZ < 0 || chunkX >= ChunkCountX || chunkZ >= ChunkCountZ )
@@ -465,7 +570,18 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	public void SetPaintCell( int cellX, int cellZ, bool traversable, TreasureSurfaceMaterial material )
 	{
-		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+		SetPaintCell( cellX, cellZ, traversable, material, GetPaintHeight( cellX, cellZ ), paintHeight: false );
+	}
+
+	public void SetPaintCell(
+		int cellX,
+		int cellZ,
+		bool traversable,
+		TreasureSurfaceMaterial material,
+		float height,
+		bool paintHeight )
+	{
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out float[] heights, out int cellsX, out int cellsZ ) )
 			return;
 		if ( cellX < 0 || cellZ < 0 || cellX >= cellsX || cellZ >= cellsZ )
 			return;
@@ -473,6 +589,8 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		int i = cellZ * cellsX + cellX;
 		trav[ i ] = traversable ? ( byte )1 : ( byte )0;
 		mats[ i ] = ( byte )material;
+		if ( paintHeight )
+			heights[ i ] = height;
 		NotifyPaintChanged();
 	}
 
@@ -487,7 +605,28 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		bool paintTraversable,
 		bool paintMaterial )
 	{
-		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+		PaintBrush(
+			worldCenter,
+			radiusMeters,
+			traversable,
+			material,
+			paintTraversable,
+			paintMaterial,
+			paintHeight: false,
+			height: baseHeight );
+	}
+
+	public void PaintBrush(
+		Vector3 worldCenter,
+		float radiusMeters,
+		bool traversable,
+		TreasureSurfaceMaterial material,
+		bool paintTraversable,
+		bool paintMaterial,
+		bool paintHeight,
+		float height )
+	{
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out float[] heights, out int cellsX, out int cellsZ ) )
 			return;
 		if ( radiusMeters <= 0f )
 			return;
@@ -538,6 +677,13 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 					if ( mats[ i ] != matByte )
 						mats[ i ] = matByte;
 				}
+
+				if ( paintHeight )
+				{
+					// Absolute height paint only writes onto traversable cells.
+					if ( trav[ i ] != 0 )
+						heights[ i ] = height;
+				}
 			}
 		}
 
@@ -546,7 +692,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	public void FillAll( bool traversable, TreasureSurfaceMaterial material )
 	{
-		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out _, out _ ) )
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out _, out _, out _ ) )
 			return;
 
 		byte t = traversable ? ( byte )1 : ( byte )0;
@@ -560,12 +706,119 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		NotifyPaintChanged();
 	}
 
+	public void FillAllHeights( float height )
+	{
+		if ( !TryGetPaintArrays( out _, out _, out float[] heights, out _, out _ ) )
+			return;
+
+		for ( int i = 0; i < heights.Length; i++ )
+			heights[ i ] = height;
+
+		NotifyPaintChanged();
+	}
+
+	/// <summary>
+	/// Raycasts downward per cell using Height Bake settings and writes hit Y into height paint.
+	/// </summary>
+	public int BakeHeightsFromRaycasts()
+	{
+		ResolveBakeRay( out float startY, out float distance );
+		return BakeHeightsFromRaycasts(
+			heightBakeMask,
+			startY,
+			distance,
+			heightBakeHitOffset,
+			heightBakeTraversableOnly,
+			heightBakeMissBehavior,
+			heightBakeTriggerInteraction );
+	}
+
+	public void ResolveBakeRay( out float startY, out float distance )
+	{
+		float maxY = definition != null ? definition.maxWorldY : baseHeight + 32f;
+		switch ( heightBakeRayStartMode )
+		{
+			case HeightBakeRayStartMode.AboveBaseHeight:
+				startY = baseHeight + heightBakeRayPad;
+				break;
+			case HeightBakeRayStartMode.Absolute:
+				startY = heightBakeRayStartY + heightBakeRayPad;
+				break;
+			default:
+				startY = Mathf.Max( maxY, baseHeight ) + heightBakeRayPad;
+				break;
+		}
+
+		distance = Mathf.Max( 0.1f, heightBakeRayDistance );
+	}
+
+	public int BakeHeightsFromRaycasts( LayerMask layerMask, float rayStartY, float rayDistance )
+	{
+		return BakeHeightsFromRaycasts(
+			layerMask,
+			rayStartY,
+			rayDistance,
+			heightBakeHitOffset,
+			heightBakeTraversableOnly,
+			heightBakeMissBehavior,
+			heightBakeTriggerInteraction );
+	}
+
+	public int BakeHeightsFromRaycasts(
+		LayerMask layerMask,
+		float rayStartY,
+		float rayDistance,
+		float hitOffset,
+		bool traversableOnly,
+		HeightBakeMissBehavior missBehavior,
+		QueryTriggerInteraction triggerInteraction )
+	{
+		if ( !TryGetPaintArrays( out byte[] trav, out _, out float[] heights, out int cellsX, out int cellsZ ) )
+			return 0;
+
+		int written = 0;
+		float halfX = worldSizeX * 0.5f;
+		float halfZ = worldSizeZ * 0.5f;
+		float cell = CellSize;
+		Vector3 down = Vector3.down;
+		float dist = Mathf.Max( 0.1f, rayDistance );
+
+		for ( int z = 0; z < cellsZ; z++ )
+		{
+			for ( int x = 0; x < cellsX; x++ )
+			{
+				int i = z * cellsX + x;
+				if ( traversableOnly && trav[ i ] == 0 )
+					continue;
+
+				float wx = worldOrigin.x - halfX + ( x + 0.5f ) * cell;
+				float wz = worldOrigin.z - halfZ + ( z + 0.5f ) * cell;
+				Vector3 origin = new Vector3( wx, rayStartY, wz );
+				if ( Physics.Raycast( origin, down, out RaycastHit hit, dist, layerMask, triggerInteraction ) )
+				{
+					heights[ i ] = hit.point.y + hitOffset;
+					written++;
+				}
+				else
+				{
+					// No geometry under this cell — block travel.
+					trav[ i ] = 0;
+					if ( missBehavior == HeightBakeMissBehavior.SetBaseHeight )
+						heights[ i ] = baseHeight;
+				}
+			}
+		}
+
+		NotifyPaintChanged();
+		return written;
+	}
+
 	public void ApplyPaintToChunk( TreasureChunk chunk )
 	{
 		if ( chunk == null || !chunk.Loaded || chunk.PaintTraversable == null )
 			return;
 
-		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out int cellsX, out int cellsZ ) )
+		if ( !TryGetPaintArrays( out byte[] trav, out byte[] mats, out float[] heights, out int cellsX, out int cellsZ ) )
 			return;
 
 		int res = chunk.Resolution;
@@ -584,12 +837,19 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 				{
 					chunk.PaintTraversable[ chunkIndex ] = defaultNonTraversable ? ( byte )0 : ( byte )1;
 					chunk.PaintMaterial[ chunkIndex ] = ( byte )TreasureSurfaceMaterial.Stone;
+					chunk.BaseHeight[ chunkIndex ] = baseHeight;
+					chunk.Height[ chunkIndex ] = baseHeight;
+					chunk.SmoothedHeight[ chunkIndex ] = baseHeight;
 					continue;
 				}
 
 				int paintIndex = worldCellZ * cellsX + worldCellX;
 				chunk.PaintTraversable[ chunkIndex ] = trav[ paintIndex ];
 				chunk.PaintMaterial[ chunkIndex ] = mats[ paintIndex ];
+				float h = heights[ paintIndex ];
+				chunk.BaseHeight[ chunkIndex ] = h;
+				chunk.Height[ chunkIndex ] = h;
+				chunk.SmoothedHeight[ chunkIndex ] = h;
 			}
 		}
 	}
@@ -622,4 +882,19 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 				new Vector3( worldOrigin.x - halfX + worldSizeX, y, wz ) );
 		}
 	}
+}
+
+public enum HeightBakeRayStartMode
+{
+	Absolute = 0,
+	AboveMaxWorldY = 1,
+	AboveBaseHeight = 2
+}
+
+public enum HeightBakeMissBehavior
+{
+	/// <summary>On miss: mark non-traversable and set height to baseHeight.</summary>
+	SetBaseHeight = 0,
+	/// <summary>On miss: mark non-traversable and leave height unchanged.</summary>
+	KeepExisting = 1
 }

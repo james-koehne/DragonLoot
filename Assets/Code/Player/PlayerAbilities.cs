@@ -38,6 +38,7 @@ public class PlayerAbilities : MonoBehaviour
 		if ( !_inputEnabled )
 			return;
 
+		// Ability slot keys 1-3 are rebound to category switch this pass; leave slots unbound.
 		GameInput input = GetGameInput();
 		if ( input == null || input.AbilitySlots == null )
 			return;

@@ -24,6 +24,7 @@ CBUFFER_START(UnityPerMaterial)
     half _SparkleFlicker;
     half _TintVariation;
     half _ValueVariation;
+    half _VariationSeed;
     half _CoinCount;
     half _BandContrast;
     half _GrooveDarkness;

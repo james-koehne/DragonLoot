@@ -27,6 +27,13 @@ public class CoinSortingCrankInteractable : InteractableBase
 		if ( !IsAvailable || player == null || station == null )
 			return false;
 
+		if ( station.IsRepositioning )
+			return false;
+
+		PlayerSorterReposition reposition = player.SorterReposition;
+		if ( reposition != null && reposition.IsCarrying )
+			return false;
+
 		int level = station.StationLevel;
 		if ( level >= 2 )
 			return false;

@@ -8,7 +8,6 @@ using UnityEngine.UI;
 /// Presentation table with hand-placed slots; each slot accepts one specific artifact definition.
 /// Placements are permanent. Empty slots show a cyan hologram of the required artifact.
 /// </summary>
-[RequireComponent( typeof( Collider ) )]
 public class ArtifactPresentationTableInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget, IPermanentTreasureDisplayOwner
 {
 	[Header( "Slots" )]
@@ -42,6 +41,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	[SerializeField]
 	bool drawGizmosAlways;
 
+	Collider _collider;
 	readonly List<TreasureItem> _displayedItems = new List<TreasureItem>();
 	TreasureItem[] _occupants;
 	int _currentCount;
@@ -61,6 +61,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	public bool AimedSlotValid => _aimedSlotValid;
 	public bool IsAimFeedbackFresh => _aimFeedbackFrame == Time.frameCount;
 	public Vector3 SocketRotation => socketRotation;
+	public Collider TableCollider => _collider;
 
 	protected virtual void Reset()
 	{
@@ -69,6 +70,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 	protected virtual void Awake()
 	{
+		EnsureCollider();
 		EnsureOccupants();
 		SyncSlotVolumes();
 		EnsureSlotIndicators();
@@ -569,6 +571,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			GetSlotWorldPose( slotIndex, out endWorldPos, out endWorldRot );
 			item.EnterDisplayed( this, anchor, endWorldPos, endWorldRot );
 			ApplyDisplayedItemPose( item, slotIndex );
+			TreasureInteractSfx.PlayPlace( item.Definition, endWorldPos );
 		}
 
 		if ( slotIndicators != null )
@@ -594,6 +597,20 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		}
 
 		return _occupants.Length > 0;
+	}
+
+	void EnsureCollider()
+	{
+		_collider = GetComponent<Collider>();
+		if ( _collider == null )
+			_collider = GetComponentInChildren<Collider>( true );
+
+		if ( _collider == null )
+		{
+			Debug.LogError(
+				"ArtifactPresentationTableInteractable on '" + name + "' requires a Collider on this object or a child.",
+				this );
+		}
 	}
 
 	void EnsureOccupants()

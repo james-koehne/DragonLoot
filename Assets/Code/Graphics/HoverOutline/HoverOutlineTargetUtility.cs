@@ -34,6 +34,10 @@ public static class HoverOutlineTargetUtility
 		if ( crank != null )
 			return CanOutlineCrank( crank );
 
+		CoinSortingStationMoveInteractable move = interactable as CoinSortingStationMoveInteractable;
+		if ( move != null )
+			return move.CanInteract( player );
+
 		return false;
 	}
 
@@ -103,7 +107,20 @@ public static class HoverOutlineTargetUtility
 
 		TreasureItemInteractable itemInteractable = focus as TreasureItemInteractable;
 		if ( itemInteractable != null )
-			return CollectRenderers( itemInteractable.Item );
+		{
+			TreasureItem item = itemInteractable.Item;
+			ITreasureDisplayStackOwner display = item != null ? item.Owner as ITreasureDisplayStackOwner : null;
+			if ( display != null
+				&& item.Definition != null
+				&& item.Definition.category == TreasureCategory.Coin )
+			{
+				display.AppendSlotOutlineRenderers( item, Buffer );
+				if ( Buffer.Count > 0 )
+					return Buffer;
+			}
+
+			return CollectRenderers( item );
+		}
 
 		ChestInteractable chest = focus as ChestInteractable;
 		if ( chest != null )
@@ -121,7 +138,47 @@ public static class HoverOutlineTargetUtility
 		if ( crank != null )
 			return CollectFromBehaviour( crank );
 
+		CoinSortingStationMoveInteractable move = focus as CoinSortingStationMoveInteractable;
+		if ( move != null )
+		{
+			CoinSortingStation station = move.Station;
+			if ( station != null )
+			{
+				AppendStationMoveRenderers( station );
+				return Buffer;
+			}
+
+			return CollectFromBehaviour( move );
+		}
+
 		return Buffer;
+	}
+
+	static void AppendStationMoveRenderers( CoinSortingStation station )
+	{
+		if ( station == null )
+			return;
+
+		Renderer[] renderers = station.GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < renderers.Length; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null || !renderer.enabled )
+				continue;
+			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+				continue;
+			if ( renderer.sharedMaterial == null )
+				continue;
+			if ( renderer.GetComponentInParent<CoinSortingCrankInteractable>() != null )
+				continue;
+			if ( renderer.GetComponentInParent<GroundCoinStack>() != null )
+				continue;
+			int collectable = PhysicsLayers.CollectableLayer;
+			if ( collectable >= 0 && renderer.gameObject.layer == collectable )
+				continue;
+
+			Buffer.Add( renderer );
+		}
 	}
 
 	public static IReadOnlyList<Renderer> CollectRenderers( TreasureItem item )

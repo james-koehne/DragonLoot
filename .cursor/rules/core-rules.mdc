@@ -8,3 +8,4 @@ Where possible spawn GameObjects in using Addressables, not Prefab Instantiation
 Don't generate .meta files, let Unity create them
 Never use UnityEngine.Input
 Never use System.Threading.Tasks for gameplay unless asked
+Keep method calls on one line when they fit; do not wrap with one argument per line (e.g. `ApplyAndPlay( a, b, c, d, e, f );` not each arg on its own line). Only break lines when a call genuinely exceeds readable length.

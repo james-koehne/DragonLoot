@@ -1,0 +1,23 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+Built from '6000.3/staging' branch; Version is '6000.3.18f1 (5ebeb53e4c07) revision 6209205'; Using compiler version '194234433'; Build Type 'Release'
+OS: 'Windows 11  (10.0.26200) Core' Language: 'en' Physical Memory: 63133 MB
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1
+System  architecture: x64
+Process architecture: x64
+Date: 2026-08-12T07:05:53Z
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-james" at "2026-08-12T07:05:53.0840881Z"
+
+COMMAND LINE ARGUMENTS:
+C:\Program Files\Unity\Hub\Editor\6000.3.18f1\Editor\Unity.exe
+-batchmode
+-nographics
+-quit
+-projectPath
+C:\GameDevelopment\FunkGames\DragonLoot\DragonLoot
+-executeMethod
+QuestCatalogInstaller.BatchInstall
+-logFile
+C:\GameDevelopment\FunkGames\DragonLoot\DragonLoot\quest-install.log
+Successfully changed project path to: C:\GameDevelopment\FunkGames\DragonLoot\DragonLoot
+C:/GameDevelopment/FunkGames/DragonLoot/DragonLoot
+Exiting without the bug reporter. Application will terminate with return code 1

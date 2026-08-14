@@ -213,7 +213,10 @@ static class CoinSortingStationSetup
 
 		GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>( PrefabPath );
 		if ( existing != null )
-			return existing;
+		{
+			ConfigureExistingPrefab( PrefabPath );
+			return AssetDatabase.LoadAssetAtPath<GameObject>( PrefabPath );
+		}
 
 		GameObject root = BuildHierarchy();
 		GameObject prefab = PrefabUtility.SaveAsPrefabAsset( root, PrefabPath );
@@ -222,10 +225,108 @@ static class CoinSortingStationSetup
 		return prefab;
 	}
 
+	static void ConfigureExistingPrefab( string path )
+	{
+		GameObject root = PrefabUtility.LoadPrefabContents( path );
+		bool dirty = false;
+
+		CoinSortingStation station = root.GetComponent<CoinSortingStation>();
+		if ( station == null )
+		{
+			PrefabUtility.UnloadPrefabContents( root );
+			return;
+		}
+
+		Rigidbody body = root.GetComponent<Rigidbody>();
+		if ( body == null )
+		{
+			body = root.AddComponent<Rigidbody>();
+			dirty = true;
+		}
+
+		body.isKinematic = true;
+		body.useGravity = false;
+		body.interpolation = RigidbodyInterpolation.Interpolate;
+		body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+
+		Rigidbody[] nested = root.GetComponentsInChildren<Rigidbody>( true );
+		for ( int i = 0; i < nested.Length; i++ )
+		{
+			Rigidbody rb = nested[ i ];
+			if ( rb == null || rb.gameObject == root )
+				continue;
+			Object.DestroyImmediate( rb );
+			dirty = true;
+		}
+
+		Transform bodyTf = root.transform.Find( "Body" );
+		GameObject moveHost = bodyTf != null ? bodyTf.gameObject : root;
+		CoinSortingStationMoveInteractable move = moveHost.GetComponent<CoinSortingStationMoveInteractable>();
+		if ( move == null )
+		{
+			move = moveHost.AddComponent<CoinSortingStationMoveInteractable>();
+			dirty = true;
+		}
+
+		move.BindStation( station );
+		station.EditorSetMoveInteractable( move );
+
+		CoinSortingHopper hopper = root.GetComponentInChildren<CoinSortingHopper>( true );
+		CoinSortingCrankInteractable crank = root.GetComponentInChildren<CoinSortingCrankInteractable>( true );
+		if ( hopper != null )
+			station.EditorSetHopper( hopper );
+		if ( crank != null )
+			station.EditorSetCrank( crank );
+
+		FeedbackSystem.Feedbacks feedbacks = root.GetComponent<FeedbackSystem.Feedbacks>();
+		if ( feedbacks == null )
+		{
+			feedbacks = root.AddComponent<FeedbackSystem.Feedbacks>();
+			dirty = true;
+		}
+
+		if ( EnsureSortedFeedbacks( root, station, crank ) )
+			dirty = true;
+
+		if ( root.GetComponent<CoinSortingCrankAudio>() == null )
+		{
+			root.AddComponent<CoinSortingCrankAudio>();
+			dirty = true;
+		}
+
+		if ( dirty )
+		{
+			EditorUtility.SetDirty( root );
+			PrefabUtility.SaveAsPrefabAsset( root, path );
+		}
+
+		PrefabUtility.UnloadPrefabContents( root );
+	}
+
 	static GameObject BuildHierarchy()
 	{
 		GameObject root = new GameObject( "CoinSortingStation" );
 		CoinSortingStation station = root.AddComponent<CoinSortingStation>();
+
+		Rigidbody bodyRb = root.AddComponent<Rigidbody>();
+		bodyRb.isKinematic = true;
+		bodyRb.useGravity = false;
+		bodyRb.interpolation = RigidbodyInterpolation.Interpolate;
+		bodyRb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+
+		FeedbackSystem.Feedbacks settle = root.AddComponent<FeedbackSystem.Feedbacks>();
+		settle.AddFeedback( new FeedbackSystem.PunchScaleFeedback
+		{
+			Target = root.transform,
+			Punch = new Vector3( 0.06f, -0.08f, 0.06f ),
+			Duration = 0.22f
+		} );
+		settle.AddFeedback( new FeedbackSystem.ShakeTransformFeedback
+		{
+			Target = root.transform,
+			Duration = 0.18f,
+			Strength = 0.035f
+		} );
 
 		// Body placeholder
 		GameObject body = GameObject.CreatePrimitive( PrimitiveType.Cube );
@@ -234,6 +335,8 @@ static class CoinSortingStationSetup
 		body.transform.localPosition = new Vector3( 0f, 0.6f, 0f );
 		body.transform.localScale = new Vector3( 1.6f, 1.2f, 1.2f );
 		// Keep the body BoxCollider so placement rays can hit the whole station (maps to hopper).
+
+		CoinSortingStationMoveInteractable move = body.AddComponent<CoinSortingStationMoveInteractable>();
 
 		// Hopper (placement box on top)
 		GameObject hopperGo = new GameObject( "Hopper" );
@@ -283,11 +386,66 @@ static class CoinSortingStationSetup
 
 		station.EditorSetHopper( hopper );
 		station.EditorSetCrank( crank );
+		station.EditorSetMoveInteractable( move );
 		station.EditorSetChutes( bindings );
 		hopper.BindStation( station );
 		crank.BindStation( station );
+		move.BindStation( station );
+		EnsureSortedFeedbacks( root, station, crank );
+		if ( root.GetComponent<CoinSortingCrankAudio>() == null )
+			root.AddComponent<CoinSortingCrankAudio>();
 
 		return root;
+	}
+
+	static bool EnsureSortedFeedbacks(
+		GameObject root,
+		CoinSortingStation station,
+		CoinSortingCrankInteractable crank )
+	{
+		if ( root == null || station == null )
+			return false;
+
+		bool dirty = false;
+		Transform existing = root.transform.Find( "OnSortedFeedbacks" );
+		GameObject host;
+		if ( existing == null )
+		{
+			host = new GameObject( "OnSortedFeedbacks" );
+			host.transform.SetParent( root.transform, false );
+			dirty = true;
+		}
+		else
+		{
+			host = existing.gameObject;
+		}
+
+		FeedbackSystem.Feedbacks sorted = host.GetComponent<FeedbackSystem.Feedbacks>();
+		if ( sorted == null )
+		{
+			sorted = host.AddComponent<FeedbackSystem.Feedbacks>();
+			dirty = true;
+		}
+
+		station.EditorSetSortedFeedback( sorted );
+
+		if ( sorted.FeedbackList != null && sorted.FeedbackList.Count > 0 )
+			return dirty;
+
+		Transform crankTarget = crank != null ? crank.transform : root.transform;
+		sorted.AddFeedback( new FeedbackSystem.PunchRotationFeedback
+		{
+			Target = crankTarget,
+			Punch = new Vector3( 80f, 0f, 0f ),
+			Duration = 0.16f
+		} );
+		sorted.AddFeedback( new FeedbackSystem.PunchScaleFeedback
+		{
+			Target = crankTarget,
+			Punch = new Vector3( 0.08f, 0.08f, 0.08f ),
+			Duration = 0.16f
+		} );
+		return true;
 	}
 
 	static Transform CreateChute( Transform parent, string name, Vector3 localPos )

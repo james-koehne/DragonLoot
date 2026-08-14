@@ -424,6 +424,17 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
+		PlayerSorterReposition sorter = _player.SorterReposition;
+		if ( sorter != null && sorter.IsCarrying )
+		{
+			_current = null;
+			_hasLastHit = false;
+			_hasSurfaceHit = false;
+			ClearPickableIndicator();
+			TrySorterPlaceInput();
+			return;
+		}
+
 		UpdateFocus();
 		UpdatePickableIndicator();
 		TryInteractInput();
@@ -497,6 +508,7 @@ public class PlayerInteraction : MonoBehaviour
 			}
 
 			InteractableBase interactable = ResolveInteractableFromHit( hit.collider );
+			interactable = PromoteSorterMoveFocus( interactable, hit.collider );
 			if ( interactable == null )
 				continue;
 
@@ -520,7 +532,7 @@ public class PlayerInteraction : MonoBehaviour
 					bestItemHit = hit;
 				}
 			}
-			else if ( hit.distance < bestOtherDist )
+			else if ( ShouldPreferNonTreasureFocus( interactable, hit.distance, bestOther, bestOtherDist ) )
 			{
 				bestOtherDist = hit.distance;
 				bestOther = interactable;
@@ -634,6 +646,79 @@ public class PlayerInteraction : MonoBehaviour
 
 		TrySecondaryRepeatInput( input, holding );
 		TryPrimaryRepeatInput( input );
+	}
+
+	void TrySorterPlaceInput()
+	{
+		GameInput input = GetGameInput();
+		if ( input == null || input.SecondaryInteract == null )
+			return;
+
+		if ( !input.SecondaryInteract.WasPressedThisFrame() )
+			return;
+
+		PlayerSorterReposition sorter = _player != null ? _player.SorterReposition : null;
+		if ( sorter == null || !sorter.IsCarrying )
+			return;
+
+		// Placement confirmation is owned by PlayerSorterReposition (invalid press no-ops).
+		if ( _player != null )
+			_player.CancelSlideVelocity();
+	}
+
+	static InteractableBase PromoteSorterMoveFocus( InteractableBase interactable, Collider collider )
+	{
+		if ( collider == null )
+			return interactable;
+
+		if ( interactable is CoinSortingCrankInteractable )
+			return interactable;
+
+		if ( collider.GetComponentInParent<CoinSortingCrankInteractable>() != null )
+			return interactable;
+
+		CoinSortingStation station = collider.GetComponentInParent<CoinSortingStation>();
+		if ( station == null )
+			return interactable;
+
+		GroundCoinStack stack = interactable as GroundCoinStack;
+		if ( stack != null && !station.IsHopperStack( stack ) )
+			return interactable;
+
+		CoinSortingStationMoveInteractable move = station.MoveInteractable;
+		if ( move == null )
+			move = station.GetComponentInChildren<CoinSortingStationMoveInteractable>( true );
+
+		return move != null ? move : interactable;
+	}
+
+	/// <summary>
+	/// Body and crank colliders overlap in X; prefer the crank when the ray is near it so
+	/// "Hold to crank" wins over "Hold to move sorter".
+	/// </summary>
+	static bool ShouldPreferNonTreasureFocus(
+		InteractableBase candidate,
+		float candidateDist,
+		InteractableBase currentBest,
+		float bestDist )
+	{
+		if ( candidate == null )
+			return false;
+
+		if ( currentBest == null )
+			return true;
+
+		const float crankPreferSlack = 0.5f;
+
+		if ( candidate is CoinSortingCrankInteractable
+			&& currentBest is CoinSortingStationMoveInteractable )
+			return candidateDist <= bestDist + crankPreferSlack;
+
+		if ( candidate is CoinSortingStationMoveInteractable
+			&& currentBest is CoinSortingCrankInteractable )
+			return candidateDist + crankPreferSlack < bestDist;
+
+		return candidateDist < bestDist;
 	}
 
 	void TryPrimaryRepeatInput( GameInput input )

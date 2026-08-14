@@ -129,13 +129,11 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( bottom == null )
 			bottom = _baseItem;
 
-		Vector3 contact = bottom != null ? bottom.transform.position : placePos;
-		preview.SetStackOutline(
-			contact,
+		preview.SetItemMesh(
+			placePos,
 			placeRot,
 			scale,
 			CanPlace( item, in query ) );
-		preview.Position = placePos;
 		return true;
 	}
 
@@ -255,6 +253,8 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 				continue;
 
 			member.EnterSettledPhysics( ends[ i ], rots[ i ] );
+			CoinGemInteractFeedback.PlayPlace( member );
+			TreasureInteractSfx.PlayPlace( member.Definition, ends[ i ] );
 		}
 
 		SettleSupportColumn( baseItem != null ? baseItem : columnBottom );

@@ -15,6 +15,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	const string CoinTypeMapProp = "_CoinTypeMap";
 	const string TypeCountProp = "_TypeCount";
 	const string TypeFresnelProp = "_TypeFresnelColor";
+	const string VariationSeedProp = "_VariationSeed";
 
 	static readonly Vector4[] TypeFresnelScratch = new Vector4[CoinStackVisualDefinition.MaxTypeSlots];
 
@@ -35,18 +36,34 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	TreasureDefinition _treasure;
 	int _targetCount;
 	float _targetHeight;
+	float _displayedHeight;
+	float _heightSmoothVelocity;
+	bool _smoothHeight;
 	float _targetDiameter;
 	float _meshRefDiameter = 1f;
 	float _meshRefHeight = 0.1f;
 	float _meshBoundsMinY;
 	float _meshBoundsSizeY = 0.1f;
 	float _diameterScale = 1f;
+	float _variationSeed = 1f;
 	Texture2D _typeMap;
 	Color[] _typeMapPixels;
 
 	public int DisplayedCount => _targetCount;
 
 	public MeshRenderer MeshRenderer => meshRenderer;
+	public float VariationSeed => _variationSeed;
+
+	public void SetVariationSeed( float seed )
+	{
+		_variationSeed = Mathf.Abs( seed ) < 0.0001f ? 1f : seed;
+		if ( meshRenderer != null && _mpb != null )
+		{
+			meshRenderer.GetPropertyBlock( _mpb );
+			_mpb.SetFloat( VariationSeedProp, _variationSeed );
+			meshRenderer.SetPropertyBlock( _mpb );
+		}
+	}
 
 	CoinStackVisualDefinition Definition
 	{
@@ -82,12 +99,12 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	{
 		EnsureVisual();
 		ApplyDefinitionSettings();
-		EnsureSparkleMaskContributor();
+		StripSparkleMaskContributor();
 	}
 
 	void OnEnable()
 	{
-		EnsureSparkleMaskContributor();
+		StripSparkleMaskContributor();
 	}
 
 	void OnDestroy()
@@ -102,14 +119,16 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		}
 	}
 
-	void EnsureSparkleMaskContributor()
+	void StripSparkleMaskContributor()
 	{
-		EnsureVisual();
 		TreasureSparkleMaskContributor contributor = GetComponent<TreasureSparkleMaskContributor>();
 		if ( contributor == null )
-			contributor = gameObject.AddComponent<TreasureSparkleMaskContributor>();
-		contributor.SetKind( TreasureSparkleDefinition.SparkleSourceKind.Coin );
-		contributor.InvalidateRendererCache();
+			return;
+
+		if ( Application.isPlaying )
+			Destroy( contributor );
+		else
+			DestroyImmediate( contributor );
 	}
 
 	public void SetStack( TreasureDefinition definition, int count )
@@ -151,8 +170,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		if ( meshRenderer != null )
 			meshRenderer.enabled = visible;
 
-		ApplyTransform( visible ? _targetHeight : 0f );
-		EnsureSparkleMaskContributor();
+		SetDisplayedHeight( visible ? _targetHeight : 0f, animate: false );
 	}
 
 	/// <summary>
@@ -204,9 +222,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		if ( meshRenderer != null )
 			meshRenderer.enabled = visible;
 
-		ApplyTransform( visible ? _targetHeight : 0f );
-		EnsureSparkleMaskContributor();
-		_ = snap;
+		SetDisplayedHeight( visible ? _targetHeight : 0f, animate: !snap );
 	}
 
 	public void SnapToCount( TreasureDefinition definition, int count )
@@ -390,6 +406,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		_mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
 		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
 		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
+		_mpb.SetFloat( VariationSeedProp, _variationSeed );
 		meshRenderer.SetPropertyBlock( _mpb );
 	}
 
@@ -405,6 +422,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		_mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
 		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
 		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
+		_mpb.SetFloat( VariationSeedProp, _variationSeed );
 
 		if ( _typeMap != null )
 			_mpb.SetTexture( CoinTypeMapProp, _typeMap );
@@ -464,6 +482,45 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			SafeDivScale( diameter / refDiameter, parentLossy.x ),
 			scaleY,
 			SafeDivScale( diameter / refDiameter, parentLossy.z ) );
+	}
+
+	void SetDisplayedHeight( float height, bool animate )
+	{
+		_targetHeight = Mathf.Max( 0f, height );
+		if ( !animate || !Application.isPlaying )
+		{
+			_smoothHeight = false;
+			_heightSmoothVelocity = 0f;
+			_displayedHeight = _targetHeight;
+			ApplyTransform( _displayedHeight );
+			return;
+		}
+
+		_smoothHeight = true;
+	}
+
+	void LateUpdate()
+	{
+		if ( !_smoothHeight )
+			return;
+
+		_displayedHeight = Mathf.SmoothDamp(
+			_displayedHeight,
+			_targetHeight,
+			ref _heightSmoothVelocity,
+			0.08f,
+			Mathf.Infinity,
+			Time.deltaTime );
+		ApplyTransform( _displayedHeight );
+
+		if ( Mathf.Abs( _displayedHeight - _targetHeight ) < 0.0005f
+			&& Mathf.Abs( _heightSmoothVelocity ) < 0.0005f )
+		{
+			_displayedHeight = _targetHeight;
+			_heightSmoothVelocity = 0f;
+			_smoothHeight = false;
+			ApplyTransform( _displayedHeight );
+		}
 	}
 
 	static float SafeDivScale( float value, float parentAxis )

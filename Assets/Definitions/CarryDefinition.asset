@@ -41,3 +41,108 @@ MonoBehaviour:
   handMotionSmoothSpeed: 12
   uprightPitchFavor: 0.6
   uprightSmoothSpeed: 10
+  categoryRestOffset: {x: 0, y: -0.35, z: -0.2}
+  categoryRestEuler: {x: 25, y: 0, z: 0}
+  categorySwapDuration: 0.35
+  heldVisualMaxCoins: 128
+  wholeStackHoldSeconds: 5
+  wholeStackHoldCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0.2
+      inSlope: 0
+      outSlope: 0.09666667
+      tangentMode: 69
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 60
+      value: 6
+      inSlope: 0.09666667
+      outSlope: 0
+      tangentMode: 69
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  wholeStackHoldMaxSeconds: 6
+  wholeStackProgressRingSize: 48
+  wholeStackAbsorbTweenDuration: 0.28
+  activeRefillTweenDuration: 0.22
+  pileStealStaggerSeconds: 0.06
+  coinVisualPoolSize: 32
+  coinStackPickupClips:
+  - {fileID: 8300000, guid: ccebde6c17b1a314586d4628267c4649, type: 3}
+  - {fileID: 8300000, guid: be4e5926207190246a8dde02f553b44e, type: 3}
+  - {fileID: 8300000, guid: 23c4de5ebce35f849a4d1733f4113a58, type: 3}
+  - {fileID: 8300000, guid: b6a90cf110a157b4baf4d841c3a7a40a, type: 3}
+  - {fileID: 8300000, guid: dfc3dccb48621664d9c3e9b09f29af69, type: 3}
+  - {fileID: 8300000, guid: ace23213a1e366a43a00f0775584f40f, type: 3}
+  - {fileID: 8300000, guid: d415802eb6192d247aaafb1907c98ff7, type: 3}
+  coinStackPickupVolumeMin: 0.85
+  coinStackPickupVolumeMax: 1
+  coinStackPickupPitchMin: 0.95
+  coinStackPickupPitchMax: 1.05
+  coinStackPlaceClips:
+  - {fileID: 8300000, guid: ccebde6c17b1a314586d4628267c4649, type: 3}
+  - {fileID: 8300000, guid: be4e5926207190246a8dde02f553b44e, type: 3}
+  - {fileID: 8300000, guid: 23c4de5ebce35f849a4d1733f4113a58, type: 3}
+  - {fileID: 8300000, guid: b6a90cf110a157b4baf4d841c3a7a40a, type: 3}
+  - {fileID: 8300000, guid: dfc3dccb48621664d9c3e9b09f29af69, type: 3}
+  - {fileID: 8300000, guid: ace23213a1e366a43a00f0775584f40f, type: 3}
+  - {fileID: 8300000, guid: d415802eb6192d247aaafb1907c98ff7, type: 3}
+  coinStackPlaceVolumeMin: 0.85
+  coinStackPlaceVolumeMax: 1
+  coinStackPlacePitchMin: 0.95
+  coinStackPlacePitchMax: 1.05
+  stackHandLandPickupCountCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 5
+      value: 3
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 15
+      value: 6
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 40
+      value: 10
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  stackHandLandPickupMaxCount: 12
+  stackHandLandPickupStaggerSeconds: 0.04
+  stackHandLandPickupVolumeScale: 0.45
+  stackHandLandPickupSpatialBlend: 0

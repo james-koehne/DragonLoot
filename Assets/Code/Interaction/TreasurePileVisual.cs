@@ -31,6 +31,18 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	public int LootLayoutSeed => lootLayoutSeed;
 
+	[Header( "Artifact Latent Bake" )]
+	[Tooltip( "Per-pile baked latent poses for this heightmap + layout seed. Pure data — not shared across piles." )]
+	[SerializeField]
+	TreasurePileLatentBake latentBake;
+
+	public TreasurePileLatentBake LatentBake => latentBake;
+
+	public void SetLatentBake( TreasurePileLatentBake bake )
+	{
+		latentBake = bake;
+	}
+
 	[Header( "Authored Height (level)" )]
 	[SerializeField]
 	[HideInInspector]
@@ -366,7 +378,12 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			_pile.SyncRemainingFromVisual();
 
 		if ( TotalRemainingLoot <= 0 )
-			OnPileEmptied();
+		{
+			if ( _pile != null )
+				_pile.OnEmptiedFromVisual();
+			else
+				OnPileEmptied();
+		}
 
 		return taken;
 	}
@@ -439,8 +456,11 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		if ( artifactProps != null && _definition != null && _heightfield != null )
 		{
 			GoldPileLootStreamSettings stream = lootInstances != null ? lootInstances.StreamSettings : null;
-			artifactProps.Bind( this, _definition, _heightfield, transform, lootInstances, stream, lootLayoutSeed );
+			await artifactProps.BindAsync( this, _definition, _heightfield, transform, lootInstances, stream, lootLayoutSeed );
 		}
+
+		if ( this == null )
+			return;
 
 		TreasurePileSurfaceBridge bridge = GetComponent<TreasurePileSurfaceBridge>();
 		if ( bridge != null )
@@ -967,6 +987,12 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			return interactable.PileDefinition;
 
 		return null;
+	}
+
+	/// <summary>Editor bake / tools: resolve definition without requiring runtime Bind.</summary>
+	public TreasurePileDefinition ResolveDefinitionForEditor()
+	{
+		return ResolveDefinition();
 	}
 
 	static int ResolveMeshResolution( TreasurePileDefinition definition, int heightRes )

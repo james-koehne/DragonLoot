@@ -15,24 +15,24 @@ MonoBehaviour:
   displayName: Treasure Pile
   coinContents:
   - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    count: 10000
-  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
-    count: 10000
-  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     count: 50000
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 50000
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 250000
   treasureContents:
   - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
-    count: 120
+    count: 240
   - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
-    count: 100
+    count: 200
   - treasure: {fileID: 11400000, guid: b6e1d4a8c2f53970e8a5b1d7c4f0e268, type: 2}
-    count: 70
+    count: 140
   - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
-    count: 50
+    count: 100
   - treasure: {fileID: 11400000, guid: 3f8a2d6c9e1b4570a4d8c2f6b0e5a937, type: 2}
-    count: 30
+    count: 60
   - treasure: {fileID: 11400000, guid: 5252608b20a5b26478a15dc5c333597f, type: 2}
-    count: 20
+    count: 40
   - treasure: {fileID: 11400000, guid: 950345e010709da49a63b1fbdf37dd7a, type: 2}
     count: 40
   - treasure: {fileID: 11400000, guid: 24a987b32945df74897fe318bdf5ec63, type: 2}
@@ -82,7 +82,7 @@ MonoBehaviour:
   - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
     count: 1
   maxVisibleTotal: 2400
-  coinVisibleBufferFraction: 0.2
+  coinVisibleBufferFraction: 0.1
   heightResolution: 256
   worldSize: 32
   maxHeight: 12
@@ -104,4 +104,12 @@ MonoBehaviour:
   treasureHeightBias: 0.4
   treasurePickupOutsideFraction: 0.4
   treasureReleaseOutsideFraction: 0.9
+  preferBakedLatents: 1
+  latentVolumeMaxAttempts: 24
+  latentRetryNoOccupancyPasses: 1
+  latentRetrySaltPasses: 0
+  latentUseSpatialHash: 1
+  latentAvoidCoinSeats: 0
+  latentBuildBudgetMs: 12
+  latentBuildMaxAttemptsPerFrame: 64
   pileMaterial: {fileID: 0}

@@ -130,7 +130,7 @@ Material:
     - _DistantCoinColor2: {r: 1.9, g: 0.9, b: 0.4, a: 1}
     - _DistantCoinColor3: {r: 1.1, g: 0.64, b: 0.16, a: 1}
     - _FresnelColor: {r: 1, g: 0.82, b: 0.45, a: 1}
-    - _GapColor: {r: 0.49056602, g: 0.327044, b: 0, a: 1}
+    - _GapColor: {r: 1, g: 0.83823526, b: 0.31372553, a: 1}
     - _SilverColor: {r: 1, g: 0.9291071, b: 0.603, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

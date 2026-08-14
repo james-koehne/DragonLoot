@@ -30,11 +30,22 @@ public class DebugCarrySection : DebugOverlaySection
 
 		GUILayout.Label( $"Weight: {carry.UsedWeight} (burden {carry.CarryBurden01:P0}, move x{carry.MoveSpeedMultiplier:0.##})" );
 		GUILayout.Label( $"Reference weight: {carry.MaxCarryWeight}" );
+		GUILayout.Label( $"Selected: {carry.SelectedBucket}  Total: {carry.TotalCount}" );
 		GUILayout.Label( $"Count: {carry.Count}  Held: {carry.HeldCount}" );
 		GUILayout.Label( $"Has Active: {carry.HasActive}" );
+		GUILayout.Label( $"Buckets C/G/A: {carry.GetBucketCount( CarryBucketKind.Coin )}/{carry.GetBucketCount( CarryBucketKind.Gem )}/{carry.GetBucketCount( CarryBucketKind.Artifact )}" );
 
 		if ( carry.TryPeekActive( out TreasureDefinition def ) && def != null )
 			GUILayout.Label( $"Active: {def.name}" );
+
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Coins" ) )
+			carry.TrySetSelectedBucket( CarryBucketKind.Coin );
+		if ( GUILayout.Button( "Gems" ) )
+			carry.TrySetSelectedBucket( CarryBucketKind.Gem );
+		if ( GUILayout.Button( "Artifacts" ) )
+			carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
+		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Clear Hands" ) )

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 
 using UnityEngine;
@@ -14,6 +15,13 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar.IInstanceMaskSource
 {
 	const int BatchSize = 1023;
+	/// <summary>Real CPU work budget per frame while placing bind seats (play mode).</summary>
+	const float BindSlotWorkBudgetMs = 12f;
+	/// <summary>Hard cap on placement attempts per frame so one pile cannot monopolize a frame.</summary>
+	const int BindSlotsMaxAttemptsPerFrame = 4096;
+	/// <summary>Near-surface top-up spawns per frame during play-mode bind seed.</summary>
+	const int BindSeedSpawnsPerFrame = 128;
+	const int BindSeedMaxPasses = 64;
 
 	struct Slot
 	{
@@ -79,7 +87,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	GoldPileLootStreamSettings streamSettings;
 
 	[SerializeField]
-	[Tooltip( "Logs slot/instance draw counts once after the initial BindAsync spawn." )]
+	[Tooltip( "Logs slot/instance draw counts once after BindAsync finishes (including deferred seed)." )]
 	bool logInitialSpawnStats = true;
 
 	public Mesh FallbackMesh => fallbackMesh;
@@ -277,6 +285,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		EnsureStreamSettings();
 
+
 		BuildRemaining( definition );
 		await EnsureFallbackVisualsAsync( definition );
 		if ( !IsBindTargetAlive( bindId ) )
@@ -294,17 +303,18 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_streamer.Bind( _chunkGrid, streamSettings );
 		AllocateChunkDrawnLists();
 
-		BuildSlots( definition, visuals );
-		RebuildVisibility();
+		// Play mode: spread placement across frames by CPU budget. Edit/sync finishes in one go.
+		await BuildSlotsAsync( definition, visuals, bindId );
 		if ( !IsBindTargetAlive( bindId ) )
 			return;
 
 		// Fill near-surface seats up to the steady draw target (not just one 48-seat pass).
-		SeedSteadyNearSurfaceCoins();
+		await SeedSteadyNearSurfaceCoinsAsync( bindId );
 		if ( !IsBindTargetAlive( bindId ) )
 			return;
 
 		_ready = _slots != null;
+
 
 		if ( logInitialSpawnStats )
 			LogInitialSpawnStats();
@@ -313,28 +323,53 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	/// <summary>
 	/// Promotes / spawns near-surface coin seats until the steady draw budget is filled.
 	/// Bind-time only — digs use a throttled TopUp pass instead.
+	/// Rebuilds after each TopUp and stops when Drawn does not increase.
 	/// </summary>
-	void SeedSteadyNearSurfaceCoins()
+	async Task SeedSteadyNearSurfaceCoinsAsync( int bindId )
 	{
-		if ( _definition == null || _heightfield == null )
+		if ( _definition == null || _heightfield == null || _slots == null )
 			return;
 
-		float topUpRadius = _heightfield.WorldSize * 0.55f;
-		const int maxPasses = 64;
-		const int spawnPerPass = 128;
 
-		for ( int pass = 0; pass < maxPasses; pass++ )
+		float topUpRadius = _heightfield.WorldSize * 0.55f;
+		bool timeSlice = Application.isPlaying;
+		int drawn = CountDrawnCoinSlots();
+
+		for ( int pass = 0; pass < BindSeedMaxPasses; pass++ )
 		{
-			int drawn = CountDrawnCoinSlots();
-			if ( drawn >= _steadyVisibleBudget )
+			if ( !IsBindTargetAlive( bindId ) )
+				return;
+
+			int need = _steadyVisibleBudget - drawn;
+			if ( need <= 0 )
 				break;
 
-			int spawned = TopUpShallowCoinSeatsNear( Vector3.zero, topUpRadius, spawnPerPass );
+			int spawned = TopUpShallowCoinSeatsNear(
+				Vector3.zero,
+				topUpRadius,
+				Mathf.Min( BindSeedSpawnsPerFrame, need ) );
 			if ( spawned <= 0 )
 				break;
 
+			// Required to know if TopUp actually increased Drawn (spawned != newly drawn).
 			RebuildVisibility();
+
+			int after = CountDrawnCoinSlots();
+			if ( after <= drawn )
+			{
+				break;
+			}
+
+			drawn = after;
+
+			if ( timeSlice )
+			{
+				await Awaitable.NextFrameAsync();
+				if ( !IsBindTargetAlive( bindId ) )
+					return;
+			}
 		}
+
 	}
 
 	bool IsBindTargetAlive( int bindId )
@@ -2518,7 +2553,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 	}
 
-	void BuildSlots( TreasurePileDefinition definition, Dictionary<TreasureDefinition, VisualAssets> visuals )
+	async Task BuildSlotsAsync(
+		TreasurePileDefinition definition,
+		Dictionary<TreasureDefinition, VisualAssets> visuals,
+		int bindId )
 	{
 		List<Slot> list = new List<Slot>( 256 );
 		List<BatchGroup> batches = new List<BatchGroup>();
@@ -2542,9 +2580,18 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int steadyBudget = definition.SteadyCoinVisibleBudget();
 		// Prefer shallow (visible) seats for the steady fill; dig-buffer remainder stays buried volume.
 		float shallowFraction = Mathf.Clamp01( steadyBudget / ( float )drawCap );
+		bool timeSlice = Application.isPlaying;
+		bool publishedSparse = false;
+		int attemptsThisFrame = 0;
+		System.Diagnostics.Stopwatch frameWorkSw = timeSlice
+			? System.Diagnostics.Stopwatch.StartNew()
+			: null;
 
 		for ( int e = 0; e < coinContents.Length; e++ )
 		{
+			if ( !IsBindTargetAlive( bindId ) )
+				return;
+
 			TreasurePileEntry entry = coinContents[ e ];
 			if ( entry.treasure == null || entry.count <= 0 )
 				continue;
@@ -2601,6 +2648,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 						DrawBatch = new Matrix4x4[ BatchSize ]
 					} );
 				}
+
+				// Publish batch defs early so sparse ready can draw.
+				_batches = batches.ToArray();
 			}
 
 			Mesh coinMesh = GetCoinMesh( entry.treasure );
@@ -2615,6 +2665,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 			for ( int i = 0; i < want; i++ )
 			{
+				if ( !IsBindTargetAlive( bindId ) )
+					return;
+
 				int unitIndex = _coinUnitSerial++;
 				float scale = entry.treasure.worldScale.x;
 				if ( scale < 0.01f )
@@ -2696,26 +2749,113 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					}
 				}
 
-				if ( !placed )
+				if ( placed )
+				{
+					list.Add( volumeSlot );
+				}
+
+
+				if ( !timeSlice )
 					continue;
 
-				list.Add( volumeSlot );
+				attemptsThisFrame++;
+				bool overBudget = attemptsThisFrame >= BindSlotsMaxAttemptsPerFrame
+					|| ( frameWorkSw != null
+						&& frameWorkSw.Elapsed.TotalMilliseconds >= BindSlotWorkBudgetMs );
+				if ( !overBudget )
+					continue;
+
+
+				// Commit only on first sparse publish (so coins appear early) and at the end.
+				// Intermediate yields keep growing `list` only — avoids O(n) cell rebuilds every slice.
+				if ( !publishedSparse )
+				{
+					CommitBindSlotProgress( list, batches, rebuildVisibility: true );
+					_ready = _slots != null;
+					publishedSparse = true;
+				}
+
+
+				attemptsThisFrame = 0;
+				await Awaitable.NextFrameAsync();
+				if ( !IsBindTargetAlive( bindId ) )
+					return;
+
+
+				// Restart AFTER await so other piles' CPU is not billed to this frame budget.
+				if ( frameWorkSw != null )
+					frameWorkSw.Restart();
 			}
 		}
 
-		_slots = list.ToArray();
+		CommitBindSlotProgress( list, batches, rebuildVisibility: true );
+		if ( !publishedSparse )
+			_ready = _slots != null;
+	}
+
+	void CommitBindSlotProgress(
+		List<Slot> list,
+		List<BatchGroup> batches,
+		bool rebuildVisibility )
+	{
+		int prevCount = _slots != null ? _slots.Length : 0;
+		Slot[] prevSlots = _slots;
+
 		_batches = batches.ToArray();
-		_cellLists = new List<int>[ spatialCells * spatialCells ];
-		_drawnCellLists = new List<int>[ spatialCells * spatialCells ];
-		for ( int i = 0; i < _cellLists.Length; i++ )
+		_slots = list.ToArray();
+
+		// Intermediate grows must keep Drawn/MatrixIndex or sparse draw state is wiped.
+		if ( !rebuildVisibility && prevSlots != null )
 		{
-			_cellLists[ i ] = new List<int>( 16 );
-			_drawnCellLists[ i ] = new List<int>( 8 );
+			int keep = Mathf.Min( prevCount, _slots.Length );
+			for ( int i = 0; i < keep; i++ )
+			{
+				Slot s = _slots[ i ];
+				s.Drawn = prevSlots[ i ].Drawn;
+				s.MatrixIndex = prevSlots[ i ].MatrixIndex;
+				_slots[ i ] = s;
+			}
+		}
+
+		int cellCount = spatialCells * spatialCells;
+		if ( _cellLists == null || _cellLists.Length != cellCount )
+		{
+			_cellLists = new List<int>[ cellCount ];
+			_drawnCellLists = new List<int>[ cellCount ];
+			for ( int i = 0; i < cellCount; i++ )
+			{
+				_cellLists[ i ] = new List<int>( 16 );
+				_drawnCellLists[ i ] = new List<int>( 8 );
+			}
+		}
+		else
+		{
+			for ( int i = 0; i < cellCount; i++ )
+				_cellLists[ i ].Clear();
+
+			// Only wipe drawn-cell lists when rebuilding; otherwise keep sparse draw indices.
+			if ( rebuildVisibility )
+			{
+				for ( int i = 0; i < cellCount; i++ )
+					_drawnCellLists[ i ].Clear();
+			}
 		}
 
 		for ( int i = 0; i < _slots.Length; i++ )
 			AssignCell( i );
+
+
+		if ( !rebuildVisibility )
+		{
+			return;
+		}
+
+		RebuildVisibility();
+		// Keep the working list in sync so later ToArray commits do not wipe Drawn flags.
+		for ( int i = 0; i < _slots.Length && i < list.Count; i++ )
+			list[ i ] = _slots[ i ];
 	}
+
 
 	bool TryCreateVolumeCoinSlot(
 		TreasureDefinition definition,

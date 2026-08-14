@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27725a0549f518041a754948f828997a, type: 3}
+  m_Name: Quest_Museum
+  m_EditorClassIdentifier: Assembly-CSharp::QuestDefinition
+  id: quest_museum
+  displayTitle: Remember the Treasures
+  onStartDialogue:
+  - speaker: Dragon
+    text: And these...
+    pauseAfter: 0.25
+  - speaker: Dragon
+    text: These are the things worth remembering.
+    pauseAfter: 0.5
+  onCompleteDialogue:
+  - speaker: Dragon
+    text: Hmm.
+    pauseAfter: 0.25
+  - speaker: Dragon
+    text: I remember stealing that.
+    pauseAfter: 1.1
+  - speaker: Dragon
+    text: Good times.
+    pauseAfter: 0.5
+  steps:
+  - id: find_museum
+    objectiveText: Find an artifact and bring it to the museum
+    markerTargetId: museum_table
+    onEnterDialogue: []
+    onCompleteDialogue: []
+    conditionMode: 0
+    conditions:
+    - type: 0
+      targetId: volume_museum
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      sectionId: 
+  - id: place_artifact
+    objectiveText: Place the artifact in its correct museum spot
+    markerTargetId: museum_table
+    onEnterDialogue: []
+    onCompleteDialogue: []
+    conditionMode: 0
+    conditions:
+    - type: 5
+      targetId: museum_table
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      sectionId: 

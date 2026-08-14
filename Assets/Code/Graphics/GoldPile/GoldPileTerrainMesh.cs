@@ -247,16 +247,21 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		}
 
 		if ( !_colliderCookPending && !_colliderTiles.HasDirtyOrPending() )
+		{
 			return;
+		}
 
 		if ( !ShouldCookColliderNow() )
+		{
 			return;
+		}
 
 		int scheduled = _colliderTiles.RequestAsyncBakes( MaxAsyncCooksPerFrame );
 		_colliderCookPending = _colliderTiles.HasDirtyOrPending();
 		if ( scheduled > 0 )
 			_lastColliderCookTime = Time.unscaledTime;
 	}
+
 
 	bool ShouldCookColliderNow()
 	{

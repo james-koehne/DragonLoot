@@ -1,6 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
-using MoreMountains.Feedbacks;
+using FeedbackSystem;
 using System;
 using System.Threading.Tasks;
 using UnityEngine.Events;
@@ -46,11 +46,11 @@ public class FunkButton : MonoBehaviour, ISubmitHandler, IPointerDownHandler, IP
 	public bool startSelected = false;
 
 	[Header( "Feedback Players per State" )]
-	public MMF_Player normalStateFeedback;
-	public MMF_Player highlightedStateFeedback;
-	public MMF_Player pressedStateFeedback;
-	public MMF_Player selectedStateFeedback;
-	public MMF_Player disabledStateFeedback;
+	public Feedbacks normalStateFeedback;
+	public Feedbacks highlightedStateFeedback;
+	public Feedbacks pressedStateFeedback;
+	public Feedbacks selectedStateFeedback;
+	public Feedbacks disabledStateFeedback;
 
 	[Header( "Click Event" )]
 	public UnityEvent onClick = new UnityEvent();
@@ -145,24 +145,24 @@ public class FunkButton : MonoBehaviour, ISubmitHandler, IPointerDownHandler, IP
 		onStateChanged?.Invoke( state );
 	}
 
-	private void PlayFeedback( MMF_Player player )
+	private void PlayFeedback( Feedbacks feedbacks )
 	{
-		if ( player != null )
-			player.PlayFeedbacks();
+		if ( feedbacks != null )
+			feedbacks.Play();
 	}
 
 	private void StopAllFeedbacks()
 	{
 		if ( normalStateFeedback != null )
-			normalStateFeedback.StopFeedbacks();
+			normalStateFeedback.Stop();
 		if ( highlightedStateFeedback != null )
-			highlightedStateFeedback.StopFeedbacks();
+			highlightedStateFeedback.Stop();
 		if ( pressedStateFeedback != null )
-			pressedStateFeedback.StopFeedbacks();
+			pressedStateFeedback.Stop();
 		if ( selectedStateFeedback != null )
-			selectedStateFeedback.StopFeedbacks();
+			selectedStateFeedback.Stop();
 		if ( disabledStateFeedback != null )
-			disabledStateFeedback.StopFeedbacks();
+			disabledStateFeedback.Stop();
 	}
 
 	public void OnSubmit( BaseEventData eventData )

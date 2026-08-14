@@ -35,6 +35,15 @@ public class ProfileSaveData : IGameStats
 	/// <summary>True after the skeleton key has been claimed from its display case.</summary>
 	public bool skeletonKeyClaimed;
 
+	/// <summary>Active linear quest id (null when catalog complete or not started).</summary>
+	public string activeQuestId;
+
+	/// <summary>Step index within <see cref="activeQuestId"/>.</summary>
+	public int activeStepIndex;
+
+	/// <summary>Completed quest ids in catalog order.</summary>
+	public List<string> completedQuestIds;
+
 	public ProfileSaveData()
 	{
 		UpdateTime = "INVALID";
@@ -68,6 +77,16 @@ public class ProfileSaveData : IGameStats
 
 		if ( upgradeLevels == null )
 			upgradeLevels = new Dictionary<string, int>();
+
+		EnsureQuestProgress();
+	}
+
+	public void EnsureQuestProgress()
+	{
+		if ( completedQuestIds == null )
+			completedQuestIds = new List<string>();
+		if ( activeStepIndex < 0 )
+			activeStepIndex = 0;
 	}
 
 	/// <summary>
@@ -126,7 +145,56 @@ public class ProfileSaveData : IGameStats
 			changed = true;
 		}
 
+		if ( MergeQuestProgressFrom( other ) )
+			changed = true;
+
 		return changed;
+	}
+
+	/// <summary>Keeps the furthest linear quest progress between two saves.</summary>
+	public bool MergeQuestProgressFrom( ProfileSaveData other )
+	{
+		if ( other == null )
+			return false;
+
+		EnsureQuestProgress();
+		other.EnsureQuestProgress();
+
+		bool changed = false;
+		if ( other.completedQuestIds != null )
+		{
+			for ( int i = 0; i < other.completedQuestIds.Count; i++ )
+			{
+				string id = other.completedQuestIds[ i ];
+				if ( string.IsNullOrEmpty( id ) )
+					continue;
+				if ( completedQuestIds.Contains( id ) )
+					continue;
+				completedQuestIds.Add( id );
+				changed = true;
+			}
+		}
+
+		int selfScore = ComputeQuestProgressScore( this );
+		int otherScore = ComputeQuestProgressScore( other );
+		if ( otherScore > selfScore )
+		{
+			activeQuestId = other.activeQuestId;
+			activeStepIndex = other.activeStepIndex;
+			changed = true;
+		}
+
+		return changed;
+	}
+
+	static int ComputeQuestProgressScore( ProfileSaveData save )
+	{
+		if ( save == null )
+			return 0;
+
+		int completed = save.completedQuestIds != null ? save.completedQuestIds.Count : 0;
+		int step = Mathf.Max( 0, save.activeStepIndex );
+		return completed * 1000 + step;
 	}
 }
 

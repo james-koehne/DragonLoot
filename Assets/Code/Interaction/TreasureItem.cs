@@ -29,6 +29,7 @@ public class TreasureItem : MonoBehaviour
 	bool _usingContinuous;
 	float _variationSeed;
 	float _cleanProgress = 1f;
+	int _artifactSurfaceBouncesRemaining;
 
 	public TreasureDefinition Definition => definition;
 	public TreasureItemState State => _state;
@@ -106,7 +107,7 @@ public class TreasureItem : MonoBehaviour
 	{
 		ApplyVariationSeed();
 		ApplyDirtVisual();
-		EnsureSparkleMaskContributor();
+		StripSparkleMaskContributor();
 	}
 
 	public void Bind( TreasureDefinition treasure, bool viaAddressables )
@@ -126,7 +127,7 @@ public class TreasureItem : MonoBehaviour
 		ApplyDirtVisual();
 		ApplyDisplayName();
 		ApplyCollectableLayer();
-		EnsureSparkleMaskContributor();
+		StripSparkleMaskContributor();
 	}
 
 	public void ResetCleanlinessFromDefinition()
@@ -319,6 +320,15 @@ public class TreasureItem : MonoBehaviour
 		}
 
 		_stableTimer = 0f;
+		if ( definition != null && definition.category == TreasureCategory.Artifact )
+		{
+			TreasureSurfaceDefinition surfaceDef = TreasureSurfaceWorld.Instance != null
+				? TreasureSurfaceWorld.Instance.Definition
+				: null;
+			_artifactSurfaceBouncesRemaining = surfaceDef != null ? surfaceDef.artifactMaxBounces : 1;
+			ClampArtifactToTreasureSurface( allowBounce: true );
+		}
+
 		LooseTreasureManager.Register( this );
 		TreasureProximitySleep.RegisterPhysics( this );
 
@@ -946,17 +956,16 @@ public class TreasureItem : MonoBehaviour
 			renderer.sharedMaterial = definition.materialOverride;
 	}
 
-	void EnsureSparkleMaskContributor()
+	void StripSparkleMaskContributor()
 	{
 		TreasureSparkleMaskContributor contributor = GetComponent<TreasureSparkleMaskContributor>();
 		if ( contributor == null )
-			contributor = gameObject.AddComponent<TreasureSparkleMaskContributor>();
+			return;
 
-		TreasureSparkleDefinition.SparkleSourceKind kind = TreasureSparkleDefinition.SparkleSourceKind.Artifact;
-		if ( definition != null )
-			kind = TreasureSparkleDefinition.KindFromCategory( definition.category );
-		contributor.SetKind( kind );
-		contributor.RefreshRegistration();
+		if ( Application.isPlaying )
+			Destroy( contributor );
+		else
+			DestroyImmediate( contributor );
 	}
 
 	/// <summary>
@@ -1130,6 +1139,8 @@ public class TreasureItem : MonoBehaviour
 			return;
 
 		TickCoinTopple();
+		if ( definition != null && definition.category == TreasureCategory.Artifact )
+			ClampArtifactToTreasureSurface( allowBounce: true );
 		TickPhysicsStabilization();
 	}
 
@@ -1211,7 +1222,7 @@ public class TreasureItem : MonoBehaviour
 
 		TreasureSurfaceDefinition surfaceDef = world.Definition;
 		float snapDist = surfaceDef != null ? surfaceDef.artifactSurfaceSnapDistance : 0.07f;
-		float seatLift = TreasureSurfaceSeat.GetContactLift( this, transform.rotation, Vector3.up );
+		float seatLift = TreasureSurfaceSeat.GetStableContactLift( this );
 		Vector3 pos = transform.position;
 
 		bool needXz = true;
@@ -1219,7 +1230,8 @@ public class TreasureItem : MonoBehaviour
 		{
 			needXz = false;
 			float contactY = sample.Height + seatLift;
-			if ( Mathf.Abs( pos.y - contactY ) > snapDist )
+			// Always lift if below the surface; snap when farther than snapDist above/below.
+			if ( pos.y < contactY - 0.001f || Mathf.Abs( pos.y - contactY ) > snapDist )
 			{
 				pos.y = contactY;
 				transform.position = pos;
@@ -1235,6 +1247,86 @@ public class TreasureItem : MonoBehaviour
 			dest.y = recovered.Height + seatLift;
 			transform.SetPositionAndRotation( dest, transform.rotation );
 			SyncRigidbodyToTransform();
+		}
+	}
+
+	/// <summary>
+	/// Keeps artifact pivots from sinking under the treasure surface heightfield
+	/// (which is not a Unity collider). Optional bounce uses artifact hop params.
+	/// </summary>
+	public void ClampArtifactToTreasureSurface( bool allowBounce )
+	{
+		if ( definition == null || definition.category != TreasureCategory.Artifact )
+			return;
+
+		TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+		if ( world == null || world.Sampler == null || !world.IsInitialized )
+			return;
+
+		Vector3 pos = transform.position;
+		if ( world.TryGetChunkCoord( pos, out TreasureChunkCoord coord ) )
+			world.EnsureChunkLoaded( coord );
+
+		if ( !world.Sampler.TrySample( pos, out TreasureSurfaceSample sample ) || !sample.Valid )
+			return;
+
+		if ( !sample.Traversable )
+		{
+			if ( !world.TryFindNearestTraversable( pos, out Vector3 dest, out TreasureSurfaceSample recovered, preferStable: false ) )
+				return;
+
+			float lift = TreasureSurfaceSeat.GetStableContactLift( this );
+			dest.y = Mathf.Max( recovered.Height, recovered.Height + lift );
+			transform.position = dest;
+			SyncRigidbodyToTransform();
+			if ( _body != null )
+			{
+				Vector3 v = _body.linearVelocity;
+				if ( v.y < 0f )
+				{
+					v.y = 0f;
+					_body.linearVelocity = v;
+				}
+			}
+
+			return;
+		}
+
+		float seatLift = TreasureSurfaceSeat.GetStableContactLift( this );
+		float contactY = sample.Height + seatLift;
+		if ( pos.y >= contactY - 0.0001f )
+			return;
+
+		float under = contactY - pos.y;
+		pos.y = contactY;
+		transform.position = pos;
+		SyncRigidbodyToTransform();
+
+		if ( _body == null )
+			return;
+
+		Vector3 vel = _body.linearVelocity;
+		TreasureSurfaceDefinition def = world.Definition;
+		if ( allowBounce
+			&& vel.y < -0.05f
+			&& _artifactSurfaceBouncesRemaining > 0
+			&& def != null )
+		{
+			float impact = Mathf.Max( -vel.y, under );
+			float restitution = Mathf.Max( 0.05f, def.artifactBounceRestitution );
+			float hopMin = def.artifactHopMin;
+			float hopCap = def.artifactHopMax;
+			if ( hopCap < hopMin )
+				hopCap = hopMin;
+			vel.y = Mathf.Clamp( impact * restitution, hopMin, hopCap );
+			_artifactSurfaceBouncesRemaining--;
+			_body.linearVelocity = vel;
+			_stableTimer = 0f;
+		}
+		else if ( vel.y < 0f )
+		{
+			vel.y = 0f;
+			_body.linearVelocity = vel;
 		}
 	}
 

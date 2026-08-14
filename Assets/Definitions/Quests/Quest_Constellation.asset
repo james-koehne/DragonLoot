@@ -1,0 +1,58 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 27725a0549f518041a754948f828997a, type: 3}
+  m_Name: Quest_Constellation
+  m_EditorClassIdentifier: Assembly-CSharp::QuestDefinition
+  id: quest_constellation
+  displayTitle: Admire the Gems
+  onStartDialogue:
+  - speaker: Dragon
+    text: Gold is for counting.
+    pauseAfter: 0.25
+  - speaker: Dragon
+    text: Gems, however...
+    pauseAfter: 0.25
+  - speaker: Dragon
+    text: ...are for admiring.
+    pauseAfter: 0.5
+  onCompleteDialogue:
+  - speaker: Dragon
+    text: I haven't seen that in a very long time.
+    pauseAfter: 1.2
+  - speaker: Dragon
+    text: Beautiful.
+    pauseAfter: 0.6
+  steps:
+  - id: find_constellation
+    objectiveText: Find the constellation wall
+    markerTargetId: constellation
+    onEnterDialogue: []
+    onCompleteDialogue: []
+    conditionMode: 0
+    conditions:
+    - type: 0
+      targetId: volume_constellation
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      sectionId: 
+  - id: fill_constellation
+    objectiveText: Fill the constellation with the required gems
+    markerTargetId: constellation
+    onEnterDialogue: []
+    onCompleteDialogue: []
+    conditionMode: 0
+    conditions:
+    - type: 4
+      targetId: constellation
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      sectionId: 

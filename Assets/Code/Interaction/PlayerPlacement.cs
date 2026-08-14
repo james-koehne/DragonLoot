@@ -1,6 +1,16 @@
 using System.Collections.Generic;
 
+using FeedbackSystem;
+
 using UnityEngine;
+
+public enum SecondaryContextAction
+{
+	None,
+	Place,
+	Throw,
+	CannotPlace
+}
 
 /// <summary>
 /// Drives placement preview ghost and place attempts while the player is holding treasure.
@@ -24,6 +34,9 @@ public class PlayerPlacement : MonoBehaviour
 	static readonly List<Renderer> StackOutlineScratch = new List<Renderer>( 8 );
 	static readonly List<TreasureItem> StackOutlineColumnScratch = new List<TreasureItem>( 8 );
 
+	[SerializeField]
+	Feedbacks onPlaceLandFeedback;
+
 	PlayerPlacementDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
 	public ITreasurePlacementTarget ActiveTarget => _activeTarget;
@@ -40,6 +53,62 @@ public class PlayerPlacement : MonoBehaviour
 	public FloorPlacementTarget FloorTarget => _floorTarget;
 	public float PlacementArcHeight => RuntimeDefinition.Get( Definition, d => d.placementArcHeight, 0.12f );
 	public float CoinFlipSpeed => RuntimeDefinition.Get( Definition, d => d.coinFlipSpeed, 1f );
+
+	/// <summary>
+	/// What SecondaryInteract would do right now, without performing the action.
+	/// Mirrors <see cref="TrySecondaryPlace"/> outcomes for context UI.
+	/// </summary>
+	public SecondaryContextAction GetSecondaryContextAction()
+	{
+		if ( !_inputEnabled || _player == null )
+			return SecondaryContextAction.None;
+
+		PlayerCarry carry = _player.Carry;
+		if ( carry == null || carry.Count <= 0 )
+			return SecondaryContextAction.None;
+
+		if ( !carry.TryPeekActive( out TreasureItem item ) || item == null )
+			return SecondaryContextAction.None;
+
+		if ( HasValidPlacement )
+			return SecondaryContextAction.Place;
+
+		PlacementQuery query = BuildQuery();
+
+		if ( !query.HasHit || query.Hit.collider == null )
+			return SecondaryContextAction.Throw;
+
+		if ( _hasPreview )
+		{
+			if ( ShouldThrowAtRejectedConstellation( _activeTarget, item ) )
+				return SecondaryContextAction.Throw;
+
+			if ( CanAutoFindValidSlot( _activeTarget, item ) )
+				return SecondaryContextAction.Place;
+
+			return SecondaryContextAction.CannotPlace;
+		}
+
+		ITreasurePlacementTarget aimTarget = ResolveTarget( in query, allowGroundStack: true );
+
+		if ( aimTarget != null && aimTarget != _floorTarget )
+		{
+			query.AutoFindValidSlot = true;
+			if ( !aimTarget.CanPlace( item, in query ) )
+			{
+				if ( ShouldThrowAtRejectedConstellation( aimTarget, item ) )
+					return SecondaryContextAction.Throw;
+				return SecondaryContextAction.CannotPlace;
+			}
+
+			return SecondaryContextAction.Place;
+		}
+
+		if ( aimTarget == _floorTarget || IsAimingFloorSurface( in query ) )
+			return SecondaryContextAction.CannotPlace;
+
+		return SecondaryContextAction.CannotPlace;
+	}
 
 	float DropUpBias => RuntimeDefinition.Get( Definition, d => d.dropUpBias, 0.05f );
 	float GroundStackUpBias => RuntimeDefinition.Get( Definition, d => d.groundStackUpBias, 0.02f );
@@ -87,6 +156,14 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !_inputEnabled || _player == null || _interaction == null )
 		{
 			ClearPreview();
+			return;
+		}
+
+		PlayerSorterReposition sorter = _player.SorterReposition;
+		if ( sorter != null && sorter.IsRepositioning )
+		{
+			// Sorter owns StackVolume outline for place-validity tint — do not clear it.
+			ClearTreasurePreviewOnly();
 			return;
 		}
 
@@ -206,13 +283,6 @@ public class PlayerPlacement : MonoBehaviour
 
 		EnsureGhost();
 		ConfigureGhostVisuals();
-
-		if ( preview.GhostStyle == PlacementGhostStyle.StackOutline )
-		{
-			_ghost.SetVisible( false );
-			UpdateStackHoverOutline( target );
-			return;
-		}
 
 		_ghost.SetVisible( true );
 		_ghost.SyncFromItem( item );
@@ -605,15 +675,22 @@ public class PlayerPlacement : MonoBehaviour
 
 	bool TryPlaceWithAutoFindValidSlot( ITreasurePlacementTarget target, TreasureItem item )
 	{
+		if ( !CanAutoFindValidSlot( target, item ) )
+			return false;
+
+		PlacementQuery query = BuildQuery();
+		query.AutoFindValidSlot = true;
+		return ExecutePlace( target, item, in query );
+	}
+
+	bool CanAutoFindValidSlot( ITreasurePlacementTarget target, TreasureItem item )
+	{
 		if ( !SupportsAutoFindValidSlot( target ) || item == null )
 			return false;
 
 		PlacementQuery query = BuildQuery();
 		query.AutoFindValidSlot = true;
-		if ( !target.CanPlace( item, in query ) )
-			return false;
-
-		return ExecutePlace( target, item, in query );
+		return target.CanPlace( item, in query );
 	}
 
 	bool TryPlaceFromActivePreview( TreasureItem item )
@@ -709,6 +786,7 @@ public class PlayerPlacement : MonoBehaviour
 		Quaternion[] rots = new Quaternion[ cluster.Count ];
 		Vector3[] landVels = new Vector3[ cluster.Count ];
 		float[] flightTimes = new float[ cluster.Count ];
+		ThrowFlightPath[] paths = new ThrowFlightPath[ cluster.Count ];
 
 		for ( int i = 0; i < cluster.Count; i++ )
 		{
@@ -718,6 +796,8 @@ public class PlayerPlacement : MonoBehaviour
 
 			Vector3 start = member.transform.position;
 			Vector3 memberVelocity = throwVelocity;
+			ThrowFlightPath path = new ThrowFlightPath();
+			paths[ i ] = path;
 
 			if ( !TreasureSurfaceThrow.TryPredictLanding(
 				world,
@@ -725,7 +805,8 @@ public class PlayerPlacement : MonoBehaviour
 				memberVelocity,
 				out Vector3 landPos,
 				out Vector3 landVel,
-				out float flightTime ) )
+				out float flightTime,
+				path ) )
 			{
 				Vector3 planarThrow = new Vector3( throwVelocity.x, 0f, throwVelocity.z );
 				Vector3 flatDir = planarThrow.sqrMagnitude > 0.0001f
@@ -736,6 +817,10 @@ public class PlayerPlacement : MonoBehaviour
 				landPos.y = surfaceDef != null ? surfaceDef.baseHeight : start.y;
 				landVel = planarThrow * landScale;
 				flightTime = 0.35f;
+				path.Clear();
+				path.Add( start, 0f );
+				path.Add( landPos, flightTime );
+				path.LandVelocity = landVel;
 			}
 
 			ends[ i ] = landPos;
@@ -767,7 +852,8 @@ public class PlayerPlacement : MonoBehaviour
 			landVels,
 			flightTimes,
 			spins,
-			CoinFlipSpeed ) );
+			CoinFlipSpeed,
+			paths ) );
 
 		EventBus.Publish( new PlacementCompletedEvent
 		{
@@ -938,7 +1024,35 @@ public class PlayerPlacement : MonoBehaviour
 			Item = item,
 			Definition = definition
 		} );
+
+		// Destination cue (stack top / ghost pose) — 3D at where the treasure will land.
+		TreasureInteractSfx.PlayPlace( definition, preview.Position );
+		PlayPlaceLandFeedback();
 		return true;
+	}
+
+	public void PlayPlaceLandFeedback()
+	{
+		PlayPlaceLandFeedback( null );
+	}
+
+	public void PlayPlaceLandFeedback( TreasureItem item )
+	{
+		if ( onPlaceLandFeedback != null )
+			onPlaceLandFeedback.Play();
+
+		// Landing SFX for flights is fired from flight completion with the land position.
+		// Immediate / whole-stack callers that need a land cue pass an explicit world position.
+		if ( item != null && !item.IsInFlight )
+			TreasureInteractSfx.PlayPlace( item );
+	}
+
+	public void PlayPlaceLandFeedbackAt( TreasureDefinition definition, Vector3 worldPosition )
+	{
+		if ( onPlaceLandFeedback != null )
+			onPlaceLandFeedback.Play();
+
+		TreasureInteractSfx.PlayPlace( definition, worldPosition );
 	}
 
 	PlacementQuery BuildQuery()
@@ -1481,6 +1595,17 @@ public class PlayerPlacement : MonoBehaviour
 		_activePreview = default;
 		_hasSmoothedPreview = false;
 		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
+		if ( _ghost != null )
+			_ghost.SetVisible( false );
+	}
+
+	void ClearTreasurePreviewOnly()
+	{
+		GroundTreasureStackTarget.ClearPreviewReservation();
+		_activeTarget = null;
+		_hasPreview = false;
+		_activePreview = default;
+		_hasSmoothedPreview = false;
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
 	}

@@ -12,6 +12,9 @@ public static class PhysicsLayers
 
 	static bool _applied;
 
+	public static int PlayerLayer => LayerMask.NameToLayer( PlayerLayerName );
+	public static int CollectableLayer => LayerMask.NameToLayer( CollectableLayerName );
+
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.BeforeSceneLoad )]
 	static void Apply()
 	{

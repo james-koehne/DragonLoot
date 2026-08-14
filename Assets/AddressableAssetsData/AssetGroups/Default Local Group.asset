@@ -20,6 +20,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0c047e98e88153842a63b59ea3ba5043
+    m_Address: LightFlickerDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 0eaa497ede230864da009d12dcdc9024
     m_Address: Assets/Addressables/Treasure/Artifacts/BronzeChaliceVisual.prefab
     m_ReadOnly: 0
@@ -90,6 +96,12 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 50d0b586433eeae46804a5f21702c850
+    m_Address: QuestCatalogDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 54b18aea4c0eec147b576328346e822d
     m_Address: Assets/Addressables/Treasure/Artifacts/RustyShortswordVisual.prefab
     m_ReadOnly: 0
@@ -124,6 +136,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/DragonsteelSwordVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 60cc58be380385c4e83f61ea9ea86c1d
+    m_Address: AudioDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6279f1d03dbc3bd489f53942d2b25767
     m_Address: Assets/Addressables/Treasure/Artifacts/CrystalCandelabrumVisual.prefab

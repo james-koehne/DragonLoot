@@ -20,6 +20,20 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 	public IReadOnlyList<TreasureItem> DisplayedCoins => DisplayedItems;
 
+	/// <summary>
+	/// Hold-F whole-stack place: every carried coin must match this table's accepted definition.
+	/// </summary>
+	public bool CanAcceptWholeCarriedCoinStack( IReadOnlyList<TreasureDefinition> definitions )
+	{
+		if ( definitions == null || definitions.Count == 0 || AcceptedCoin == null )
+			return false;
+
+		if ( !PlayerCarry.AreCoinDefinitionsUniform( definitions, out TreasureDefinition uniform ) )
+			return false;
+
+		return uniform == AcceptedCoin;
+	}
+
 	protected override void Reset()
 	{
 		base.Reset();

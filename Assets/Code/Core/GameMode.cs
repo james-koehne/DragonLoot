@@ -126,11 +126,41 @@ public class GameMode : MonoBehaviour, IGameMode
 				crosshair = interfacePrefab.AddComponent<CrosshairUI>();
 			crosshair.Setup();
 
-			// TreasureCounterHUD disabled for now.
-			// TreasureCounterHUD counterHud = interfacePrefab.GetComponentInChildren<TreasureCounterHUD>( true );
-			// if ( counterHud == null )
-			// 	counterHud = interfacePrefab.AddComponent<TreasureCounterHUD>();
-			// counterHud.Setup();
+			InteractionContextUI contextUi = interfacePrefab.GetComponentInChildren<InteractionContextUI>( true );
+			if ( contextUi == null )
+				contextUi = interfacePrefab.AddComponent<InteractionContextUI>();
+			contextUi.Setup();
+
+			InteractionProgressRingUI progressRing = interfacePrefab.GetComponentInChildren<InteractionProgressRingUI>( true );
+			if ( progressRing == null )
+			{
+				CrosshairUI host = interfacePrefab.GetComponentInChildren<CrosshairUI>( true );
+				if ( host != null )
+					progressRing = host.gameObject.AddComponent<InteractionProgressRingUI>();
+				else
+					progressRing = interfacePrefab.AddComponent<InteractionProgressRingUI>();
+			}
+
+			progressRing.Setup();
+
+			DragonDialogueUI dialogueUi = interfacePrefab.GetComponentInChildren<DragonDialogueUI>( true );
+			if ( dialogueUi != null )
+				dialogueUi.Setup();
+
+			QuestObjectiveUI objectiveUi = interfacePrefab.GetComponentInChildren<QuestObjectiveUI>( true );
+			if ( objectiveUi != null )
+				objectiveUi.Setup();
+
+			QuestCompassUI compassUi = interfacePrefab.GetComponentInChildren<QuestCompassUI>( true );
+			if ( compassUi != null )
+				compassUi.Setup();
+
+			QuestWorldMarker worldMarker = interfacePrefab.GetComponentInChildren<QuestWorldMarker>( true );
+			if ( worldMarker != null )
+				worldMarker.Setup();
+
+			QuestSystem quests = QuestSystem.EnsureExists();
+			quests.StartOrResumeCatalog();
 		}
 
 		if ( GetComponent<DebugOverlay>() == null )

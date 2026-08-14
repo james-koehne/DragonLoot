@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
 
+using FeedbackSystem;
+
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -10,7 +12,6 @@ using UnityEngine.UI;
 /// If the accepted treasure is stackable (<see cref="TreasureDefinition.canStack"/>), items
 /// pile vertically in a slot; otherwise each slot holds one item (gems).
 /// </summary>
-[RequireComponent( typeof( Collider ) )]
 public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget, ITreasureDisplayStackOwner
 {
 	public enum FillDirection
@@ -80,11 +81,17 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	[SerializeField]
 	protected GameObject completedHighlight;
 
+	[Header( "Editor" )]
+	[SerializeField]
+	bool drawLayoutGizmosAlways;
+
+	protected Collider TableCollider;
 	protected DisplaySlot[] Slots;
 	readonly List<TreasureItem> _displayedItems = new List<TreasureItem>();
 	int _currentCount;
 	bool _isComplete;
 	int _previewOutlineSlot = -1;
+	Feedbacks _placeFeedbacks;
 
 	public abstract TreasureOwnerKind OwnerKind { get; }
 
@@ -94,7 +101,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 	public TreasureDefinition AcceptedTreasure => acceptedTreasure;
 	public int CurrentCount => _currentCount;
-	public int SlotCount => rows * columns;
+	public int SlotCount => DisplayTableSlotLayout.SlotCount( rows, columns );
 	public bool AllowsVerticalStack => acceptedTreasure != null && acceptedTreasure.canStack;
 
 	/// <summary>Completion target: slot count, or slots × max stack when capped.</summary>
@@ -118,6 +125,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 	protected virtual void Awake()
 	{
+		EnsureCollider();
 		EnsureDisplayArea();
 		RebuildSlots();
 		ApplyInteractionName();
@@ -191,6 +199,183 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		return false;
 	}
 
+	public bool TryGetSlotIndex( TreasureItem selected, out int slotIndex )
+	{
+		slotIndex = -1;
+		if ( selected == null || Slots == null )
+			return false;
+
+		for ( int s = 0; s < Slots.Length; s++ )
+		{
+			if ( Slots[ s ].Items.IndexOf( selected ) < 0 )
+				continue;
+
+			slotIndex = s;
+			return true;
+		}
+
+		return false;
+	}
+
+	public int GetSlotCount( int slotIndex )
+	{
+		if ( Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return 0;
+
+		return Slots[ slotIndex ].Count;
+	}
+
+	public void AppendSlotOutlineRenderers( TreasureItem selected, List<Renderer> renderers )
+	{
+		if ( !TryGetSlotIndex( selected, out int slotIndex ) )
+			return;
+
+		AppendSlotOutlineRenderers( Slots[ slotIndex ], renderers );
+	}
+
+	public bool TryConsumeSlotDefinitions(
+		int slotIndex,
+		List<TreasureDefinition> into,
+		out Vector3 contact,
+		out Quaternion rotation )
+	{
+		contact = transform.position;
+		rotation = transform.rotation;
+		if ( into == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
+
+		DisplaySlot slot = Slots[ slotIndex ];
+		if ( slot.Count <= 0 )
+			return false;
+
+		GetSlotBaseWorldPose( slotIndex, out contact, out rotation );
+
+		List<TreasureItem> taken = new List<TreasureItem>( slot.Items.Count );
+		for ( int i = 0; i < slot.Items.Count; i++ )
+		{
+			TreasureItem member = slot.Items[ i ];
+			if ( member == null || member.Definition == null )
+				continue;
+
+			taken.Add( member );
+		}
+
+		if ( taken.Count == 0 )
+			return false;
+
+		slot.Items.Clear();
+		for ( int i = 0; i < taken.Count; i++ )
+		{
+			TreasureItem member = taken[ i ];
+			into.Add( member.Definition );
+			_displayedItems.Remove( member );
+			_currentCount = Mathf.Max( 0, _currentCount - 1 );
+			NotifySortedDelta( member.Definition, -1 );
+			EventBus.Publish( new TreasureRemovedEvent
+			{
+				Target = this,
+				Item = member,
+				Definition = member.Definition
+			} );
+			TreasureItemFactory.Despawn( member );
+		}
+
+		_isComplete = false;
+		SetCompletedVisual( false );
+		RestackSlot( slotIndex );
+		RefreshSlotCylinder( slotIndex, animate: true );
+		RefreshCountLabel();
+		PublishChanged();
+		return into.Count > 0;
+	}
+
+	public int GetSlotCoinAppendCapacity( int slotIndex, TreasureDefinition probe )
+	{
+		if ( !Accepts( probe ) || Slots == null )
+			return 0;
+		if ( slotIndex < 0 || slotIndex >= Slots.Length )
+			return 0;
+
+		DisplaySlot slot = Slots[ slotIndex ];
+		if ( slot.IsEmpty )
+		{
+			if ( !AllowsVerticalStack )
+				return 1;
+			return maxStackPerSlot > 0 ? maxStackPerSlot : int.MaxValue;
+		}
+
+		if ( !CanStackOnto( slot ) )
+			return 0;
+
+		int max = maxStackPerSlot > 0 ? maxStackPerSlot : int.MaxValue;
+		return Mathf.Max( 0, max - slot.Count );
+	}
+
+	public bool TryGetSlotAppendPose( int slotIndex, out Vector3 contact, out Quaternion rotation )
+	{
+		contact = transform.position;
+		rotation = transform.rotation;
+		if ( Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
+
+		GetSlotBaseWorldPose( slotIndex, out contact, out rotation );
+		float height = 0f;
+		DisplaySlot slot = Slots[ slotIndex ];
+		for ( int i = 0; i < slot.Items.Count; i++ )
+			height += TreasureStackSpacing.GetStep( slot.Items[ i ] );
+		contact += Vector3.up * height;
+		return true;
+	}
+
+	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
+	{
+		if ( definitions == null || definitions.Count == 0 || Slots == null )
+			return 0;
+		if ( slotIndex < 0 || slotIndex >= Slots.Length )
+			return 0;
+
+		DisplaySlot slot = Slots[ slotIndex ];
+		int added = 0;
+		for ( int i = 0; i < definitions.Count; i++ )
+		{
+			TreasureDefinition def = definitions[ i ];
+			if ( GetSlotCoinAppendCapacity( slotIndex, def ) <= 0 )
+				break;
+
+			TryGetSlotAppendPose( slotIndex, out Vector3 pos, out Quaternion rot );
+			TreasureItem visual = TreasureItemFactory.RentVisualCoin( def, pos, rot );
+			if ( visual == null )
+				visual = TreasureItemFactory.SpawnFallback( def, pos, rot, null );
+			if ( visual == null )
+				break;
+
+			slot.Items.Add( visual );
+			if ( !_displayedItems.Contains( visual ) )
+				_displayedItems.Add( visual );
+			_currentCount++;
+			visual.EnterDisplayed( this, pos, rot );
+			NotifySortedDelta( def, 1 );
+			PlayTreasurePlaceFeedback( visual );
+			added++;
+		}
+
+		if ( added <= 0 )
+			return 0;
+
+		RefreshSlotCylinder( slotIndex, animate: true );
+		RefreshCountLabel();
+		PublishChanged();
+		if ( !_isComplete && _currentCount >= Capacity )
+		{
+			_isComplete = true;
+			SetCompletedVisual( true );
+			PublishCompleted();
+			PlayCompleteFx();
+		}
+
+		return added;
+	}
+
 	public void Remove( TreasureItem item )
 	{
 		if ( item == null || Slots == null )
@@ -260,16 +445,6 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		// Slot occupancy alone is not enough — wrong treasure type must show as invalid.
 		bool placementValid = Accepts( item.Definition ) && valid;
 
-		// Stackable coin columns use the same stack outline as ground stacks (no item-mesh ghost).
-		if ( AllowsVerticalStack )
-		{
-			GetSlotBaseWorldPose( slotIndex, out Vector3 contact, out Quaternion rot );
-			preview.SetStackOutline( contact, rot, scale, placementValid );
-			GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 tipPos, out _ );
-			preview.Position = tipPos;
-			return true;
-		}
-
 		GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 pos, out Quaternion itemRot );
 		preview.SetItemMesh( pos, itemRot, scale, placementValid );
 		return true;
@@ -323,6 +498,29 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		return true;
 	}
 
+	/// <summary>Hold-F whole coin stack: resolve a placeable slot under the aim ray.</summary>
+	public bool TryResolveWholeCoinPlaceSlot(
+		TreasureItem probe,
+		in PlacementQuery query,
+		out int slotIndex,
+		out Vector3 contact,
+		out Quaternion rotation )
+	{
+		slotIndex = -1;
+		contact = transform.position;
+		rotation = transform.rotation;
+		if ( probe == null || !CanPlace( probe, in query ) )
+			return false;
+
+		if ( !TryResolveNearestSlot( probe, in query, out slotIndex, out _, out bool valid ) || !valid )
+			return false;
+
+		if ( GetSlotCoinAppendCapacity( slotIndex, probe.Definition ) <= 0 )
+			return false;
+
+		return TryGetSlotAppendPose( slotIndex, out contact, out rotation );
+	}
+
 	/// <summary>
 	/// Always snaps to the nearest generated slot based on aim. Invalid slots still resolve
 	/// so the preview stays on the hovered pile instead of jumping to table center.
@@ -343,18 +541,26 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( !TryResolveAimedSlot( in query, out slotIndex ) )
 			return false;
 
-		if ( TryGetStackIndexForSlot( item, slotIndex, out stackIndex ) )
+		int hoveredSlot = slotIndex;
+		if ( TryGetStackIndexForSlot( item, hoveredSlot, out stackIndex ) )
 		{
 			valid = true;
 			return true;
 		}
 
 		if ( query.AutoFindValidSlot
-			&& TryFindNearestValidSlot( item, in query, out slotIndex, out stackIndex ) )
+			&& TryFindNearestValidSlot( item, in query, out int autoSlot, out int autoStack ) )
 		{
+			slotIndex = autoSlot;
+			stackIndex = autoStack;
 			valid = true;
 			return true;
 		}
+
+		// Invalid: still preview at the hovered slot (top of occupied stack or base).
+		slotIndex = hoveredSlot;
+		if ( slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
 
 		stackIndex = Slots[ slotIndex ].Count;
 		valid = false;
@@ -580,7 +786,8 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		{
 			GetSlotWorldPose( slotIndex, stackIndex, item, out endWorldPos, out endWorldRot );
 			item.EnterDisplayed( this, endWorldPos, endWorldRot );
-			RefreshSlotCylinder( slotIndex );
+			RefreshSlotCylinder( slotIndex, animate: true );
+			PlayTreasurePlaceFeedback( item );
 		}
 
 		PlayPlaceFx();
@@ -592,6 +799,24 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			PublishCompleted();
 			PlayCompleteFx();
 		}
+	}
+
+	static void PlayTreasurePlaceFeedback( TreasureItem item )
+	{
+		if ( item == null )
+			return;
+
+		if ( ArtifactPlantFeedback.IsArtifact( item ) )
+		{
+			ArtifactPlantFeedback.PlayOn( item );
+			TreasureInteractSfx.PlayPlace( item );
+			return;
+		}
+
+		if ( CoinGemInteractFeedback.IsCoinOrGem( item ) )
+			CoinGemInteractFeedback.PlayPlace( item );
+
+		TreasureInteractSfx.PlayPlace( item );
 	}
 
 	void RestackSlot( int slotIndex )
@@ -615,6 +840,11 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 	void RefreshSlotCylinder( int slotIndex )
 	{
+		RefreshSlotCylinder( slotIndex, animate: false );
+	}
+
+	void RefreshSlotCylinder( int slotIndex, bool animate )
+	{
 		if ( Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
 			return;
 
@@ -625,11 +855,23 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			ref visual,
 			area,
 			slot.Items,
-			snap: true,
+			snap: !animate,
 			localPosition: slot.LocalBasePosition,
 			localRotation: slot.LocalRotation,
 			hostName: CoinColumnCylinderBinder.HostChildName + "_Typed_" + slotIndex );
 		slot.Cylinder = visual;
+		if ( animate )
+			PlaySlotPunch( slot );
+	}
+
+	void PlaySlotPunch( DisplaySlot slot )
+	{
+		Transform punchTarget = slot != null && slot.Cylinder != null
+			? slot.Cylinder.transform
+			: transform;
+		EnsurePlaceFeedback( punchTarget );
+		if ( _placeFeedbacks != null )
+			_placeFeedbacks.Play();
 	}
 
 	void GetSlotWorldPose( int slotIndex, int stackIndex, TreasureItem item, out Vector3 worldPos, out Quaternion worldRot )
@@ -785,25 +1027,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	/// </summary>
 	Vector3 ComputeSlotLocalPosition( int index )
 	{
-		int row;
-		int col;
-
-		switch ( fillDirection )
-		{
-			default:
-				row = index / columns;
-				col = index % columns;
-				break;
-		}
-
-		float width = ( columns - 1 ) * slotSpacing;
-		float depth = ( rows - 1 ) * slotSpacing;
-		float startX = -width * 0.5f;
-		float startZ = depth * 0.5f;
-
-		float x = startX + col * slotSpacing;
-		float z = startZ - row * slotSpacing;
-		return new Vector3( x, margin, z );
+		return DisplayTableSlotLayout.GetSlotLocalPosition( index, rows, columns, slotSpacing, margin );
 	}
 
 	protected virtual Quaternion GetSlotLocalRotation()
@@ -816,6 +1040,62 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( displayArea == null )
 			displayArea = transform;
 	}
+
+	void EnsureCollider()
+	{
+		TableCollider = GetComponent<Collider>();
+		if ( TableCollider == null )
+			TableCollider = GetComponentInChildren<Collider>( true );
+
+		if ( TableCollider == null )
+		{
+			Debug.LogError(
+				GetType().Name + " on '" + name + "' requires a Collider on this object or a child.",
+				this );
+		}
+	}
+
+	void OnDrawGizmos()
+	{
+		if ( drawLayoutGizmosAlways )
+			DrawLayoutGizmos();
+	}
+
+	void OnDrawGizmosSelected()
+	{
+		DrawLayoutGizmos();
+	}
+
+	void DrawLayoutGizmos()
+	{
+		Transform area = displayArea != null ? displayArea : transform;
+		DisplayTableSlotLayout.DrawLayoutGizmos(
+			area,
+			rows,
+			columns,
+			slotSpacing,
+			margin,
+			new Color( 0.35f, 1f, 0.55f, 0.9f ),
+			new Color( 0.35f, 1f, 0.55f, 0.35f ) );
+	}
+
+#if UNITY_EDITOR
+	public void DrawLayoutSceneHandles()
+	{
+		Transform area = displayArea != null ? displayArea : transform;
+		if ( area == null )
+			return;
+
+		UnityEditor.Handles.color = new Color( 1f, 0.85f, 0.2f, 0.95f );
+		int count = DisplayTableSlotLayout.SlotCount( rows, columns );
+		for ( int i = 0; i < count; i++ )
+		{
+			Vector3 world = area.TransformPoint(
+				DisplayTableSlotLayout.GetSlotLocalPosition( i, rows, columns, slotSpacing, margin ) );
+			UnityEditor.Handles.Label( world + area.up * 0.05f, i.ToString() );
+		}
+	}
+#endif
 
 	void ApplyInteractionName()
 	{
@@ -843,14 +1123,45 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			completedHighlight.SetActive( completed );
 	}
 
-	/// <summary>Hook for place SFX / sparkle (assets later).</summary>
+	/// <summary>Place settle juice — punch scale on the table / slot cylinder.</summary>
 	protected virtual void PlayPlaceFx()
 	{
+		EnsurePlaceFeedback( transform );
+		if ( _placeFeedbacks != null )
+			_placeFeedbacks.Play();
 	}
 
 	/// <summary>Hook for completion FX / SFX (assets later).</summary>
 	protected virtual void PlayCompleteFx()
 	{
+	}
+
+	void EnsurePlaceFeedback( Transform punchTarget )
+	{
+		if ( _placeFeedbacks != null )
+		{
+			if ( punchTarget != null
+				&& _placeFeedbacks.FeedbackList != null
+				&& _placeFeedbacks.FeedbackList.Count > 0 )
+			{
+				PunchScaleFeedback punch = _placeFeedbacks.FeedbackList[ 0 ] as PunchScaleFeedback;
+				if ( punch != null )
+					punch.Target = punchTarget;
+			}
+
+			return;
+		}
+
+		GameObject go = new GameObject( "OnPlaceFeedbacks" );
+		go.transform.SetParent( transform, false );
+		_placeFeedbacks = go.AddComponent<Feedbacks>();
+		_placeFeedbacks.Initialize();
+		_placeFeedbacks.AddFeedback( new PunchScaleFeedback
+		{
+			Target = punchTarget != null ? punchTarget : transform,
+			Punch = new Vector3( 0.06f, -0.08f, 0.06f ),
+			Duration = 0.18f
+		} );
 	}
 
 	static void NotifySortedDelta( TreasureDefinition definition, int delta )

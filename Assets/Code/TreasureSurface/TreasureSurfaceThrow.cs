@@ -4,9 +4,72 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
+/// Dense sample path from throw prediction so flight tweens follow pile bounces.
+/// </summary>
+public sealed class ThrowFlightPath
+{
+	public readonly List<Vector3> Positions = new List<Vector3>( 128 );
+	public readonly List<float> Times = new List<float>( 128 );
+	public Vector3 LandVelocity;
+	public bool SeatOnPileFlow;
+
+	public void Clear()
+	{
+		Positions.Clear();
+		Times.Clear();
+		LandVelocity = Vector3.zero;
+		SeatOnPileFlow = false;
+	}
+
+	public void Add( Vector3 position, float time )
+	{
+		Positions.Add( position );
+		Times.Add( time );
+	}
+
+	public float Duration
+	{
+		get
+		{
+			if ( Times.Count <= 0 )
+				return 0f;
+			return Times[ Times.Count - 1 ];
+		}
+	}
+
+	public Vector3 Evaluate( float time )
+	{
+		int count = Positions.Count;
+		if ( count <= 0 )
+			return Vector3.zero;
+		if ( count == 1 || time <= Times[ 0 ] )
+			return Positions[ 0 ];
+
+		float endT = Times[ count - 1 ];
+		if ( time >= endT )
+			return Positions[ count - 1 ];
+
+		for ( int i = 1; i < count; i++ )
+		{
+			float t1 = Times[ i ];
+			if ( time > t1 )
+				continue;
+
+			float t0 = Times[ i - 1 ];
+			float span = t1 - t0;
+			float u = span > 0.0001f ? ( time - t0 ) / span : 1f;
+			return Vector3.Lerp( Positions[ i - 1 ], Positions[ i ], u );
+		}
+
+		return Positions[ count - 1 ];
+	}
+}
+
+/// <summary>
 /// Predicts ballistic landings on the treasure surface and plays throw flight tweens.
 /// Flight follows the throw velocity (aim + inherited player motion) under gravity,
 /// and always runs long enough for the arc to reach the floor at any aim pitch.
+/// Gold piles are solid: throws bounce off the mound, then land and flow on the floor.
 /// </summary>
 public static class TreasureSurfaceThrow
 {
@@ -18,6 +81,8 @@ public static class TreasureSurfaceThrow
 	const float MaxFlightTime = MaxBallisticSteps * BallisticDt;
 	const float HitEpsilonY = 0.04f;
 	const float SettleStartU = 0.88f;
+	const int DefaultPileMaxBounces = 3;
+	const float DefaultPileRestitution = 0.45f;
 
 	public static bool TryPredictLanding(
 		TreasureSurfaceWorld world,
@@ -26,7 +91,7 @@ public static class TreasureSurfaceThrow
 		out Vector3 landPos,
 		out Vector3 landVelocity )
 	{
-		return TryPredictLanding( world, start, velocity, out landPos, out landVelocity, out _ );
+		return TryPredictLanding( world, start, velocity, out landPos, out landVelocity, out _, null );
 	}
 
 	public static bool TryPredictLanding(
@@ -37,17 +102,38 @@ public static class TreasureSurfaceThrow
 		out Vector3 landVelocity,
 		out float flightTime )
 	{
+		return TryPredictLanding( world, start, velocity, out landPos, out landVelocity, out flightTime, null );
+	}
+
+	public static bool TryPredictLanding(
+		TreasureSurfaceWorld world,
+		Vector3 start,
+		Vector3 velocity,
+		out Vector3 landPos,
+		out Vector3 landVelocity,
+		out float flightTime,
+		ThrowFlightPath path )
+	{
 		landPos = start;
 		landVelocity = FlattenHorizontal( velocity );
 		flightTime = MinFlightTime;
+		if ( path != null )
+			path.Clear();
 
 		if ( world == null || !world.IsInitialized )
 			return false;
 
 		TreasureSurfaceDefinition def = world.Definition;
-		float g = def.throwBallisticGravity;
+		float g = def != null ? def.throwBallisticGravity : 18f;
+		float landScale = def != null ? def.throwLandingSpeedScale : 0.85f;
+		int pileBouncesLeft = def != null ? Mathf.Max( 0, def.throwPileMaxBounces ) : DefaultPileMaxBounces;
+		float pileRestitution = def != null ? Mathf.Max( 0.05f, def.throwPileBounceRestitution ) : DefaultPileRestitution;
+
 		Vector3 p = start;
 		Vector3 v = velocity;
+
+		if ( path != null )
+			path.Add( p, 0f );
 
 		// Ensure the start chunk is loaded so early samples succeed.
 		if ( world.TryGetChunkCoord( start, out TreasureChunkCoord startCoord ) )
@@ -55,16 +141,23 @@ public static class TreasureSurfaceThrow
 
 		for ( int step = 0; step < MaxBallisticSteps; step++ )
 		{
+			Vector3 prev = p;
 			v.y -= g * BallisticDt;
 			p += v * BallisticDt;
 			float elapsed = ( step + 1 ) * BallisticDt;
 
 			if ( !world.ContainsWorldPoint( p ) )
 			{
-				// Seat along the throw direction near where we left the surface — never snap
-				// sideways to whatever cell is nearest the player.
 				if ( TrySeatAlongThrow( world, start, velocity, p, def, out landPos, out landVelocity, out flightTime ) )
+				{
+					if ( path != null )
+					{
+						path.Add( landPos, flightTime );
+						path.LandVelocity = landVelocity;
+					}
+
 					return true;
+				}
 
 				break;
 			}
@@ -72,23 +165,99 @@ public static class TreasureSurfaceThrow
 			if ( world.TryGetChunkCoord( p, out TreasureChunkCoord coord ) )
 				world.EnsureChunkLoaded( coord );
 
+			if ( TryGetPileSurface( p, out float pileY, out Vector3 pileNormal ) )
+			{
+				bool hitPile = p.y <= pileY + HitEpsilonY || prev.y > pileY + HitEpsilonY && p.y <= pileY + HitEpsilonY;
+				if ( hitPile )
+				{
+					p = new Vector3( p.x, pileY + HitEpsilonY * 0.5f, p.z );
+					if ( path != null )
+						path.Add( p, elapsed );
+
+					if ( pileBouncesLeft <= 0 )
+					{
+						landPos = new Vector3( p.x, pileY, p.z );
+						landVelocity = FlattenHorizontal( v ) * landScale;
+						if ( landVelocity.sqrMagnitude < 0.04f )
+						{
+							Vector3 downhill = Vector3.ProjectOnPlane( Vector3.down, pileNormal );
+							if ( downhill.sqrMagnitude > 0.0001f )
+								landVelocity = downhill.normalized * 0.6f;
+						}
+
+						flightTime = Mathf.Clamp( elapsed, MinFlightTime * 0.5f, MaxFlightTime );
+						if ( path != null )
+						{
+							path.LandVelocity = landVelocity;
+							path.SeatOnPileFlow = true;
+						}
+
+						return true;
+					}
+
+					pileBouncesLeft--;
+					v = Vector3.Reflect( v, pileNormal.normalized );
+					v *= pileRestitution;
+					// Nudge outward so the next step does not immediately re-hit.
+					if ( Vector3.Dot( v, pileNormal ) < 0.35f )
+						v += pileNormal.normalized * 0.35f;
+					continue;
+				}
+			}
+
 			if ( !world.Sampler.TrySample( p, out TreasureSurfaceSample sample ) )
+			{
+				if ( path != null && ( step % 2 == 0 ) )
+					path.Add( p, elapsed );
 				continue;
+			}
 
 			if ( !sample.Traversable )
+			{
+				if ( path != null && ( step % 2 == 0 ) )
+					path.Add( p, elapsed );
 				continue;
+			}
+
+			// Gold-pile stamped cells are not valid floor landings — bounce handled above.
+			if ( IsGoldPileSurfacePoint( p ) )
+			{
+				if ( path != null && ( step % 2 == 0 ) )
+					path.Add( p, elapsed );
+				continue;
+			}
 
 			if ( p.y <= sample.Height + HitEpsilonY )
 			{
 				landPos = new Vector3( p.x, sample.Height, p.z );
-				landVelocity = FlattenHorizontal( v ) * def.throwLandingSpeedScale;
-				// Use true impact time so steep lobs finish and steep drops don't overshoot.
+				landVelocity = FlattenHorizontal( v ) * landScale;
 				flightTime = Mathf.Clamp( elapsed, MinFlightTime * 0.5f, MaxFlightTime );
+				if ( path != null )
+				{
+					path.Add( landPos, flightTime );
+					path.LandVelocity = landVelocity;
+					path.SeatOnPileFlow = false;
+				}
+
 				return true;
 			}
+
+			if ( path != null && ( step % 2 == 0 ) )
+				path.Add( p, elapsed );
 		}
 
-		return TrySeatAlongThrow( world, start, velocity, start + FlattenHorizontal( velocity ).normalized * 4f, def, out landPos, out landVelocity, out flightTime );
+		if ( TrySeatAlongThrow( world, start, velocity, start + FlattenHorizontal( velocity ).normalized * 4f, def, out landPos, out landVelocity, out flightTime ) )
+		{
+			if ( path != null )
+			{
+				path.Add( landPos, flightTime );
+				path.LandVelocity = landVelocity;
+			}
+
+			return true;
+		}
+
+		return false;
 	}
 
 	static bool TrySeatAlongThrow(
@@ -126,6 +295,9 @@ public static class TreasureSurfaceThrow
 			if ( world.TryGetChunkCoord( probe, out TreasureChunkCoord coord ) )
 				world.EnsureChunkLoaded( coord );
 
+			if ( IsGoldPileSurfacePoint( probe ) )
+				continue;
+
 			if ( world.Sampler != null
 				&& world.Sampler.TrySample( probe, out TreasureSurfaceSample sample )
 				&& sample.Traversable )
@@ -138,6 +310,9 @@ public static class TreasureSurfaceThrow
 
 			if ( world.TryFindNearestTraversable( probe, out Vector3 recovered, out TreasureSurfaceSample recoveredSample, preferStable: false ) )
 			{
+				if ( IsGoldPileSurfacePoint( recovered ) )
+					continue;
+
 				// Reject recoveries that swing too far off the throw axis.
 				Vector3 toRecovered = FlattenHorizontal( recovered - start );
 				if ( dir.sqrMagnitude > 0.0001f && toRecovered.sqrMagnitude > 0.0001f )
@@ -157,10 +332,13 @@ public static class TreasureSurfaceThrow
 
 		if ( world.TryFindNearestTraversable( preferNear, out landPos, out TreasureSurfaceSample nearest, preferStable: false ) )
 		{
-			landPos.y = nearest.Height;
-			landVelocity = flat * landScale;
-			flightTime = EstimateFlightTime( start, landPos, velocity, def );
-			return true;
+			if ( !IsGoldPileSurfacePoint( landPos ) )
+			{
+				landPos.y = nearest.Height;
+				landVelocity = flat * landScale;
+				flightTime = EstimateFlightTime( start, landPos, velocity, def );
+				return true;
+			}
 		}
 
 		return false;
@@ -204,7 +382,8 @@ public static class TreasureSurfaceThrow
 		Vector3[] landVelocities,
 		float[] flightTimes,
 		float spins,
-		float speedScale = 1f )
+		float speedScale = 1f,
+		ThrowFlightPath[] paths = null )
 	{
 		if ( cluster == null || endPositions == null || endRotations == null )
 			yield break;
@@ -248,6 +427,9 @@ public static class TreasureSurfaceThrow
 			endScale[ i ] = item.GetWorldScale();
 
 			float raw = flightTimes != null && i < flightTimes.Length ? flightTimes[ i ] : MinFlightTime;
+			if ( paths != null && i < paths.Length && paths[ i ] != null && paths[ i ].Positions.Count > 1 )
+				raw = Mathf.Max( raw, paths[ i ].Duration );
+
 			durations[ i ] = Mathf.Clamp( raw / speedScale, MinFlightTime * 0.5f, MaxFlightTime );
 			if ( durations[ i ] > maxDuration )
 				maxDuration = durations[ i ];
@@ -273,18 +455,31 @@ public static class TreasureSurfaceThrow
 				float t = Mathf.Min( elapsed, dur );
 				float u = dur > 0.0001f ? Mathf.Clamp01( t / dur ) : 1f;
 
-				// True ballistic path from throw velocity (aim + inherited motion).
-				Vector3 ballistic = startPos[ i ] + throwVelocity * t + 0.5f * accel * ( t * t );
+				Vector3 pos;
+				ThrowFlightPath path = paths != null && i < paths.Length ? paths[ i ] : null;
+				if ( path != null && path.Positions.Count > 1 )
+				{
+					float pathT = path.Duration * u;
+					pos = path.Evaluate( pathT );
+					// Late ease into authored seat height (stack offsets).
+					float settle = CoinFlipMotion.SmoothStep( Mathf.Clamp01( ( u - SettleStartU ) / ( 1f - SettleStartU ) ) );
+					pos = Vector3.Lerp( pos, endPositions[ i ], settle );
+				}
+				else
+				{
+					// True ballistic path from throw velocity (aim + inherited motion).
+					Vector3 ballistic = startPos[ i ] + throwVelocity * t + 0.5f * accel * ( t * t );
 
-				// Stop at the floor: steep drops must not tunnel under the seat height.
-				float landY = endPositions[ i ].y;
-				float verticalSpeed = throwVelocity.y + accel.y * t;
-				if ( ballistic.y < landY && verticalSpeed <= 0f )
-					ballistic.y = landY;
+					// Stop at the floor: steep drops must not tunnel under the seat height.
+					float landY = endPositions[ i ].y;
+					float verticalSpeed = throwVelocity.y + accel.y * t;
+					if ( ballistic.y < landY && verticalSpeed <= 0f )
+						ballistic.y = landY;
 
-				// Late ease only for stack-height / seating corrections — keep the arc intact.
-				float settle = CoinFlipMotion.SmoothStep( Mathf.Clamp01( ( u - SettleStartU ) / ( 1f - SettleStartU ) ) );
-				Vector3 pos = Vector3.Lerp( ballistic, endPositions[ i ], settle );
+					// Late ease only for stack-height / seating corrections — keep the arc intact.
+					float settle = CoinFlipMotion.SmoothStep( Mathf.Clamp01( ( u - SettleStartU ) / ( 1f - SettleStartU ) ) );
+					pos = Vector3.Lerp( ballistic, endPositions[ i ], settle );
+				}
 
 				Transform tr = item.transform;
 				tr.position = pos;
@@ -313,18 +508,24 @@ public static class TreasureSurfaceThrow
 
 			member.transform.SetPositionAndRotation( endPositions[ i ], endRotations[ i ] );
 			member.ApplyWorldScale();
-			member.EndFlight();
 
 			if ( member.State == TreasureItemState.Held && member.Owner is PlayerCarry carry && carry.ContainsItem( member ) )
+			{
+				member.EndFlight();
 				continue;
+			}
 
 			Vector3 vel = Vector3.zero;
 			if ( landVelocities != null && i < landVelocities.Length )
 				vel = landVelocities[ i ];
 
+			ThrowFlightPath path = paths != null && i < paths.Length ? paths[ i ] : null;
+			if ( path != null && path.LandVelocity.sqrMagnitude > 0.0001f )
+				vel = path.LandVelocity;
+
 			float dur = durations[ i ];
 			float impactVertical = throwVelocity.y + accel.y * dur;
-			if ( impactVertical < -0.05f )
+			if ( impactVertical < -0.05f && ( path == null || !path.SeatOnPileFlow ) )
 				vel.y = impactVertical;
 
 			Vector3 pos = endPositions[ i ];
@@ -342,12 +543,56 @@ public static class TreasureSurfaceThrow
 			}
 
 			if ( TreasurePileLooseDeposit.TryAbsorbLooseItem( member, pos ) )
+			{
+				member.EndFlight();
 				continue;
+			}
 
-			if ( TreasureItem.UsesSurfaceSimulation( member.Definition ) )
-				member.EnterSurface( pos, rot, vel );
+			bool seatOnPileFlow = path != null && path.SeatOnPileFlow;
+
+			if ( ArtifactPlantFeedback.IsArtifact( member ) && !seatOnPileFlow )
+			{
+				Quaternion plantRot = TreasureOrientation.AlignUprightToNormal( rot, Vector3.up );
+				Vector3 plantUp = Vector3.up;
+				if ( world != null && world.Sampler != null
+					&& world.Sampler.TrySample( pos, out TreasureSurfaceSample plantSample )
+					&& plantSample.Traversable )
+				{
+					plantUp = plantSample.Normal.sqrMagnitude > 0.0001f
+						? plantSample.Normal.normalized
+						: Vector3.up;
+					if ( Vector3.Dot( plantUp, Vector3.up ) < PlacementFloorSurface.MinFloorUpDot )
+						plantUp = Vector3.up;
+					plantRot = TreasureOrientation.AlignUprightToNormal( rot, plantUp );
+					pos.y = plantSample.Height + TreasureSurfaceSeat.GetStableContactLift( member );
+				}
+
+				pos = FloorPlacementTarget.ResolveArtifactPlaceSeparation( member, pos );
+				if ( world != null && world.Sampler != null
+					&& world.Sampler.TrySample( pos, out TreasureSurfaceSample separatedSample )
+					&& separatedSample.Traversable )
+				{
+					pos.y = separatedSample.Height + TreasureSurfaceSeat.GetStableContactLift( member );
+				}
+
+				member.EndFlight();
+				member.EnterSettledPhysics( pos, plantRot );
+				ArtifactPlantFeedback.PlayOn( member );
+				continue;
+			}
+
+			member.EndFlight();
+
+			if ( TreasureItem.UsesSurfaceSimulation( member.Definition ) || seatOnPileFlow )
+			{
+				member.EnterSurface( pos, rot, FlattenHorizontal( vel ) );
+			}
 			else
+			{
 				member.EnterPhysics( pos, rot, vel );
+				if ( member.Definition != null && member.Definition.category == TreasureCategory.Artifact )
+					member.ClampArtifactToTreasureSurface( allowBounce: true );
+			}
 		}
 	}
 
@@ -374,6 +619,72 @@ public static class TreasureSurfaceThrow
 
 		// Crowns / goblets / helmets / artifacts.
 		spins = def != null ? def.throwArtifactSpins : 1f;
+	}
+
+	static bool IsGoldPileSurfacePoint( Vector3 worldPos )
+	{
+		IReadOnlyList<TreasurePileSurfaceBridge> bridges = TreasurePileSurfaceBridge.Active;
+		for ( int i = 0; i < bridges.Count; i++ )
+		{
+			TreasurePileSurfaceBridge bridge = bridges[ i ];
+			if ( bridge == null )
+				continue;
+
+			TreasurePileVisual visual = bridge.Visual;
+			if ( visual == null )
+				visual = bridge.GetComponent<TreasurePileVisual>();
+			if ( visual == null )
+				continue;
+
+			if ( visual.HasPileSurfaceAt( worldPos ) || visual.IsPointBuried( worldPos ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool TryGetPileSurface( Vector3 worldPos, out float surfaceY, out Vector3 normal )
+	{
+		surfaceY = 0f;
+		normal = Vector3.up;
+		bool found = false;
+		float bestY = float.MinValue;
+
+		IReadOnlyList<TreasurePileSurfaceBridge> bridges = TreasurePileSurfaceBridge.Active;
+		for ( int i = 0; i < bridges.Count; i++ )
+		{
+			TreasurePileSurfaceBridge bridge = bridges[ i ];
+			if ( bridge == null )
+				continue;
+
+			TreasurePileVisual visual = bridge.Visual;
+			if ( visual == null )
+				visual = bridge.GetComponent<TreasurePileVisual>();
+			if ( visual == null )
+				continue;
+
+			GoldPileHeightfield hf = visual.Heightfield;
+			if ( hf == null || !hf.IsInitialized )
+				continue;
+
+			if ( !hf.ExistsAtWorld( worldPos, visual.transform ) )
+				continue;
+
+			float y = hf.SampleWorldHeight( worldPos, visual.transform );
+			if ( !found || y > bestY )
+			{
+				found = true;
+				bestY = y;
+				surfaceY = y;
+				normal = hf.SampleWorldNormal( worldPos, visual.transform );
+				if ( normal.sqrMagnitude < 0.0001f )
+					normal = Vector3.up;
+				else
+					normal = normal.normalized;
+			}
+		}
+
+		return found;
 	}
 
 	static Vector3 FlattenHorizontal( Vector3 v )

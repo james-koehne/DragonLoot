@@ -104,4 +104,12 @@ MonoBehaviour:
   treasureHeightBias: 0.4
   treasurePickupOutsideFraction: 0.4
   treasureReleaseOutsideFraction: 0.9
+  preferBakedLatents: 1
+  latentVolumeMaxAttempts: 24
+  latentRetryNoOccupancyPasses: 1
+  latentRetrySaltPasses: 0
+  latentUseSpatialHash: 1
+  latentAvoidCoinSeats: 0
+  latentBuildBudgetMs: 12
+  latentBuildMaxAttemptsPerFrame: 64
   pileMaterial: {fileID: 0}
