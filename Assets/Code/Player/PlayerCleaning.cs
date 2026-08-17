@@ -36,6 +36,8 @@ public class PlayerCleaning : MonoBehaviour
 		// Clean is unbound this pass (E is whole-stack pickup). Manual polish disabled until rebound.
 		if ( !_inputEnabled || _player == null )
 			return;
+		if ( !TreasureCleaningDefinition.IsCleaningEnabled() )
+			return;
 
 		GameInput input = GetGameInput();
 		if ( input == null || input.Clean == null )

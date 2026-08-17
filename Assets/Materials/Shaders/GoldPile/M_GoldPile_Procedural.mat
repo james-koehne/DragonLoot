@@ -62,8 +62,8 @@ Material:
     - _BumpScale: 1
     - _BurialAmount: 0.4
     - _CellJitter: 1
-    - _CoinDensity: 55
-    - _CoinDiameter: 0.2
+    - _CoinDensity: 30
+    - _CoinDiameter: 0.3
     - _CoinNormalStrength: 0
     - _CoinTilt: 0.5
     - _CoinUVScale: 1.35
@@ -109,9 +109,12 @@ Material:
     - _LodNoiseFade: 1
     - _Metallic: 1
     - _MetallicVariation: 0
+    - _PomEnabled: 0
+    - _PomHeight: 0.08
+    - _PomSteps: 12
     - _ReflectionFloor: 0.12
     - _RimAoStrength: 0.35
-    - _RimBevelStrength: 0.05
+    - _RimBevelStrength: 0.55
     - _RimBevelWidth: 0.14
     - _RotationRandomness: 1
     - _SilverAmount: 0.1

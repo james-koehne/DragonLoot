@@ -122,7 +122,8 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
     half detailFade = ProcLodDetailFade(lodBand);
 
     half3 heightfieldNormalWS = ProcDeformNormalWS(input.deformUV, geomNormalWS);
-    ProcCoinSurface coin = SampleProcVirtualCoins(positionWS, heightfieldNormalWS, camDist, lodBand);
+    float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS);
+    ProcCoinSurface coin = SampleProcVirtualCoins(positionWS, heightfieldNormalWS, viewDirWS, camDist, lodBand);
 
     half3 detailedNormalWS = lerp(heightfieldNormalWS, coin.normalWS, detailFade);
 

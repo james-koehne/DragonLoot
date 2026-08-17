@@ -17,4 +17,7 @@ public static class PlacementFeedbackColors
 
 	/// <summary>Outline tint when aiming at a pickable gem or artifact.</summary>
 	public static Color PickableHighlight => new Color( 1f, 0.85f, 0.35f, 1f );
+
+	/// <summary>Outline tint for active quest objective meshes (distinct from gold/green/red).</summary>
+	public static Color QuestObjectiveHighlight => new Color( 0.2f, 0.95f, 1f, 1f );
 }

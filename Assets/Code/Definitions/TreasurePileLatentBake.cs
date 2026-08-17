@@ -44,6 +44,9 @@ public class TreasurePileLatentBake : ScriptableObject
 	[Tooltip( "Whether coin seat avoidance was enabled when baking." )]
 	public bool avoidedCoinSeats;
 
+	[Tooltip( "Fingerprint of curated authored props (definitions + local poses) at bake time." )]
+	public int authoredFingerprint;
+
 	/// <summary>
 	/// Hidden from inspectors — expanding thousands of entries crashes / freezes the editor.
 	/// </summary>
@@ -58,7 +61,8 @@ public class TreasurePileLatentBake : ScriptableObject
 		int contentsFp,
 		int volumeAttempts,
 		bool spatialHash,
-		bool avoidCoins )
+		bool avoidCoins,
+		int authoredFp = 0 )
 	{
 		if ( effectivePileSeed != effectiveSeed )
 			return false;
@@ -71,6 +75,8 @@ public class TreasurePileLatentBake : ScriptableObject
 		if ( usedSpatialHash != spatialHash )
 			return false;
 		if ( avoidedCoinSeats != avoidCoins )
+			return false;
+		if ( authoredFingerprint != authoredFp )
 			return false;
 		return poses != null;
 	}

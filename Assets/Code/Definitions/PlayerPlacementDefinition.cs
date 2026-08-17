@@ -28,6 +28,11 @@ public class PlayerPlacementDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float groundStackSnapRadius = 0.42f;
 
+	[Header( "Constellation" )]
+	[Tooltip( "How far a held gem can snap-place onto a constellation. Independent of pickup interact range." )]
+	[Min( 0.1f )]
+	public float constellationPlaceRange = 12f;
+
 	[Header( "Placement Motion" )]
 	[Tooltip( "Peak arc height when snapping treasure into a placement slot." )]
 	[Min( 0f )]
@@ -77,6 +82,7 @@ public class PlayerPlacementDefinition : ScriptableObject
 		groundStackReleaseSpeedScale = Mathf.Clamp01( groundStackReleaseSpeedScale );
 		groundStackReleaseUpScale = Mathf.Clamp01( groundStackReleaseUpScale );
 		groundStackSnapRadius = Mathf.Max( 0.05f, groundStackSnapRadius );
+		constellationPlaceRange = Mathf.Max( 0.1f, constellationPlaceRange );
 		placementArcHeight = Mathf.Max( 0f, placementArcHeight );
 		coinFlipSpeed = Mathf.Max( 0.1f, coinFlipSpeed );
 		previewSmoothSpeed = Mathf.Max( 0.1f, previewSmoothSpeed );

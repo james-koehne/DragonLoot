@@ -506,7 +506,12 @@ public static class TreasureSurfaceThrow
 			if ( member == null )
 				continue;
 
-			member.transform.SetPositionAndRotation( endPositions[ i ], endRotations[ i ] );
+			bool keepFlightRotation = member.Definition != null
+				&& member.Definition.category == TreasureCategory.Gem;
+			Quaternion landRot = keepFlightRotation
+				? member.transform.rotation
+				: endRotations[ i ];
+			member.transform.SetPositionAndRotation( endPositions[ i ], landRot );
 			member.ApplyWorldScale();
 
 			if ( member.State == TreasureItemState.Held && member.Owner is PlayerCarry carry && carry.ContainsItem( member ) )
@@ -529,7 +534,7 @@ public static class TreasureSurfaceThrow
 				vel.y = impactVertical;
 
 			Vector3 pos = endPositions[ i ];
-			Quaternion rot = endRotations[ i ];
+			Quaternion rot = landRot;
 
 			TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
 			if ( world != null && world.Sampler != null

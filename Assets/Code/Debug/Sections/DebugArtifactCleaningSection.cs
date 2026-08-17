@@ -54,6 +54,14 @@ public class DebugArtifactCleaningSection : DebugOverlaySection
 		TreasureCleaningDefinition def = GameInstance.GetDefinition<TreasureCleaningDefinition>();
 		if ( def != null )
 		{
+			bool nextEnabled = GUILayout.Toggle( def.cleaningEnabled, "Cleaning enabled" );
+			if ( nextEnabled != def.cleaningEnabled )
+			{
+				def.cleaningEnabled = nextEnabled;
+				if ( !nextEnabled )
+					ForceCleanAllTreasure();
+			}
+
 			GUILayout.Label( $"Manual duration: {def.manualCleanDurationSeconds:0.00}s" );
 			GUILayout.Label( $"Belt travel: {def.stationBeltTravelSeconds:0.00}s" );
 			bool nextUnlocked = GUILayout.Toggle( def.stationUnlocked, "Station unlocked" );
@@ -63,6 +71,20 @@ public class DebugArtifactCleaningSection : DebugOverlaySection
 		else
 		{
 			GUILayout.Label( "TreasureCleaningDefinition not loaded" );
+		}
+	}
+
+	static void ForceCleanAllTreasure()
+	{
+		TreasureItem[] items = Object.FindObjectsByType<TreasureItem>(
+			FindObjectsInactive.Include,
+			FindObjectsSortMode.None );
+		for ( int i = 0; i < items.Length; i++ )
+		{
+			TreasureItem item = items[ i ];
+			if ( item == null )
+				continue;
+			item.SetClean();
 		}
 	}
 }

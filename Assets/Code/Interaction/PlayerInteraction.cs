@@ -452,10 +452,12 @@ public class PlayerInteraction : MonoBehaviour
 
 		EnsureInteractMask();
 		Ray ray = new Ray( cam.position, _cameraLook.GetCameraForward() );
+		float interactRange = InteractRange;
+		float aimRayLength = Mathf.Max( interactRange + 8f, interactRange * 3f );
 		int hitCount = Physics.RaycastNonAlloc(
 			ray,
 			_rayHits,
-			InteractRange,
+			aimRayLength,
 			_resolvedMask,
 			QueryTriggerInteraction.Ignore );
 
@@ -478,6 +480,8 @@ public class PlayerInteraction : MonoBehaviour
 		bool hasSurface = false;
 
 		Transform playerRoot = _player != null ? _player.transform : null;
+		Vector3 playerPos = playerRoot != null ? playerRoot.position : cam.position;
+		float rangeSq = interactRange * interactRange;
 
 		for ( int i = 0; i < hitCount; i++ )
 		{
@@ -490,14 +494,16 @@ public class PlayerInteraction : MonoBehaviour
 			if ( IsPlayerOwnedHit( hit.collider, playerRoot ) )
 				continue;
 
-			if ( !hasNearest || hit.distance < nearestDist )
+			bool within3dRange = hit.distance <= interactRange + 0.001f;
+
+			if ( within3dRange && ( !hasNearest || hit.distance < nearestDist ) )
 			{
 				nearestDist = hit.distance;
 				nearestHit = hit;
 				hasNearest = true;
 			}
 
-			if ( PlacementFloorSurface.IsFloorCollider( hit.collider ) )
+			if ( within3dRange && PlacementFloorSurface.IsFloorCollider( hit.collider ) )
 			{
 				if ( !hasSurface || hit.distance < surfaceDist )
 				{
@@ -513,6 +519,9 @@ public class PlayerInteraction : MonoBehaviour
 				continue;
 
 			interactable = PromoteStackedCoinToOwnerStack( interactable );
+
+			if ( !IsWithinFocusRange( interactable, hit, playerPos, interactRange, rangeSq ) )
+				continue;
 
 			bool canInteract = interactable.CanInteract( _player );
 			bool canOutline = HoverOutlineTargetUtility.CanOutlineFocus( interactable, _player );
@@ -847,6 +856,31 @@ public class PlayerInteraction : MonoBehaviour
 	static bool IsFloorExemptOutlineInteractable( InteractableBase interactable )
 	{
 		return interactable is GroundCoinStack || interactable is CoinStackInteractable;
+	}
+
+	/// <summary>
+	/// Coin stacks use planar XZ reach so aiming at the top of a tall stack still works.
+	/// Everything else uses the 3D ray hit distance.
+	/// </summary>
+	static bool IsWithinFocusRange(
+		InteractableBase interactable,
+		RaycastHit hit,
+		Vector3 playerPos,
+		float interactRange,
+		float rangeSq )
+	{
+		if ( interactable == null )
+			return false;
+
+		if ( interactable is GroundCoinStack || interactable is CoinStackInteractable )
+		{
+			Vector3 stackPos = interactable.transform.position;
+			float dx = stackPos.x - playerPos.x;
+			float dz = stackPos.z - playerPos.z;
+			return dx * dx + dz * dz <= rangeSq;
+		}
+
+		return hit.distance <= interactRange + 0.001f;
 	}
 
 	void ResetPrimaryRepeatState()

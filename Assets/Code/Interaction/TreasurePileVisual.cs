@@ -38,9 +38,188 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	public TreasurePileLatentBake LatentBake => latentBake;
 
+	public const string AuthoredLootRootName = "_AuthoredLoot";
+	public const string LatentBakePreviewRootName = "_LatentBakePreview";
+
 	public void SetLatentBake( TreasurePileLatentBake bake )
 	{
 		latentBake = bake;
+	}
+
+	/// <summary>Persisted child that holds curated scene props (artifacts, chests, keys).</summary>
+	public Transform EnsureAuthoredLootRoot()
+	{
+		Transform existing = transform.Find( AuthoredLootRootName );
+		if ( existing != null )
+			return existing;
+
+		GameObject go = new GameObject( AuthoredLootRootName );
+		go.transform.SetParent( transform, false );
+		go.transform.localPosition = Vector3.zero;
+		go.transform.localRotation = Quaternion.identity;
+		go.transform.localScale = Vector3.one;
+		return go.transform;
+	}
+
+	public Transform FindAuthoredLootRoot()
+	{
+		return transform.Find( AuthoredLootRootName );
+	}
+
+	public Transform FindLatentBakePreviewRoot()
+	{
+		return transform.Find( LatentBakePreviewRootName );
+	}
+
+	public void CollectAuthoredItems( List<TreasurePileAuthoredItem> results )
+	{
+		if ( results == null )
+			return;
+
+		results.Clear();
+		Transform root = FindAuthoredLootRoot();
+		if ( root == null )
+			return;
+
+		TreasurePileAuthoredItem[] items = root.GetComponentsInChildren<TreasurePileAuthoredItem>( true );
+		for ( int i = 0; i < items.Length; i++ )
+		{
+			TreasurePileAuthoredItem authored = items[ i ];
+			if ( authored == null || authored.Item == null || authored.Definition == null )
+				continue;
+			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+				continue;
+			results.Add( authored );
+		}
+	}
+
+	public int CountAuthoredItems()
+	{
+		Transform root = FindAuthoredLootRoot();
+		if ( root == null )
+			return 0;
+
+		int count = 0;
+		TreasurePileAuthoredItem[] items = root.GetComponentsInChildren<TreasurePileAuthoredItem>( true );
+		for ( int i = 0; i < items.Length; i++ )
+		{
+			TreasurePileAuthoredItem authored = items[ i ];
+			if ( authored == null || authored.Item == null || authored.Definition == null )
+				continue;
+			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+				continue;
+			count++;
+		}
+
+		return count;
+	}
+
+	/// <summary>Stable hash of curated prop definitions + local poses for bake fingerprinting.</summary>
+	public int ComputeAuthoredFingerprint()
+	{
+		Transform root = FindAuthoredLootRoot();
+		if ( root == null )
+			return 0;
+
+		TreasurePileAuthoredItem[] items = root.GetComponentsInChildren<TreasurePileAuthoredItem>( true );
+		int curated = 0;
+		for ( int i = 0; i < items.Length; i++ )
+		{
+			TreasurePileAuthoredItem authored = items[ i ];
+			if ( authored == null || authored.Item == null || authored.Definition == null )
+				continue;
+			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+				continue;
+			curated++;
+		}
+
+		if ( curated == 0 )
+			return 0;
+
+		unchecked
+		{
+			uint h = 2166136261u;
+			for ( int i = 0; i < items.Length; i++ )
+			{
+				TreasurePileAuthoredItem authored = items[ i ];
+				if ( authored == null || authored.Item == null || authored.Definition == null )
+					continue;
+				if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+					continue;
+
+				TreasureDefinition def = authored.Definition;
+				Transform t = authored.transform;
+				Vector3 localPos = transform.InverseTransformPoint( t.position );
+				Quaternion localRot = Quaternion.Inverse( transform.rotation ) * t.rotation;
+				Vector3 scale = t.lossyScale;
+
+				h = MixAuthoredString( h, def.id );
+				h = MixAuthoredString( h, def.name );
+				h = ( h ^ ( uint )( int )def.category ) * 16777619u;
+				h = MixAuthoredFloat( h, localPos.x );
+				h = MixAuthoredFloat( h, localPos.y );
+				h = MixAuthoredFloat( h, localPos.z );
+				h = MixAuthoredFloat( h, localRot.x );
+				h = MixAuthoredFloat( h, localRot.y );
+				h = MixAuthoredFloat( h, localRot.z );
+				h = MixAuthoredFloat( h, localRot.w );
+				h = MixAuthoredFloat( h, scale.x );
+				h = MixAuthoredFloat( h, scale.y );
+				h = MixAuthoredFloat( h, scale.z );
+			}
+
+			return ( int )h;
+		}
+	}
+
+	public bool IsLatentBakeStale()
+	{
+		if ( latentBake == null )
+			return CountAuthoredItems() > 0;
+
+		// Inspector-safe: do not rebuild heightfield here. OnEnable / Bake already ensure preview.
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+			return false;
+
+		TreasurePileDefinition def = ResolveDefinitionForEditor();
+		if ( def == null )
+			return true;
+
+		int heightFp = _heightfield.ComputeLayoutFingerprint();
+		int contentsFp = def.HashLargePropContents();
+		int authoredFp = ComputeAuthoredFingerprint();
+		int effectiveSeed = WorldLootSeed.GetPileEffectiveSeed( transform, lootLayoutSeed );
+		int volumeAttempts = Mathf.Max( 1, def.latentVolumeMaxAttempts );
+		return !latentBake.MatchesFingerprint(
+			effectiveSeed,
+			heightFp,
+			contentsFp,
+			volumeAttempts,
+			def.latentUseSpatialHash,
+			def.latentAvoidCoinSeats,
+			authoredFp );
+	}
+
+	static uint MixAuthoredString( uint h, string value )
+	{
+		unchecked
+		{
+			if ( value == null )
+				return h * 16777619u;
+
+			for ( int i = 0; i < value.Length; i++ )
+				h = ( h ^ value[ i ] ) * 16777619u;
+			return h;
+		}
+	}
+
+	static uint MixAuthoredFloat( uint h, float value )
+	{
+		unchecked
+		{
+			int bits = Mathf.RoundToInt( value * 1000f );
+			return ( h ^ ( uint )bits ) * 16777619u;
+		}
 	}
 
 	[Header( "Authored Height (level)" )]
@@ -73,6 +252,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	bool _hasInteractPoint;
 	int _totalUnits = 1;
 	GoldPileCarveSettings _carveSettings = GoldPileCarveSettings.Default;
+	int _lastCarveUnits = 1;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Pile;
 	public GoldPileHeightfield Heightfield => _heightfield;
@@ -575,6 +755,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		GoldPileCarveSettings resolved = ResolveCarveSettings( settings );
 		_carveSettings = resolved;
+		_lastCarveUnits = Mathf.Max( 1, units );
 
 		int coinCount = inventoryAlreadyConsumed
 			? ResolveCoinCountForCarveVolume( units )
@@ -803,7 +984,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			return false;
 
 		float reach = player.Interaction != null ? player.Interaction.InteractRange : 8f;
-		if ( ( preferredWorldPos - player.transform.position ).sqrMagnitude > reach * reach )
+		if ( PlanarDistanceSq( preferredWorldPos, player.transform.position ) > reach * reach )
 			return false;
 
 		PlayerCarry carry = player.Carry;
@@ -833,7 +1014,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			return 0;
 
 		float reach = player.Interaction != null ? player.Interaction.InteractRange : 8f;
-		if ( ( preferredWorldPos - player.transform.position ).sqrMagnitude > reach * reach )
+		if ( PlanarDistanceSq( preferredWorldPos, player.transform.position ) > reach * reach )
 			return 0;
 
 		PlayerCarry carry = player.Carry;
@@ -847,6 +1028,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			consumedDefs,
 			out worldPos,
 			out _ );
+	}
+
+	static float PlanarDistanceSq( Vector3 a, Vector3 b )
+	{
+		float dx = a.x - b.x;
+		float dz = a.z - b.z;
+		return dx * dx + dz * dz;
 	}
 
 	public bool TryConsumeDefinition( TreasureDefinition definition )
@@ -1365,7 +1553,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		float lootRadius = _carveSettings.radius * 2.5f;
 		if ( lootInstances != null )
-			lootInstances.RefreshAfterCarve( worldCenter, lootRadius );
+			lootInstances.RefreshAfterCarve( worldCenter, lootRadius, _lastCarveUnits );
 
 		if ( phaseSw != null )
 		{

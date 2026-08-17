@@ -889,6 +889,7 @@ public class PlayerSorterReposition : MonoBehaviour
 		if ( station != null )
 		{
 			station.ClearOutputStackBindings();
+			station.BindOutputStacksInBounds();
 			station.EndRepositioning();
 			station.PlayPlacedFeedback();
 		}

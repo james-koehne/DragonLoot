@@ -167,6 +167,7 @@ public class PlayerController : MonoBehaviour
 	public Vector3 PlanarVelocity => _planarVelocity;
 	public float PlanarSpeed => _planarVelocity.magnitude;
 	public Vector3 LocalPlanarVelocity => _localPlanarVelocity;
+	public Vector3 FlatMoveIntent => _debugFlatMoveIntent;
 
 	/// <summary>
 	/// Velocity baked into thrown treasure: full planar motion, plus vertical only while airborne
@@ -669,11 +670,13 @@ public class PlayerController : MonoBehaviour
 					PerformClimbJumpOff();
 				}
 				else if ( _jumpAvailable
-				     && !_isSliding
 				     && !_isClimbing
 				     && ( IsGrounded || canCoyoteJump )
 				     && jumpPressed )
 				{
+					if ( _isSliding )
+						ExitSlide( retainMomentum: true );
+
 					_verticalVelocity = JumpForce;
 					_jumpAvailable = false;
 					_coyoteTimer = 0f;
@@ -682,7 +685,6 @@ public class PlayerController : MonoBehaviour
 					_wasGrounded = false;
 					_isSliding = false;
 					ClearClimb();
-					ClearSlideExitBoost();
 					_hasGroundHit = false;
 					_groundCollider = null;
 					WasJumpThisFrame = true;

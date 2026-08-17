@@ -25,6 +25,12 @@ public class GemConstellationEditor : Editor
 	SerializedProperty _slots;
 	SerializedProperty _forcedConnections;
 	SerializedProperty _excludedConnections;
+	SerializedProperty _fillSlotsOnStart;
+	SerializedProperty _slotFillChance;
+	SerializedProperty _minFilledSlots;
+	SerializedProperty _maxFilledSlots;
+	SerializedProperty _randomGemPool;
+	SerializedProperty _fillSeed;
 	SerializedProperty _snapDuration;
 	SerializedProperty _bounceScale;
 	SerializedProperty _gemSocketRotation;
@@ -43,6 +49,12 @@ public class GemConstellationEditor : Editor
 		_slots = serializedObject.FindProperty( "slots" );
 		_forcedConnections = serializedObject.FindProperty( "forcedConnections" );
 		_excludedConnections = serializedObject.FindProperty( "excludedConnections" );
+		_fillSlotsOnStart = serializedObject.FindProperty( "fillSlotsOnStart" );
+		_slotFillChance = serializedObject.FindProperty( "slotFillChance" );
+		_minFilledSlots = serializedObject.FindProperty( "minFilledSlots" );
+		_maxFilledSlots = serializedObject.FindProperty( "maxFilledSlots" );
+		_randomGemPool = serializedObject.FindProperty( "randomGemPool" );
+		_fillSeed = serializedObject.FindProperty( "fillSeed" );
 		_snapDuration = serializedObject.FindProperty( "snapDuration" );
 		_bounceScale = serializedObject.FindProperty( "bounceScale" );
 		_gemSocketRotation = serializedObject.FindProperty( "gemSocketRotation" );
@@ -57,7 +69,7 @@ public class GemConstellationEditor : Editor
 		serializedObject.Update();
 
 		EditorGUILayout.PropertyField( _acceptanceMode );
-		if ( _acceptanceMode.enumValueIndex == ( int )GemConstellationAcceptanceMode.SetGem )
+		if ( _acceptanceMode.enumValueIndex != ( int )GemConstellationAcceptanceMode.PerSlot )
 			EditorGUILayout.PropertyField( _defaultAcceptedGem );
 
 		EditorGUILayout.Space();
@@ -70,6 +82,23 @@ public class GemConstellationEditor : Editor
 
 		if ( _acceptanceMode.enumValueIndex == ( int )GemConstellationAcceptanceMode.PerSlot )
 			DrawPerSlotWarnings();
+
+		EditorGUILayout.Space();
+		EditorGUILayout.LabelField( "Start Fill", EditorStyles.boldLabel );
+		EditorGUILayout.PropertyField( _fillSlotsOnStart );
+		EditorGUILayout.PropertyField( _slotFillChance );
+		EditorGUILayout.PropertyField( _minFilledSlots );
+		EditorGUILayout.PropertyField( _maxFilledSlots );
+		EditorGUILayout.PropertyField( _randomGemPool, true );
+		EditorGUILayout.PropertyField( _fillSeed );
+		if ( _fillSlotsOnStart.boolValue
+			&& _acceptanceMode.enumValueIndex == ( int )GemConstellationAcceptanceMode.AnyGem
+			&& _randomGemPool.arraySize == 0 )
+		{
+			EditorGUILayout.HelpBox(
+				"Assign Random Gem Pool for mixed gems, or a Default Accepted Gem as a single-type fallback.",
+				MessageType.Info );
+		}
 
 		EditorGUILayout.Space();
 		EditorGUILayout.LabelField( "Placement", EditorStyles.boldLabel );

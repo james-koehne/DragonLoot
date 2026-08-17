@@ -92,6 +92,12 @@ static class GoldPileRuntimeGeometrySceneGuard
 				|| name == "~" + ColliderRootName
 				|| name.StartsWith( ColliderTilePrefix );
 
+			if ( name == TreasurePileVisual.LatentBakePreviewRootName )
+			{
+				stripped += ProcessLatentBakePreview( child, destroy );
+				continue;
+			}
+
 			if ( colliderHierarchy )
 			{
 				stripped += ProcessColliderHierarchy( child, destroy );
@@ -127,6 +133,21 @@ static class GoldPileRuntimeGeometrySceneGuard
 		}
 
 		return stripped;
+	}
+
+	static int ProcessLatentBakePreview( Transform root, bool destroy )
+	{
+		if ( root == null )
+			return 0;
+
+		if ( destroy )
+		{
+			Object.DestroyImmediate( root.gameObject );
+			return 1;
+		}
+
+		SetHideFlagsRecursive( root, RuntimeHideFlags );
+		return 1;
 	}
 
 	static int ProcessColliderHierarchy( Transform root, bool destroy )

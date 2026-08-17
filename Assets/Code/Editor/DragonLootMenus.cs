@@ -34,6 +34,7 @@ public static class DragonLootMenus
 	public const string AudioResetClipLists = Root + "/Audio/Reset Clip Lists To Defaults";
 
 	// --- Treasure content ---
+	public const string TreasureCreate = Root + "/Treasure/Create Treasure";
 	public const string TreasureInstallArtifacts = Root + "/Treasure/Install Fantasy Pack Artifacts";
 	public const string TreasureInstallChests = Root + "/Treasure/Install Chests & Keys";
 	public const string TreasureBuildDisplayTables = Root + "/Treasure/Build Display Table Prefabs";
@@ -65,5 +66,8 @@ public static class DragonLootMenus
 	// --- Quests ---
 	public const string QuestsInstallCatalog = Root + "/Quests/Install Catalog & Content";
 	public const string QuestsWireLevel = Root + "/Quests/Create Standalone Level Setup Objects";
+
+	// --- UI ---
+	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";
 }
 #endif

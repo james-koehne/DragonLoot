@@ -184,12 +184,16 @@ public sealed class GemPyramidCluster
 				SeatContactOnSurface();
 			}
 
-			if ( !TryBuildWorldPose( gem, 0, surfaceDef, out pos, out rot ) )
+			if ( !TryBuildWorldPose( gem, 0, surfaceDef, out pos, out _ ) )
 				return;
 			_occupiedPoseKeys.Remove( poseKey );
 			poseKey = PoseKey( pos );
 			_occupiedPoseKeys.Add( poseKey );
-			ApplySettledPose( gem, pos, rot );
+
+			// Lone floor gems keep their rolled orientation; pyramids right themselves on join.
+			Vector3 seedPos = gem.transform.position;
+			seedPos.y = pos.y;
+			ApplySettledPose( gem, seedPos, gem.transform.rotation );
 			return;
 		}
 

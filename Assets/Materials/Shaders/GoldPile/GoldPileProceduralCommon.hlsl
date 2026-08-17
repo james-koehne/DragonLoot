@@ -149,12 +149,128 @@ struct ProcCoinSurface
     half burial;
 };
 
+struct ProcCoinWinner
+{
+    float3 cell;
+    float2 local;
+    float3 planar;
+    float3 uvT;
+    float3 rotT;
+    float3 rotB;
+    float3 coinFacing;
+    float2 rnd2;
+    float rnd3;
+    half mask;
+    half burial;
+    half priority;
+};
+
+// Analytic coin height in 0..1 (disc radius space). Raised rim, recessed curved face.
+float ProcCoinHeight01(float distNorm)
+{
+    float r = saturate(distNorm);
+    float rimW = max((float)_RimBevelWidth, 0.02);
+    float rimAmp = lerp(0.3, 1.0, saturate((float)_RimBevelStrength / 1.5));
+
+    // Subtle dome across the face, kept below the rim peak.
+    float face = 0.52 + 0.14 * (1.0 - r * r);
+
+    // Raised bevel near the outer edge.
+    float rimT = saturate((r - (1.0 - rimW)) / rimW);
+    float rim = smoothstep(0.0, 0.32, rimT) * (1.0 - smoothstep(0.65, 1.05, rimT));
+    rim *= rimAmp;
+
+    float h = lerp(face, 1.0, rim);
+    h *= 1.0 - smoothstep(0.98, 1.02, distNorm);
+    return saturate(h);
+}
+
+#if defined(_POM_ON)
+float2 ProcCoinApplyPom(
+    float2 local,
+    float3 viewDirWS,
+    float3 rotT,
+    float3 rotB,
+    float3 coinFacing,
+    float radius,
+    float diameter,
+    half detailFade)
+{
+    float pomHeight = (float)_PomHeight;
+    if (pomHeight <= 1e-5 || detailFade <= 0.001h)
+        return local;
+
+    float heightScale = pomHeight * diameter;
+    float3 viewTS = float3(
+        dot(viewDirWS, rotT),
+        dot(viewDirWS, rotB),
+        dot(viewDirWS, coinFacing));
+
+    float viewZ = max(abs(viewTS.z), 0.08);
+    float2 viewXY = float2(viewTS.x, viewTS.y);
+    float2 maxOffset = -viewXY / viewZ * heightScale;
+
+    int maxSteps = (int)clamp(round((float)_PomSteps), 4.0, 12.0);
+    float grazing = 1.0 - saturate(abs(viewTS.z));
+    float stepF = lerp(4.0, (float)maxSteps, grazing) * (float)detailFade;
+    int steps = (int)clamp(round(stepF), 4.0, (float)maxSteps);
+
+    float2 delta = maxOffset / (float)steps;
+    float layerDepth = rcp((float)steps);
+
+    float2 currLocal = local;
+    float currLayer = 0.0;
+    float currH = ProcCoinHeight01(length(currLocal) / max(radius, 1e-4));
+
+    [loop]
+    for (int i = 0; i < 12; i++)
+    {
+        if (i >= steps)
+            break;
+        if (currLayer >= currH)
+            break;
+        currLocal += delta;
+        currLayer += layerDepth;
+        currH = ProcCoinHeight01(length(currLocal) / max(radius, 1e-4));
+    }
+
+    return currLocal;
+}
+
+// Cheap grazing rim expand during neighbour search (no POM march).
+float2 ProcCoinSearchLocal(
+    float2 local,
+    float3 viewDirWS,
+    float3 nWS,
+    float3 uvT,
+    float3 uvB,
+    float diameter,
+    half detailFade)
+{
+    float pomHeight = (float)_PomHeight;
+    if (pomHeight <= 1e-5 || detailFade <= 0.001h)
+        return local;
+
+    float3 vPlanar = viewDirWS - nWS * dot(viewDirWS, nWS);
+    float2 vL = float2(dot(vPlanar, uvT), dot(vPlanar, uvB));
+    float vLenSq = dot(vL, vL);
+    if (vLenSq <= 1e-10)
+        return local;
+
+    float2 vDir = vL * rsqrt(vLenSq);
+    float grazing = 1.0 - saturate(abs(dot(viewDirWS, nWS)));
+    float rimH = pomHeight * diameter * lerp(0.25, 1.0, saturate((float)_RimBevelStrength));
+    return local - vDir * (rimH * grazing);
+}
+#endif
+
 // World-XYZ coin lattice:
 // Each coin has a fixed 3D center. Discs are measured in metres in the surface
 // plane through that center — no axis projection, no stretch.
 ProcCoinSurface SampleProcVirtualCoins(
     float3 positionWS,
     float3 surfaceNormalWS,
+    float3 viewDirWS,
     float camDist,
     half lodBand)
 {
@@ -194,16 +310,8 @@ ProcCoinSurface SampleProcVirtualCoins(
     float3 baseCell = floor(worldScaled);
 
     bool hasCoin = false;
-    // Stable stack order: higher priority always wins the full overlap (no mid-face depth cuts).
-    half bestPriority = -1.0h;
-    half bestMask = 0;
-    half3 bestAlbedo = 0;
-    half3 bestNormalWS = nWS;
-    half3 bestNormalTS = half3(0, 0, 1);
-    half bestMetallic = _Metallic;
-    half bestSmoothness = _Smoothness;
-    half bestOcc = 1;
-    half bestBurial = 1;
+    ProcCoinWinner winner = (ProcCoinWinner)0;
+    winner.priority = -1.0h;
 
     // Neighbourhood stays fixed; LOD fades features instead of changing loop cost mid-frame.
     const int extent = 1;
@@ -220,7 +328,6 @@ ProcCoinSurface SampleProcVirtualCoins(
                 float3 cell = baseCell + float3(ox, oy, oz);
                 float3 rnd = ProcHash33(cell);
                 float rndW = ProcHash31(cell + 11.17);
-                float2 rnd2 = ProcHash22(cell.xy + cell.z + 91.17);
                 float rnd3 = ProcHash31(cell + 53.97);
 
                 float3 jitter = (rnd * 2.0 - 1.0) * _CellJitter * 0.5;
@@ -244,7 +351,12 @@ ProcCoinSurface SampleProcVirtualCoins(
                 float3 uvB = -tangentWS * s + bitangentWS * c;
 
                 float2 local = float2(dot(planar, uvT), dot(planar, uvB));
-                float distNorm = length(local) / max(radius, 1e-4);
+#if defined(_POM_ON)
+                float2 searchLocal = ProcCoinSearchLocal(local, viewDirWS, nWS, uvT, uvB, diameter, detailFade);
+#else
+                float2 searchLocal = local;
+#endif
+                float distNorm = length(searchLocal) / max(radius, 1e-4);
                 half mask = 1.0h - smoothstep(0.98h, 1.02h, (half)distNorm);
                 if (mask < 0.001h)
                     continue;
@@ -260,7 +372,7 @@ ProcCoinSurface SampleProcVirtualCoins(
                 half priority = (half)ProcHash31(cell + 29.53);
                 // Tiny mask bias only for AA edge ties on the same layer (never splits two coins mid-face).
                 priority += mask * 1e-4h;
-                if (hasCoin && priority <= bestPriority)
+                if (hasCoin && priority <= winner.priority)
                     continue;
 
                 // Per-coin lighting orientation: tilt facing away from the mound normal.
@@ -281,117 +393,19 @@ ProcCoinSurface SampleProcVirtualCoins(
                 float3 rotT = coinT * c + coinB * s;
                 float3 rotB = -coinT * s + coinB * c;
 
-                half exposed = saturate(1.0h - burial);
-
-                // Gold / copper / silver mix from cell hash (gold gets the leftover weight).
-                half copperW = saturate(_CopperAmount);
-                half silverW = saturate(_SilverAmount);
-                half goldW = max(0.001h, 1.0h - copperW - silverW);
-                half metalPick = (half)ProcHash31(cell + 77.7) * (goldW + copperW + silverW);
-                half3 metalTint = _BaseColor.rgb;
-                half metalMet = _Metallic;
-                half metalSm = _Smoothness;
-                half4 albedoSample;
-                if (metalPick < silverW)
-                {
-                    albedoSample = SAMPLE_TEXTURE2D(_SilverBaseMap, sampler_SilverBaseMap, coinUV);
-                    metalTint = _SilverColor.rgb;
-                    metalMet = 0.95h;
-                    metalSm = 0.80h;
-                }
-                else if (metalPick < silverW + copperW)
-                {
-                    albedoSample = SAMPLE_TEXTURE2D(_CopperBaseMap, sampler_CopperBaseMap, coinUV);
-                    metalTint = _CopperColor.rgb;
-                    metalMet = 0.85h;
-                    metalSm = 0.55h;
-                }
-                else
-                {
-                    albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, coinUV);
-                }
-
-                half4 maskSample = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, coinUV);
-
-                // Match DragonLoot/Coin Pile variation: tint + value + tiny warm bias only.
-                half tint = 1.0h + ((half)rnd2.x * 2.0h - 1.0h) * _TintVariation * noiseKeep;
-                half value = 1.0h + ((half)rnd2.y * 2.0h - 1.0h) * _ValueVariation * noiseKeep;
-                half3 albedo = albedoSample.rgb * metalTint * tint * value;
-                half warm = ((half)rnd3 * 2.0h - 1.0h) * 0.03h * noiseKeep;
-                albedo += half3(warm, warm * 0.35h, -warm);
-
-                half metallic = saturate(maskSample.r * metalMet);
-                half smoothness = saturate(maskSample.a * metalSm);
-
-                half rimWidth = max(_RimBevelWidth, 0.001h);
-                half rimFactor = smoothstep(1.0h - rimWidth, 1.0h, (half)distNorm);
-
-                if (_RimAoStrength > 0.001h)
-                {
-                    half rimAo = rimFactor * _RimAoStrength;
-                    albedo *= saturate(1.0h - rimAo * 0.55h);
-                    smoothness = saturate(smoothness * (1.0h - rimAo * 0.4h));
-                }
-
-                if (_EdgeHighlightStrength > 0.001h && detailFade > 0.001h)
-                {
-                    half edgeWidth = max(_EdgeWidth, 0.001h);
-                    half edgeCenter = 1.0h - edgeWidth * 0.5h;
-                    half rim = saturate(1.0h - abs(distNorm - edgeCenter) / edgeWidth);
-                    rim = rim * rim;
-                    albedo += albedo * rim * _EdgeHighlightStrength * 0.35h * exposed * detailFade * noiseKeep;
-                }
-
-                half3 normalTS = half3(0, 0, 1);
-                half3 coinNormalWS = coinFacing;
-                if (useNormals > 0.001h)
-                {
-                    normalTS = UnpackNormalScale(
-                        SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, coinUV),
-                        _BumpScale * _CoinNormalStrength * useNormals);
-                    coinNormalWS = SafeNormalize(
-                        normalTS.x * rotT + normalTS.y * rotB + normalTS.z * coinFacing);
-                    coinNormalWS = SafeNormalize(lerp(coinFacing, coinNormalWS, useNormals));
-                    normalTS = lerp(half3(0, 0, 1), normalTS, useNormals);
-                }
-
-                // Fake rim thickness: bend normals outward near the disc edge.
-                half rimBevel = _RimBevelStrength * detailFade;
-                if (rimBevel > 0.001h && rimFactor > 0.001h)
-                {
-                    float planarLenSq = dot(planar, planar);
-                    float3 outward = planarLenSq > 1e-10
-                        ? planar * rsqrt(planarLenSq)
-                        : uvT;
-                    coinNormalWS = SafeNormalize(coinNormalWS + outward * (float)(rimFactor * rimBevel));
-                }
-
-                half occ = 1.0h;
-                if (_RimAoStrength > 0.001h)
-                    occ = saturate(1.0h - rimFactor * _RimAoStrength);
-
-                // Optional dirt is gap-only unless strength > 0.
-                if (useDirt > 0.001h && _DirtStrength > 0.001h)
-                {
-                    half dirt = saturate(dirtSample * _DirtStrength * 0.35h) * useDirt;
-                    albedo = lerp(albedo, albedo * half3(0.55h, 0.42h, 0.28h), dirt);
-                    metallic = saturate(metallic * (1.0h - dirt * 0.55h));
-                    smoothness = saturate(smoothness * (1.0h - dirt * 0.4h));
-                }
-
-                if (exposed < 0.999h)
-                    albedo = lerp(_GapColor.rgb, albedo, exposed);
-
                 hasCoin = true;
-                bestPriority = priority;
-                bestMask = mask;
-                bestAlbedo = albedo;
-                bestNormalTS = normalTS;
-                bestNormalWS = coinNormalWS;
-                bestMetallic = metallic;
-                bestSmoothness = smoothness;
-                bestOcc = occ;
-                bestBurial = burial;
+                winner.cell = cell;
+                winner.local = local;
+                winner.planar = planar;
+                winner.uvT = uvT;
+                winner.rotT = rotT;
+                winner.rotB = rotB;
+                winner.coinFacing = coinFacing;
+                winner.rnd2 = ProcHash22(cell.xy + cell.z + 91.17);
+                winner.rnd3 = rnd3;
+                winner.mask = mask;
+                winner.burial = burial;
+                winner.priority = priority;
             }
         }
     }
@@ -403,22 +417,7 @@ ProcCoinSurface SampleProcVirtualCoins(
         gapAlbedo = _GapColor.rgb * lerp(1.0h, gapDark, saturate(_DirtStrength) * useDirt);
     }
 
-    if (hasCoin)
-    {
-        half cover = bestMask;
-        half metalCover = cover > 0.5h ? 1.0h : 0.0h;
-        result.albedo = lerp(gapAlbedo, bestAlbedo, cover);
-        result.normalTS = lerp(half3(0, 0, 1), bestNormalTS, cover);
-        result.normalWS = SafeNormalize(lerp(nWS, bestNormalWS, cover));
-        result.metallic = lerp(_GapMetallic, bestMetallic, metalCover);
-        result.smoothness = lerp(_GapSmoothness, bestSmoothness, cover);
-        // Gaps use material AO; coin faces keep authored rim occlusion.
-        half gapOcc = saturate(1.0h - _AOStrength * 0.65h);
-        result.occlusion = lerp(gapOcc, bestOcc, metalCover);
-        result.coverage = cover;
-        result.burial = bestBurial;
-    }
-    else
+    if (!hasCoin)
     {
         result.albedo = gapAlbedo;
         result.occlusion = saturate(1.0h - _AOStrength * 0.65h);
@@ -427,7 +426,150 @@ ProcCoinSurface SampleProcVirtualCoins(
         result.normalWS = nWS;
         result.coverage = 0;
         result.burial = 1;
+        return result;
     }
+
+    // Shade winning coin once (POM + texture samples).
+    float2 shadeLocal = winner.local;
+#if defined(_POM_ON)
+    shadeLocal = ProcCoinApplyPom(
+        winner.local,
+        viewDirWS,
+        winner.rotT,
+        winner.rotB,
+        winner.coinFacing,
+        radius,
+        diameter,
+        detailFade);
+#endif
+    float distNorm = length(shadeLocal) / max(radius, 1e-4);
+    float2 discUV = shadeLocal / max(diameter, 1e-4);
+    float2 coinUV = discUV / max((float)_CoinUVScale, 0.001) + _CoinUVCenter.xy;
+    coinUV = saturate(coinUV);
+
+    half exposed = saturate(1.0h - winner.burial);
+
+    half copperW = saturate(_CopperAmount);
+    half silverW = saturate(_SilverAmount);
+    half goldW = max(0.001h, 1.0h - copperW - silverW);
+    half metalPick = (half)ProcHash31(winner.cell + 77.7) * (goldW + copperW + silverW);
+    half3 metalTint = _BaseColor.rgb;
+    half metalMet = _Metallic;
+    half metalSm = _Smoothness;
+    half4 albedoSample;
+    if (metalPick < silverW)
+    {
+        albedoSample = SAMPLE_TEXTURE2D(_SilverBaseMap, sampler_SilverBaseMap, coinUV);
+        metalTint = _SilverColor.rgb;
+        metalMet = 0.95h;
+        metalSm = 0.80h;
+    }
+    else if (metalPick < silverW + copperW)
+    {
+        albedoSample = SAMPLE_TEXTURE2D(_CopperBaseMap, sampler_CopperBaseMap, coinUV);
+        metalTint = _CopperColor.rgb;
+        metalMet = 0.85h;
+        metalSm = 0.55h;
+    }
+    else
+    {
+        albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, coinUV);
+    }
+
+    half4 maskSample = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, coinUV);
+
+    half tint = 1.0h + ((half)winner.rnd2.x * 2.0h - 1.0h) * _TintVariation * noiseKeep;
+    half value = 1.0h + ((half)winner.rnd2.y * 2.0h - 1.0h) * _ValueVariation * noiseKeep;
+    half3 albedo = albedoSample.rgb * metalTint * tint * value;
+    half warm = ((half)winner.rnd3 * 2.0h - 1.0h) * 0.03h * noiseKeep;
+    albedo += half3(warm, warm * 0.35h, -warm);
+
+    half metallic = saturate(maskSample.r * metalMet);
+    half smoothness = saturate(maskSample.a * metalSm);
+
+    half rimWidth = max(_RimBevelWidth, 0.001h);
+    half rimFactor = smoothstep(1.0h - rimWidth, 1.0h, (half)distNorm);
+
+    if (_RimAoStrength > 0.001h)
+    {
+        half rimAo = rimFactor * _RimAoStrength;
+        albedo *= saturate(1.0h - rimAo * 0.55h);
+        smoothness = saturate(smoothness * (1.0h - rimAo * 0.4h));
+    }
+
+    if (_EdgeHighlightStrength > 0.001h && detailFade > 0.001h)
+    {
+        half edgeWidth = max(_EdgeWidth, 0.001h);
+        half edgeCenter = 1.0h - edgeWidth * 0.5h;
+        half rim = saturate(1.0h - abs((half)distNorm - edgeCenter) / edgeWidth);
+        rim = rim * rim;
+        albedo += albedo * rim * _EdgeHighlightStrength * 0.35h * exposed * detailFade * noiseKeep;
+    }
+
+    half3 normalTS = half3(0, 0, 1);
+    half3 coinNormalWS = winner.coinFacing;
+    if (useNormals > 0.001h)
+    {
+        normalTS = UnpackNormalScale(
+            SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, coinUV),
+            _BumpScale * _CoinNormalStrength * useNormals);
+        coinNormalWS = SafeNormalize(
+            normalTS.x * winner.rotT + normalTS.y * winner.rotB + normalTS.z * winner.coinFacing);
+        coinNormalWS = SafeNormalize(lerp(winner.coinFacing, coinNormalWS, useNormals));
+        normalTS = lerp(half3(0, 0, 1), normalTS, useNormals);
+    }
+
+    // Height-gradient tilt so recessed face / rim curve catch light.
+#if defined(_POM_ON)
+    if (_PomHeight > 1e-5h && detailFade > 0.001h)
+    {
+        float eps = max(radius * 0.04, 1e-5);
+        float hC = ProcCoinHeight01(distNorm);
+        float hX = ProcCoinHeight01(length(shadeLocal + float2(eps, 0.0)) / max(radius, 1e-4));
+        float hY = ProcCoinHeight01(length(shadeLocal + float2(0.0, eps)) / max(radius, 1e-4));
+        float heightScale = (float)_PomHeight * diameter;
+        float2 grad = float2(hC - hX, hC - hY) / eps * heightScale * (float)detailFade;
+        coinNormalWS = SafeNormalize(coinNormalWS + winner.rotT * grad.x + winner.rotB * grad.y);
+    }
+#endif
+
+    // Fake rim thickness: bend normals outward near the disc edge.
+    half rimBevel = _RimBevelStrength * detailFade;
+    if (rimBevel > 0.001h && rimFactor > 0.001h)
+    {
+        float planarLenSq = dot(winner.planar, winner.planar);
+        float3 outward = planarLenSq > 1e-10
+            ? winner.planar * rsqrt(planarLenSq)
+            : winner.uvT;
+        coinNormalWS = SafeNormalize(coinNormalWS + outward * (float)(rimFactor * rimBevel));
+    }
+
+    half occ = 1.0h;
+    if (_RimAoStrength > 0.001h)
+        occ = saturate(1.0h - rimFactor * _RimAoStrength);
+
+    if (useDirt > 0.001h && _DirtStrength > 0.001h)
+    {
+        half dirt = saturate(dirtSample * _DirtStrength * 0.35h) * useDirt;
+        albedo = lerp(albedo, albedo * half3(0.55h, 0.42h, 0.28h), dirt);
+        metallic = saturate(metallic * (1.0h - dirt * 0.55h));
+        smoothness = saturate(smoothness * (1.0h - dirt * 0.4h));
+    }
+
+    if (exposed < 0.999h)
+        albedo = lerp(_GapColor.rgb, albedo, exposed);
+
+    half cover = winner.mask;
+    half metalCover = cover > 0.5h ? 1.0h : 0.0h;
+    result.albedo = lerp(gapAlbedo, albedo, cover);
+    result.normalTS = lerp(half3(0, 0, 1), normalTS, cover);
+    result.normalWS = SafeNormalize(lerp(nWS, coinNormalWS, cover));
+    result.metallic = lerp(_GapMetallic, metallic, metalCover);
+    result.smoothness = lerp(_GapSmoothness, smoothness, cover);
+    half gapOcc = saturate(1.0h - _AOStrength * 0.65h);
+    result.occlusion = lerp(gapOcc, occ, metalCover);
+    result.coverage = cover;
+    result.burial = winner.burial;
 
     return result;
 }

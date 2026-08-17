@@ -48,7 +48,12 @@ public class TreasureItem : MonoBehaviour
 
 	public bool RequiresCleaning
 	{
-		get { return definition != null && definition.GetRequiresCleaning(); }
+		get
+		{
+			if ( definition == null || !definition.GetRequiresCleaning() )
+				return false;
+			return TreasureCleaningDefinition.IsCleaningEnabled();
+		}
 	}
 
 	public bool IsClean
@@ -1001,6 +1006,9 @@ public class TreasureItem : MonoBehaviour
 
 	void ApplyDirtVisual()
 	{
+		if ( !RequiresCleaning && _cleanProgress < 0.999f )
+			_cleanProgress = 1f;
+
 		EnsureRendererCache();
 		if ( _renderers == null || _renderers.Length == 0 )
 			return;

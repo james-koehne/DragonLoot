@@ -43,6 +43,97 @@ public static class ArtifactMaterialInstaller
 		Debug.Log( "Artifact materials installed (DragonLoot/Artifact) and cleaning definition registered." );
 	}
 
+	/// <summary>
+	/// Converts materials on a single visual prefab to <c>DragonLoot/Artifact</c>. Returns true if any material was assigned.
+	/// </summary>
+	public static bool ConvertPrefabMaterials( string prefabPath )
+	{
+		if ( string.IsNullOrEmpty( prefabPath ) )
+			return false;
+
+		Shader shader = Shader.Find( ShaderName );
+		if ( shader == null )
+		{
+			Debug.LogWarning( "Artifact shader not found: " + ShaderName );
+			return false;
+		}
+
+		EnsureFolder( "Assets/Materials" );
+		EnsureFolder( "Assets/Materials/Shaders" );
+		EnsureFolder( MaterialFolder );
+		EnsureCleaningDefinition();
+
+		GameObject prefabRoot = PrefabUtility.LoadPrefabContents( prefabPath );
+		if ( prefabRoot == null )
+			return false;
+
+		bool dirty = false;
+		try
+		{
+			var cache = new Dictionary<Material, Material>();
+			dirty = ConvertRenderersOnRoot( prefabRoot, shader, cache, forceAssign: true );
+			if ( dirty )
+				PrefabUtility.SaveAsPrefabAsset( prefabRoot, prefabPath );
+		}
+		finally
+		{
+			PrefabUtility.UnloadPrefabContents( prefabRoot );
+		}
+
+		return dirty;
+	}
+
+	static bool ConvertRenderersOnRoot(
+		GameObject prefabRoot,
+		Shader shader,
+		Dictionary<Material, Material> sourceToArtifactMat,
+		bool forceAssign )
+	{
+		bool dirty = false;
+		Renderer[] renderers = prefabRoot.GetComponentsInChildren<Renderer>( true );
+		for ( int r = 0; r < renderers.Length; r++ )
+		{
+			Renderer renderer = renderers[ r ];
+			if ( renderer == null )
+				continue;
+
+			Material[] shared = renderer.sharedMaterials;
+			if ( shared == null || shared.Length == 0 )
+				continue;
+
+			Material[] next = null;
+			for ( int m = 0; m < shared.Length; m++ )
+			{
+				Material source = shared[ m ];
+				if ( source == null )
+					continue;
+				if ( source.shader != null && source.shader.name == ShaderName )
+					continue;
+
+				Material artifactMat = GetOrCreateArtifactMaterial( source, shader, sourceToArtifactMat );
+				if ( artifactMat == null || artifactMat == source )
+					continue;
+
+				if ( next == null )
+				{
+					next = new Material[ shared.Length ];
+					for ( int c = 0; c < shared.Length; c++ )
+						next[ c ] = shared[ c ];
+				}
+
+				next[ m ] = artifactMat;
+			}
+
+			if ( next != null && forceAssign )
+			{
+				renderer.sharedMaterials = next;
+				dirty = true;
+			}
+		}
+
+		return dirty;
+	}
+
 	public static void TryInstall( bool forceAssignPrefabs )
 	{
 		Shader shader = Shader.Find( ShaderName );
@@ -76,47 +167,7 @@ public static class ArtifactMaterialInstaller
 			bool dirty = false;
 			try
 			{
-				Renderer[] renderers = prefabRoot.GetComponentsInChildren<Renderer>( true );
-				for ( int r = 0; r < renderers.Length; r++ )
-				{
-					Renderer renderer = renderers[ r ];
-					if ( renderer == null )
-						continue;
-
-					Material[] shared = renderer.sharedMaterials;
-					if ( shared == null || shared.Length == 0 )
-						continue;
-
-					Material[] next = null;
-					for ( int m = 0; m < shared.Length; m++ )
-					{
-						Material source = shared[ m ];
-						if ( source == null )
-							continue;
-						if ( source.shader != null && source.shader.name == ShaderName )
-							continue;
-
-						Material artifactMat = GetOrCreateArtifactMaterial( source, shader, sourceToArtifactMat );
-						if ( artifactMat == null || artifactMat == source )
-							continue;
-
-						if ( next == null )
-						{
-							next = new Material[ shared.Length ];
-							for ( int c = 0; c < shared.Length; c++ )
-								next[ c ] = shared[ c ];
-						}
-
-						next[ m ] = artifactMat;
-					}
-
-					if ( next != null && forceAssignPrefabs )
-					{
-						renderer.sharedMaterials = next;
-						dirty = true;
-					}
-				}
-
+				dirty = ConvertRenderersOnRoot( prefabRoot, shader, sourceToArtifactMat, forceAssignPrefabs );
 				if ( dirty )
 					PrefabUtility.SaveAsPrefabAsset( prefabRoot, path );
 			}

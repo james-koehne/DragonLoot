@@ -2,8 +2,6 @@ using System.Collections.Generic;
 using System.IO;
 
 using UnityEditor;
-using UnityEditor.AddressableAssets;
-using UnityEditor.AddressableAssets.Settings;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
@@ -16,7 +14,6 @@ public static class ArtifactTreasureInstaller
 	const string SourceFolder = "Assets/ThirdParty/LowlyPoly/Fantasy Treasure Pack/Prefab";
 	const string VisualFolder = "Assets/Addressables/Treasure/Artifacts";
 	const string DefinitionFolder = "Assets/Definitions/Treasure/Artifacts";
-	const int CollectableLayer = 6;
 
 	static readonly string[] PileDefinitionPaths =
 	{
@@ -162,14 +159,14 @@ public static class ArtifactTreasureInstaller
 				continue;
 			}
 
-			string visualGuid = CreateOrUpdateVisual( source, visualPath );
+			string visualGuid = TreasureVisualPrefabBuilder.CreateOrUpdateFromPrefab( source, visualPath );
 			if ( string.IsNullOrEmpty( visualGuid ) )
 			{
 				Debug.LogError( "ArtifactTreasureInstaller: failed visual for " + spec.DefName );
 				continue;
 			}
 
-			RegisterAddressable( visualPath );
+			AddressableEditorUtil.TryRegister( visualPath, visualPath );
 
 			TreasureDefinition def = CreateOrUpdateDefinition( spec, defPath, visualGuid );
 			if ( def != null )
@@ -186,155 +183,6 @@ public static class ArtifactTreasureInstaller
 		Debug.Log( "ArtifactTreasureInstaller: " + message );
 		if ( showDialog )
 			EditorUtility.DisplayDialog( "Fantasy Pack Artifacts", message, "OK" );
-	}
-
-	static string CreateOrUpdateVisual( GameObject source, string visualPath )
-	{
-		GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab( source );
-		if ( instance == null )
-			instance = Object.Instantiate( source );
-
-		PrefabUtility.UnpackPrefabInstance(
-			instance,
-			PrefabUnpackMode.Completely,
-			InteractionMode.AutomatedAction );
-
-		string visualName = Path.GetFileNameWithoutExtension( visualPath );
-		instance.name = visualName;
-		instance.transform.SetPositionAndRotation( Vector3.zero, Quaternion.identity );
-		instance.transform.localScale = Vector3.one;
-
-		StripAnimators( instance );
-		SetLayerRecursive( instance, CollectableLayer );
-		EnsurePhysicsComponents( instance );
-
-		GameObject saved = PrefabUtility.SaveAsPrefabAsset( instance, visualPath );
-		Object.DestroyImmediate( instance );
-
-		if ( saved == null )
-			return null;
-
-		return AssetDatabase.AssetPathToGUID( visualPath );
-	}
-
-	static void StripAnimators( GameObject root )
-	{
-		Animator[] animators = root.GetComponentsInChildren<Animator>( true );
-		for ( int i = 0; i < animators.Length; i++ )
-		{
-			if ( animators[ i ] != null )
-				Object.DestroyImmediate( animators[ i ] );
-		}
-	}
-
-	static void SetLayerRecursive( GameObject root, int layer )
-	{
-		Transform[] transforms = root.GetComponentsInChildren<Transform>( true );
-		for ( int i = 0; i < transforms.Length; i++ )
-			transforms[ i ].gameObject.layer = layer;
-	}
-
-	static void EnsurePhysicsComponents( GameObject root )
-	{
-		Collider[] existing = root.GetComponentsInChildren<Collider>( true );
-		for ( int i = 0; i < existing.Length; i++ )
-		{
-			if ( existing[ i ] != null )
-				Object.DestroyImmediate( existing[ i ] );
-		}
-
-		Rigidbody[] bodies = root.GetComponentsInChildren<Rigidbody>( true );
-		for ( int i = 0; i < bodies.Length; i++ )
-		{
-			if ( bodies[ i ] != null && bodies[ i ].gameObject != root )
-				Object.DestroyImmediate( bodies[ i ] );
-		}
-
-		AddColliders( root );
-
-		Rigidbody body = root.GetComponent<Rigidbody>();
-		if ( body == null )
-			body = root.AddComponent<Rigidbody>();
-		body.mass = 0.25f;
-		body.linearDamping = 0.6f;
-		body.angularDamping = 0.6f;
-		body.useGravity = true;
-		body.isKinematic = true;
-		body.interpolation = RigidbodyInterpolation.Interpolate;
-		body.collisionDetectionMode = CollisionDetectionMode.Discrete;
-	}
-
-	static void AddColliders( GameObject root )
-	{
-		MeshFilter[] filters = root.GetComponentsInChildren<MeshFilter>( true );
-		int added = 0;
-		for ( int i = 0; i < filters.Length; i++ )
-		{
-			MeshFilter filter = filters[ i ];
-			if ( filter == null || filter.sharedMesh == null )
-				continue;
-
-			Mesh mesh = filter.sharedMesh;
-			if ( mesh.vertexCount > 0 && mesh.vertexCount <= 255 )
-			{
-				MeshCollider meshCollider = filter.gameObject.AddComponent<MeshCollider>();
-				meshCollider.sharedMesh = mesh;
-				meshCollider.convex = true;
-				added++;
-			}
-			else
-			{
-				Renderer renderer = filter.GetComponent<Renderer>();
-				Bounds localBounds = mesh.bounds;
-				BoxCollider box = filter.gameObject.AddComponent<BoxCollider>();
-				box.center = localBounds.center;
-				box.size = localBounds.size;
-				if ( renderer == null )
-				{
-					// keep mesh-local bounds
-				}
-				added++;
-			}
-		}
-
-		if ( added == 0 )
-		{
-			Bounds bounds = CalculateRendererBounds( root );
-			BoxCollider fallback = root.AddComponent<BoxCollider>();
-			if ( bounds.size.sqrMagnitude > 0.0001f )
-			{
-				fallback.center = root.transform.InverseTransformPoint( bounds.center );
-				Vector3 lossy = root.transform.lossyScale;
-				fallback.size = new Vector3(
-					SafeDiv( bounds.size.x, lossy.x ),
-					SafeDiv( bounds.size.y, lossy.y ),
-					SafeDiv( bounds.size.z, lossy.z ) );
-			}
-			else
-			{
-				fallback.size = Vector3.one * 0.5f;
-			}
-		}
-	}
-
-	static Bounds CalculateRendererBounds( GameObject root )
-	{
-		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
-		if ( renderers == null || renderers.Length == 0 )
-			return new Bounds( root.transform.position, Vector3.zero );
-
-		Bounds bounds = renderers[ 0 ].bounds;
-		for ( int i = 1; i < renderers.Length; i++ )
-		{
-			if ( renderers[ i ] != null )
-				bounds.Encapsulate( renderers[ i ].bounds );
-		}
-		return bounds;
-	}
-
-	static float SafeDiv( float a, float b )
-	{
-		return Mathf.Abs( b ) < 0.0001f ? a : a / b;
 	}
 
 	static TreasureDefinition CreateOrUpdateDefinition( ArtifactSpec spec, string defPath, string visualGuid )
@@ -436,38 +284,8 @@ public static class ArtifactTreasureInstaller
 		return null;
 	}
 
-	static void RegisterAddressable( string assetPath )
-	{
-		AddressableAssetSettings settings = AddressableAssetSettingsDefaultObject.Settings;
-		if ( settings == null )
-		{
-			Debug.LogWarning( "AddressableAssetSettings missing; skipped registering " + assetPath );
-			return;
-		}
-
-		string guid = AssetDatabase.AssetPathToGUID( assetPath );
-		if ( string.IsNullOrEmpty( guid ) )
-			return;
-
-		AddressableAssetGroup group = settings.DefaultGroup;
-		AddressableAssetEntry entry = settings.FindAssetEntry( guid );
-		if ( entry == null )
-			entry = settings.CreateOrMoveEntry( guid, group, readOnly: false, postEvent: false );
-
-		entry.SetAddress( assetPath );
-		settings.SetDirty( AddressableAssetSettings.ModificationEvent.EntryMoved, entry, true );
-	}
-
 	static void EnsureFolder( string path )
 	{
-		if ( AssetDatabase.IsValidFolder( path ) )
-			return;
-
-		string parent = Path.GetDirectoryName( path ).Replace( '\\', '/' );
-		string name = Path.GetFileName( path );
-		if ( !AssetDatabase.IsValidFolder( parent ) )
-			EnsureFolder( parent );
-
-		AssetDatabase.CreateFolder( parent, name );
+		AddressableEditorUtil.EnsureFolder( path );
 	}
 }

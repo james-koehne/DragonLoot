@@ -262,7 +262,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		}
 
 		RestackSlot( slotIndex );
-		RefreshSlotCylinder( slotIndex, animate: true );
+		RefreshSlotCylinder( slotIndex );
 		RefreshCountLabel();
 		PublishChanged();
 		return into.Count > 0;
@@ -339,7 +339,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		if ( added <= 0 )
 			return 0;
 
-		RefreshSlotCylinder( slotIndex, animate: true );
+		RefreshSlotCylinder( slotIndex );
 		RefreshCountLabel();
 		PublishChanged();
 		return added;
@@ -834,11 +834,9 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		{
 			GetSlotWorldPose( slotIndex, stackIndex, item, out endWorldPos, out endWorldRot );
 			item.EnterDisplayed( this, endWorldPos, endWorldRot );
-			RefreshSlotCylinder( slotIndex, animate: true );
+			RefreshSlotCylinder( slotIndex );
 			PlayTreasurePlaceFeedback( item );
 		}
-
-		PlayPlaceFx();
 	}
 
 	static void PlayTreasurePlaceFeedback( TreasureItem item )
@@ -880,11 +878,6 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	void RefreshSlotCylinder( int slotIndex )
 	{
-		RefreshSlotCylinder( slotIndex, animate: false );
-	}
-
-	void RefreshSlotCylinder( int slotIndex, bool animate )
-	{
 		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
 			return;
 
@@ -895,56 +888,11 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			ref visual,
 			area,
 			slot.Items,
-			snap: !animate,
+			snap: false,
 			localPosition: slot.LocalBasePosition,
 			localRotation: slot.LocalRotation,
 			hostName: CoinColumnCylinderBinder.HostChildName + "_Mixed_" + slotIndex );
 		slot.Cylinder = visual;
-		if ( animate )
-			PlayPlaceFx( slot );
-	}
-
-	void PlayPlaceFx()
-	{
-		PlayPlaceFx( null );
-	}
-
-	void PlayPlaceFx( SlotStack slot )
-	{
-		Transform punchTarget = slot != null && slot.Cylinder != null
-			? slot.Cylinder.transform
-			: transform;
-		EnsurePlaceFeedback( punchTarget );
-		if ( _placeFeedbacks != null )
-			_placeFeedbacks.Play();
-	}
-
-	void EnsurePlaceFeedback( Transform punchTarget )
-	{
-		if ( _placeFeedbacks != null )
-		{
-			if ( punchTarget != null
-				&& _placeFeedbacks.FeedbackList != null
-				&& _placeFeedbacks.FeedbackList.Count > 0 )
-			{
-				PunchScaleFeedback punch = _placeFeedbacks.FeedbackList[ 0 ] as PunchScaleFeedback;
-				if ( punch != null )
-					punch.Target = punchTarget;
-			}
-
-			return;
-		}
-
-		GameObject go = new GameObject( "OnPlaceFeedbacks" );
-		go.transform.SetParent( transform, false );
-		_placeFeedbacks = go.AddComponent<Feedbacks>();
-		_placeFeedbacks.Initialize();
-		_placeFeedbacks.AddFeedback( new PunchScaleFeedback
-		{
-			Target = punchTarget != null ? punchTarget : transform,
-			Punch = new Vector3( 0.06f, -0.08f, 0.06f ),
-			Duration = 0.18f
-		} );
 	}
 
 	void GetSlotWorldPose( int slotIndex, int stackIndex, TreasureItem item, out Vector3 worldPos, out Quaternion worldRot )

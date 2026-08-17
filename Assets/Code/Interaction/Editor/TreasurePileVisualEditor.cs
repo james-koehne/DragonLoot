@@ -47,7 +47,11 @@ public class TreasurePileVisualEditor : Editor
 		Undo.undoRedoPerformed += OnUndoRedo;
 		TreasurePileVisual visual = target as TreasurePileVisual;
 		if ( visual != null && !Application.isPlaying )
+		{
 			RebuildPreview( visual );
+			if ( visual.LatentBake != null && visual.LatentBake.PoseCount > 0 )
+				RefreshLatentBakePreview( visual );
+		}
 	}
 
 	void OnDisable()
@@ -76,8 +80,21 @@ public class TreasurePileVisualEditor : Editor
 		EditorGUILayout.LabelField( "Artifact Latent Bake", EditorStyles.boldLabel );
 		EditorGUILayout.HelpBox(
 			"Bakes deterministic latent poses from this pile's authored height + layout seed. "
-			+ "Each pile needs its own bake (heightmaps differ). Does not preview props.",
+			+ "Curated props under _AuthoredLoot reserve occupancy; bake stores the auto-fill remainder. "
+			+ "Each pile needs its own bake (heightmaps differ).",
 			MessageType.None );
+
+		int authoredCount = visual.CountAuthoredItems();
+		if ( authoredCount > 0 )
+			EditorGUILayout.LabelField( "Curated authored props", authoredCount.ToString() );
+
+		if ( !Application.isPlaying && visual.IsLatentBakeStale() )
+		{
+			EditorGUILayout.HelpBox(
+				"Authored items or mound changed — rebake to update fill.",
+				MessageType.Warning );
+		}
+
 		if ( GUILayout.Button( "Bake Latents For This Pile" ) )
 			BakeLatentsForVisual( visual );
 
@@ -362,10 +379,132 @@ public class TreasurePileVisualEditor : Editor
 			bake );
 		EditorUtility.SetDirty( bake );
 		AssetDatabase.SaveAssets();
+		RefreshLatentBakePreview( visual );
 		EditorUtility.DisplayDialog(
 			"Bake Latents",
-			$"Wrote {bake.PoseCount} poses to {bake.name} for pile '{visual.name}'.",
+			$"Wrote {bake.PoseCount} remainder poses to {bake.name} for pile '{visual.name}' "
+			+ $"(+ {visual.CountAuthoredItems()} curated authored).",
 			"OK" );
+	}
+
+	static void RefreshLatentBakePreview( TreasurePileVisual visual )
+	{
+		if ( visual == null || Application.isPlaying )
+			return;
+
+		ClearLatentBakePreview( visual );
+		TreasurePileLatentBake bake = visual.LatentBake;
+		if ( bake == null || bake.poses == null || bake.poses.Length == 0 )
+			return;
+
+		Transform root = EnsureLatentBakePreviewRoot( visual );
+		for ( int i = 0; i < bake.poses.Length; i++ )
+		{
+			TreasurePileLatentBake.Pose pose = bake.poses[ i ];
+			if ( pose.definition == null )
+				continue;
+
+			Vector3 worldPos = visual.transform.TransformPoint( pose.localPos );
+			Quaternion worldRot = visual.transform.rotation * pose.localRot;
+			TreasureItem item = TreasureItemFactory.SpawnSync( pose.definition, worldPos, worldRot, root );
+			if ( item == null )
+				continue;
+
+			ConfigureBakePreviewItem( item, pose.scale );
+		}
+
+		SceneView.RepaintAll();
+	}
+
+	static Transform EnsureLatentBakePreviewRoot( TreasurePileVisual visual )
+	{
+		Transform existing = visual.FindLatentBakePreviewRoot();
+		if ( existing != null )
+		{
+			SetHideAndDontSaveRecursive( existing );
+			return existing;
+		}
+
+		GameObject go = new GameObject( TreasurePileVisual.LatentBakePreviewRootName );
+		go.transform.SetParent( visual.transform, false );
+		go.transform.localPosition = Vector3.zero;
+		go.transform.localRotation = Quaternion.identity;
+		go.transform.localScale = Vector3.one;
+		SetHideAndDontSaveRecursive( go.transform );
+		return go.transform;
+	}
+
+	static void ClearLatentBakePreview( TreasurePileVisual visual )
+	{
+		Transform root = visual != null ? visual.FindLatentBakePreviewRoot() : null;
+		if ( root == null )
+			return;
+
+		for ( int i = root.childCount - 1; i >= 0; i-- )
+		{
+			Transform child = root.GetChild( i );
+			if ( child == null )
+				continue;
+
+			TreasureItem item = child.GetComponent<TreasureItem>();
+			GameObject go = child.gameObject;
+			if ( item != null )
+			{
+				bool viaAddressables = item.ReleasedViaAddressables;
+				item.OnDespawned();
+				if ( viaAddressables )
+					UnityEngine.AddressableAssets.Addressables.ReleaseInstance( go );
+				else
+					Object.DestroyImmediate( go );
+			}
+			else
+				Object.DestroyImmediate( go );
+		}
+	}
+
+	static void ConfigureBakePreviewItem( TreasureItem item, float scale )
+	{
+		if ( item == null )
+			return;
+
+		GameObject go = item.gameObject;
+		SetHideAndDontSaveRecursive( go.transform );
+
+		Rigidbody body = item.Body;
+		if ( body != null )
+		{
+			body.isKinematic = true;
+			body.detectCollisions = false;
+		}
+
+		Collider[] cols = go.GetComponentsInChildren<Collider>( true );
+		for ( int i = 0; i < cols.Length; i++ )
+		{
+			if ( cols[ i ] != null )
+				cols[ i ].enabled = false;
+		}
+
+		Behaviour[] behaviours = go.GetComponentsInChildren<Behaviour>( true );
+		for ( int i = 0; i < behaviours.Length; i++ )
+		{
+			Behaviour b = behaviours[ i ];
+			if ( b == null || b is TreasureItem )
+				continue;
+			b.enabled = false;
+		}
+
+		if ( scale > 0.01f )
+			go.transform.localScale = Vector3.one * scale;
+	}
+
+	static void SetHideAndDontSaveRecursive( Transform root )
+	{
+		if ( root == null )
+			return;
+
+		root.gameObject.hideFlags = HideFlags.HideAndDontSave;
+		for ( int i = 0; i < root.childCount; i++ )
+			SetHideAndDontSaveRecursive( root.GetChild( i ) );
 	}
 
 	void ApplyOneShot( TreasurePileVisual visual, GoldPileEditorBrushMode mode, int iterations )

@@ -159,8 +159,17 @@ public class GameMode : MonoBehaviour, IGameMode
 			if ( worldMarker != null )
 				worldMarker.Setup();
 
+			PauseMenuUI pauseMenu = interfacePrefab.GetComponentInChildren<PauseMenuUI>( true );
+			if ( pauseMenu != null )
+				pauseMenu.Setup();
+
+			PouchSummaryUI pouchSummary = interfacePrefab.GetComponentInChildren<PouchSummaryUI>( true );
+			if ( pouchSummary != null )
+				pouchSummary.Setup();
+
 			QuestSystem quests = QuestSystem.EnsureExists();
 			quests.StartOrResumeCatalog();
+			QuestObjectiveOutline.EnsureExists();
 		}
 
 		if ( GetComponent<DebugOverlay>() == null )

@@ -66,6 +66,10 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float fullStackLateralOffset = 0.35f;
 
+	[Tooltip( "Seconds for a sorted coin to fly from the chute onto the output stack." )]
+	[Min( 0.05f )]
+	public float sortedCoinFlightDuration = 0.28f;
+
 	[Header( "Reposition — Pickup" )]
 	[Tooltip( "Hold Interact on the body this long to begin telekinetic carry." )]
 	[Min( 0.1f )]

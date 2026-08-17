@@ -43,13 +43,13 @@ MonoBehaviour:
     m_SubObjectType: 
     m_SubObjectGUID: 
     m_EditorAssetChanged: 0
-  worldScale: {x: 0.2, y: 0.2, z: 0.2}
+  worldScale: {x: 0.3, y: 0.3, z: 0.3}
   heldScale: {x: 0.2, y: 0.2, z: 0.2}
   activeHeldLocalEuler: {x: 0, y: 0, z: 0}
   heldStackLocalEuler: {x: 0, y: 0, z: 0}
   cleaningRequirement: 0
   canStack: 1
-  coinThickness: 0.041
+  coinThickness: 0.0615
   cartGridSize: {x: 1, y: 1}
   pickupClips:
   - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}

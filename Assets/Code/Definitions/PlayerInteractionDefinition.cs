@@ -62,6 +62,9 @@ public class PlayerInteractionDefinition : ScriptableObject
 	[Header( "Pickable Focus Outline" )]
 	public HoverOutlineVisualSettings pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
+	[Header( "Quest Objective Outline" )]
+	public HoverOutlineVisualSettings questOutline = HoverOutlineVisualSettings.DefaultQuest();
+
 	void OnValidate()
 	{
 		interactRange = Mathf.Max( 0.1f, interactRange );
@@ -85,5 +88,9 @@ public class PlayerInteractionDefinition : ScriptableObject
 			pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 		else
 			pickableOutline.Validate();
+		if ( questOutline == null )
+			questOutline = HoverOutlineVisualSettings.DefaultQuest();
+		else
+			questOutline.Validate();
 	}
 }

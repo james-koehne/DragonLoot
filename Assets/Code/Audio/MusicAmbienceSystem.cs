@@ -53,21 +53,27 @@ public class MusicAmbienceSystem : MonoBehaviour
 
 		_instance = this;
 		EnsureSources();
+		AudioMaster.Apply();
 	}
 
 	void OnDestroy()
 	{
 		if ( _instance == this )
 			_instance = null;
+
+		AudioMaster.FlushPersist();
 	}
 
 	void Start()
 	{
+		AudioMaster.Apply();
 		BeginPlaylists();
 	}
 
 	void Update()
 	{
+		AudioMaster.Tick();
+
 		if ( !_started )
 			BeginPlaylists();
 
@@ -78,14 +84,14 @@ public class MusicAmbienceSystem : MonoBehaviour
 		TickBed(
 			ref _music,
 			def.musicTracks,
-			Mathf.Clamp01( def.musicVolume ),
+			ResolveBedVolume( def.musicVolume, AudioChannel.Music ),
 			Mathf.Max( 1, def.musicPlaysPerTrack ),
 			Mathf.Max( 0f, def.musicCrossfadeSeconds ) );
 
 		TickBed(
 			ref _ambience,
 			def.ambienceTracks,
-			Mathf.Clamp01( def.ambienceVolume ),
+			ResolveBedVolume( def.ambienceVolume, AudioChannel.Ambience ),
 			Mathf.Max( 1, def.ambiencePlaysPerTrack ),
 			Mathf.Max( 0f, def.ambienceCrossfadeSeconds ) );
 	}
@@ -108,10 +114,10 @@ public class MusicAmbienceSystem : MonoBehaviour
 		_ambience.Crossfading = false;
 
 		if ( _music.Index >= 0 )
-			PlayImmediate( ref _music, def.musicTracks[_music.Index], Mathf.Clamp01( def.musicVolume ) );
+			PlayImmediate( ref _music, def.musicTracks[_music.Index], ResolveBedVolume( def.musicVolume, AudioChannel.Music ) );
 
 		if ( _ambience.Index >= 0 )
-			PlayImmediate( ref _ambience, def.ambienceTracks[_ambience.Index], Mathf.Clamp01( def.ambienceVolume ) );
+			PlayImmediate( ref _ambience, def.ambienceTracks[_ambience.Index], ResolveBedVolume( def.ambienceVolume, AudioChannel.Ambience ) );
 	}
 
 	void TickBed(
@@ -234,6 +240,11 @@ public class MusicAmbienceSystem : MonoBehaviour
 		bed.Crossfading = false;
 		bed.CrossfadeElapsed = 0f;
 		bed.CrossfadeDuration = 0f;
+	}
+
+	static float ResolveBedVolume( float designerVolume, AudioChannel channel )
+	{
+		return Mathf.Clamp01( designerVolume ) * AudioMaster.GetChannelGain( channel );
 	}
 
 	static void PlayImmediate( ref BedChannel bed, AudioClip clip, float targetVolume )

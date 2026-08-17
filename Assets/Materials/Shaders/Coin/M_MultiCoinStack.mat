@@ -70,8 +70,8 @@ Material:
     - _RidgeSoftness: 0.02
     - _SeamClipGrooveOnly: 0
     - _SeamClipWidth: 0.01
-    - _SeamNormalStrength: 2
-    - _SeamSideClip: 1
+    - _SeamNormalStrength: 0
+    - _SeamSideClip: 0
     - _SeamSoftAO: 0
     - _SeamViewAlignEnd: 0.92
     - _SeamViewAlignStart: 0.7
@@ -79,7 +79,7 @@ Material:
     - _ShineBoost: 0.5
     - _SideBumpScale: 0.35
     - _SideFacetFrequency: 8
-    - _SideFacetStrength: 0.04
+    - _SideFacetStrength: 0.02
     - _Smoothness: 0.75
     - _SparkleCoverage: 0.05
     - _SparkleDensity: 64
@@ -93,6 +93,7 @@ Material:
     - _TintVariation: 0.03
     - _TypeCount: 3
     - _ValueVariation: 0.03
+    - _VariationSeed: 1
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _FresnelColor: {r: 1, g: 0.82, b: 0.45, a: 1}

@@ -9,12 +9,20 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	public const string AssetPath = "Assets/Definitions/Treasure/Pile/GoldPileLootStreamSettings.asset";
 	public const string LegacyAssetPath = "Assets/Materials/Shaders/GoldPile/GoldPileLootStreamSettings.asset";
 
+	public static readonly int CoinLod0EndId = Shader.PropertyToID( "_GoldPileCoinLod0End" );
+	public static readonly int CoinLod1EndId = Shader.PropertyToID( "_GoldPileCoinLod1End" );
+	public static readonly int CoinLod2EndId = Shader.PropertyToID( "_GoldPileCoinLod2End" );
+	public static readonly int CoinDitherFadeId = Shader.PropertyToID( "_GoldPileCoinDitherFade" );
+	public static readonly int CoinLodKeep1Id = Shader.PropertyToID( "_GoldPileCoinLodKeep1" );
+	public static readonly int CoinLodKeep2Id = Shader.PropertyToID( "_GoldPileCoinLodKeep2" );
+	public static readonly int CoinDitherEnableId = Shader.PropertyToID( "_GoldPileCoinDitherEnable" );
+
 	[Header( "Chunks" )]
 	[Min( 1f )]
 	public float chunkSize = 8f;
 
 	[Header( "Category culling" )]
-	[Tooltip( "Legacy GPU path: when enabled, large props skip distance density. Coins always use lod density." )]
+	[Tooltip( "Legacy GPU path: when enabled, large props skip distance density. Coins use per-chunk instance budgets." )]
 	public bool useCategoryDistanceCulling = true;
 
 	[Header( "LOD distances (meters to chunk bounds, XZ) — coins" )]
@@ -30,16 +38,86 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	[Min( 1 )]
 	public int lodHysteresisFrames = 8;
 
-	[Header( "Density" )]
-	[Tooltip( "Fraction of coins drawn at LOD0 (near)." )]
+	[Header( "Per-chunk instance budgets (coins)" )]
+	[Tooltip( "Max Drawn / submitted coin instances per chunk at LOD0 (near)." )]
+	[Min( 1 )]
+	public int lod0InstancesPerChunk = 250;
+
+	[Tooltip( "Submitted coin instances per chunk at LOD1 (stable subset of Drawn)." )]
+	[Min( 0 )]
+	public int lod1InstancesPerChunk = 150;
+
+	[Tooltip( "Submitted coin instances per chunk at LOD2." )]
+	[Min( 0 )]
+	public int lod2InstancesPerChunk = 80;
+
+	[Header( "LOD dither fade" )]
+	[Tooltip( "Meters for screen-dither dissolve at lod0→lod1, lod1→lod2, and before lod2End." )]
+	[Min( 0.1f )]
+	public float ditherFadeWidth = 5f;
+
+	[Header( "Coin Pose" )]
+	[Tooltip( "0 = upright, 1 = full heightfield-normal tilt." )]
+	[Range( 0f, 1f )]
+	public float coinTiltStrength = 1f;
+
+	[Tooltip( "Random tip jitter in degrees around surface axes." )]
+	[Min( 0f )]
+	public float coinTipJitterDegrees = 6f;
+
+	[Tooltip( "Random yaw range in degrees (360 = full spin)." )]
+	[Min( 0f )]
+	public float coinYawJitterDegrees = 360f;
+
+	[Tooltip( "Extra sink into the mesh as a fraction of coin scale (Mode A embed / Mode B surface seat)." )]
+	[Min( 0f )]
+	public float coinEmbedSinkFraction = 0.08f;
+
+	[Tooltip( "Scale jitter for GPU coin seats. 0 = fall back to TreasurePileDefinition.placementScaleJitter." )]
+	[Range( 0f, 0.5f )]
+	public float coinScaleJitter = 0f;
+
+	[Header( "Coin Density / Overlap" )]
+	[Tooltip( "Min XZ spacing between GPU coin seats when enforceCoinOverlap is on." )]
+	[Min( 0.01f )]
+	public float coinPlacementMinSpacing = 0.18f;
+
+	[Tooltip( "When true, reject new coin seats that are too close to existing untaken seats." )]
+	public bool enforceCoinOverlap = true;
+
+	[Header( "Coin Dig Modes (A/B)" )]
+	[Tooltip( "Mode A: place volume / shallow-embed seats that dig can reveal and release." )]
+	public bool useEmbeddedVolumeSeats = true;
+
+	[Tooltip( "Mode B visual: place decorative GPU coins sitting on the surface (never dig-released)." )]
+	public bool useSurfaceDecorSeats = false;
+
+	[Tooltip( "Mode A dig: release embedded seats to world when their pivot leaves the mound." )]
+	public bool releaseEmbeddedSeatsOnDig = true;
+
+	[Tooltip( "Mode B dig: spawn separate physical world coins from inventory based on dig amount." )]
+	public bool spawnPhysicalCoinsOnDig = false;
+
+	[Tooltip( "Chance per dig-amount roll to spawn one physical coin." )]
+	[Range( 0f, 1f )]
+	public float digPhysicalSpawnChance = 0.35f;
+
+	[Tooltip( "Hard cap on physical coin spawns per carve." )]
+	[Min( 0 )]
+	public int digPhysicalMaxPerCarve = 3;
+
+	[Tooltip( "Carve inventory units per spawn roll (rolls = floor(carveUnits / this))." )]
+	[Min( 0.01f )]
+	public float digPhysicalUnitsPerRoll = 1f;
+
+	[Header( "Density (legacy — unused for coins; kept for asset compatibility)" )]
+	[Tooltip( "Legacy hash density. Coins use lodNInstancesPerChunk instead." )]
 	[Range( 0f, 1f )]
 	public float lod0Density = 1f;
 
-	[Tooltip( "Fraction of coins drawn at LOD1." )]
 	[Range( 0f, 1f )]
 	public float lod1Density = 0.6f;
 
-	[Tooltip( "Fraction of coins drawn at LOD2." )]
 	[Range( 0f, 1f )]
 	public float lod2Density = 0.25f;
 
@@ -66,6 +144,35 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	public bool drawChunkGizmos = true;
 
 	public bool drawOverlayStats = true;
+
+	public int InstancesPerChunkForLod( int lod )
+	{
+		switch ( lod )
+		{
+			case 0: return Mathf.Max( 0, lod0InstancesPerChunk );
+			case 1: return Mathf.Max( 0, lod1InstancesPerChunk );
+			case 2: return Mathf.Max( 0, lod2InstancesPerChunk );
+			default: return 0;
+		}
+	}
+
+	/// <summary>
+	/// Submit the previous LOD's instance count through the dither fade band so extras can dissolve
+	/// in the shader before they are dropped from the CPU list.
+	/// </summary>
+	public int SoftInstancesPerChunk( int lod, float distanceMeters )
+	{
+		int budget = InstancesPerChunkForLod( lod );
+		if ( lod <= 0 )
+			return budget;
+
+		float prevEnd = lod == 1 ? lod0End : lod1End;
+		int prevBudget = InstancesPerChunkForLod( lod - 1 );
+		float fade = Mathf.Max( 0.1f, ditherFadeWidth );
+		if ( distanceMeters < prevEnd + fade )
+			return prevBudget;
+		return budget;
+	}
 
 	public float DensityForLod( int lod )
 	{
@@ -101,6 +208,17 @@ public class GoldPileLootStreamSettings : ScriptableObject
 		if ( distanceMetersSqr <= lod2 * lod2 )
 			return 2;
 		return 3;
+	}
+
+	public void PushCoinDitherGlobals()
+	{
+		Shader.SetGlobalFloat( CoinLod0EndId, lod0End );
+		Shader.SetGlobalFloat( CoinLod1EndId, lod1End );
+		Shader.SetGlobalFloat( CoinLod2EndId, lod2End );
+		Shader.SetGlobalFloat( CoinDitherFadeId, Mathf.Max( 0.1f, ditherFadeWidth ) );
+		float invLod0 = 1f / Mathf.Max( 1, lod0InstancesPerChunk );
+		Shader.SetGlobalFloat( CoinLodKeep1Id, Mathf.Clamp01( lod1InstancesPerChunk * invLod0 ) );
+		Shader.SetGlobalFloat( CoinLodKeep2Id, Mathf.Clamp01( lod2InstancesPerChunk * invLod0 ) );
 	}
 
 	/// <summary>True for Gem; everything else that is not Coin uses the artifact bucket.</summary>

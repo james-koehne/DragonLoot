@@ -20,6 +20,7 @@ MonoBehaviour:
   volumeMaxAttempts: 24
   usedSpatialHash: 1
   avoidedCoinSeats: 0
+  authoredFingerprint: 0
   poses:
   - definition: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
     localPos: {x: -3.7859097, y: 1.1833522, z: 2.7700696}

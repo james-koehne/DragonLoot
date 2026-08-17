@@ -8,10 +8,12 @@ public sealed class HoverOutlineRendererFeature : ScriptableRendererFeature
 	public sealed class FrameData : ContextItem
 	{
 		public TextureHandle maskTexture = TextureHandle.nullHandle;
+		public TextureHandle questMaskTexture = TextureHandle.nullHandle;
 
 		public override void Reset()
 		{
 			maskTexture = TextureHandle.nullHandle;
+			questMaskTexture = TextureHandle.nullHandle;
 		}
 	}
 
@@ -38,13 +40,19 @@ public sealed class HoverOutlineRendererFeature : ScriptableRendererFeature
 		if ( compositeShader != null && _compositeMaterial == null )
 			_compositeMaterial = CoreUtils.CreateEngineMaterial( compositeShader );
 
+		if ( _compositeMaterial != null )
+		{
+			_compositeMaterial.SetTexture( "_HoverOutlineMask", Texture2D.blackTexture );
+			_compositeMaterial.SetTexture( "_QuestOutlineMask", Texture2D.blackTexture );
+		}
+
 		_maskPass = new HoverOutlineMaskPass( _maskMaterial );
 		_compositePass = new HoverOutlineCompositePass( _compositeMaterial );
 	}
 
 	public override void AddRenderPasses( ScriptableRenderer renderer, ref RenderingData renderingData )
 	{
-		if ( !HoverOutlineRegistrar.HasTarget )
+		if ( !HoverOutlineRegistrar.HasTarget && !QuestOutlineRegistrar.HasTarget )
 			return;
 
 		if ( renderingData.cameraData.cameraType != CameraType.Game )

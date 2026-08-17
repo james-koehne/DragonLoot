@@ -198,6 +198,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 
 		RestackPoses();
+		EventBus.Publish( new PouchChangedEvent
+		{
+			Bucket = kind,
+			Carry = this
+		} );
 		return true;
 	}
 
@@ -1795,6 +1800,43 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 	}
 
+	/// <summary>
+	/// Groups held definitions in the bucket for HUD summary (includes coin definition-only slots).
+	/// </summary>
+	public void BuildBucketSummary( CarryBucketKind kind, List<TreasureDefinition> uniqueDefs, List<int> counts )
+	{
+		if ( uniqueDefs == null || counts == null )
+			return;
+
+		uniqueDefs.Clear();
+		counts.Clear();
+
+		CategoryBucket bucket = GetBucket( kind );
+		if ( bucket.HasActive )
+			AccumulateSummary( bucket.Active.Definition, uniqueDefs, counts );
+
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+			AccumulateSummary( bucket.Held[ i ].Definition, uniqueDefs, counts );
+	}
+
+	static void AccumulateSummary( TreasureDefinition definition, List<TreasureDefinition> uniqueDefs, List<int> counts )
+	{
+		if ( definition == null )
+			return;
+
+		for ( int i = 0; i < uniqueDefs.Count; i++ )
+		{
+			if ( uniqueDefs[ i ] == definition )
+			{
+				counts[ i ]++;
+				return;
+			}
+		}
+
+		uniqueDefs.Add( definition );
+		counts.Add( 1 );
+	}
+
 	/// <summary>Coin-bucket snapshot for the sorting hopper.</summary>
 	public void CopyCoinsInOrder( List<TreasureItem> buffer )
 	{
@@ -2474,15 +2516,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	float GetHeldStackStep( TreasureDefinition definition, CarryDefinition carryDef )
 	{
-		float step = TreasureStackSpacing.GetStep( definition );
-		if ( definition != null )
-		{
-			float worldY = Mathf.Abs( definition.worldScale.y );
-			float heldY = Mathf.Abs( definition.heldScale.y );
-			if ( worldY > 0.0001f && heldY > 0.0001f )
-				step *= heldY / worldY;
-		}
-
+		float step = TreasureStackSpacing.GetHeldStep( definition );
 		float padding = carryDef != null ? carryDef.stackPadding : 0.01f;
 		float fallback = carryDef != null ? carryDef.fallbackStackStep : 0.04f;
 		if ( step < 0.0001f )
@@ -2519,7 +2553,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( defs.Count >= CoinColumnCylinderBinder.MinCountForCylinder )
 		{
 			bool[] covered = null;
-			CoinColumnCylinderBinder.BindDefinitions( ref coins.HeldCylinder, coins.HoldRoot, defs, snap: false, covered );
+			CoinColumnCylinderBinder.BindDefinitions( ref coins.HeldCylinder, coins.HoldRoot, defs, snap: false, covered, useHeldScale: true );
 			if ( coins.HeldCylinder != null )
 			{
 				coins.HeldCylinder.SetVariationSeed( EnsureCoinHandVariationSeed() );

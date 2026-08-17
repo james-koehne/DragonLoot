@@ -376,6 +376,59 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		return added;
 	}
 
+	/// <summary>
+	/// Quiet start-of-play fill: spawn into a slot without place SFX or punch juice.
+	/// </summary>
+	protected int SpawnDisplayedStack( int slotIndex, TreasureDefinition definition, int count )
+	{
+		if ( definition == null || count <= 0 || Slots == null )
+			return 0;
+		if ( slotIndex < 0 || slotIndex >= Slots.Length )
+			return 0;
+
+		int added = 0;
+		for ( int i = 0; i < count; i++ )
+		{
+			if ( GetSlotCoinAppendCapacity( slotIndex, definition ) <= 0 )
+				break;
+
+			TryGetSlotAppendPose( slotIndex, out Vector3 pos, out Quaternion rot );
+			TreasureItem visual = TreasureItemFactory.RentVisualCoin( definition, pos, rot );
+			if ( visual == null )
+				visual = TreasureItemFactory.SpawnFallback( definition, pos, rot, null );
+			if ( visual == null )
+				break;
+
+			Slots[ slotIndex ].Items.Add( visual );
+			if ( !_displayedItems.Contains( visual ) )
+				_displayedItems.Add( visual );
+			_currentCount++;
+			visual.EnterDisplayed( this, pos, rot );
+			NotifySortedDelta( definition, 1 );
+			added++;
+		}
+
+		if ( added > 0 )
+			RefreshSlotCylinder( slotIndex, animate: false );
+
+		return added;
+	}
+
+	protected void FinishStartFill()
+	{
+		RefreshCountLabel();
+		if ( _currentCount <= 0 )
+			return;
+
+		PublishChanged();
+		if ( !_isComplete && EvaluateComplete() )
+		{
+			_isComplete = true;
+			SetCompletedVisual( true );
+			PublishCompleted();
+		}
+	}
+
 	public void Remove( TreasureItem item )
 	{
 		if ( item == null || Slots == null )

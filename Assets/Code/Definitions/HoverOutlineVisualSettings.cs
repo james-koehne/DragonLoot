@@ -90,6 +90,25 @@ public class HoverOutlineVisualSettings
 		return settings;
 	}
 
+	public static HoverOutlineVisualSettings DefaultQuest()
+	{
+		HoverOutlineVisualSettings settings = new HoverOutlineVisualSettings();
+		Color quest = PlacementFeedbackColors.QuestObjectiveHighlight;
+		settings.outlineColor = new Color( quest.r * 1.15f, quest.g * 1.2f, quest.b * 1.25f, 1f );
+		settings.outlineIntensity = 1.1f;
+		settings.hdrBoost = 1.6f;
+		settings.scalePixels = 3.5f;
+		settings.maskDilatePixels = 2.5f;
+		settings.depthThreshold = 1.5f;
+		settings.normalThreshold = 0.4f;
+		settings.depthNormalThreshold = 0.5f;
+		settings.depthNormalThresholdScale = 7f;
+		settings.normalEdgeWeight = 1f;
+		settings.pulseSpeed = 1.35f;
+		settings.pulseAmount = 0.14f;
+		return settings;
+	}
+
 	public void Validate()
 	{
 		outlineIntensity = Mathf.Clamp( outlineIntensity, 0f, 2f );
@@ -152,5 +171,23 @@ public class HoverOutlineVisualSettings
 		material.SetFloat( NormalEdgeWeightId, normalEdgeWeight );
 		material.SetFloat( PulseSpeedId, pulseSpeed );
 		material.SetFloat( PulseAmountId, pulseAmount );
+	}
+
+	static readonly int QuestOutlineColorId = Shader.PropertyToID( "_QuestOutlineColor" );
+	static readonly int QuestOutlineIntensityId = Shader.PropertyToID( "_QuestOutlineIntensity" );
+	static readonly int QuestHdrBoostId = Shader.PropertyToID( "_QuestHdrBoost" );
+	static readonly int QuestPulseSpeedId = Shader.PropertyToID( "_QuestPulseSpeed" );
+	static readonly int QuestPulseAmountId = Shader.PropertyToID( "_QuestPulseAmount" );
+
+	public void ApplyQuestToMaterial( Material material )
+	{
+		if ( material == null )
+			return;
+
+		material.SetColor( QuestOutlineColorId, outlineColor );
+		material.SetFloat( QuestOutlineIntensityId, outlineIntensity );
+		material.SetFloat( QuestHdrBoostId, hdrBoost );
+		material.SetFloat( QuestPulseSpeedId, pulseSpeed );
+		material.SetFloat( QuestPulseAmountId, pulseAmount );
 	}
 }

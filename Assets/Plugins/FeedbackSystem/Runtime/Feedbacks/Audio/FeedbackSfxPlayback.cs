@@ -7,6 +7,9 @@ namespace FeedbackSystem
 	/// </summary>
 	public static class FeedbackSfxPlayback
 	{
+		/// <summary>When false, one-shots are skipped. Default true. Game code uses this as the FX mute gate.</summary>
+		public static bool Enabled = true;
+
 		public static float SampleVolume( float min, float max )
 		{
 			float lo = Mathf.Clamp01( Mathf.Min( min, max ) );
@@ -42,7 +45,7 @@ namespace FeedbackSystem
 			float minDistance = 1f,
 			float maxDistance = 20f )
 		{
-			if ( clip == null )
+			if ( !Enabled || clip == null )
 				return;
 
 			float volume = SampleVolume( volumeMin, volumeMax );

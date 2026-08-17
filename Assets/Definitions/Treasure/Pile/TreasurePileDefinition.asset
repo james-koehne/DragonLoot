@@ -81,7 +81,7 @@ MonoBehaviour:
     count: 1
   - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
     count: 1
-  maxVisibleTotal: 2400
+  maxVisibleTotal: 16384
   coinVisibleBufferFraction: 0.1
   heightResolution: 256
   worldSize: 32

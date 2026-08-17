@@ -160,10 +160,10 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 			return;
 
 		const float pad = 8f;
-		const float width = 560f;
+		const float width = 640f;
 		const float line = 18f;
 		const float headerLines = 5f;
-		const float linesPerPile = 7f;
+		const float linesPerPile = 11f;
 		float height = pad * 2f + line * ( headerLines + linesPerPile * Mathf.Max( 1, s_active.Count ) );
 		float x = pad;
 		if ( DebugOverlay.IsOpen )
@@ -218,12 +218,35 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 			}
 
 			GoldPileChunkStreamer streamer = loot.Streamer;
+			GoldPileLootStreamSettings settings = loot.StreamSettings;
+			int lod0Budget = loot.Lod0InstancesPerChunk;
 			GUILayout.Label(
 				$"[{i}] {name}: {stream}  {lootOn}  " +
 				$"L{streamer.LoadedCount} V{streamer.VisibleCount} R{streamer.RenderedCount} F{streamer.FrustumCulledCount}" );
 			GUILayout.Label(
-				$"    Coins drawn {loot.LastDrawnCount}  Culled {loot.LastCulledCount}  Pool {loot.DrawnPoolCount}  " +
+				$"    Submitted {loot.LastDrawnCount}  Culled {loot.LastCulledCount}  Pool {loot.DrawnPoolCount}  " +
 				$"Steady {loot.SteadyVisibleBudget}/{loot.MaxVisibleTotal}" );
+			GUILayout.Label(
+				$"    Mix G/S/C submitted {loot.LastSubmittedGold}/{loot.LastSubmittedSilver}/{loot.LastSubmittedCopper}" +
+				( loot.LastSubmittedOther > 0 ? $" other {loot.LastSubmittedOther}" : "" ) +
+				$"  authored {loot.AuthoredMixLabel}" );
+			GUILayout.Label(
+				$"    Chunk Drawn pool min/avg/max {loot.LastMinChunkDrawnPool}/{loot.LastAvgChunkDrawnPool}/{loot.LastMaxChunkDrawnPool}  " +
+				$"LOD0/chunk {lod0Budget}" );
+			if ( settings != null )
+			{
+				GUILayout.Label(
+					$"    LOD budgets {settings.lod0InstancesPerChunk}/{settings.lod1InstancesPerChunk}/{settings.lod2InstancesPerChunk}  " +
+					$"dither {settings.ditherFadeWidth:0.#}m @ {settings.lod2End:0.#}m" );
+				GUILayout.Label(
+					$"    Modes emb={settings.useEmbeddedVolumeSeats} surf={settings.useSurfaceDecorSeats}  " +
+					$"rel={settings.releaseEmbeddedSeatsOnDig} phys={settings.spawnPhysicalCoinsOnDig}  " +
+					$"overlap={settings.enforceCoinOverlap} spacing={settings.coinPlacementMinSpacing:0.##}" );
+				GUILayout.Label(
+					$"    Pose tilt={settings.coinTiltStrength:0.##} tip={settings.coinTipJitterDegrees:0.#}  " +
+					$"yaw={settings.coinYawJitterDegrees:0.#} sink={settings.coinEmbedSinkFraction:0.###}  " +
+					$"lastPhysSpawn {loot.LastPhysicalSpawnCount}" );
+			}
 			GUILayout.Label(
 				$"    Rebuilds {loot.CacheRebuildCount}  Dirty {loot.LastDirtyChunkRebuildCount}" );
 

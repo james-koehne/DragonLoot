@@ -708,9 +708,6 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	public void PlayRemoveFeedback()
 	{
-		if ( _machineBuffer )
-			return;
-
 		EnsureCountFeedback();
 		if ( onLandFeedback != null )
 			onLandFeedback.Stop();
@@ -919,7 +916,11 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 		if ( Count <= 0 )
+		{
+			if ( _machineBuffer )
+				PlayRemoveFeedback();
 			DestroyIfEmpty();
+		}
 		else
 			PlayRemoveFeedback();
 		return true;

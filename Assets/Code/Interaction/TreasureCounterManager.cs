@@ -156,8 +156,10 @@ public class TreasureCounterManager : MonoBehaviour
 		{
 			SeedPileEntries( def.coinContents );
 			SeedPileEntries( def.treasureContents );
+			SeedAuthoredPileExtras( pile );
 			if ( ( def.coinContents != null && def.coinContents.Length > 0 )
-				|| ( def.treasureContents != null && def.treasureContents.Length > 0 ) )
+				|| ( def.treasureContents != null && def.treasureContents.Length > 0 )
+				|| ( pile.PileVisual != null && pile.PileVisual.CountAuthoredItems() > 0 ) )
 				return;
 		}
 
@@ -172,6 +174,32 @@ public class TreasureCounterManager : MonoBehaviour
 
 		TreasureCounterEntry legacy = GetOrCreateEntry( pile.Treasure );
 		legacy.Total += amount;
+	}
+
+	void SeedAuthoredPileExtras( TreasurePileInteractable pile )
+	{
+		TreasurePileVisual visual = pile != null ? pile.PileVisual : null;
+		if ( visual == null )
+			visual = pile.GetComponent<TreasurePileVisual>();
+		if ( visual == null )
+			return;
+
+		Transform root = visual.FindAuthoredLootRoot();
+		if ( root == null )
+			return;
+
+		TreasurePileAuthoredItem[] items = root.GetComponentsInChildren<TreasurePileAuthoredItem>( true );
+		for ( int i = 0; i < items.Length; i++ )
+		{
+			TreasurePileAuthoredItem authored = items[ i ];
+			if ( authored == null || authored.Definition == null )
+				continue;
+			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+				continue;
+
+			TreasureCounterEntry counter = GetOrCreateEntry( authored.Definition );
+			counter.Total += 1;
+		}
 	}
 
 	void SeedPileEntries( TreasurePileEntry[] entries )

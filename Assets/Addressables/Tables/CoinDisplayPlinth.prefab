@@ -92,6 +92,10 @@ MonoBehaviour:
   countLabel: {fileID: 0}
   completedHighlight: {fileID: 0}
   drawLayoutGizmosAlways: 0
+  fillSlotsOnStart: 1
+  minCoinsPerSlot: 0
+  maxCoinsPerSlot: 6
+  fillSeed: 0
 --- !u!1 &4398170695080236926
 GameObject:
   m_ObjectHideFlags: 0

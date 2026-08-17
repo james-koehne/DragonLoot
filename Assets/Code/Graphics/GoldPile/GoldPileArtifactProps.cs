@@ -27,6 +27,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		public bool Taken;
 		public bool Spawned;
 		public bool Exposed;
+		public bool IsAuthored;
 		public int PropIndex;
 	}
 
@@ -76,6 +77,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 	bool _hasLastStreamPlayerPos;
 	Vector3 _lastStreamPlayerPos;
 	readonly List<TreasureItem> _pendingWorldReleases = new List<TreasureItem>( 8 );
+	readonly List<TreasurePileAuthoredItem> _authoredScratch = new List<TreasurePileAuthoredItem>( 16 );
+	readonly List<GameObject> _disabledAuthoredProxies = new List<GameObject>( 16 );
 
 	public int PropCount => _props.Count;
 	public int LatentCount => _latent.Count;
@@ -93,7 +96,17 @@ public class GoldPileArtifactProps : MonoBehaviour
 		int authoredLayoutSeed = 0 )
 	{
 		int bindId = BeginBind( owner, definition, heightfield, pileRoot, loot, streamSettings, authoredLayoutSeed );
-		BuildLatentEntries();
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
+		AppendAuthoredLatentsFromScene( disableProxies: Application.isPlaying, occupiedBounds, occupancyGrid );
+
+		bool appliedBake = false;
+		if ( settings.PreferBake )
+			appliedBake = TryAppendBakedLatents( settings );
+
+		if ( !appliedBake )
+			PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
+
 		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
 	}
 
@@ -109,16 +122,19 @@ public class GoldPileArtifactProps : MonoBehaviour
 		int bindId = BeginBind( owner, definition, heightfield, pileRoot, loot, streamSettings, authoredLayoutSeed );
 
 		LatentBindSettings settings = ResolveLatentBindSettings();
+		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
+		AppendAuthoredLatentsFromScene( disableProxies: Application.isPlaying, occupiedBounds, occupancyGrid );
+
 		bool appliedBake = false;
 		if ( settings.PreferBake )
-			appliedBake = TryApplyBakedLatents( settings );
+			appliedBake = TryAppendBakedLatents( settings );
 
 		if ( !appliedBake )
 		{
 			if ( Application.isPlaying )
-				await BuildLatentEntriesAsync( bindId, settings );
+				await PlaceDefinitionContentsAsync( bindId, settings, occupiedBounds, occupancyGrid );
 			else
-				BuildLatentEntries();
+				PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
 		}
 
 		if ( !IsBindStillValid( bindId ) )
@@ -128,7 +144,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Editor-only: procedural latent build into a pure-data bake asset (no reveal / no scene props).
+	/// Editor-only: procedural remainder latent build into a pure-data bake asset (no reveal / no scene props).
+	/// Authored curated props stay on scene objects; only auto-fill poses are written to the bake.
 	/// </summary>
 	public void BakeLatentsInto(
 		TreasurePileVisual owner,
@@ -143,7 +160,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return;
 
 		BeginBind( owner, definition, heightfield, pileRoot, loot, null, authoredLayoutSeed );
-		BuildLatentEntries();
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
+		SeedOccupancyFromAuthoredScene( occupiedBounds, occupancyGrid );
+		PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
 		WriteBakeAsset( bake, authoredLayoutSeed );
 		ClearAll();
 	}
@@ -607,6 +627,20 @@ public class GoldPileArtifactProps : MonoBehaviour
 		ExposedLatentCount = 0;
 		StreamedOutCount = 0;
 		_pendingWorldReleases.Clear();
+		// Authored scene proxies are never despawned here — only re-enabled when rebinding.
+		RestoreDisabledAuthoredProxies();
+	}
+
+	void RestoreDisabledAuthoredProxies()
+	{
+		for ( int i = 0; i < _disabledAuthoredProxies.Count; i++ )
+		{
+			GameObject go = _disabledAuthoredProxies[ i ];
+			if ( go != null )
+				go.SetActive( true );
+		}
+
+		_disabledAuthoredProxies.Clear();
 	}
 
 	void LateUpdate()
@@ -699,30 +733,29 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return s;
 	}
 
-	bool TryApplyBakedLatents( LatentBindSettings settings )
+	bool TryAppendBakedLatents( LatentBindSettings settings )
 	{
 		TreasurePileLatentBake bake = _owner != null ? _owner.LatentBake : null;
-		if ( bake == null || bake.poses == null || bake.poses.Length == 0 )
+		if ( bake == null || bake.poses == null )
 			return false;
 		if ( _heightfield == null || _definition == null )
 			return false;
 
 		int heightFp = _heightfield.ComputeLayoutFingerprint();
 		int contentsFp = _definition.HashLargePropContents();
+		int authoredFp = _owner != null ? _owner.ComputeAuthoredFingerprint() : 0;
 		if ( !bake.MatchesFingerprint(
 			_pileLootSeed,
 			heightFp,
 			contentsFp,
 			settings.VolumeMaxAttempts,
 			settings.UseSpatialHash,
-			settings.AvoidCoinSeats ) )
+			settings.AvoidCoinSeats,
+			authoredFp ) )
 		{
 			return false;
 		}
 
-		_latent.Clear();
-		ExposedLatentCount = 0;
-		StreamedOutCount = 0;
 		for ( int i = 0; i < bake.poses.Length; i++ )
 		{
 			TreasurePileLatentBake.Pose pose = bake.poses[ i ];
@@ -745,11 +778,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 				Taken = false,
 				Spawned = false,
 				Exposed = false,
+				IsAuthored = false,
 				PropIndex = -1
 			} );
 		}
 
-		return _latent.Count > 0;
+		return true;
 	}
 
 	void WriteBakeAsset( TreasurePileLatentBake bake, int authoredLayoutSeed )
@@ -762,16 +796,29 @@ public class GoldPileArtifactProps : MonoBehaviour
 		bake.effectivePileSeed = _pileLootSeed;
 		bake.heightFingerprint = _heightfield.ComputeLayoutFingerprint();
 		bake.contentsFingerprint = _definition.HashLargePropContents();
+		bake.authoredFingerprint = _owner != null ? _owner.ComputeAuthoredFingerprint() : 0;
 		bake.sourceDefinitionName = _definition.name;
 		bake.volumeMaxAttempts = settings.VolumeMaxAttempts;
 		bake.usedSpatialHash = settings.UseSpatialHash;
 		bake.avoidedCoinSeats = settings.AvoidCoinSeats;
 
-		TreasurePileLatentBake.Pose[] poses = new TreasurePileLatentBake.Pose[ _latent.Count ];
+		// Bake stores remainder only — authored curated props stay on scene objects.
+		int remainderCount = 0;
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			if ( !_latent[ i ].IsAuthored )
+				remainderCount++;
+		}
+
+		TreasurePileLatentBake.Pose[] poses = new TreasurePileLatentBake.Pose[ remainderCount ];
+		int write = 0;
 		for ( int i = 0; i < _latent.Count; i++ )
 		{
 			LatentEntry latent = _latent[ i ];
-			poses[ i ] = new TreasurePileLatentBake.Pose
+			if ( latent.IsAuthored )
+				continue;
+
+			poses[ write++ ] = new TreasurePileLatentBake.Pose
 			{
 				definition = latent.Definition,
 				localPos = latent.LocalPos,
@@ -787,21 +834,105 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	void BuildLatentEntries()
 	{
-		BuildLatentEntriesSync( ResolveLatentBindSettings() );
+		LatentBindSettings settings = ResolveLatentBindSettings();
+		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
+		AppendAuthoredLatentsFromScene( disableProxies: false, occupiedBounds, occupancyGrid );
+		PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
 	}
 
-	async Task BuildLatentEntriesAsync( int bindId, LatentBindSettings settings )
+	void SeedOccupancyFromAuthoredScene( List<Bounds> occupiedBounds, VolumeOccupancyGrid occupancyGrid )
 	{
-		_latent.Clear();
-		ExposedLatentCount = 0;
-		StreamedOutCount = 0;
-		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
+		if ( _owner == null || _pileRoot == null )
 			return;
 
-		CreateOccupancy(
-			settings,
-			out List<Bounds> occupiedBounds,
-			out VolumeOccupancyGrid occupancyGrid );
+		_owner.CollectAuthoredItems( _authoredScratch );
+		for ( int i = 0; i < _authoredScratch.Count; i++ )
+		{
+			if ( !TryBuildAuthoredLatent( _authoredScratch[ i ], out LatentEntry latent ) )
+				continue;
+
+			if ( occupancyGrid != null )
+				occupancyGrid.Add( latent.LocalBounds );
+			else if ( occupiedBounds != null )
+				occupiedBounds.Add( latent.LocalBounds );
+		}
+	}
+
+	void AppendAuthoredLatentsFromScene(
+		bool disableProxies,
+		List<Bounds> occupiedBounds,
+		VolumeOccupancyGrid occupancyGrid )
+	{
+		if ( _owner == null || _pileRoot == null )
+			return;
+
+		_owner.CollectAuthoredItems( _authoredScratch );
+		for ( int i = 0; i < _authoredScratch.Count; i++ )
+		{
+			TreasurePileAuthoredItem authored = _authoredScratch[ i ];
+			if ( !TryBuildAuthoredLatent( authored, out LatentEntry latent ) )
+				continue;
+
+			_latent.Add( latent );
+			if ( occupancyGrid != null )
+				occupancyGrid.Add( latent.LocalBounds );
+			else if ( occupiedBounds != null )
+				occupiedBounds.Add( latent.LocalBounds );
+
+			if ( disableProxies && authored != null && authored.gameObject != null && authored.gameObject.activeSelf )
+			{
+				authored.gameObject.SetActive( false );
+				_disabledAuthoredProxies.Add( authored.gameObject );
+			}
+		}
+	}
+
+	bool TryBuildAuthoredLatent( TreasurePileAuthoredItem authored, out LatentEntry latent )
+	{
+		latent = default;
+		if ( authored == null || authored.Item == null || authored.Definition == null || _pileRoot == null )
+			return false;
+		if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+			return false;
+
+		TreasureDefinition def = authored.Definition;
+		Transform t = authored.transform;
+		Vector3 localPos = _pileRoot.InverseTransformPoint( t.position );
+		Quaternion localRot = Quaternion.Inverse( _pileRoot.rotation ) * t.rotation;
+		float scale = def.worldScale.x > 0.01f ? def.worldScale.x : 1f;
+		float lossy = t.lossyScale.x;
+		if ( lossy > 0.01f )
+			scale = lossy;
+
+		Bounds worldBounds = GetItemBounds( authored.Item );
+		Bounds localBounds = WorldBoundsToLocal( worldBounds );
+		if ( localBounds.size.sqrMagnitude < 1e-6f )
+			localBounds = GoldPileTreasurePlacement.LocalAabbFromPose( localPos, localRot, scale, null );
+
+		latent = new LatentEntry
+		{
+			Definition = def,
+			LocalPos = localPos,
+			LocalRot = localRot,
+			Scale = scale,
+			LocalBounds = localBounds,
+			Taken = false,
+			Spawned = false,
+			Exposed = false,
+			IsAuthored = true,
+			PropIndex = -1
+		};
+		return true;
+	}
+
+	async Task PlaceDefinitionContentsAsync(
+		int bindId,
+		LatentBindSettings settings,
+		List<Bounds> occupiedBounds,
+		VolumeOccupancyGrid occupancyGrid )
+	{
+		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
+			return;
 
 		System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
 		int attemptsThisFrame = 0;
@@ -840,18 +971,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 	}
 
-	void BuildLatentEntriesSync( LatentBindSettings settings )
+	void PlaceDefinitionContents(
+		LatentBindSettings settings,
+		List<Bounds> occupiedBounds,
+		VolumeOccupancyGrid occupancyGrid )
 	{
-		_latent.Clear();
-		ExposedLatentCount = 0;
-		StreamedOutCount = 0;
 		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
 			return;
-
-		CreateOccupancy(
-			settings,
-			out List<Bounds> occupiedBounds,
-			out VolumeOccupancyGrid occupancyGrid );
 
 		for ( int e = 0; e < _definition.treasureContents.Length; e++ )
 		{
@@ -867,6 +993,26 @@ public class GoldPileArtifactProps : MonoBehaviour
 				PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid );
 			}
 		}
+	}
+
+	async Task BuildLatentEntriesAsync( int bindId, LatentBindSettings settings )
+	{
+		_latent.Clear();
+		ExposedLatentCount = 0;
+		StreamedOutCount = 0;
+		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
+		AppendAuthoredLatentsFromScene( disableProxies: Application.isPlaying, occupiedBounds, occupancyGrid );
+		await PlaceDefinitionContentsAsync( bindId, settings, occupiedBounds, occupancyGrid );
+	}
+
+	void BuildLatentEntriesSync( LatentBindSettings settings )
+	{
+		_latent.Clear();
+		ExposedLatentCount = 0;
+		StreamedOutCount = 0;
+		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
+		AppendAuthoredLatentsFromScene( disableProxies: false, occupiedBounds, occupancyGrid );
+		PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
 	}
 
 	void CreateOccupancy(
@@ -999,6 +1145,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			Taken = false,
 			Spawned = false,
 			Exposed = false,
+			IsAuthored = false,
 			PropIndex = -1
 		} );
 	}
@@ -1784,6 +1931,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			Taken = false,
 			Spawned = false,
 			Exposed = false,
+			IsAuthored = false,
 			PropIndex = -1
 		} );
 		return _latent.Count - 1;

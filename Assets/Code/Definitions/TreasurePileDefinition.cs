@@ -25,11 +25,11 @@ public class TreasurePileDefinition : ScriptableObject
 	[Tooltip( "Gems and artifacts. Count = units in the pile (latent or exposed). No visibility caps." )]
 	public TreasurePileEntry[] treasureContents;
 
-	[Tooltip( "Cap on simultaneously drawn GPU coin instances (visual densify only). Buried seats do not consume this. Steady near-surface fill uses maxVisibleTotal × (1 − coinVisibleBufferFraction)." )]
+	[Tooltip( "Seat-pool / bind size for GPU coin visuals (not the in-view draw limiter). Per-chunk LOD budgets on GoldPileLootStreamSettings control submitted density. Buried seats do not consume the Drawn pool." )]
 	[Min( 1 )]
-	public int maxVisibleTotal = 1200;
+	public int maxVisibleTotal = 16384;
 
-	[Tooltip( "Headroom above the steady near-surface fill. Steady target = maxVisibleTotal × (1 − this). Default 0.2 → keep ~80% of the draw cap near-surface (e.g. 1200 → ~960)." )]
+	[Tooltip( "Headroom above the steady near-surface fill. Steady target = maxVisibleTotal × (1 − this), further capped by lod0InstancesPerChunk × chunk count at runtime." )]
 	[Range( 0f, 0.9f )]
 	public float coinVisibleBufferFraction = 0.2f;
 
@@ -204,45 +204,56 @@ public class TreasurePileDefinition : ScriptableObject
 	/// </summary>
 	public int[] ComputeCoinSeatTargets()
 	{
-		if ( coinContents == null || coinContents.Length == 0 )
+		return ComputeMixQuotas( Mathf.Max( 1, maxVisibleTotal ) );
+	}
+
+	/// <summary>Largest-remainder mix quotas for <paramref name="budget"/> from authored coinContents counts.</summary>
+	public int[] ComputeMixQuotas( int budget )
+	{
+		return ComputeLargestRemainderQuotas( coinContents, budget );
+	}
+
+	public static int[] ComputeLargestRemainderQuotas( TreasurePileEntry[] entries, int budget )
+	{
+		if ( entries == null || entries.Length == 0 )
 			return Array.Empty<int>();
 
-		int budget = Mathf.Max( 1, maxVisibleTotal );
+		int cap = Mathf.Max( 0, budget );
 		int totalWeight = 0;
-		for ( int i = 0; i < coinContents.Length; i++ )
+		for ( int i = 0; i < entries.Length; i++ )
 		{
-			TreasurePileEntry entry = coinContents[ i ];
+			TreasurePileEntry entry = entries[ i ];
 			if ( entry.treasure != null && entry.count > 0 )
 				totalWeight += entry.count;
 		}
 
-		int[] targets = new int[ coinContents.Length ];
-		if ( totalWeight <= 0 || budget <= 0 )
+		int[] targets = new int[ entries.Length ];
+		if ( totalWeight <= 0 || cap <= 0 )
 			return targets;
 
 		int assigned = 0;
-		float[] remainders = new float[ coinContents.Length ];
-		for ( int i = 0; i < coinContents.Length; i++ )
+		float[] remainders = new float[ entries.Length ];
+		for ( int i = 0; i < entries.Length; i++ )
 		{
-			TreasurePileEntry entry = coinContents[ i ];
+			TreasurePileEntry entry = entries[ i ];
 			if ( entry.treasure == null || entry.count <= 0 )
 				continue;
 
-			float exact = ( entry.count / ( float )totalWeight ) * budget;
+			float exact = ( entry.count / ( float )totalWeight ) * cap;
 			int floor = Mathf.FloorToInt( exact );
 			targets[ i ] = floor;
 			remainders[ i ] = exact - floor;
 			assigned += floor;
 		}
 
-		int leftover = budget - assigned;
+		int leftover = cap - assigned;
 		while ( leftover > 0 )
 		{
 			int best = -1;
 			float bestRem = -1f;
-			for ( int i = 0; i < coinContents.Length; i++ )
+			for ( int i = 0; i < entries.Length; i++ )
 			{
-				TreasurePileEntry entry = coinContents[ i ];
+				TreasurePileEntry entry = entries[ i ];
 				if ( entry.treasure == null || entry.count <= 0 )
 					continue;
 				if ( remainders[ i ] > bestRem )

@@ -42,6 +42,9 @@ CBUFFER_START(UnityPerMaterial)
     half _EdgeWidth;
     half4 _CoinUVCenter;
     half _CoinUVScale;
+    half _PomEnabled;
+    half _PomHeight;
+    half _PomSteps;
     half _CopperAmount;
     half _SilverAmount;
     half4 _CopperColor;

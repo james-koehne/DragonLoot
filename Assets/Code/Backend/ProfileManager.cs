@@ -44,6 +44,9 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Completed quest ids in catalog order.</summary>
 	public List<string> completedQuestIds;
 
+	/// <summary>User master volume (0–1). Combined with <see cref="AudioDefinition.masterVolume"/>.</summary>
+	public float masterVolume = 1f;
+
 	public ProfileSaveData()
 	{
 		UpdateTime = "INVALID";
@@ -79,6 +82,11 @@ public class ProfileSaveData : IGameStats
 			upgradeLevels = new Dictionary<string, int>();
 
 		EnsureQuestProgress();
+
+		if ( float.IsNaN( masterVolume ) || float.IsInfinity( masterVolume ) )
+			masterVolume = 1f;
+		else
+			masterVolume = Mathf.Clamp01( masterVolume );
 	}
 
 	public void EnsureQuestProgress()

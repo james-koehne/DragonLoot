@@ -136,6 +136,44 @@ public static class TreasureItemFactory
 		return item;
 	}
 
+	/// <summary>
+	/// Synchronous Addressables spawn for gameplay start-fill. Uses WaitForCompletion, not Tasks.
+	/// </summary>
+	public static TreasureItem SpawnSync(
+		TreasureDefinition definition,
+		Vector3 position,
+		Quaternion rotation,
+		Transform parent = null )
+	{
+		if ( definition == null )
+			return CreateFallback( null, position, rotation, parent );
+
+		GameObject instance = null;
+		bool viaAddressables = false;
+
+		AssetReferenceGameObject prefabRef = definition.prefab;
+		if ( prefabRef != null && prefabRef.RuntimeKeyIsValid() )
+		{
+			AsyncOperationHandle<GameObject> handle = parent != null
+				? prefabRef.InstantiateAsync( position, rotation, parent )
+				: prefabRef.InstantiateAsync( position, rotation );
+			GameObject result = handle.WaitForCompletion();
+			if ( handle.Status == AsyncOperationStatus.Succeeded && result != null )
+			{
+				instance = result;
+				viaAddressables = true;
+			}
+		}
+
+		if ( instance == null )
+			return CreateFallback( definition, position, rotation, parent );
+
+		TreasureItem item = EnsureItem( instance, definition, viaAddressables );
+		LooseTreasureManager.EnsureExists();
+		item.OnSpawned();
+		return item;
+	}
+
 	public static TreasureItem SpawnFallback(
 		TreasureDefinition definition,
 		Vector3 position,

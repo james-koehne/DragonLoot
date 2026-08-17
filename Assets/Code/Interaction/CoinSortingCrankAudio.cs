@@ -29,11 +29,19 @@ public class CoinSortingCrankAudio : MonoBehaviour
 
 	void Update()
 	{
+		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
+		{
+			StopSources();
+			return;
+		}
+
 		TickFade();
 	}
 
 	public void NotifyPulse()
 	{
+		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
+			return;
 		if ( _station == null )
 			return;
 		if ( _station.IsRepositioning )
@@ -56,6 +64,9 @@ public class CoinSortingCrankAudio : MonoBehaviour
 
 	void PlayNext( CoinSortingStationDefinition def )
 	{
+		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
+			return;
+
 		EnsureSources();
 		if ( _current == null || def == null )
 			return;
@@ -120,6 +131,15 @@ public class CoinSortingCrankAudio : MonoBehaviour
 
 		float t = _fadeDuration > 0.0001f ? _fadeRemaining / _fadeDuration : 0f;
 		_fading.volume = _fadeStartVolume * Mathf.Clamp01( t );
+	}
+
+	void StopSources()
+	{
+		if ( _current != null && _current.isPlaying )
+			_current.Stop();
+		if ( _fading != null && _fading.isPlaying )
+			_fading.Stop();
+		_fadeRemaining = 0f;
 	}
 
 	void EnsureSources()

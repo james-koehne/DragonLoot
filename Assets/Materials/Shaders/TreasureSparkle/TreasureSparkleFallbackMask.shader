@@ -3,6 +3,7 @@ Shader "DragonLoot/Treasure Sparkle Fallback Mask"
 	Properties
 	{
 		_MaskWriteValue ("Mask Write Value", Float) = 1
+		_GoldPileCoinDitherEnable ("Coin Lod Dither Enable", Float) = 0
 	}
 
 	SubShader
@@ -30,6 +31,7 @@ Shader "DragonLoot/Treasure Sparkle Fallback Mask"
 			#pragma fragment Frag
 			#pragma multi_compile_instancing
 			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+			#include "../Coin/CoinPileLodDither.hlsl"
 
 			float _MaskWriteValue;
 
@@ -42,6 +44,7 @@ Shader "DragonLoot/Treasure Sparkle Fallback Mask"
 			struct Varyings
 			{
 				float4 positionCS : SV_POSITION;
+				float3 positionWS : TEXCOORD0;
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -50,13 +53,16 @@ Shader "DragonLoot/Treasure Sparkle Fallback Mask"
 				Varyings output;
 				UNITY_SETUP_INSTANCE_ID(input);
 				UNITY_TRANSFER_INSTANCE_ID(input, output);
-				output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+				VertexPositionInputs posInputs = GetVertexPositionInputs(input.positionOS.xyz);
+				output.positionCS = posInputs.positionCS;
+				output.positionWS = posInputs.positionWS;
 				return output;
 			}
 
 			half Frag(Varyings input) : SV_Target
 			{
 				UNITY_SETUP_INSTANCE_ID(input);
+				CoinPileApplyLodDither(input.positionWS, input.positionCS);
 				return _MaskWriteValue;
 			}
 			ENDHLSL

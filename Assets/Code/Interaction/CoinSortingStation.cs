@@ -58,7 +58,10 @@ public class CoinSortingStation : MonoBehaviour
 		new Dictionary<TreasureDefinition, GroundCoinStack>();
 	readonly Dictionary<TreasureDefinition, int> _fullStackIndexByType =
 		new Dictionary<TreasureDefinition, int>();
+	readonly Dictionary<TreasureDefinition, int> _pendingOutputByType =
+		new Dictionary<TreasureDefinition, int>();
 	readonly HashSet<TreasureDefinition> _missingChuteLogged = new HashSet<TreasureDefinition>();
+	static readonly List<GroundCoinStack> BindStackScratch = new List<GroundCoinStack>( 16 );
 
 	CoinSortingStationDefinition _definition;
 	GroundCoinStack _hopperStack;
@@ -164,6 +167,7 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		EnsureDefaultUpgradeLevel();
 		EnsureHopperStack();
+		BindOutputStacksInBounds();
 	}
 
 	void Update()
@@ -304,6 +308,98 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		_activeOutputByType.Clear();
 		_fullStackIndexByType.Clear();
+		_pendingOutputByType.Clear();
+	}
+
+	/// <summary>
+	/// Bind homogeneous world stacks inside the station's physical bounds as chute outputs.
+	/// Matching stacks of the same type merge into one bound stack.
+	/// </summary>
+	public void BindOutputStacksInBounds()
+	{
+		Bounds bounds = GetCombinedPhysicalBounds();
+		Vector3 center = bounds.center;
+		Vector3 extents = bounds.extents + new Vector3( 0.05f, 0.15f, 0.05f );
+		int hits = Physics.OverlapBoxNonAlloc(
+			center,
+			extents,
+			OverlapScratch,
+			transform.rotation,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Ignore );
+
+		BindStackScratch.Clear();
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider col = OverlapScratch[ i ];
+			if ( col == null )
+				continue;
+
+			GroundCoinStack stack = col.GetComponentInParent<GroundCoinStack>();
+			if ( stack == null || IsHopperStack( stack ) || stack.IsMachineBuffer || stack.Count <= 0 )
+				continue;
+			if ( !stack.TryGetHomogeneousDefinition( out TreasureDefinition homo ) || homo == null )
+				continue;
+			if ( FindChute( homo ) == null )
+				continue;
+
+			if ( !BindStackScratch.Contains( stack ) )
+				BindStackScratch.Add( stack );
+		}
+
+		for ( int i = 0; i < BindStackScratch.Count; i++ )
+		{
+			GroundCoinStack stack = BindStackScratch[ i ];
+			if ( stack == null || stack.Count <= 0 )
+				continue;
+			if ( !stack.TryGetHomogeneousDefinition( out TreasureDefinition homo ) || homo == null )
+				continue;
+
+			TreasureDefinition key = ResolveOutputKey( homo );
+			if ( key == null )
+				continue;
+
+			if ( _activeOutputByType.TryGetValue( key, out GroundCoinStack existing )
+				&& existing != null
+				&& existing != stack
+				&& existing.Count > 0 )
+			{
+				MergeBoundStacks( existing, stack );
+				continue;
+			}
+
+			_activeOutputByType[ key ] = stack;
+		}
+	}
+
+	TreasureDefinition ResolveOutputKey( TreasureDefinition definition )
+	{
+		if ( definition == null || chutes == null )
+			return null;
+
+		for ( int i = 0; i < chutes.Count; i++ )
+		{
+			ChuteBinding binding = chutes[ i ];
+			if ( binding.coin == null )
+				continue;
+			if ( SameCoinType( binding.coin, definition ) )
+				return binding.coin;
+		}
+
+		return definition;
+	}
+
+	void MergeBoundStacks( GroundCoinStack survivor, GroundCoinStack other )
+	{
+		if ( survivor == null || other == null || survivor == other )
+			return;
+
+		ConsumeScratch.Clear();
+		if ( !other.TryConsumeAllDefinitions( ConsumeScratch ) )
+			return;
+
+		survivor.TryAppendDefinitions( ConsumeScratch );
+		ConsumeScratch.Clear();
 	}
 
 	public void PlayPlacedFeedback()
@@ -1144,15 +1240,63 @@ public class CoinSortingStation : MonoBehaviour
 		if ( stack == null )
 			return false;
 
-		if ( stack.IsFull || !stack.TryAppendDefinition( definition ) )
+		int pending = 0;
+		TreasureDefinition key = ResolveOutputKey( definition );
+		if ( key != null && _pendingOutputByType.TryGetValue( key, out int pendingStored ) )
+			pending = pendingStored;
+
+		int logicalCount = stack.Count + pending;
+		if ( stack.IsFull || logicalCount >= stack.MaxHeight )
 		{
 			BumpFullStackIndex( definition );
 			stack = GetOrCreateOutputStack( definition, chute );
-			if ( stack == null || !stack.TryAppendDefinition( definition ) )
+			if ( stack == null )
+				return false;
+
+			pending = 0;
+			key = ResolveOutputKey( definition );
+			if ( key != null && _pendingOutputByType.TryGetValue( key, out pendingStored ) )
+				pending = pendingStored;
+			logicalCount = stack.Count + pending;
+			if ( stack.IsFull || logicalCount >= stack.MaxHeight )
 				return false;
 		}
 
+		if ( key != null )
+			_pendingOutputByType[ key ] = pending + 1;
+
 		_activeOutputByType[ definition ] = stack;
+		if ( key != null && key != definition )
+			_activeOutputByType[ key ] = stack;
+
+		Vector3 startPos = chute.position;
+		Renderer marker = chute.GetComponentInChildren<Renderer>();
+		if ( marker != null )
+			startPos = marker.bounds.center;
+
+		float pendingHeight = 0f;
+		for ( int i = 0; i < pending; i++ )
+			pendingHeight += TreasureStackSpacing.GetStep( definition );
+
+		Vector3 endPos = stack.ContactPosition + Vector3.up * ( stack.SettledHeight + pendingHeight );
+		Quaternion endRot = stack.transform.rotation;
+
+		CoinSortingStationDefinition def = ResolveDefinition();
+		float duration = def != null ? Mathf.Max( 0.05f, def.sortedCoinFlightDuration ) : 0.28f;
+
+		List<TreasureDefinition> flightDefs = new List<TreasureDefinition>( 1 ) { definition };
+		GroundCoinStack captureStack = stack;
+		TreasureDefinition captureDef = definition;
+		TreasureDefinition captureKey = key;
+		CoinStackFlight.FlyToWorld(
+			flightDefs,
+			startPos,
+			chute.rotation,
+			0f,
+			endPos,
+			endRot,
+			duration,
+			() => CompleteSortedFlight( captureStack, captureDef, captureKey ) );
 
 		EventBus.Publish( new CoinSorterUsedEvent
 		{
@@ -1162,6 +1306,38 @@ public class CoinSortingStation : MonoBehaviour
 
 		PlaySortedFeedback();
 		return true;
+	}
+
+	void CompleteSortedFlight( GroundCoinStack stack, TreasureDefinition definition, TreasureDefinition key )
+	{
+		if ( key != null && _pendingOutputByType.TryGetValue( key, out int pending ) )
+		{
+			pending = Mathf.Max( 0, pending - 1 );
+			if ( pending <= 0 )
+				_pendingOutputByType.Remove( key );
+			else
+				_pendingOutputByType[ key ] = pending;
+		}
+
+		if ( stack == null || definition == null )
+			return;
+
+		if ( stack.IsFull || !stack.TryAppendDefinition( definition ) )
+		{
+			BumpFullStackIndex( definition );
+			Transform chute = FindChute( definition );
+			if ( chute == null )
+				return;
+
+			GroundCoinStack created = GetOrCreateOutputStack( definition, chute );
+			if ( created != null )
+				created.TryAppendDefinition( definition );
+			return;
+		}
+
+		_activeOutputByType[ definition ] = stack;
+		if ( key != null )
+			_activeOutputByType[ key ] = stack;
 	}
 
 	Transform FindChute( TreasureDefinition definition )
@@ -1181,9 +1357,24 @@ public class CoinSortingStation : MonoBehaviour
 		return null;
 	}
 
+	Vector3 ResolveChuteStackContact( Transform chute, float lateralOffset )
+	{
+		Vector3 pos = chute.position + chute.right * lateralOffset;
+		Renderer marker = chute.GetComponentInChildren<Renderer>();
+		if ( marker != null )
+			pos.y = marker.bounds.max.y;
+		else
+			pos += Vector3.up * ( Mathf.Abs( chute.lossyScale.y ) * 0.5f );
+		return pos;
+	}
+
 	GroundCoinStack GetOrCreateOutputStack( TreasureDefinition definition, Transform chute )
 	{
-		if ( _activeOutputByType.TryGetValue( definition, out GroundCoinStack existing ) )
+		TreasureDefinition key = ResolveOutputKey( definition );
+		if ( key == null )
+			key = definition;
+
+		if ( TryGetActiveOutput( key, definition, out GroundCoinStack existing ) )
 		{
 			if ( existing != null && !existing.IsFull )
 				return existing;
@@ -1191,16 +1382,22 @@ public class CoinSortingStation : MonoBehaviour
 			if ( existing != null && existing.IsFull )
 				BumpFullStackIndex( definition );
 			else
+			{
 				_activeOutputByType.Remove( definition );
+				if ( key != null )
+					_activeOutputByType.Remove( key );
+			}
 		}
 
 		int index = 0;
 		if ( _fullStackIndexByType.TryGetValue( definition, out int stored ) )
 			index = stored;
+		else if ( key != null && _fullStackIndexByType.TryGetValue( key, out stored ) )
+			index = stored;
 
 		CoinSortingStationDefinition def = ResolveDefinition();
 		float lateral = def != null ? def.fullStackLateralOffset : 0.35f;
-		Vector3 pos = chute.position + chute.right * ( lateral * index );
+		Vector3 pos = ResolveChuteStackContact( chute, lateral * index );
 		Quaternion rot = TreasureOrientation.FlattenUpright( chute.rotation );
 
 		GroundCoinStack nearest = GroundCoinStack.FindNearest( pos, lateral * 0.45f );
@@ -1210,12 +1407,26 @@ public class CoinSortingStation : MonoBehaviour
 			&& SameCoinType( homo, definition ) )
 		{
 			_activeOutputByType[ definition ] = nearest;
+			if ( key != null )
+				_activeOutputByType[ key ] = nearest;
 			return nearest;
 		}
 
 		GroundCoinStack created = GroundCoinStack.CreateAt( pos, rot );
 		_activeOutputByType[ definition ] = created;
+		if ( key != null )
+			_activeOutputByType[ key ] = created;
 		return created;
+	}
+
+	bool TryGetActiveOutput( TreasureDefinition key, TreasureDefinition definition, out GroundCoinStack stack )
+	{
+		if ( key != null && _activeOutputByType.TryGetValue( key, out stack ) && stack != null )
+			return true;
+		if ( definition != null && _activeOutputByType.TryGetValue( definition, out stack ) && stack != null )
+			return true;
+		stack = null;
+		return false;
 	}
 
 	void BumpFullStackIndex( TreasureDefinition definition )

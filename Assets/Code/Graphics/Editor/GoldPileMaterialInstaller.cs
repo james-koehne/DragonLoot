@@ -267,6 +267,9 @@ public static class GoldPileMaterialInstaller
 		// Devtoid coin atlas sits high in the square with baked rim — crop to the face.
 		material.SetVector("_CoinUVCenter", new Vector4(0.5f, 0.58f, 0f, 0f));
 		material.SetFloat("_CoinUVScale", 1.35f);
+		material.SetFloat("_PomEnabled", 1f);
+		material.SetFloat("_PomHeight", 0.08f);
+		material.SetFloat("_PomSteps", 8f);
 		material.SetFloat("_CopperAmount", 0.2f);
 		material.SetFloat("_SilverAmount", 0.1f);
 		material.SetColor("_CopperColor", new Color(1f, 0.62f, 0.38f, 1f));
@@ -302,8 +305,7 @@ public static class GoldPileMaterialInstaller
 		material.SetFloat("_LodFar", 40f);
 		material.SetFloat("_LodNoiseFade", 1f);
 
-		material.DisableKeyword("_POM_ON");
-		material.DisableKeyword("_HEIGHTMAP_ON");
+		material.EnableKeyword("_POM_ON");
 		GoldPileQuality.Apply(material);
 	}
 

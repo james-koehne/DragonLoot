@@ -14,7 +14,8 @@ public enum SecondaryContextAction
 
 /// <summary>
 /// Drives placement preview ghost and place attempts while the player is holding treasure.
-/// Reuses the single raycast from <see cref="PlayerInteraction"/> (no extra raycast).
+/// Reuses the interact raycast from <see cref="PlayerInteraction"/>; gems also probe
+/// constellations out to <see cref="PlayerPlacementDefinition.constellationPlaceRange"/>.
 /// </summary>
 public class PlayerPlacement : MonoBehaviour
 {
@@ -116,10 +117,12 @@ public class PlayerPlacement : MonoBehaviour
 	float GroundStackReleaseUpScale => RuntimeDefinition.Get( Definition, d => d.groundStackReleaseUpScale, 0.1f );
 	bool ShowGroundStackPreview => RuntimeDefinition.Get( Definition, d => d.showGroundStackPreview, true );
 	float GroundStackSnapRadius => RuntimeDefinition.Get( Definition, d => d.groundStackSnapRadius, 0.42f );
+	float ConstellationPlaceRange => RuntimeDefinition.Get( Definition, d => d.constellationPlaceRange, 12f );
 	float PreviewSmoothSpeed => RuntimeDefinition.Get( Definition, d => d.previewSmoothSpeed, 18f );
 
 	static readonly Collider[] StackSnapOverlap = new Collider[ 48 ];
 	static readonly RaycastHit[] StackSnapSphereCastHits = new RaycastHit[ 24 ];
+	static readonly RaycastHit[] ConstellationRayHits = new RaycastHit[ 32 ];
 	static readonly HashSet<int> StackSnapColumnIds = new HashSet<int>();
 	static readonly List<TreasureItem> StackSnapColumnBuffer = new List<TreasureItem>( 32 );
 
@@ -824,7 +827,11 @@ public class PlayerPlacement : MonoBehaviour
 			}
 
 			ends[ i ] = landPos;
-			rots[ i ] = TreasureOrientation.FlattenUpright( member.transform.rotation );
+			bool flattenEnd = member.Definition == null
+				|| member.Definition.category != TreasureCategory.Gem;
+			rots[ i ] = flattenEnd
+				? TreasureOrientation.FlattenUpright( member.transform.rotation )
+				: member.transform.rotation;
 			landVels[ i ] = landVel;
 			flightTimes[ i ] = flightTime;
 			member.BeginFlight();
@@ -1069,7 +1076,93 @@ public class PlayerPlacement : MonoBehaviour
 			query.HasHit = true;
 		}
 
+		TryOverrideQueryWithConstellation( ref query );
 		return query;
+	}
+
+	/// <summary>
+	/// Held gems can snap-place onto a constellation beyond normal interact range,
+	/// as long as it is the nearest collider along the aim ray.
+	/// </summary>
+	void TryOverrideQueryWithConstellation( ref PlacementQuery query )
+	{
+		if ( !IsHoldingGem() )
+			return;
+
+		if ( !TryGetNearestConstellationHit( out RaycastHit constellationHit ) )
+			return;
+
+		if ( query.HasHit && query.Hit.collider != null && constellationHit.distance > query.Hit.distance + 0.001f )
+			return;
+
+		query.Hit = constellationHit;
+		query.HasHit = true;
+		query.InteractRange = Mathf.Max( query.InteractRange, ConstellationPlaceRange );
+	}
+
+	bool IsHoldingGem()
+	{
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || !carry.TryPeekActive( out TreasureItem held ) || held == null )
+			return false;
+
+		return held.Definition != null && held.Definition.category == TreasureCategory.Gem;
+	}
+
+	bool TryGetNearestConstellationHit( out RaycastHit constellationHit )
+	{
+		constellationHit = default;
+		if ( _interaction == null || !_interaction.TryGetAimRay( out Ray aimRay ) )
+			return false;
+
+		float range = Mathf.Max( ConstellationPlaceRange, _interaction.InteractRange );
+		LayerMask mask = _interaction.InteractMask;
+		int hitCount = Physics.RaycastNonAlloc(
+			aimRay,
+			ConstellationRayHits,
+			range,
+			mask,
+			QueryTriggerInteraction.Ignore );
+
+		Transform playerRoot = _player != null ? _player.transform : null;
+		RaycastHit nearest = default;
+		float nearestDist = float.MaxValue;
+		bool hasNearest = false;
+
+		for ( int i = 0; i < hitCount; i++ )
+		{
+			RaycastHit hit = ConstellationRayHits[ i ];
+			if ( hit.collider == null )
+				continue;
+
+			if ( IsPlayerOwnedPlacementHit( hit.collider, playerRoot ) )
+				continue;
+
+			if ( !hasNearest || hit.distance < nearestDist )
+			{
+				nearest = hit;
+				nearestDist = hit.distance;
+				hasNearest = true;
+			}
+		}
+
+		if ( !hasNearest || nearest.collider == null )
+			return false;
+
+		if ( nearest.collider.GetComponentInParent<GemConstellationInteractable>() == null )
+			return false;
+
+		constellationHit = nearest;
+		return true;
+	}
+
+	static bool IsPlayerOwnedPlacementHit( Collider collider, Transform playerRoot )
+	{
+		if ( collider == null || playerRoot == null )
+			return false;
+
+		Transform hitTransform = collider.transform;
+		return hitTransform == playerRoot || hitTransform.IsChildOf( playerRoot );
 	}
 
 	/// <summary>

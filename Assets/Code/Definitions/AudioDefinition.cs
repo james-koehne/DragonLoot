@@ -9,6 +9,11 @@ using UnityEngine.Serialization;
 [CreateAssetMenu( fileName = "AudioDefinition", menuName = "Definitions/AudioDefinition" )]
 public class AudioDefinition : ScriptableObject
 {
+	[Header( "Master" )]
+	[Range( 0f, 1f )]
+	[Tooltip( "Designer-wide multiplier applied to all game audio. Combined with the user's saved master volume." )]
+	public float masterVolume = 1f;
+
 	[Header( "Music" )]
 	[Tooltip( "Playlist played sequentially. Session start index is random; then wraps forever." )]
 	public AudioClip[] musicTracks;
@@ -51,6 +56,10 @@ public class AudioDefinition : ScriptableObject
 	[Tooltip( "Planar distance between footstep sounds while moving." )]
 	[Min( 0.05f )]
 	public float stepStrideDistance = 1.1f;
+
+	[Tooltip( "Minimum planar heading change in degrees that plays an extra footstep. 90 = left-to-forward, 180 = left-to-right reversal. 0 = disabled." )]
+	[Range( 0f, 180f )]
+	public float stepTurnDegrees = 90f;
 
 	[Range( 0f, 1f )]
 	public float stepVolumeMin = 0.7f;

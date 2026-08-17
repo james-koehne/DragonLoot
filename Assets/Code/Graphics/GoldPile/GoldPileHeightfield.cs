@@ -1648,6 +1648,11 @@ public sealed class GoldPileHeightfield
 
 		int pad = ResolveCarveBlurPad( radius, cell, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
+		ExpandDirtyRect(
+			Mathf.Max( 0, minX - pad ),
+			Mathf.Min( _resolution - 1, maxX + pad ),
+			Mathf.Max( 0, minZ - pad ),
+			Mathf.Min( _resolution - 1, maxZ + pad ) );
 
 		if ( phaseSw != null )
 		{
@@ -1689,7 +1694,67 @@ public sealed class GoldPileHeightfield
 			return;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		CarveAtLocal( local.x, local.z, radius, amountNormalized, settings );
+		float search = Mathf.Max( radius * 4f, _worldSize * 0.2f );
+		if ( TrySnapToExistingMound( local.x, local.z, search, out float snappedX, out float snappedZ ) )
+			CarveAtLocal( snappedX, snappedZ, radius, amountNormalized, settings );
+		else
+			CarveAtLocal( local.x, local.z, radius, amountNormalized, settings );
+	}
+
+	/// <summary>
+	/// Moves a local XZ sample onto the nearest remaining mound cell when the aim point
+	/// already sits at ground (stale collider crater, rim coin, etc.).
+	/// </summary>
+	public bool TrySnapToExistingMound( float localX, float localZ, float searchRadius, out float snappedX, out float snappedZ )
+	{
+		snappedX = localX;
+		snappedZ = localZ;
+		if ( _heights == null )
+			return false;
+
+		if ( ExistsAtLocal( localX, localZ ) )
+			return true;
+
+		float half = _worldSize * 0.5f;
+		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		int originX = Mathf.Clamp( Mathf.RoundToInt( ( localX + half ) / cell ), 0, _resolution - 1 );
+		int originZ = Mathf.Clamp( Mathf.RoundToInt( ( localZ + half ) / cell ), 0, _resolution - 1 );
+		int maxR = Mathf.Max( 1, Mathf.CeilToInt( Mathf.Max( searchRadius, cell ) / cell ) );
+		float groundN = _maxHeight > 0.0001f ? _groundLevel / _maxHeight : 0f;
+
+		int minX = Mathf.Max( 0, originX - maxR );
+		int maxX = Mathf.Min( _resolution - 1, originX + maxR );
+		int minZ = Mathf.Max( 0, originZ - maxR );
+		int maxZ = Mathf.Min( _resolution - 1, originZ + maxR );
+
+		float bestSq = float.MaxValue;
+		int bestX = -1;
+		int bestZ = -1;
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				if ( _heights[ Index( x, z ) ] < groundN )
+					continue;
+
+				float dx = x - originX;
+				float dz = z - originZ;
+				float sq = dx * dx + dz * dz;
+				if ( sq >= bestSq )
+					continue;
+
+				bestSq = sq;
+				bestX = x;
+				bestZ = z;
+			}
+		}
+
+		if ( bestX < 0 )
+			return false;
+
+		snappedX = -half + bestX * cell;
+		snappedZ = -half + bestZ * cell;
+		return true;
 	}
 
 	/// <summary>
@@ -1762,6 +1827,11 @@ public sealed class GoldPileHeightfield
 
 		int pad = ResolveCarveBlurPad( radius, cell, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
+		ExpandDirtyRect(
+			Mathf.Max( 0, minX - pad ),
+			Mathf.Min( _resolution - 1, maxX + pad ),
+			Mathf.Max( 0, minZ - pad ),
+			Mathf.Min( _resolution - 1, maxZ + pad ) );
 	}
 
 	public void DepositAtWorld( Vector3 worldPos, Transform pileRoot, float radius, float amountNormalized )

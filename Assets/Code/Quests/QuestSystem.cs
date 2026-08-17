@@ -42,6 +42,56 @@ public class QuestSystem : MonoBehaviour
 
 	public int ActiveStepIndex => _stepIndex;
 
+	/// <summary>
+	/// Invokes <paramref name="onRoot"/> for each incomplete step target / marker that may have meshes.
+	/// Volumes are skipped (no outline mesh).
+	/// </summary>
+	public void CollectActiveOutlineRoots( System.Action<Transform> onRoot )
+	{
+		if ( onRoot == null || _catalogComplete || _activeQuest == null )
+			return;
+
+		QuestStep step = GetActiveStep();
+		if ( step == null )
+			return;
+
+		if ( !string.IsNullOrEmpty( step.markerTargetId ) )
+			TryAddOutlineRoot( step.markerTargetId, onRoot );
+
+		if ( step.conditions == null || _conditionMet == null )
+			return;
+
+		for ( int i = 0; i < step.conditions.Length; i++ )
+		{
+			if ( i < _conditionMet.Length && _conditionMet[ i ] )
+				continue;
+
+			QuestCondition condition = step.conditions[ i ];
+			if ( condition == null || string.IsNullOrEmpty( condition.targetId ) )
+				continue;
+
+			// Volume enter conditions have no mesh to outline.
+			if ( condition.type == QuestConditionType.EnterVolume )
+				continue;
+
+			TryAddOutlineRoot( condition.targetId, onRoot );
+		}
+	}
+
+	static void TryAddOutlineRoot( string id, System.Action<Transform> onRoot )
+	{
+		if ( string.IsNullOrEmpty( id ) || onRoot == null )
+			return;
+
+		if ( QuestTargetRegistry.TryGetTarget( id, out QuestTarget target ) && target != null )
+		{
+			onRoot( target.transform );
+			return;
+		}
+
+		// Volumes intentionally skipped — no outline mesh.
+	}
+
 	public static QuestSystem EnsureExists()
 	{
 		if ( _instance != null )

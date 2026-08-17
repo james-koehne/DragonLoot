@@ -12,6 +12,19 @@ namespace FeedbackSystem
 		static Transform _root;
 		static int _next;
 
+		public static void StopAll()
+		{
+			if ( _sources == null )
+				return;
+
+			for ( int i = 0; i < _sources.Length; i++ )
+			{
+				AudioSource source = _sources[i];
+				if ( source != null && source.isPlaying )
+					source.Stop();
+			}
+		}
+
 		public static void Play( AudioClip clip, float volume, float pitch, Vector3 position )
 		{
 			Play( clip, volume, pitch, position, spatialBlend: 0f, minDistance: 1f, maxDistance: 20f );
@@ -26,7 +39,7 @@ namespace FeedbackSystem
 			float minDistance,
 			float maxDistance )
 		{
-			if ( clip == null )
+			if ( !FeedbackSfxPlayback.Enabled || clip == null )
 				return;
 
 			Ensure();

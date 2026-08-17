@@ -8,6 +8,8 @@ public sealed class HoverOutlineCompositePass : ScriptableRenderPass
 {
 	static readonly int ClipToViewId = Shader.PropertyToID( "_ClipToView" );
 	static readonly int MaskTexelSizeId = Shader.PropertyToID( "_HoverOutlineMask_TexelSize" );
+	static readonly int MaskTextureId = Shader.PropertyToID( "_HoverOutlineMask" );
+	static readonly int QuestMaskTextureId = Shader.PropertyToID( "_QuestOutlineMask" );
 
 	readonly ProfilingSampler _profilingSampler = new ProfilingSampler( "HoverOutlineComposite" );
 	readonly Material _compositeMaterial;
@@ -19,12 +21,14 @@ public sealed class HoverOutlineCompositePass : ScriptableRenderPass
 		ConfigureInput( ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Normal );
 	}
 
+	static bool HasAnyTarget => HoverOutlineRegistrar.HasTarget || QuestOutlineRegistrar.HasTarget;
+
 #if URP_COMPATIBILITY_MODE
 #pragma warning disable 618, 672
 
 	public override void Execute( ScriptableRenderContext context, ref RenderingData renderingData )
 	{
-		if ( !HoverOutlineRegistrar.HasTarget || _compositeMaterial == null )
+		if ( !HasAnyTarget || _compositeMaterial == null )
 			return;
 
 		Camera camera = renderingData.cameraData.camera;
@@ -47,7 +51,7 @@ public sealed class HoverOutlineCompositePass : ScriptableRenderPass
 
 	public override void RecordRenderGraph( RenderGraph renderGraph, ContextContainer frameData )
 	{
-		if ( !HoverOutlineRegistrar.HasTarget || _compositeMaterial == null )
+		if ( !HasAnyTarget || _compositeMaterial == null )
 			return;
 
 		UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
@@ -56,8 +60,7 @@ public sealed class HoverOutlineCompositePass : ScriptableRenderPass
 			return;
 
 		HoverOutlineRendererFeature.FrameData outlineData = frameData.Get<HoverOutlineRendererFeature.FrameData>();
-
-		if ( !outlineData.maskTexture.IsValid() )
+		if ( !outlineData.maskTexture.IsValid() || !outlineData.questMaskTexture.IsValid() )
 			return;
 
 		ApplySettings( cameraData.camera );
@@ -67,16 +70,34 @@ public sealed class HoverOutlineCompositePass : ScriptableRenderPass
 			return;
 
 		RenderGraphUtils.BlitMaterialParameters parameters = new RenderGraphUtils.BlitMaterialParameters( source, source, _compositeMaterial, 0 );
-		renderGraph.AddBlitPass( parameters, "HoverOutlineComposite" );
+		IBaseRenderGraphBuilder blitBuilder = renderGraph.AddBlitPass( parameters, "HoverOutlineComposite", true );
+		try
+		{
+			blitBuilder.UseGlobalTexture( MaskTextureId );
+			blitBuilder.UseGlobalTexture( QuestMaskTextureId );
+		}
+		finally
+		{
+			blitBuilder.Dispose();
+		}
 	}
 
 	void ApplySettings( Camera camera )
 	{
-		HoverOutlineVisualSettings settings = HoverOutlineRegistrar.Settings;
-		if ( settings == null || _compositeMaterial == null )
+		if ( _compositeMaterial == null )
 			return;
 
-		settings.ApplyToMaterial( _compositeMaterial );
+		HoverOutlineVisualSettings hover = HoverOutlineRegistrar.Settings;
+		if ( hover != null )
+			hover.ApplyToMaterial( _compositeMaterial );
+		else
+			HoverOutlineVisualSettings.DefaultPickable().ApplyToMaterial( _compositeMaterial );
+
+		HoverOutlineVisualSettings quest = QuestOutlineRegistrar.Settings;
+		if ( quest != null )
+			quest.ApplyQuestToMaterial( _compositeMaterial );
+		else
+			HoverOutlineVisualSettings.DefaultQuest().ApplyQuestToMaterial( _compositeMaterial );
 
 		if ( camera != null )
 		{

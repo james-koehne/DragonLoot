@@ -132,6 +132,19 @@ public class CarryDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float categorySwapDuration = 0.35f;
 
+	[Header( "Pouch Summary HUD" )]
+	[Tooltip( "Seconds to slide the pouch summary in from the left." )]
+	[Min( 0f )]
+	public float pouchSummaryFadeIn = 0.2f;
+
+	[Tooltip( "Seconds the pouch summary stays fully visible." )]
+	[Min( 0f )]
+	public float pouchSummaryHold = 2f;
+
+	[Tooltip( "Seconds to slide the pouch summary back out to the left." )]
+	[Min( 0f )]
+	public float pouchSummaryFadeOut = 0.35f;
+
 	[Header( "Held Coin Visual" )]
 	[Tooltip( "Max coins represented by the left-hand cylinder height. Logical count may exceed this." )]
 	[Min( 1 )]
@@ -285,6 +298,9 @@ public class CarryDefinition : ScriptableObject
 		uprightPitchFavor = Mathf.Clamp01( uprightPitchFavor );
 		uprightSmoothSpeed = Mathf.Max( 0.1f, uprightSmoothSpeed );
 		categorySwapDuration = Mathf.Max( 0.05f, categorySwapDuration );
+		pouchSummaryFadeIn = Mathf.Max( 0f, pouchSummaryFadeIn );
+		pouchSummaryHold = Mathf.Max( 0f, pouchSummaryHold );
+		pouchSummaryFadeOut = Mathf.Max( 0f, pouchSummaryFadeOut );
 		heldVisualMaxCoins = Mathf.Max( 1, heldVisualMaxCoins );
 		wholeStackHoldSeconds = Mathf.Max( 0.1f, wholeStackHoldSeconds );
 		wholeStackHoldMaxSeconds = Mathf.Max( 0.1f, wholeStackHoldMaxSeconds );

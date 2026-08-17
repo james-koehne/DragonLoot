@@ -14,10 +14,28 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GoldPileLootStreamSettings
   chunkSize: 4
   useCategoryDistanceCulling: 1
-  lod0End: 16
-  lod1End: 24
-  lod2End: 32
+  lod0End: 8
+  lod1End: 16
+  lod2End: 24
   lodHysteresisFrames: 8
+  lod0InstancesPerChunk: 125
+  lod1InstancesPerChunk: 75
+  lod2InstancesPerChunk: 40
+  ditherFadeWidth: 5
+  coinTiltStrength: 1
+  coinTipJitterDegrees: 6
+  coinYawJitterDegrees: 360
+  coinEmbedSinkFraction: 0.16
+  coinScaleJitter: 0
+  coinPlacementMinSpacing: 0.18
+  enforceCoinOverlap: 0
+  useEmbeddedVolumeSeats: 0
+  useSurfaceDecorSeats: 1
+  releaseEmbeddedSeatsOnDig: 0
+  spawnPhysicalCoinsOnDig: 1
+  digPhysicalSpawnChance: 0.1
+  digPhysicalMaxPerCarve: 3
+  digPhysicalUnitsPerRoll: 1
   lod0Density: 1
   lod1Density: 0.6
   lod2Density: 0.25

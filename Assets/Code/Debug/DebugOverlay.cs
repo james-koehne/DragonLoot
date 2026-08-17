@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// Left-dock IMGUI debug window (not game UI). Toggle with backtick.
-/// Also hosts Num± sensitivity, Escape quit, and R reload hotkeys.
+/// Also hosts Num± sensitivity and R reload hotkeys. Escape closes the panel when open.
 /// </summary>
 [DisallowMultipleComponent]
 public class DebugOverlay : MonoBehaviour
@@ -35,6 +35,7 @@ public class DebugOverlay : MonoBehaviour
 
 	const string FoldoutPrefsPrefix = "DragonLoot.Debug.Foldout.";
 
+	readonly DebugSettingsSection _settings = new DebugSettingsSection();
 	readonly List<DebugOverlaySection> _sections = new List<DebugOverlaySection>();
 	readonly Dictionary<string, bool> _foldouts = new Dictionary<string, bool>();
 
@@ -59,6 +60,8 @@ public class DebugOverlay : MonoBehaviour
 
 		if ( _open )
 			SetOpen( false );
+
+		AudioMaster.FlushPersist();
 	}
 
 	void BuildSections()
@@ -121,10 +124,9 @@ public class DebugOverlay : MonoBehaviour
 
 		if ( keyboard[ quitKey ].wasPressedThisFrame )
 		{
+			// Escape closes the debug panel when open. Game pause / quit is owned by PauseMenuUI.
 			if ( _open )
 				SetOpen( false );
-			else
-				QuitGame();
 		}
 
 		if ( keyboard[ reloadKey ].wasPressedThisFrame )
@@ -147,6 +149,12 @@ public class DebugOverlay : MonoBehaviour
 		GUILayout.BeginArea( new Rect( panel.x + 6f, panel.y + 6f, panel.width - 12f, panel.height - 12f ) );
 		GUILayout.Label( "DragonLoot Debug" );
 		GUILayout.Label( "` to close" );
+		GUILayout.Space( 4f );
+
+		GUILayout.BeginVertical( GUI.skin.box );
+		GUILayout.Label( _settings.Title );
+		_settings.Draw();
+		GUILayout.EndVertical();
 		GUILayout.Space( 4f );
 
 		_scroll = GUILayout.BeginScrollView( _scroll );
@@ -199,6 +207,9 @@ public class DebugOverlay : MonoBehaviour
 			return;
 
 		_open = open;
+		if ( !_open )
+			AudioMaster.FlushPersist();
+
 		PlayerController player = GetPlayer();
 
 		if ( _open )
@@ -211,7 +222,7 @@ public class DebugOverlay : MonoBehaviour
 				Cursor.visible = true;
 			}
 		}
-		else
+		else if ( !PauseMenuUI.IsOpen )
 		{
 			if ( player != null )
 				player.SetGameplayInputEnabled( true );

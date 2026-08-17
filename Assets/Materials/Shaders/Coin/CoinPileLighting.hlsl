@@ -3,6 +3,8 @@
 
 #include "../Stylized/StylizedLightingCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+#define COIN_PILE_FORCE_LOD_DITHER
+#include "CoinPileLodDither.hlsl"
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
@@ -106,6 +108,8 @@ half4 CoinPileLitFrag(Varyings input) : SV_Target
 {
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+    CoinPileApplyLodDither(input.positionWS, input.positionCS);
 
     float seed = input.instanceSeed;
     half tint = 1.0h + ((half)CoinPileHash11(seed) * 2.0h - 1.0h) * _TintVariation;

@@ -41,8 +41,8 @@ Shader "DragonLoot/Gold Pile Procedural"
         [HideInInspector] _GroundLevelHeight("Ground Level Height", Float) = 0.01
 
         [Header(ProceduralCoins)]
-        _CoinDiameter("Coin Diameter", Range(0.01, 0.2)) = 0.05
-        _CoinDensity("Coin Density", Range(50, 2000)) = 400
+        _CoinDiameter("Coin Diameter", Range(0.01, 0.4)) = 0.05
+        _CoinDensity("Coin Density", Range(20, 2000)) = 400
         _CellJitter("Cell Jitter", Range(0, 1)) = 0.65
         _RotationRandomness("Rotation Randomness", Range(0, 1)) = 1
         _CoinTilt("Coin Tilt", Range(0, 0.5)) = 0.2
@@ -59,6 +59,11 @@ Shader "DragonLoot/Gold Pile Procedural"
         _EdgeWidth("Edge Width", Range(0.02, 0.5)) = 0.12
         _CoinUVCenter("Coin UV Center", Vector) = (0.5, 0.58, 0, 0)
         _CoinUVScale("Coin UV Scale", Range(0.25, 4)) = 1.35
+
+        [Header(POM Depth)]
+        [Toggle(_POM_ON)] _PomEnabled("POM Enabled", Float) = 1
+        _PomHeight("POM Height", Range(0, 0.35)) = 0.08
+        [IntRange] _PomSteps("POM Steps", Range(4, 12)) = 8
 
         [Header(MetalMix)]
         _CopperAmount("Copper Amount", Range(0, 1)) = 0.2
@@ -139,6 +144,8 @@ Shader "DragonLoot/Gold Pile Procedural"
             #pragma target 3.0
             #pragma vertex GoldPileProcLitVert
             #pragma fragment GoldPileProcLitFrag
+
+            #pragma shader_feature_local _POM_ON
 
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS

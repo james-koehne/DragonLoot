@@ -4,7 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// Distance-based footstep one-shots plus jump / landing SFX from <see cref="AudioDefinition"/>.
-/// Clips and volume/pitch ranges are read from the definition on every play so inspector edits apply live.
+/// Sharp planar heading changes also plant an extra step. Clips and ranges are read live from the definition.
 /// </summary>
 [DisallowMultipleComponent]
 public class PlayerFootsteps : MonoBehaviour
@@ -23,6 +23,8 @@ public class PlayerFootsteps : MonoBehaviour
 	PlayRandomSFXFeedback _goldPileSfx;
 	PlayRandomSFXFeedback _jumpSfx;
 	float _distanceAccumulator;
+	Vector3 _lastTurnDir;
+	bool _hasTurnDir;
 
 	AudioDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
@@ -45,6 +47,7 @@ public class PlayerFootsteps : MonoBehaviour
 		if ( _player.WasLandingThisFrame )
 		{
 			_distanceAccumulator = 0f;
+			ClearTurnDir();
 			PlayStep( landing: true );
 			return;
 		}
@@ -55,6 +58,7 @@ public class PlayerFootsteps : MonoBehaviour
 		     || _player.MovementState == PlayerMovementState.Gliding )
 		{
 			_distanceAccumulator = 0f;
+			ClearTurnDir();
 			return;
 		}
 
@@ -62,10 +66,14 @@ public class PlayerFootsteps : MonoBehaviour
 		if ( speed < MinSpeedForSteps )
 		{
 			_distanceAccumulator = 0f;
+			ClearTurnDir();
 			return;
 		}
 
 		AudioDefinition def = Definition;
+		if ( TryPlayTurnStep( def ) )
+			return;
+
 		float stride = def != null ? def.stepStrideDistance : 1.1f;
 		if ( stride < 0.05f )
 			stride = 1.1f;
@@ -76,6 +84,39 @@ public class PlayerFootsteps : MonoBehaviour
 
 		_distanceAccumulator -= stride;
 		PlayStep( landing: false );
+	}
+
+	bool TryPlayTurnStep( AudioDefinition def )
+	{
+		float threshold = def != null ? def.stepTurnDegrees : 90f;
+		Vector3 intent = _player.FlatMoveIntent;
+		intent.y = 0f;
+		bool hasIntent = intent.sqrMagnitude > 0.0001f;
+		if ( !hasIntent )
+			return false;
+
+		Vector3 moveDir = intent.normalized;
+		bool played = false;
+		if ( _hasTurnDir && threshold > 0.01f )
+		{
+			float angle = Vector3.Angle( _lastTurnDir, moveDir );
+			if ( angle >= threshold )
+			{
+				_distanceAccumulator = 0f;
+				PlayStep( landing: false );
+				played = true;
+			}
+		}
+
+		_lastTurnDir = moveDir;
+		_hasTurnDir = true;
+		return played;
+	}
+
+	void ClearTurnDir()
+	{
+		_hasTurnDir = false;
+		_lastTurnDir = Vector3.zero;
 	}
 
 	void PlayStep( bool landing )

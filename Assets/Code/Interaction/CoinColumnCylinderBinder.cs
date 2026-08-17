@@ -291,15 +291,18 @@ public static class CoinColumnCylinderBinder
 	}
 
 	/// <summary>
-	/// One multi-type cylinder for an owned ground stack from logical definitions (no per-coin meshes required).
+	/// One multi-type cylinder from logical definitions (no per-coin meshes required).
 	/// Fills <paramref name="cylinderCovered"/> with true for slots represented by the cylinder.
+	/// When <paramref name="useHeldScale"/> is true, diameter and thickness use heldScale
+	/// (heldScale.y / worldScale.y, typically 0.2/0.3).
 	/// </summary>
 	public static void BindDefinitions(
 		ref CoinStackCylinderVisual primaryVisual,
 		Transform parent,
 		IList<TreasureDefinition> slots,
 		bool snap,
-		bool[] cylinderCovered )
+		bool[] cylinderCovered,
+		bool useHeldScale = false )
 	{
 		if ( cylinderCovered != null )
 		{
@@ -347,8 +350,10 @@ public static class CoinColumnCylinderBinder
 		{
 			TreasureDefinition def = slots[ i ];
 			MultiSlotBuffer.Add( def );
-			runHeight += TreasureStackSpacing.GetStep( def );
-			float d = ResolveRunDiameter( def, -1f, useHeldDiameter: false );
+			runHeight += useHeldScale
+				? TreasureStackSpacing.GetHeldStep( def )
+				: TreasureStackSpacing.GetStep( def );
+			float d = ResolveRunDiameter( def, -1f, useHeldScale );
 			if ( d > maxDiameter )
 				maxDiameter = d;
 		}
@@ -371,7 +376,7 @@ public static class CoinColumnCylinderBinder
 		else
 			segmentVisual.SetStackMulti( MultiSlotBuffer, snap: false, maxDiameter, runHeight );
 
-		ApplyCylinderShadowCasting( segmentVisual, heldColumn: false );
+		ApplyCylinderShadowCasting( segmentVisual, heldColumn: useHeldScale );
 		DestroyExtraSegmentChildren( container, 1 );
 
 		if ( cylinderCovered != null )
@@ -435,7 +440,12 @@ public static class CoinColumnCylinderBinder
 				break;
 
 			MultiSlotBuffer.Add( def );
-			runHeight += heightStep > 0.0001f ? heightStep : TreasureStackSpacing.GetStep( item );
+			if ( heightStep > 0.0001f )
+				runHeight += heightStep;
+			else if ( useHeldDiameter )
+				runHeight += TreasureStackSpacing.GetHeldStep( item );
+			else
+				runHeight += TreasureStackSpacing.GetStep( item );
 			float d = ResolveRunDiameter( def, diameter, useHeldDiameter );
 			if ( d > maxDiameter )
 				maxDiameter = d;

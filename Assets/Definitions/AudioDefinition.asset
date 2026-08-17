@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e1a85d66101ca04e85342d7592dcce7, type: 3}
   m_Name: AudioDefinition
   m_EditorClassIdentifier: Assembly-CSharp::AudioDefinition
+  masterVolume: 0.5
   musicTracks:
   - {fileID: 8300000, guid: b27e5b1e9f7f37f4b8b43d39a432aead, type: 3}
   - {fileID: 8300000, guid: a3efd02ea0d48cd4798a32206d4b29f3, type: 3}
@@ -44,6 +45,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 49d0ed682f4fa99499ac80d3c9782e99, type: 3}
   - {fileID: 8300000, guid: 932a63ca8e65b2e4cb644429d98f325c, type: 3}
   stepStrideDistance: 2
+  stepTurnDegrees: 90
   stepVolumeMin: 0.1
   stepVolumeMax: 0.2
   landStepVolumeMin: 0.85

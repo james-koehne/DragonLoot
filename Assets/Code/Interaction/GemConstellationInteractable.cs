@@ -92,6 +92,34 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 	[SerializeField]
 	List<GemConstellationConnectionPair> excludedConnections = new List<GemConstellationConnectionPair>();
 
+	[Header( "Start Fill" )]
+	[Tooltip( "When enabled, some slots are pre-filled with gems on play." )]
+	[SerializeField]
+	bool fillSlotsOnStart;
+
+	[Tooltip( "Chance used to pick how many already-connected slots to pre-fill." )]
+	[SerializeField]
+	[Range( 0f, 1f )]
+	float slotFillChance = 0.4f;
+
+	[Tooltip( "Guarantee at least this many filled slots when enough eligible nodes exist." )]
+	[SerializeField]
+	[Min( 0 )]
+	int minFilledSlots;
+
+	[Tooltip( "0 = no cap. Otherwise filled slots are clamped to this count." )]
+	[SerializeField]
+	[Min( 0 )]
+	int maxFilledSlots;
+
+	[Tooltip( "Gems to pick from for random fill. Empty uses each slot's accepted gem (override or default)." )]
+	[SerializeField]
+	List<TreasureDefinition> randomGemPool = new List<TreasureDefinition>();
+
+	[Tooltip( "0 = non-deterministic. Non-zero seeds which slots fill and which gems are picked." )]
+	[SerializeField]
+	int fillSeed;
+
 	[Header( "Placement" )]
 	[SerializeField]
 	[Min( 0.05f )]
@@ -154,10 +182,20 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		RefreshLineVisual();
 	}
 
+	protected virtual void Start()
+	{
+		TryFillSlotsOnStart();
+	}
+
 	protected virtual void OnValidate()
 	{
 		snapDuration = Mathf.Max( 0.05f, snapDuration );
 		bounceScale = Mathf.Max( 1f, bounceScale );
+		slotFillChance = Mathf.Clamp01( slotFillChance );
+		minFilledSlots = Mathf.Max( 0, minFilledSlots );
+		maxFilledSlots = Mathf.Max( 0, maxFilledSlots );
+		if ( maxFilledSlots > 0 && maxFilledSlots < minFilledSlots )
+			maxFilledSlots = minFilledSlots;
 		NormalizeConnectionPairs( forcedConnections );
 		NormalizeConnectionPairs( excludedConnections );
 		EnsureOccupants();
@@ -167,6 +205,325 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 	protected virtual void OnDestroy()
 	{
 		StopAllCoroutines();
+	}
+
+	void TryFillSlotsOnStart()
+	{
+		if ( !fillSlotsOnStart )
+			return;
+
+		EnsureOccupants();
+		int count = SlotCount;
+		if ( count <= 0 || slots == null )
+			return;
+
+		System.Random rng = fillSeed != 0 ? new System.Random( fillSeed ) : null;
+		List<int> eligible = new List<int>( count );
+		for ( int i = 0; i < count; i++ )
+		{
+			if ( IsSlotOccupied( i ) )
+				continue;
+			if ( slots[ i ].anchor == null )
+				continue;
+			if ( !HasStartFillCandidate( i ) )
+				continue;
+
+			eligible.Add( i );
+		}
+
+		if ( eligible.Count == 0 )
+		{
+			Debug.LogWarning(
+				"Gem constellation '" + name + "' start fill is enabled but no eligible slots/gems were found. Assign Random Gem Pool or accepted gems.",
+				this );
+			return;
+		}
+
+		int targetCount = ResolveStartFillCount( eligible.Count, rng );
+		List<int> chosen = new List<int>( targetCount );
+		TryPickConnectedStartFillSlots( eligible, targetCount, rng, chosen );
+
+		int added = 0;
+		for ( int i = 0; i < chosen.Count; i++ )
+		{
+			int slotIndex = chosen[ i ];
+			TreasureDefinition gem = PickStartFillGem( slotIndex, rng );
+			if ( gem == null )
+				continue;
+			if ( TryPlaceStartFillGem( slotIndex, gem ) )
+				added++;
+		}
+
+		if ( added <= 0 )
+			return;
+
+		RefreshCountLabel();
+		PublishChanged();
+		RefreshLineVisual();
+		if ( !_isComplete && EvaluateComplete() )
+		{
+			_isComplete = true;
+			SetCompletedVisual( true );
+			PublishCompleted();
+		}
+	}
+
+	bool HasStartFillCandidate( int slotIndex )
+	{
+		if ( randomGemPool != null )
+		{
+			for ( int i = 0; i < randomGemPool.Count; i++ )
+			{
+				if ( AcceptsForSlot( slotIndex, randomGemPool[ i ] ) )
+					return true;
+			}
+		}
+
+		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
+			return false;
+
+		TreasureDefinition slotOverride = slots[ slotIndex ].overrideGem;
+		if ( slotOverride != null && AcceptsForSlot( slotIndex, slotOverride ) )
+			return true;
+
+		return defaultAcceptedGem != null && AcceptsForSlot( slotIndex, defaultAcceptedGem );
+	}
+
+	TreasureDefinition PickStartFillGem( int slotIndex, System.Random rng )
+	{
+		List<TreasureDefinition> candidates = new List<TreasureDefinition>( 8 );
+		if ( randomGemPool != null )
+		{
+			for ( int i = 0; i < randomGemPool.Count; i++ )
+			{
+				TreasureDefinition gem = randomGemPool[ i ];
+				if ( gem == null || gem.category != TreasureCategory.Gem )
+					continue;
+				if ( !AcceptsForSlot( slotIndex, gem ) )
+					continue;
+				if ( !candidates.Contains( gem ) )
+					candidates.Add( gem );
+			}
+		}
+
+		if ( candidates.Count > 0 )
+			return candidates[ NextRange( rng, 0, candidates.Count ) ];
+
+		if ( slots != null && slotIndex >= 0 && slotIndex < slots.Count )
+		{
+			TreasureDefinition slotOverride = slots[ slotIndex ].overrideGem;
+			if ( slotOverride != null && AcceptsForSlot( slotIndex, slotOverride ) )
+				return slotOverride;
+		}
+
+		if ( defaultAcceptedGem != null && AcceptsForSlot( slotIndex, defaultAcceptedGem ) )
+			return defaultAcceptedGem;
+
+		return null;
+	}
+
+	bool TryPlaceStartFillGem( int slotIndex, TreasureDefinition definition )
+	{
+		if ( definition == null || _occupants == null )
+			return false;
+		if ( slotIndex < 0 || slotIndex >= _occupants.Length )
+			return false;
+		if ( IsSlotOccupied( slotIndex ) )
+			return false;
+		if ( !AcceptsForSlot( slotIndex, definition ) )
+			return false;
+
+		GetSlotWorldPose( slotIndex, out Vector3 pos, out Quaternion rot );
+		TreasureItem item = TreasureItemFactory.SpawnSync( definition, pos, rot );
+		if ( item == null )
+			return false;
+
+		_occupants[ slotIndex ] = item;
+		if ( !_displayedItems.Contains( item ) )
+			_displayedItems.Add( item );
+		_currentCount++;
+		item.EnterDisplayed( this, GetSlotParent( slotIndex ), pos, rot );
+		NotifySortedDelta( definition, 1 );
+		return true;
+	}
+
+	int ResolveStartFillCount( int eligibleCount, System.Random rng )
+	{
+		int minFill = Mathf.Max( 0, minFilledSlots );
+		int maxFill = maxFilledSlots > 0 ? Mathf.Min( maxFilledSlots, eligibleCount ) : eligibleCount;
+		minFill = Mathf.Min( minFill, maxFill );
+
+		int fromChance = 0;
+		float chance = Mathf.Clamp01( slotFillChance );
+		for ( int i = 0; i < eligibleCount; i++ )
+		{
+			if ( NextFloat( rng ) <= chance )
+				fromChance++;
+		}
+
+		return Mathf.Clamp( fromChance, minFill, maxFill );
+	}
+
+	void TryPickConnectedStartFillSlots( List<int> eligible, int targetCount, System.Random rng, List<int> into )
+	{
+		if ( into == null )
+			return;
+
+		into.Clear();
+		if ( eligible == null || eligible.Count == 0 || targetCount <= 0 )
+			return;
+
+		RebuildConnections();
+
+		int slotCount = SlotCount;
+		bool[] eligibleMask = new bool[ slotCount ];
+		for ( int i = 0; i < eligible.Count; i++ )
+		{
+			int slotIndex = eligible[ i ];
+			if ( slotIndex >= 0 && slotIndex < slotCount )
+				eligibleMask[ slotIndex ] = true;
+		}
+
+		List<int>[] adj = new List<int>[ slotCount ];
+		for ( int i = 0; i < slotCount; i++ )
+			adj[ i ] = new List<int>( 4 );
+
+		for ( int i = 0; i < _resolvedConnections.Count; i++ )
+		{
+			GemConstellationResolvedConnection edge = _resolvedConnections[ i ];
+			if ( edge.SlotA < 0 || edge.SlotB < 0 || edge.SlotA >= slotCount || edge.SlotB >= slotCount )
+				continue;
+			if ( !eligibleMask[ edge.SlotA ] || !eligibleMask[ edge.SlotB ] )
+				continue;
+
+			adj[ edge.SlotA ].Add( edge.SlotB );
+			adj[ edge.SlotB ].Add( edge.SlotA );
+		}
+
+		List<int> starts = new List<int>( eligible.Count );
+		for ( int i = 0; i < eligible.Count; i++ )
+			starts.Add( eligible[ i ] );
+		Shuffle( starts, rng );
+
+		List<int> component = new List<int>( eligible.Count );
+		int bestStart = starts[ 0 ];
+		int bestSize = 0;
+		for ( int i = 0; i < starts.Count; i++ )
+		{
+			int start = starts[ i ];
+			CollectConnectedSlots( start, adj, component );
+			if ( component.Count > bestSize )
+			{
+				bestStart = start;
+				bestSize = component.Count;
+			}
+
+			if ( component.Count >= targetCount )
+			{
+				bestStart = start;
+				bestSize = component.Count;
+				break;
+			}
+		}
+
+		GrowConnectedSlots( bestStart, adj, Mathf.Min( targetCount, bestSize ), rng, into );
+	}
+
+	static void CollectConnectedSlots( int start, List<int>[] adj, List<int> into )
+	{
+		into.Clear();
+		if ( adj == null || start < 0 || start >= adj.Length )
+			return;
+
+		into.Add( start );
+		int cursor = 0;
+		while ( cursor < into.Count )
+		{
+			int node = into[ cursor ];
+			cursor++;
+			List<int> neighbors = adj[ node ];
+			if ( neighbors == null )
+				continue;
+
+			for ( int i = 0; i < neighbors.Count; i++ )
+			{
+				int next = neighbors[ i ];
+				if ( !into.Contains( next ) )
+					into.Add( next );
+			}
+		}
+	}
+
+	static void GrowConnectedSlots( int start, List<int>[] adj, int targetCount, System.Random rng, List<int> into )
+	{
+		into.Clear();
+		if ( adj == null || start < 0 || start >= adj.Length || targetCount <= 0 )
+			return;
+
+		into.Add( start );
+		List<int> frontier = new List<int>( 8 );
+		AppendUnchosenNeighbors( start, adj, into, frontier );
+
+		while ( into.Count < targetCount && frontier.Count > 0 )
+		{
+			int pick = NextRange( rng, 0, frontier.Count );
+			int node = frontier[ pick ];
+			frontier.RemoveAt( pick );
+			if ( into.Contains( node ) )
+				continue;
+
+			into.Add( node );
+			AppendUnchosenNeighbors( node, adj, into, frontier );
+		}
+	}
+
+	static void AppendUnchosenNeighbors( int node, List<int>[] adj, List<int> chosen, List<int> frontier )
+	{
+		if ( adj == null || node < 0 || node >= adj.Length || chosen == null || frontier == null )
+			return;
+
+		List<int> neighbors = adj[ node ];
+		if ( neighbors == null )
+			return;
+
+		for ( int i = 0; i < neighbors.Count; i++ )
+		{
+			int next = neighbors[ i ];
+			if ( chosen.Contains( next ) || frontier.Contains( next ) )
+				continue;
+
+			frontier.Add( next );
+		}
+	}
+
+	static int NextRange( System.Random rng, int minInclusive, int maxExclusive )
+	{
+		if ( maxExclusive <= minInclusive )
+			return minInclusive;
+		if ( rng != null )
+			return rng.Next( minInclusive, maxExclusive );
+		return UnityEngine.Random.Range( minInclusive, maxExclusive );
+	}
+
+	static float NextFloat( System.Random rng )
+	{
+		if ( rng != null )
+			return ( float )rng.NextDouble();
+		return UnityEngine.Random.value;
+	}
+
+	static void Shuffle( List<int> list, System.Random rng )
+	{
+		if ( list == null )
+			return;
+
+		for ( int i = list.Count - 1; i > 0; i-- )
+		{
+			int j = NextRange( rng, 0, i + 1 );
+			int tmp = list[ i ];
+			list[ i ] = list[ j ];
+			list[ j ] = tmp;
+		}
 	}
 
 	public void ReleaseTreasure( TreasureItem item )
@@ -439,13 +796,18 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		}
 
 		// Extra manual links (non-chain or reinforced).
-		if ( forcedConnections == null )
+		AppendConnectionPairs( forcedConnections, count, markForced: true );
+	}
+
+	void AppendConnectionPairs( List<GemConstellationConnectionPair> pairs, int slotCount, bool markForced )
+	{
+		if ( pairs == null )
 			return;
 
-		for ( int i = 0; i < forcedConnections.Count; i++ )
+		for ( int i = 0; i < pairs.Count; i++ )
 		{
-			GemConstellationConnectionPair pair = forcedConnections[ i ];
-			if ( pair.slotA < 0 || pair.slotB < 0 || pair.slotA >= count || pair.slotB >= count )
+			GemConstellationConnectionPair pair = pairs[ i ];
+			if ( pair.slotA < 0 || pair.slotB < 0 || pair.slotA >= slotCount || pair.slotB >= slotCount )
 				continue;
 			if ( pair.slotA == pair.slotB )
 				continue;
@@ -458,7 +820,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 			{
 				SlotA = pair.slotA,
 				SlotB = pair.slotB,
-				IsForced = true
+				IsForced = markForced
 			} );
 		}
 	}

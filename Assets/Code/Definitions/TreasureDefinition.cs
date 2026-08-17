@@ -93,10 +93,10 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "Addressable prefab used for all states (pile, hand, table, floor)." )]
 	public AssetReferenceGameObject prefab;
 
-	[Tooltip( "Scale while in pile / free in the world." )]
+	[Tooltip( "Scale while in pile / free in the world (ground stacks, loose coins, instanced coins)." )]
 	public Vector3 worldScale = Vector3.one * 0.35f;
 
-	[Tooltip( "Scale while held in the hand stack." )]
+	[Tooltip( "Scale while held in the hand, including held coin stacks. Coin thickness scales by heldScale.y / worldScale.y." )]
 	public Vector3 heldScale = Vector3.one * 0.08f;
 
 	[Tooltip( "Local euler degrees for the Active Item (screen-center held treasure). Identity when zero." )]
@@ -114,7 +114,7 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "If false, this treasure cannot be stacked onto other loose treasure, coin stacks, or mixed table slots. Gems never floor-stack regardless." )]
 	public bool canStack = true;
 
-	[Tooltip( "World-space height each stacked item adds (hand, ground, tables, coin stacks). 0 uses a category fallback." )]
+	[Tooltip( "World-space height each stacked item adds (ground, tables, world coin stacks). Held stacks scale this by heldScale.y / worldScale.y. 0 uses a category fallback." )]
 	[Min( 0f )]
 	public float coinThickness = 0.04f;
 
@@ -272,7 +272,7 @@ public class TreasureDefinition : ScriptableObject
 			case TreasureCategory.Gem:
 				return new Vector3( 0.25f, 0.2f, 0.25f );
 			case TreasureCategory.Coin:
-				return Vector3.one * 0.35f;
+				return Vector3.one * 0.3f;
 			default:
 				return Vector3.one * 0.3f;
 		}
@@ -285,7 +285,7 @@ public class TreasureDefinition : ScriptableObject
 			case TreasureCategory.Gem:
 				return new Vector3( 0.08f, 0.06f, 0.08f );
 			case TreasureCategory.Coin:
-				return Vector3.one * 0.08f;
+				return Vector3.one * 0.2f;
 			default:
 				return Vector3.one * 0.07f;
 		}

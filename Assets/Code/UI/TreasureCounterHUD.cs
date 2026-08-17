@@ -197,6 +197,8 @@ public class TreasureCounterHUD : MonoBehaviour
 	{
 		if ( _audio == null || categoryCompleteClip == null )
 			return;
+		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
+			return;
 
 		_audio.PlayOneShot( categoryCompleteClip );
 	}

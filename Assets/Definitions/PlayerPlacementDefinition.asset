@@ -18,6 +18,7 @@ MonoBehaviour:
   groundStackReleaseUpScale: 0.1
   showGroundStackPreview: 1
   groundStackSnapRadius: 0.15
+  constellationPlaceRange: 12
   placementArcHeight: 0.12
   coinFlipSpeed: 1
   previewSmoothSpeed: 200

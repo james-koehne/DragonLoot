@@ -13,7 +13,26 @@ public static class GoldPileTreasurePlacement
 	const int AabbSampleGrid = 4;
 	const int CoinFootprintSamples = 8;
 	const float ArtifactMaxGroundEmbedFraction = 0.25f;
-	const float CoinVisualSinkFraction = 0.08f;
+	const float DefaultCoinVisualSinkFraction = 0.08f;
+
+	/// <summary>Authorable coin tilt / sink params (from GoldPileLootStreamSettings).</summary>
+	public struct CoinPoseParams
+	{
+		public float TiltStrength;
+		public float TipJitterDegrees;
+		public float YawJitterDegrees;
+		public float EmbedSinkFraction;
+		public bool RequirePivotInside;
+
+		public static CoinPoseParams Default => new CoinPoseParams
+		{
+			TiltStrength = 1f,
+			TipJitterDegrees = 6f,
+			YawJitterDegrees = 360f,
+			EmbedSinkFraction = DefaultCoinVisualSinkFraction,
+			RequirePivotInside = true
+		};
+	}
 
 	struct VolumeCandidate
 	{
@@ -1343,7 +1362,7 @@ public static class GoldPileTreasurePlacement
 	}
 
 	/// <summary>
-	/// Coin face aligned to the heightfield normal at XZ, with deterministic yaw and slight tip jitter.
+	/// Coin face aligned to the heightfield normal at XZ, with deterministic yaw and tip jitter.
 	/// </summary>
 	public static Quaternion CoinSurfaceTiltRotation(
 		GoldPileHeightfield heightfield,
@@ -1352,22 +1371,52 @@ public static class GoldPileTreasurePlacement
 		float localX,
 		float localZ )
 	{
+		return CoinSurfaceTiltRotation(
+			heightfield,
+			pileSeed,
+			slotIndex,
+			localX,
+			localZ,
+			CoinPoseParams.Default );
+	}
+
+	public static Quaternion CoinSurfaceTiltRotation(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int slotIndex,
+		float localX,
+		float localZ,
+		CoinPoseParams pose )
+	{
 		Vector3 normal = heightfield != null
 			? SampleLocalNormal( heightfield, localX, localZ )
 			: Vector3.up;
 		if ( normal.sqrMagnitude < 1e-8f )
 			normal = Vector3.up;
 
-		Quaternion tilt = Quaternion.FromToRotation( Vector3.up, normal.normalized );
-		float yaw = HashRange( pileSeed, slotIndex * 3 + 11, 0f, 360f );
-		float tipX = HashRange( pileSeed, slotIndex * 3 + 12, -6f, 6f );
-		float tipZ = HashRange( pileSeed, slotIndex * 3 + 13, -6f, 6f );
+		float tiltStrength = Mathf.Clamp01( pose.TiltStrength );
+		Vector3 blended = Vector3.Slerp( Vector3.up, normal.normalized, tiltStrength );
+		if ( blended.sqrMagnitude < 1e-8f )
+			blended = Vector3.up;
+
+		Quaternion tilt = Quaternion.FromToRotation( Vector3.up, blended.normalized );
+		float yawRange = Mathf.Max( 0f, pose.YawJitterDegrees );
+		float tipRange = Mathf.Max( 0f, pose.TipJitterDegrees );
+		float yaw = yawRange > 0.01f
+			? HashRange( pileSeed, slotIndex * 3 + 11, 0f, yawRange )
+			: 0f;
+		float tipX = tipRange > 0.01f
+			? HashRange( pileSeed, slotIndex * 3 + 12, -tipRange, tipRange )
+			: 0f;
+		float tipZ = tipRange > 0.01f
+			? HashRange( pileSeed, slotIndex * 3 + 13, -tipRange, tipRange )
+			: 0f;
 		return tilt * Quaternion.Euler( tipX, yaw, tipZ );
 	}
 
 	/// <summary>
-	/// Tilts and seats a coin so its pivot stays inside the mound volume.
-	/// Returns false without mutating pose when the column/footprint cannot keep the pivot inside.
+	/// Tilts and seats a coin on the heightfield surface.
+	/// When <see cref="CoinPoseParams.RequirePivotInside"/> is true, pivot must stay inside the mound.
 	/// </summary>
 	public static bool ConformCoinToPileSurface(
 		GoldPileHeightfield heightfield,
@@ -1379,6 +1428,31 @@ public static class GoldPileTreasurePlacement
 		Bounds meshBounds,
 		float embedDepth,
 		float minSurfaceFraction )
+	{
+		return ConformCoinToPileSurface(
+			heightfield,
+			pileSeed,
+			slotIndex,
+			ref localPos,
+			ref localRot,
+			scale,
+			meshBounds,
+			embedDepth,
+			minSurfaceFraction,
+			CoinPoseParams.Default );
+	}
+
+	public static bool ConformCoinToPileSurface(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int slotIndex,
+		ref Vector3 localPos,
+		ref Quaternion localRot,
+		float scale,
+		Bounds meshBounds,
+		float embedDepth,
+		float minSurfaceFraction,
+		CoinPoseParams pose )
 	{
 		if ( heightfield == null )
 			return false;
@@ -1395,7 +1469,7 @@ public static class GoldPileTreasurePlacement
 		float footprintRadius = Mathf.Max(
 			meshBounds.extents.x,
 			meshBounds.extents.z ) * Mathf.Max( 0.01f, scale );
-		// Footprint is a helper against hanging mesh; pivot-inside is the required gate.
+		// Footprint is a helper against hanging mesh; pivot-inside is the required gate for Mode A.
 		if ( !IsCoinFootprintSupported(
 			heightfield,
 			localPos,
@@ -1406,9 +1480,16 @@ public static class GoldPileTreasurePlacement
 			return false;
 		}
 
-		Quaternion tilted = CoinSurfaceTiltRotation( heightfield, pileSeed, slotIndex, localPos.x, localPos.z );
+		Quaternion tilted = CoinSurfaceTiltRotation(
+			heightfield,
+			pileSeed,
+			slotIndex,
+			localPos.x,
+			localPos.z,
+			pose );
 
-		float visualSink = Mathf.Max( 0.004f, scale * CoinVisualSinkFraction );
+		float sinkFraction = Mathf.Max( 0f, pose.EmbedSinkFraction );
+		float visualSink = Mathf.Max( 0.004f, scale * sinkFraction );
 		float pivotY = SolveCoinPivotYForContact(
 			localPos,
 			tilted,
@@ -1420,18 +1501,32 @@ public static class GoldPileTreasurePlacement
 			embedDepth + visualSink,
 			surfaceHeight );
 
-		// Contact solve can raise the pivot onto the surface; keep it strictly inside the volume.
-		const float insideEps = 0.005f;
-		float maxInsideY = surfaceHeight - insideEps;
-		if ( pivotY > maxInsideY )
-			pivotY = maxInsideY;
+		if ( pose.RequirePivotInside )
+		{
+			// Contact solve can raise the pivot onto the surface; keep it strictly inside the volume.
+			const float insideEps = 0.005f;
+			float maxInsideY = surfaceHeight - insideEps;
+			if ( pivotY > maxInsideY )
+				pivotY = maxInsideY;
 
-		Vector3 seated = new Vector3( localPos.x, pivotY, localPos.z );
-		if ( !IsCoinPivotInside( heightfield, seated ) )
+			Vector3 seated = new Vector3( localPos.x, pivotY, localPos.z );
+			if ( !IsCoinPivotInside( heightfield, seated ) )
+				return false;
+
+			localRot = tilted;
+			localPos = seated;
+			return true;
+		}
+
+		// Mode B surface decor: allow flush / slight sink on the mesh without volume gate.
+		float maxSurfaceY = surfaceHeight - Mathf.Min( visualSink, scale * 0.02f );
+		if ( pivotY > maxSurfaceY )
+			pivotY = maxSurfaceY;
+		if ( pivotY < heightfield.GroundLevel )
 			return false;
 
 		localRot = tilted;
-		localPos = seated;
+		localPos = new Vector3( localPos.x, pivotY, localPos.z );
 		return true;
 	}
 
@@ -1591,6 +1686,56 @@ public static class GoldPileTreasurePlacement
 		// Conservative axis-aligned box after rotation.
 		Vector3 e = AbsRotateExtents( localRot, extents );
 		return new Bounds( localPos + localRot * ( meshBounds.center * scale ), e * 2f );
+	}
+
+	/// <summary>
+	/// True when any sample of the world AABB sits inside the solid mound volume
+	/// (above ground, under the heightfield surface, within the footprint).
+	/// </summary>
+	public static bool WorldAabbIntersectsSolidMound(
+		GoldPileHeightfield heightfield,
+		Transform pileRoot,
+		Bounds worldBounds )
+	{
+		if ( heightfield == null || pileRoot == null || !heightfield.IsInitialized )
+			return false;
+
+		const int Grid = 3;
+		Vector3 min = worldBounds.min;
+		Vector3 size = worldBounds.size;
+		float ground = heightfield.GroundLevel;
+		float half = heightfield.WorldSize * 0.5f;
+
+		for ( int ix = 0; ix < Grid; ix++ )
+		{
+			float tx = Grid == 1 ? 0.5f : ix / ( float )( Grid - 1 );
+			for ( int iy = 0; iy < Grid; iy++ )
+			{
+				float ty = Grid == 1 ? 0.5f : iy / ( float )( Grid - 1 );
+				for ( int iz = 0; iz < Grid; iz++ )
+				{
+					float tz = Grid == 1 ? 0.5f : iz / ( float )( Grid - 1 );
+					Vector3 world = new Vector3(
+						min.x + size.x * tx,
+						min.y + size.y * ty,
+						min.z + size.z * tz );
+					Vector3 local = pileRoot.InverseTransformPoint( world );
+					if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+						continue;
+
+					float surface = heightfield.SampleNormalized( local.x, local.z ) * heightfield.MaxHeight;
+					if ( surface < ground )
+						continue;
+					if ( local.y < ground - 0.05f )
+						continue;
+					if ( local.y > surface + 0.08f )
+						continue;
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	static Vector3 AbsRotateExtents( Quaternion rot, Vector3 extents )

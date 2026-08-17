@@ -36,6 +36,7 @@ public static class CoinStackFlight
 			endParent,
 			endLocalPos,
 			followParent: true,
+			useHeldScale: true,
 			duration,
 			onArrived ) );
 	}
@@ -65,6 +66,7 @@ public static class CoinStackFlight
 			null,
 			endWorldPos,
 			followParent: false,
+			useHeldScale: false,
 			duration,
 			onArrived,
 			endWorldRot ) );
@@ -78,6 +80,7 @@ public static class CoinStackFlight
 		Transform endParent,
 		Vector3 endPosOrLocal,
 		bool followParent,
+		bool useHeldScale,
 		float duration,
 		Action onArrived,
 		Quaternion endWorldRot = default )
@@ -94,7 +97,13 @@ public static class CoinStackFlight
 		}
 
 		bool[] covered = null;
-		CoinColumnCylinderBinder.BindDefinitions( ref visual, go.transform, BindScratch, snap: true, covered );
+		CoinColumnCylinderBinder.BindDefinitions(
+			ref visual,
+			go.transform,
+			BindScratch,
+			snap: true,
+			covered,
+			useHeldScale: useHeldScale );
 		if ( visual != null )
 			visual.SetVariationSeed( variationSeed );
 
