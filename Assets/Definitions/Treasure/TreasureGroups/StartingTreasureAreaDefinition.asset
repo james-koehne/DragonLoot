@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1fd10bb464bd34a4eaf48dd2d879ba81, type: 3}
+  m_Name: StartingTreasureAreaDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureGroupDefinition
+  displayName: StartingTreasureArea
+  entries:
+  - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    count: 250
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 250
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 500
+  - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
+    count: 32
+  - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
+    count: 8
+  - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
+    count: 8
+  - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
+    count: 4
+  - treasure: {fileID: 11400000, guid: 3f8a2d6c9e1b4570a4d8c2f6b0e5a937, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: b6e1d4a8c2f53970e8a5b1d7c4f0e268, type: 2}
+    count: 2
+  - treasure: {fileID: 11400000, guid: 5252608b20a5b26478a15dc5c333597f, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 3a43154c7a487c74f8e609fcf994a049, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 67c51721da18e6347b5216fcf9e0e018, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 9f5e72d31aff7904cb448c492e72e20e, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 9588dd1d013c528408e3b6fb631e0d17, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 792b6a35dddfd4f46ba25841600e5188, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: ba4a35e32aef89647a1af12e0e4943d5, type: 2}
+    count: 1

@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// </summary>
 public class QuestCompassUI : MonoBehaviour
 {
-	const float HalfWidth = 220f;
+	const float HalfWidth = 440f;
 
 	[SerializeField] CanvasGroup group;
 	[SerializeField] RectTransform pip;
@@ -44,8 +44,8 @@ public class QuestCompassUI : MonoBehaviour
 		distRect.anchorMin = new Vector2( 0.5f, 0.5f );
 		distRect.anchorMax = new Vector2( 0.5f, 0.5f );
 		distRect.pivot = new Vector2( 0.5f, 1f );
-		distRect.anchoredPosition = new Vector2( 0f, -5f );
-		distRect.sizeDelta = new Vector2( 64f, 18f );
+		distRect.anchoredPosition = new Vector2( 0f, -10f );
+		distRect.sizeDelta = new Vector2( 128f, 36f );
 	}
 
 	void OnEnable()

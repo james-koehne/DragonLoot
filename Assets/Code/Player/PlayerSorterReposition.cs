@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 
 using UnityEngine;
+using UnityEngine.Rendering;
 
 /// <summary>
 /// Dedicated telekinetic carry session for <see cref="CoinSortingStation"/>.
@@ -20,7 +21,7 @@ public class PlayerSorterReposition : MonoBehaviour
 	static readonly List<Collider> ColliderScratch = new List<Collider>( 16 );
 	static readonly List<Renderer> OutlineScratch = new List<Renderer>( 16 );
 	static readonly Collider[] OverlapScratch = new Collider[ 64 ];
-	static InteractionProgressRingUI s_ring;
+	static readonly RaycastHit[] FloorHits = new RaycastHit[ 16 ];
 
 	PlayerController _player;
 	GameInput _input;
@@ -35,6 +36,10 @@ public class PlayerSorterReposition : MonoBehaviour
 	float _yawVelocity;
 	Vector3 _followVelocity;
 	float _bobTime;
+	float _lift01;
+	float _liftVelocity;
+	bool _hasCarryTarget;
+	Vector3 _lastCarryTarget;
 	bool _placementValid;
 	Vector3 _placePosition;
 	Quaternion _placeRotation = Quaternion.identity;
@@ -47,6 +52,7 @@ public class PlayerSorterReposition : MonoBehaviour
 	Collider[] _ignoredPlayerColliders;
 	bool _playerCollisionIgnored;
 	bool _hasLastValidPose;
+	bool _beginContextSubscribed;
 	Vector3 _lastValidPos;
 	Quaternion _lastValidRot = Quaternion.identity;
 
@@ -67,11 +73,6 @@ public class PlayerSorterReposition : MonoBehaviour
 		}
 	}
 
-	public static void Register( InteractionProgressRingUI ring )
-	{
-		s_ring = ring;
-	}
-
 	public void Setup( PlayerController player )
 	{
 		_player = player;
@@ -79,8 +80,42 @@ public class PlayerSorterReposition : MonoBehaviour
 
 	void OnDestroy()
 	{
+		UnsubscribeBeginContextRendering();
 		RestorePlayerCollision();
 		ClearValidityOutline();
+	}
+
+	void OnEnable()
+	{
+		SubscribeBeginContextRendering();
+	}
+
+	void OnDisable()
+	{
+		UnsubscribeBeginContextRendering();
+		ClearValidityOutline();
+	}
+
+	void SubscribeBeginContextRendering()
+	{
+		if ( _beginContextSubscribed )
+			return;
+		RenderPipelineManager.beginContextRendering += OnBeginContextRendering;
+		_beginContextSubscribed = true;
+	}
+
+	void UnsubscribeBeginContextRendering()
+	{
+		if ( !_beginContextSubscribed )
+			return;
+		RenderPipelineManager.beginContextRendering -= OnBeginContextRendering;
+		_beginContextSubscribed = false;
+	}
+
+	void OnBeginContextRendering( ScriptableRenderContext context, List<Camera> cameras )
+	{
+		if ( _phase == Phase.Carrying )
+			UpdateValidityOutline();
 	}
 
 	void Update()
@@ -115,7 +150,6 @@ public class PlayerSorterReposition : MonoBehaviour
 
 	void LateUpdate()
 	{
-		UpdateChargeRing();
 		if ( _phase == Phase.Carrying )
 			UpdateValidityOutline();
 	}
@@ -212,7 +246,7 @@ public class PlayerSorterReposition : MonoBehaviour
 
 	void BeginCarry( CoinSortingStation station )
 	{
-		if ( station == null )
+		if ( station == null || !station.RepositionEnabled )
 			return;
 
 		_station = station;
@@ -220,6 +254,10 @@ public class PlayerSorterReposition : MonoBehaviour
 		_charge = 0f;
 		_followVelocity = Vector3.zero;
 		_bobTime = 0f;
+		_lift01 = 0f;
+		_liftVelocity = 0f;
+		_hasCarryTarget = true;
+		_lastCarryTarget = station.transform.position;
 		_placementValid = false;
 
 		float yaw = station.transform.eulerAngles.y;
@@ -311,13 +349,18 @@ public class PlayerSorterReposition : MonoBehaviour
 
 		Vector3 desiredPos = cam.position + camForwardFlat * distance;
 		desiredPos.y = cam.position.y + heightOffset;
+		desiredPos = EnforceMinPlayerDistance( desiredPos, camForwardFlat, minDistance );
+
+		UpdateLiftAmount( desiredPos, dt, def );
 
 		float speed01 = Mathf.Clamp01( _player.PlanarSpeed / Mathf.Max( 0.1f, bobFullSpeed ) );
 		_bobTime += dt * bobFreq * ( 0.35f + speed01 );
-		desiredPos.y += Mathf.Sin( _bobTime * Mathf.PI * 2f ) * bobAmp * speed01;
+		float hoverY = desiredPos.y + Mathf.Sin( _bobTime * Mathf.PI * 2f ) * bobAmp * speed01 * _lift01;
+		float groundY = ResolveGroundRootY( desiredPos, 0f );
+		desiredPos.y = Mathf.Lerp( groundY, hoverY, _lift01 );
 
-		desiredPos = EnforceMinPlayerDistance( desiredPos, camForwardFlat, minDistance );
-		desiredPos = EnforceFloorClearance( desiredPos, desiredRot, floorClearance );
+		float hoverClearance = Mathf.Lerp( 0f, floorClearance, _lift01 );
+		desiredPos = EnforceFloorClearance( desiredPos, desiredRot, hoverClearance );
 
 		Vector3 current = _station.transform.position;
 		Quaternion currentRot = _station.transform.rotation;
@@ -329,13 +372,13 @@ public class PlayerSorterReposition : MonoBehaviour
 
 		Vector3 target = Vector3.SmoothDamp( current, desiredPos, ref _followVelocity, followSmooth, Mathf.Infinity, dt );
 		target = EnforceMinPlayerDistance( target, camForwardFlat, minDistance );
-		target = EnforceFloorClearance( target, moveRot, floorClearance );
+		target = EnforceFloorClearance( target, moveRot, hoverClearance );
 
 		Vector3 next = MoveWithoutEnteringGeometry( current, target, moveRot, camForwardFlat, unstickDistance );
 
 		// Min-distance can shove the sorter into a wall — re-constrain afterward.
 		Vector3 afterMin = EnforceMinPlayerDistance( next, camForwardFlat, minDistance );
-		afterMin = EnforceFloorClearance( afterMin, moveRot, floorClearance );
+		afterMin = EnforceFloorClearance( afterMin, moveRot, hoverClearance );
 		if ( afterMin != next )
 			next = MoveWithoutEnteringGeometry( next, afterMin, moveRot, camForwardFlat, unstickDistance );
 
@@ -396,37 +439,98 @@ public class PlayerSorterReposition : MonoBehaviour
 		return pushed;
 	}
 
-	Vector3 EnforceFloorClearance( Vector3 position, Quaternion rotation, float clearance )
-	{
-		if ( _station == null )
-			return position;
+	const float MoveLiftDeadzone = 0.08f;
 
-		float bottomLocalY = ResolveLocalBottomY();
-		float probeHeight = 3f;
-		Vector3 origin = position + Vector3.up * probeHeight;
-		if ( !Physics.Raycast(
-			origin,
-			Vector3.down,
-			out RaycastHit hit,
-			probeHeight + 2f,
-			Physics.DefaultRaycastLayers,
-			QueryTriggerInteraction.Ignore ) )
+	void UpdateLiftAmount( Vector3 desiredPos, float dt, CoinSortingStationDefinition def )
+	{
+		float playerSpeed = _player != null ? _player.PlanarSpeed : 0f;
+		float targetSpeed = 0f;
+		if ( _hasCarryTarget && dt > 0.0001f )
 		{
-			return position;
+			Vector3 delta = desiredPos - _lastCarryTarget;
+			delta.y = 0f;
+			targetSpeed = delta.magnitude / dt;
 		}
 
-		if ( _station.IsOwnCollider( hit.collider ) )
+		_lastCarryTarget = desiredPos;
+		_hasCarryTarget = true;
+
+		float moveSpeed = playerSpeed;
+		if ( targetSpeed > moveSpeed )
+			moveSpeed = targetSpeed;
+
+		float fullSpeed = def != null ? def.moveLiftFullSpeed : 0.85f;
+		float targetLift = 0f;
+		if ( moveSpeed > MoveLiftDeadzone )
+			targetLift = Mathf.Clamp01( ( moveSpeed - MoveLiftDeadzone ) / Mathf.Max( 0.05f, fullSpeed - MoveLiftDeadzone ) );
+
+		float smooth = def != null ? def.moveLiftSmoothTime : 0.12f;
+		_lift01 = Mathf.SmoothDamp( _lift01, targetLift, ref _liftVelocity, smooth, Mathf.Infinity, dt );
+	}
+
+	float ResolveGroundRootY( Vector3 position, float clearance )
+	{
+		if ( !TryGetFloorRootY( position, clearance, out float rootY ) )
+			return position.y;
+		return rootY;
+	}
+
+	Vector3 EnforceFloorClearance( Vector3 position, Quaternion rotation, float clearance )
+	{
+		if ( !TryGetFloorRootY( position, clearance, out float minRootY ) )
 			return position;
 
-		if ( !PlacementFloorSurface.IsFloorCollider( hit.collider )
-			&& !PlacementFloorSurface.IsWalkableFloorHit( in hit ) )
-			return position;
-
-		float minRootY = hit.point.y - bottomLocalY + Mathf.Max( 0f, clearance );
 		if ( position.y < minRootY )
 			position.y = minRootY;
 
 		return position;
+	}
+
+	bool TryGetFloorRootY( Vector3 position, float clearance, out float rootY )
+	{
+		rootY = position.y;
+		if ( _station == null )
+			return false;
+
+		float bottomLocalY = ResolveLocalBottomY();
+		float probeHeight = 3f;
+		Vector3 origin = position + Vector3.up * probeHeight;
+		int hitCount = Physics.RaycastNonAlloc(
+			origin,
+			Vector3.down,
+			FloorHits,
+			probeHeight + 2f,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Ignore );
+		if ( hitCount <= 0 )
+			return false;
+
+		bool found = false;
+		float bestDist = float.MaxValue;
+		Vector3 bestPoint = Vector3.zero;
+		for ( int i = 0; i < hitCount; i++ )
+		{
+			RaycastHit hit = FloorHits[ i ];
+			if ( hit.collider == null )
+				continue;
+			if ( _station.IsOwnCollider( hit.collider ) )
+				continue;
+			if ( !PlacementFloorSurface.IsFloorCollider( hit.collider )
+				&& !PlacementFloorSurface.IsWalkableFloorHit( in hit ) )
+				continue;
+			if ( hit.distance >= bestDist )
+				continue;
+
+			bestDist = hit.distance;
+			bestPoint = hit.point;
+			found = true;
+		}
+
+		if ( !found )
+			return false;
+
+		rootY = bestPoint.y - bottomLocalY + Mathf.Max( 0f, clearance );
+		return true;
 	}
 
 	float ResolveLocalBottomY()
@@ -801,7 +905,8 @@ public class PlayerSorterReposition : MonoBehaviour
 		HoverOutlineRegistrar.SetTarget(
 			HoverOutlineRegistrar.Owner.StackVolume,
 			OutlineScratch,
-			ResolveValidityOutlineSettings( _placementValid ) );
+			ResolveValidityOutlineSettings( _placementValid ),
+			GetInstanceID() );
 	}
 
 	HoverOutlineVisualSettings ResolveValidityOutlineSettings( bool valid )
@@ -822,7 +927,7 @@ public class PlayerSorterReposition : MonoBehaviour
 
 	void ClearValidityOutline()
 	{
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
 	}
 
 	bool TryConfirmPlace()
@@ -898,6 +1003,9 @@ public class PlayerSorterReposition : MonoBehaviour
 		_phase = Phase.Idle;
 		_placementValid = false;
 		_followVelocity = Vector3.zero;
+		_lift01 = 0f;
+		_liftVelocity = 0f;
+		_hasCarryTarget = false;
 		_hasLastValidPose = false;
 	}
 
@@ -912,6 +1020,10 @@ public class PlayerSorterReposition : MonoBehaviour
 		_phase = Phase.Idle;
 		_charge = 0f;
 		_placementValid = false;
+		_followVelocity = Vector3.zero;
+		_lift01 = 0f;
+		_liftVelocity = 0f;
+		_hasCarryTarget = false;
 		_hasLastValidPose = false;
 	}
 
@@ -992,19 +1104,6 @@ public class PlayerSorterReposition : MonoBehaviour
 
 		int playerLayer = PhysicsLayers.PlayerLayer;
 		return playerLayer >= 0 && collider.gameObject.layer == playerLayer;
-	}
-
-	void UpdateChargeRing()
-	{
-		InteractionProgressRingUI ring = s_ring;
-		if ( ring == null )
-			return;
-
-		if ( _phase == Phase.Charging )
-		{
-			ring.SetProgress( ChargeProgress01, valid: true );
-			return;
-		}
 	}
 
 	Transform ResolveCameraTransform()

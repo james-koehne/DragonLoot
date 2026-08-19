@@ -468,6 +468,47 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		return true;
 	}
 
+	/// <summary>
+	/// True when world XZ sits on authored traversable Treasure surface paint,
+	/// including a Chebyshev neighborhood (1 = 3x3). Missing authoring does not block
+	/// so isolated pile tools still work.
+	/// </summary>
+	public static bool HasTreasureSurfaceBelowWorld( Vector3 world, int neighborhoodCells = 1 )
+	{
+		TreasureSurfaceAuthoring authoring = Instance;
+		if ( authoring == null )
+			return true;
+
+		if ( !authoring.TryWorldToCell( world, out int cellX, out int cellZ ) )
+			return false;
+
+		return authoring.HasTraversableNeighborhood( cellX, cellZ, neighborhoodCells );
+	}
+
+	public bool HasTraversableNeighborhood( int cellX, int cellZ, int neighborhoodCells )
+	{
+		int radius = Mathf.Max( 1, neighborhoodCells );
+		if ( !TryGetPaintArrays( out byte[] trav, out _, out _, out int cellsX, out int cellsZ ) )
+			return !defaultNonTraversable;
+
+		for ( int z = cellZ - radius; z <= cellZ + radius; z++ )
+		{
+			if ( z < 0 || z >= cellsZ )
+				return false;
+
+			int row = z * cellsX;
+			for ( int x = cellX - radius; x <= cellX + radius; x++ )
+			{
+				if ( x < 0 || x >= cellsX )
+					return false;
+				if ( trav[ row + x ] == 0 )
+					return false;
+			}
+		}
+
+		return true;
+	}
+
 	public bool TryGetPaint( int cellX, int cellZ, out bool traversable, out TreasureSurfaceMaterial material )
 	{
 		return TryGetPaint( cellX, cellZ, out traversable, out material, out _ );

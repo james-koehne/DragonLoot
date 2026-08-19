@@ -79,104 +79,6 @@ void ArtifactInitializeInputData(Varyings input, half3 normalWS, out InputData i
     ArtifactInitializeBakedGIData(input, inputData);
 }
 
-// Light-anchored specular lobe. Smoothness tightens the highlight; MatCap props tint/scale it.
-half3 ArtifactSpecularFromLight(
-    Light light,
-    half3 normalWS,
-    half3 viewDirWS,
-    half3 f0,
-    half3 lobeTint,
-    half specPower,
-    half gate)
-{
-    half atten = light.distanceAttenuation * light.shadowAttenuation;
-    half ndotl = saturate(dot(normalWS, light.direction));
-    half3 radiance = light.color * atten * ndotl;
-    if (Luminance(radiance) <= 0.0001h)
-        return half3(0, 0, 0);
-
-    half3 halfDir = SafeNormalize(light.direction + viewDirWS);
-    half nh = saturate(dot(normalWS, halfDir));
-    half lobe = pow(nh, specPower);
-
-    return f0 * lobeTint * _MatCapColor.rgb * _MatCapIntensity * lobe * radiance * gate;
-}
-
-half3 ArtifactAccumulateSpecular(
-    InputData inputData,
-    half3 albedo,
-    half metallic,
-    half smoothness,
-    half cleanGate)
-{
-    half gate = metallic * saturate(smoothness) * cleanGate;
-    if (gate <= 0.0001h || _MatCapIntensity <= 0.0001h)
-        return half3(0, 0, 0);
-
-    half3 spec = half3(0, 0, 0);
-    half4 shadowMask = inputData.shadowMask;
-    AmbientOcclusionFactor aoFactor = CreateAmbientOcclusionFactor(inputData.normalizedScreenSpaceUV, 1.0h);
-    uint meshRenderingLayers = GetMeshRenderingLayer();
-
-    half3 f0 = lerp(half3(0.04h, 0.04h, 0.04h), albedo, metallic);
-    // Smoothness drives lobe size (rough wide → sharp hot); MatCapPower scales artist control.
-    half specPower = exp2(1.0h + 9.0h * saturate(smoothness));
-    specPower = max(specPower * max(_MatCapPower, 0.5h), 1.0h);
-
-    Light mainLight = GetMainLight(inputData, shadowMask, aoFactor);
-
-    // Optional tint map from main-light half vector so sampling stays light-anchored, not camera-locked.
-    half3 mainHalf = SafeNormalize(mainLight.direction + inputData.viewDirectionWS);
-    half3 halfVS = mul((half3x3)UNITY_MATRIX_V, mainHalf);
-    float2 tintUV = halfVS.xy * 0.5 + 0.5;
-    half3 tintTex = SAMPLE_TEXTURE2D(_MatCap, sampler_MatCap, tintUV).rgb;
-    half texWeight = saturate(Luminance(tintTex) * 8.0h);
-    half3 lobeTint = lerp(half3(1, 1, 1), tintTex, texWeight);
-
-#ifdef _LIGHT_LAYERS
-    if (IsMatchingLightLayer(mainLight.layerMask, meshRenderingLayers))
-#endif
-    {
-        spec += ArtifactSpecularFromLight(
-            mainLight, inputData.normalWS, inputData.viewDirectionWS,
-            f0, lobeTint, specPower, gate);
-    }
-
-#if defined(_ADDITIONAL_LIGHTS)
-    uint lightsCount = GetAdditionalLightsCount();
-
-#if USE_CLUSTER_LIGHT_LOOP
-    [loop] for (uint lightIndex = 0; lightIndex < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); lightIndex++)
-    {
-        CLUSTER_LIGHT_LOOP_SUBTRACTIVE_LIGHT_CHECK
-        Light dirLight = DragonLootGetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
-#ifdef _LIGHT_LAYERS
-        if (IsMatchingLightLayer(dirLight.layerMask, meshRenderingLayers))
-#endif
-        {
-            spec += ArtifactSpecularFromLight(
-                dirLight, inputData.normalWS, inputData.viewDirectionWS,
-                f0, lobeTint, specPower, gate);
-        }
-    }
-#endif
-
-    LIGHT_LOOP_BEGIN(lightsCount)
-        Light light = DragonLootGetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
-#ifdef _LIGHT_LAYERS
-        if (IsMatchingLightLayer(light.layerMask, meshRenderingLayers))
-#endif
-        {
-            spec += ArtifactSpecularFromLight(
-                light, inputData.normalWS, inputData.viewDirectionWS,
-                f0, lobeTint, specPower, gate);
-        }
-    LIGHT_LOOP_END
-#endif
-
-    return spec;
-}
-
 Varyings ArtifactLitVert(Attributes input)
 {
     Varyings output = (Varyings)0;
@@ -238,6 +140,9 @@ half4 ArtifactLitFrag(Varyings input) : SV_Target
     half cleanGate = saturate(1.0h - dirt);
     smoothness = saturate(smoothness + _CleanSmoothnessBoost * cleanGate);
 
+    half3 emissionMap = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, input.uv).rgb;
+    half3 emission = emissionMap * _EmissionColor.rgb * cleanGate;
+
     occlusion = lerp(occlusion, max(occlusion, 0.7h), metallic);
 
     float sgn = input.tangentWS.w;
@@ -251,7 +156,7 @@ half4 ArtifactLitFrag(Varyings input) : SV_Target
     surfaceData.specular = half3(0, 0, 0);
     surfaceData.smoothness = smoothness;
     surfaceData.normalTS = normalTS;
-    surfaceData.emission = 0;
+    surfaceData.emission = emission;
     surfaceData.occlusion = occlusion;
     surfaceData.alpha = 1;
     surfaceData.clearCoatMask = 0;
@@ -261,10 +166,14 @@ half4 ArtifactLitFrag(Varyings input) : SV_Target
     ArtifactInitializeInputData(input, normalWS, inputData);
 
     half3 ambientFloor = albedo * _ReflectionFloor;
-    inputData.bakedGI = max(inputData.bakedGI, ambientFloor * metallic);
+    inputData.bakedGI = max(inputData.bakedGI, ambientFloor);
 
-    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
-    color.rgb = max(color.rgb, ambientFloor * metallic);
+    DragonLootStylizedSurface surface;
+    DragonLootInitStylizedSurface(inputData, surfaceData, 1.0h, surface);
+    surface.specularIntensityScale = max(_MatCapIntensity, 0.0h) / 0.45h * (1.0h + _ShineBoost * cleanGate);
+
+    half4 color = half4(DragonLootShadeSurface(inputData, surface), 1.0h);
+    color.rgb = max(color.rgb, ambientFloor);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));
     half fresnel = ArtifactSchlickFresnel(ndotv, _FresnelPower);
@@ -273,14 +182,7 @@ half4 ArtifactLitFrag(Varyings input) : SV_Target
     half3 fresnelTerm = _FresnelColor.rgb * fresnel * _FresnelIntensity * metallic * litGate * cleanGate * fresnelScale;
     color.rgb += fresnelTerm;
 
-    // Stylized specular follows lights (half-vector), tightness from smoothness.
-    half3 specularTerm = ArtifactAccumulateSpecular(
-        inputData, albedo, metallic, smoothness, cleanGate);
-    color.rgb += specularTerm;
-
-    // HDR shine / emissive punch from fresnel + specular contributions.
-    half shineLuma = Luminance(fresnelTerm) + Luminance(specularTerm);
-    half3 shineTerm = _ShineColor.rgb * _ShineBoost * shineLuma * cleanGate;
+    half3 shineTerm = _ShineColor.rgb * _ShineBoost * Luminance(fresnelTerm) * cleanGate;
     color.rgb += shineTerm;
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);

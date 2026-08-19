@@ -43,9 +43,13 @@ public class TreasurePileDefinition : ScriptableObject
 	[Min( 0.1f )]
 	public float maxHeight = 1.75f;
 
-	[Tooltip( "Local height below which the pile does not exist (no render, collider, or interaction)." )]
+	[Tooltip( "Local height below which the pile mesh / collider is cut off." )]
 	[Min( 0f )]
 	public float groundLevelHeight = 0.01f;
+
+	[Tooltip( "Local height below which coins and treasure will not be seated. The mesh may still exist down to groundLevelHeight." )]
+	[Min( 0f )]
+	public float lootGroundLevelHeight = 0.6f;
 
 	[Header( "Mesh" )]
 	[Tooltip( "Visual mesh grid resolution. 0 = match heightResolution. Lower values reduce vert cost while keeping carve fidelity." )]
@@ -84,9 +88,9 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0f, 0.49f )]
 	public float placementJitter = 0.3f;
 
-	[Tooltip( "How much of the pile footprint is used for loot (1 = full worldSize)." )]
+	[Tooltip( "How much of the pile square gems/artifacts may use. 1 = seats can reach the heightfield bounds; lower values inset loot from the rim. Coins always use the full footprint." )]
 	[Range( 0.4f, 1f )]
-	public float placementRadiusFraction = 0.88f;
+	public float placementRadiusFraction = 1f;
 
 	[Tooltip( "Random scale variation around treasure worldScale (0.1 = ±10%)." )]
 	[Range( 0f, 0.5f )]
@@ -100,13 +104,17 @@ public class TreasurePileDefinition : ScriptableObject
 	[Min( 0 )]
 	public int coinPullToCarveCount = 2;
 
-	[Tooltip( "Gem/artifact volume radial power. 0.5 ≈ base-heavy, 1 ≈ even height, >1 pulls toward the tip." )]
+	[Tooltip( "Gem/artifact vertical distribution. 0.5 ≈ buried/base-heavy, 1 ≈ even column height, >1 pulls toward the tip. Does not affect XZ spread." )]
 	[Range( 0.25f, 3f )]
 	public float treasureRadialPower = 1.25f;
 
-	[Tooltip( "Extra weight toward the upper portion of each column for gems/artifacts (0 = uniform in column height)." )]
+	[Tooltip( "Extra weight toward the upper portion of each column for gems/artifacts (0 = uniform in column height). Does not pull seats toward the mound center." )]
 	[Range( 0f, 3f )]
 	public float treasureHeightBias = 0.75f;
+
+	[Tooltip( "XZ spread for gem/artifact latents over the placement square. 0.5 = center-heavy, 1 = even, >1 prefers the rim / pile bounds." )]
+	[Range( 0.25f, 3f )]
+	public float treasureXZSpread = 1f;
 
 	[Tooltip( "Artifact (non-gem) pick threshold: fraction of AABB outside the mound required before the prop is pickable. Gems become pickable as soon as any probe is outside." )]
 	[Range( 0.05f, 0.95f )]
@@ -117,6 +125,10 @@ public class TreasurePileDefinition : ScriptableObject
 	public float treasureReleaseOutsideFraction = 0.9f;
 
 	[Header( "Artifact Latent Bind" )]
+	[Tooltip( "Paint-cell radius that must be traversable under a latent. 1 = the cell below plus a 1-cell ring (3x3). Increase for a larger support pad." )]
+	[Min( 1 )]
+	public int latentSurfaceNeighborhoodCells = 1;
+
 	[Tooltip( "Prefer a TreasurePileLatentBake when fingerprint matches. Huge runtime win. Bake assets are per-pile on TreasurePileVisual." )]
 	public bool preferBakedLatents = true;
 
@@ -155,6 +167,11 @@ public class TreasurePileDefinition : ScriptableObject
 		if ( meshResolution <= 0 )
 			return Mathf.Max( 8, heightResolution );
 		return Mathf.Max( 8, meshResolution );
+	}
+
+	public int ResolveLatentSurfaceNeighborhoodCells()
+	{
+		return Mathf.Max( 1, latentSurfaceNeighborhoodCells );
 	}
 
 	public int SteadyCoinVisibleBudget()

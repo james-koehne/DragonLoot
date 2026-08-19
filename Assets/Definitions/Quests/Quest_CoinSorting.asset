@@ -13,53 +13,57 @@ MonoBehaviour:
   m_Name: Quest_CoinSorting
   m_EditorClassIdentifier: Assembly-CSharp::QuestDefinition
   id: quest_coin_sorting
-  displayTitle: Sort the Gold
-  onStartDialogue:
-  - speaker: Dragon
-    text: Gold is rather easier to appreciate when it isn't scattered across the
-      floor.
-    pauseAfter: 0.4
+  displayTitle: Coins
+  onStartDialogue: []
   onCompleteDialogue:
   - speaker: Dragon
     text: Much better. A respectable hoard should be sorted.
     pauseAfter: 0.4
-  steps:
-  - id: find_sorter
-    objectiveText: Find the coin sorter
-    markerTargetId: coin_sorter
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
-    conditions:
-    - type: 0
-      targetId: volume_coin_sorter
-      requiredCount: 1
-      requiredTreasure: {fileID: 0}
-      sectionId: 
-  - id: use_sorter
+    sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+    sfxVol: 0.5
+  objectives:
+  - id: use_coin_sorter
     objectiveText: Use the coin sorter
     markerTargetId: coin_sorter
-    onEnterDialogue: []
+    optional: 1
     onCompleteDialogue:
     - speaker: Dragon
       text: That is considerably faster than your manual sorting.
       pauseAfter: 0.4
+      sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
+      sfxVol: 0.5
     conditionMode: 0
     conditions:
     - type: 3
       targetId: coin_sorter
+      areaId: 
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
       sectionId: 
-  - id: fill_coin_plinth
-    objectiveText: Bring sorted stacks to the coin plinths
-    markerTargetId: coin_plinth
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
+    subObjectives: []
+  events:
+  - id: first_coins_on_table
     conditions:
-    - type: 6
-      targetId: coin_plinth
+    - type: 2
+      targetId: 
+      areaId: starting_area
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 1
+      requiredCategory: 0
+      excludeGoldBars: 0
       sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: Gold is rather easier to appreciate stacked like that.
+      pauseAfter: 0.4
+      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+      sfxVol: 0.5
+    stinger: {fileID: 0}
+    stingerVol: 0.8
+  subquests: []
+  revealWhenParentObjectiveId: clear_and_sort
+  linkedParentObjectiveId: coins_stacked

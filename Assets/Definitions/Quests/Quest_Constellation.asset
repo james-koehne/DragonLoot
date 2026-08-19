@@ -13,46 +13,50 @@ MonoBehaviour:
   m_Name: Quest_Constellation
   m_EditorClassIdentifier: Assembly-CSharp::QuestDefinition
   id: quest_constellation
-  displayTitle: Admire the Gems
-  onStartDialogue:
-  - speaker: Dragon
-    text: Gold is for counting.
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: Gems, however...
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: ...are for admiring.
-    pauseAfter: 0.5
+  displayTitle: Constellation
+  onStartDialogue: []
   onCompleteDialogue:
   - speaker: Dragon
     text: I haven't seen that in a very long time.
     pauseAfter: 1.2
+    sfx: {fileID: 0}
+    sfxVol: 0.5
   - speaker: Dragon
     text: Beautiful.
     pauseAfter: 0.6
-  steps:
-  - id: find_constellation
-    objectiveText: Find the constellation wall
-    markerTargetId: constellation
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
+    sfx: {fileID: 0}
+    sfxVol: 0.5
+  objectives: []
+  events:
+  - id: near_constellation
     conditions:
     - type: 0
       targetId: volume_constellation
+      areaId: 
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
       sectionId: 
-  - id: fill_constellation
-    objectiveText: Fill the constellation with the required gems
-    markerTargetId: constellation
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
-    conditions:
-    - type: 4
-      targetId: constellation
-      requiredCount: 1
-      requiredTreasure: {fileID: 0}
-      sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: Gold is for stacking.
+      pauseAfter: 0.25
+      sfx: {fileID: 0}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: Gems, however...
+      pauseAfter: 0.25
+      sfx: {fileID: 0}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: ...are for admiring.
+      pauseAfter: 0.5
+      sfx: {fileID: 0}
+      sfxVol: 0.5
+    stinger: {fileID: 0}
+    stingerVol: 0.8
+  subquests: []
+  revealWhenParentObjectiveId: clear_and_sort
+  linkedParentObjectiveId: gems_in_constellation

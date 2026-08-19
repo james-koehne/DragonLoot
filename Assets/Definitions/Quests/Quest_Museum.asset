@@ -13,46 +13,54 @@ MonoBehaviour:
   m_Name: Quest_Museum
   m_EditorClassIdentifier: Assembly-CSharp::QuestDefinition
   id: quest_museum
-  displayTitle: Remember the Treasures
-  onStartDialogue:
-  - speaker: Dragon
-    text: And these...
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: These are the things worth remembering.
-    pauseAfter: 0.5
-  onCompleteDialogue:
-  - speaker: Dragon
-    text: Hmm.
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: I remember stealing that.
-    pauseAfter: 1.1
-  - speaker: Dragon
-    text: Good times.
-    pauseAfter: 0.5
-  steps:
-  - id: find_museum
-    objectiveText: Find an artifact and bring it to the museum
-    markerTargetId: museum_table
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
+  displayTitle: Artifacts
+  onStartDialogue: []
+  onCompleteDialogue: []
+  objectives: []
+  events:
+  - id: find_artifact
     conditions:
-    - type: 0
-      targetId: volume_museum
+    - type: 9
+      targetId: 
+      areaId: 
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 1
+      requiredCategory: 5
+      excludeGoldBars: 1
       sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: These are the things worth remembering.
+      pauseAfter: 0.5
+      sfx: {fileID: 0}
+      sfxVol: 0.5
+    stinger: {fileID: 0}
+    stingerVol: 0.8
   - id: place_artifact
-    objectiveText: Place the artifact in its correct museum spot
-    markerTargetId: museum_table
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
     conditions:
-    - type: 5
-      targetId: museum_table
+    - type: 2
+      targetId: 
+      areaId: starting_area
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 1
+      requiredCategory: 5
+      excludeGoldBars: 1
       sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: I remember stealing that.
+      pauseAfter: 1.1
+      sfx: {fileID: 0}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: Good times.
+      pauseAfter: 0.25
+      sfx: {fileID: 0}
+      sfxVol: 0.5
+    stinger: {fileID: 0}
+    stingerVol: 0.8
+  subquests: []
+  revealWhenParentObjectiveId: clear_and_sort
+  linkedParentObjectiveId: artifacts_sorted

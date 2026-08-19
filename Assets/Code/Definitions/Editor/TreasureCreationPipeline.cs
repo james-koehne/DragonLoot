@@ -35,6 +35,8 @@ public static class TreasureCreationPipeline
 		public int Weight = 1;
 		public bool ExclusiveCarry;
 		public bool UsesHeavyThrow;
+		public bool CannotThrow;
+		public bool PlaceOnGroundOrArtifactSlotOnly;
 		public float ThrowForceScale = 1f;
 		public float ThrowUpBiasScale = 1f;
 
@@ -278,6 +280,8 @@ public static class TreasureCreationPipeline
 		request.Weight = source.weight;
 		request.ExclusiveCarry = source.exclusiveCarry;
 		request.UsesHeavyThrow = source.usesHeavyThrow;
+		request.CannotThrow = source.cannotThrow;
+		request.PlaceOnGroundOrArtifactSlotOnly = source.placeOnGroundOrArtifactSlotOnly;
 		request.ThrowForceScale = source.throwForceScale;
 		request.ThrowUpBiasScale = source.throwUpBiasScale;
 		request.RigidbodyMass = source.rigidbodyMass;
@@ -492,6 +496,8 @@ public static class TreasureCreationPipeline
 		def.weight = Mathf.Max( 1, request.Weight );
 		def.exclusiveCarry = request.ExclusiveCarry;
 		def.usesHeavyThrow = request.UsesHeavyThrow;
+		def.cannotThrow = request.CannotThrow;
+		def.placeOnGroundOrArtifactSlotOnly = request.PlaceOnGroundOrArtifactSlotOnly;
 		def.throwForceScale = request.ThrowForceScale;
 		def.throwUpBiasScale = request.ThrowUpBiasScale;
 		def.rigidbodyMass = request.RigidbodyMass;

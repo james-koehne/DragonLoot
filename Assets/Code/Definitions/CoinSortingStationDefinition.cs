@@ -70,6 +70,10 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float sortedCoinFlightDuration = 0.28f;
 
+	[Header( "Reposition" )]
+	[Tooltip( "Allow hold-to-move telekinetic reposition of the sorter." )]
+	public bool repositionEnabled = false;
+
 	[Header( "Reposition — Pickup" )]
 	[Tooltip( "Hold Interact on the body this long to begin telekinetic carry." )]
 	[Min( 0.1f )]
@@ -84,12 +88,20 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Min( 0.5f )]
 	public float minCarryDistance = 1.45f;
 
-	[Tooltip( "World Y of the float target relative to the camera (negative = below eye height)." )]
+	[Tooltip( "World Y of the float target relative to the camera while moving (negative = below eye height)." )]
 	public float carryHeightOffset = -0.55f;
 
-	[Tooltip( "Minimum clearance between sorter bottom and floor while floating." )]
+	[Tooltip( "Minimum clearance between sorter bottom and floor while moving." )]
 	[Min( 0f )]
 	public float floorHoverClearance = 0.08f;
+
+	[Tooltip( "Planar move speed that reaches full hover height. Below this, height blends toward the floor." )]
+	[Min( 0.05f )]
+	public float moveLiftFullSpeed = 0.85f;
+
+	[Tooltip( "Smooth time blending between grounded idle height and moving hover height." )]
+	[Min( 0.01f )]
+	public float moveLiftSmoothTime = 0.12f;
 
 	[Tooltip( "Max distance to search when freeing a sorter stuck inside geometry." )]
 	[Min( 0.25f )]

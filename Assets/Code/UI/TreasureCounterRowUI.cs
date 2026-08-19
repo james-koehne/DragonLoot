@@ -28,13 +28,13 @@ public class TreasureCounterRowUI : MonoBehaviour
 		if ( root == null )
 			root = gameObject.AddComponent<RectTransform>();
 
-		root.sizeDelta = new Vector2( 140f, 22f );
+		root.sizeDelta = new Vector2( 280f, 44f );
 
 		LayoutElement layoutElement = gameObject.GetComponent<LayoutElement>();
 		if ( layoutElement == null )
 			layoutElement = gameObject.AddComponent<LayoutElement>();
-		layoutElement.minHeight = 22f;
-		layoutElement.preferredHeight = 22f;
+		layoutElement.minHeight = 44f;
+		layoutElement.preferredHeight = 44f;
 		layoutElement.flexibleWidth = 1f;
 
 		_background = gameObject.GetComponent<Image>();
@@ -47,17 +47,17 @@ public class TreasureCounterRowUI : MonoBehaviour
 		if ( _flashOutline == null )
 			_flashOutline = gameObject.AddComponent<Outline>();
 		_flashOutline.effectColor = _flashColor;
-		_flashOutline.effectDistance = new Vector2( 1f, 1f );
+		_flashOutline.effectDistance = new Vector2( 2f, 2f );
 		_flashOutline.enabled = false;
 
-		_icon = CreateChildImage( "Icon", new Vector2( 2f, 2f ), new Vector2( 18f, 18f ) );
-		_checkmark = CreateChildImage( "Check", new Vector2( 124f, 4f ), new Vector2( 12f, 12f ) );
+		_icon = CreateChildImage( "Icon", new Vector2( 4f, 4f ), new Vector2( 36f, 36f ) );
+		_checkmark = CreateChildImage( "Check", new Vector2( 248f, 8f ), new Vector2( 24f, 24f ) );
 		_checkmark.color = new Color( 0.45f, 1f, 0.55f, 1f );
 		_checkmark.enabled = false;
 		_checkmark.gameObject.SetActive( false );
 
-		_nameLabel = CreateChildText( "Name", new Vector2( 22f, 1f ), new Vector2( 70f, 20f ), TextAnchor.MiddleLeft, 10 );
-		_countLabel = CreateChildText( "Count", new Vector2( 90f, 1f ), new Vector2( 32f, 20f ), TextAnchor.MiddleRight, 10 );
+		_nameLabel = CreateChildText( "Name", new Vector2( 44f, 2f ), new Vector2( 140f, 40f ), TextAnchor.MiddleLeft, 20 );
+		_countLabel = CreateChildText( "Count", new Vector2( 180f, 2f ), new Vector2( 64f, 40f ), TextAnchor.MiddleRight, 20 );
 	}
 
 	public void Bind( TreasureCounterEntry entry, bool flash )

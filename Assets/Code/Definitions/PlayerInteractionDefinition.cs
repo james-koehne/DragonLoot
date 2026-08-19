@@ -4,8 +4,13 @@ using UnityEngine;
 public class PlayerInteractionDefinition : ScriptableObject
 {
 	[Header( "Raycast" )]
+	[Tooltip( "Max distance to pick up / interact with treasure and interactables." )]
 	[Min( 0.1f )]
 	public float interactRange = 8f;
+
+	[Tooltip( "Max distance for placement aim: floor surface detection and placement query range." )]
+	[Min( 0.1f )]
+	public float placementAimRange = 6f;
 
 	[Tooltip( "0 = DefaultRaycastLayers + Collectable at runtime." )]
 	public LayerMask interactMask;
@@ -68,6 +73,7 @@ public class PlayerInteractionDefinition : ScriptableObject
 	void OnValidate()
 	{
 		interactRange = Mathf.Max( 0.1f, interactRange );
+		placementAimRange = Mathf.Max( 0.1f, placementAimRange );
 		pickupHoldInitialDelay = Mathf.Max( 0f, pickupHoldInitialDelay );
 		pickupRepeatInterval = Mathf.Max( 0.05f, pickupRepeatInterval );
 		dropUpBias = Mathf.Max( 0f, dropUpBias );

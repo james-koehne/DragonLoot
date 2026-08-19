@@ -15,14 +15,22 @@ public static class QuestDialogueSfx
 		if ( line == null || line.sfx == null )
 			return;
 
+		PlayClip( line.sfx, line.sfxVol );
+	}
+
+	public static void PlayClip( AudioClip clip, float volume )
+	{
+		if ( clip == null )
+			return;
+
 		EnsureHost();
 		if ( _host == null || _sfx == null )
 			return;
 
-		float volume = Mathf.Clamp01( line.sfxVol );
-		_sfx.Clip = line.sfx;
-		_sfx.VolumeMin = volume;
-		_sfx.VolumeMax = volume;
+		float vol = Mathf.Clamp01( volume );
+		_sfx.Clip = clip;
+		_sfx.VolumeMin = vol;
+		_sfx.VolumeMax = vol;
 		_sfx.PitchMin = 1f;
 		_sfx.PitchMax = 1f;
 		_sfx.SpatialBlend = 0f;

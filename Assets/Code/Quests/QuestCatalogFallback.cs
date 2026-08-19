@@ -4,6 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// Fallback quest catalog used when the Addressables <see cref="QuestCatalogDefinition"/> asset is missing.
+/// Also used by the editor installer to populate quest assets.
 /// </summary>
 public static class QuestCatalogFallback
 {
@@ -14,102 +15,155 @@ public static class QuestCatalogFallback
 		if ( _runtime != null )
 			return _runtime;
 
+		QuestDefinition coins = CreateRuntime( "quest_coin_sorting" );
+		PopulateCoinsSubquest( coins );
+		QuestDefinition constellation = CreateRuntime( "quest_constellation" );
+		PopulateConstellationSubquest( constellation );
+		QuestDefinition artifacts = CreateRuntime( "quest_museum" );
+		PopulateArtifactsSubquest( artifacts );
+		QuestDefinition starting = CreateRuntime( "quest_starting" );
+		PopulateStartingQuest( starting, coins, constellation, artifacts );
+		QuestDefinition main = CreateRuntime( "quest_final" );
+		PopulateMainQuest( main );
+
 		_runtime = ScriptableObject.CreateInstance<QuestCatalogDefinition>();
 		_runtime.name = "QuestCatalogDefinition_Runtime";
-		_runtime.quests = new List<QuestDefinition>
-		{
-			BuildStarting(),
-			BuildCoinSorting(),
-			BuildConstellation(),
-			BuildMuseum(),
-			BuildFinal()
-		};
+		_runtime.quests = new List<QuestDefinition> { starting, main };
 		return _runtime;
 	}
 
-	static QuestDefinition BuildStarting()
+	static QuestDefinition CreateRuntime( string id )
 	{
 		QuestDefinition quest = ScriptableObject.CreateInstance<QuestDefinition>();
-		quest.id = "quest_starting";
+		quest.id = id;
+		return quest;
+	}
+
+	public static void PopulateStartingQuest(
+		QuestDefinition quest,
+		QuestDefinition coins,
+		QuestDefinition constellation,
+		QuestDefinition artifacts )
+	{
 		quest.displayTitle = "Clear the Way";
 		quest.onStartDialogue = new[]
 		{
-			Line( "Ah. There you are, little Hoardkeeper." ),
-			Line( "I have been... busy.", 0.6f )
+			Line( "Ah. Welcome, little Hoardkeeper." ),
+			Line( "My hoard has grown somewhat... unwieldy.", 0.6f )
 		};
 		quest.onCompleteDialogue = new[]
 		{
-			Line( "Now, Hoardkeeper..." ),
-			Line( "I believe we have rather a lot of work to do.", 0.4f )
+			Line( "That is much better." ),
+			Line( "I will now unlock the door.", 0.4f )
 		};
-		quest.steps = new[]
+		quest.events = new[]
 		{
-			new QuestStep
+			new QuestEvent
 			{
-				id = "view_doorway_gold",
-				objectiveText = "Look toward the gold blocking the doorway",
-				markerTargetId = QuestSceneAutoWire.IdVolumeDoorwayGold,
-				onCompleteDialogue = new[]
+				id = "volume_doorway_gold",
+				dialogue = new[]
 				{
 					Line( "Oh." ),
-					Line( "My hoard has grown somewhat... unwieldy." ),
-					Line( "You'll need to dig your way out...", 0.5f )
+					Line( "You'll need to clear that pile too." )
 				},
 				conditions = new[]
 				{
 					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeDoorwayGold }
 				}
-			},
-			new QuestStep
+			}
+		};
+		quest.objectives = new[]
+		{
+			new QuestObjective
 			{
 				id = "clear_and_sort",
-				objectiveText = "Clear the doorway pile and place the loot on the sorting plinth",
+				objectiveText = "Clear and sort all treasure",
 				markerTargetId = QuestSceneAutoWire.IdStartingDoorPile,
-				conditions = new[]
+				subObjectives = new[]
 				{
-					new QuestCondition { type = QuestConditionType.ClearPile, targetId = QuestSceneAutoWire.IdStartingDoorPile },
-					new QuestCondition
-					{
-						type = QuestConditionType.PlaceOnOwner,
-						targetId = QuestSceneAutoWire.IdStartingSortingPlinth,
-						requiredCount = 5
-					}
+					SubObjective(
+						"gems_in_constellation",
+						"Gems in constellation",
+						QuestSceneAutoWire.IdConstellation,
+						new QuestCondition
+						{
+							type = QuestConditionType.CompleteConstellation,
+							targetId = QuestSceneAutoWire.IdConstellation,
+							areaId = QuestSceneAutoWire.AreaStarting
+						} ),
+					SubObjective(
+						"coins_stacked",
+						"Coins stacked",
+						QuestSceneAutoWire.IdCoinSorter,
+						new QuestCondition
+						{
+							type = QuestConditionType.CompleteCoinDisplay,
+							areaId = QuestSceneAutoWire.AreaStarting
+						} ),
+					SubObjective(
+						"gold_bars_stacked",
+						"Gold bars stacked",
+						QuestSceneAutoWire.IdGoldBarTable,
+						new QuestCondition
+						{
+							type = QuestConditionType.CompleteGoldBarDisplay,
+							areaId = QuestSceneAutoWire.AreaStarting
+						} ),
+					SubObjective(
+						"artifacts_sorted",
+						"Artifacts sorted",
+						QuestSceneAutoWire.IdMuseumTable,
+						new QuestCondition
+						{
+							type = QuestConditionType.CompleteArtifactTable,
+							areaId = QuestSceneAutoWire.AreaStarting
+						} )
 				}
 			}
 		};
-		return quest;
+		quest.subquests = new[] { coins, constellation, artifacts };
 	}
 
-	static QuestDefinition BuildCoinSorting()
+	public static void PopulateCoinsSubquest( QuestDefinition quest )
 	{
-		QuestDefinition quest = ScriptableObject.CreateInstance<QuestDefinition>();
-		quest.id = "quest_coin_sorting";
-		quest.displayTitle = "Sort the Gold";
-		quest.onStartDialogue = new[]
-		{
-			Line( "Gold is rather easier to appreciate when it isn't scattered across the floor.", 0.4f )
-		};
+		quest.displayTitle = "Coins";
+		quest.revealWhenParentObjectiveId = "clear_and_sort";
+		quest.linkedParentObjectiveId = "coins_stacked";
+		quest.onStartDialogue = System.Array.Empty<QuestDialogueLine>();
 		quest.onCompleteDialogue = new[]
 		{
 			Line( "Much better. A respectable hoard should be sorted.", 0.4f )
 		};
-		quest.steps = new[]
+		quest.events = new[]
 		{
-			new QuestStep
+			new QuestEvent
 			{
-				id = "find_sorter",
-				objectiveText = "Find the coin sorter",
-				markerTargetId = QuestSceneAutoWire.IdCoinSorter,
+				id = "first_coins_on_table",
+				dialogue = new[]
+				{
+					Line( "Gold is rather easier to appreciate when it isn't scattered across the floor.", 0.4f )
+				},
 				conditions = new[]
 				{
-					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeCoinSorter }
+					new QuestCondition
+					{
+						type = QuestConditionType.PlaceOnOwner,
+						areaId = QuestSceneAutoWire.AreaStarting,
+						requiredCount = 1,
+						filterByCategory = true,
+						requiredCategory = TreasureCategory.Coin
+					}
 				}
-			},
-			new QuestStep
+			}
+		};
+		quest.objectives = new[]
+		{
+			new QuestObjective
 			{
-				id = "use_sorter",
+				id = "use_coin_sorter",
 				objectiveText = "Use the coin sorter",
 				markerTargetId = QuestSceneAutoWire.IdCoinSorter,
+				optional = true,
 				onCompleteDialogue = new[]
 				{
 					Line( "That is considerably faster than your manual sorting.", 0.4f )
@@ -118,134 +172,175 @@ public static class QuestCatalogFallback
 				{
 					new QuestCondition { type = QuestConditionType.UseCoinSorter, targetId = QuestSceneAutoWire.IdCoinSorter }
 				}
-			},
-			new QuestStep
-			{
-				id = "fill_coin_plinth",
-				objectiveText = "Bring sorted stacks to the coin plinths",
-				markerTargetId = QuestSceneAutoWire.IdCoinPlinth,
-				conditions = new[]
-				{
-					new QuestCondition { type = QuestConditionType.CompleteCoinDisplay, targetId = QuestSceneAutoWire.IdCoinPlinth }
-				}
 			}
 		};
-		return quest;
 	}
 
-	static QuestDefinition BuildConstellation()
+	public static void PopulateConstellationSubquest( QuestDefinition quest )
 	{
-		QuestDefinition quest = ScriptableObject.CreateInstance<QuestDefinition>();
-		quest.id = "quest_constellation";
-		quest.displayTitle = "Admire the Gems";
-		quest.onStartDialogue = new[]
-		{
-			Line( "Gold is for counting." ),
-			Line( "Gems, however..." ),
-			Line( "...are for admiring.", 0.5f )
-		};
+		quest.displayTitle = "Constellation";
+		quest.revealWhenParentObjectiveId = "clear_and_sort";
+		quest.linkedParentObjectiveId = "gems_in_constellation";
+		quest.onStartDialogue = System.Array.Empty<QuestDialogueLine>();
 		quest.onCompleteDialogue = new[]
 		{
 			Line( "I haven't seen that in a very long time.", 1.2f ),
 			Line( "Beautiful.", 0.6f )
 		};
-		quest.steps = new[]
+		quest.events = new[]
 		{
-			new QuestStep
+			new QuestEvent
 			{
-				id = "find_constellation",
-				objectiveText = "Find the constellation wall",
-				markerTargetId = QuestSceneAutoWire.IdConstellation,
+				id = "near_constellation",
+				dialogue = new[]
+				{
+					Line( "Gold is for stacking." ),
+					Line( "Gems, however..." ),
+					Line( "...are for admiring.", 0.5f )
+				},
 				conditions = new[]
 				{
 					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeConstellation }
 				}
-			},
-			new QuestStep
-			{
-				id = "fill_constellation",
-				objectiveText = "Fill the constellation with the required gems",
-				markerTargetId = QuestSceneAutoWire.IdConstellation,
-				conditions = new[]
-				{
-					new QuestCondition { type = QuestConditionType.CompleteConstellation, targetId = QuestSceneAutoWire.IdConstellation }
-				}
 			}
 		};
-		return quest;
+		quest.objectives = System.Array.Empty<QuestObjective>();
 	}
 
-	static QuestDefinition BuildMuseum()
+	public static void PopulateArtifactsSubquest( QuestDefinition quest )
 	{
-		QuestDefinition quest = ScriptableObject.CreateInstance<QuestDefinition>();
-		quest.id = "quest_museum";
-		quest.displayTitle = "Remember the Treasures";
-		quest.onStartDialogue = new[]
+		quest.displayTitle = "Artifacts";
+		quest.revealWhenParentObjectiveId = "clear_and_sort";
+		quest.linkedParentObjectiveId = "artifacts_sorted";
+		quest.onStartDialogue = System.Array.Empty<QuestDialogueLine>();
+		quest.onCompleteDialogue = System.Array.Empty<QuestDialogueLine>();
+		quest.events = new[]
 		{
-			Line( "And these..." ),
-			Line( "These are the things worth remembering.", 0.5f )
-		};
-		quest.onCompleteDialogue = new[]
-		{
-			Line( "Hmm." ),
-			Line( "I remember stealing that.", 1.1f ),
-			Line( "Good times.", 0.5f )
-		};
-		quest.steps = new[]
-		{
-			new QuestStep
+			new QuestEvent
 			{
-				id = "find_museum",
-				objectiveText = "Find an artifact and bring it to the museum",
-				markerTargetId = QuestSceneAutoWire.IdMuseumTable,
+				id = "find_artifact",
+				dialogue = new[]
+				{
+					Line( "These are the things worth remembering.", 0.5f )
+				},
 				conditions = new[]
 				{
-					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeMuseum }
+					new QuestCondition
+					{
+						type = QuestConditionType.PickupTreasure,
+						filterByCategory = true,
+						requiredCategory = TreasureCategory.Artifact,
+						excludeGoldBars = true
+					}
 				}
 			},
-			new QuestStep
+			new QuestEvent
 			{
 				id = "place_artifact",
-				objectiveText = "Place the artifact in its correct museum spot",
-				markerTargetId = QuestSceneAutoWire.IdMuseumTable,
+				dialogue = new[]
+				{
+					Line( "I remember stealing that.", 1.1f ),
+					Line( "Good times." )
+				},
 				conditions = new[]
 				{
-					new QuestCondition { type = QuestConditionType.CompleteArtifactTable, targetId = QuestSceneAutoWire.IdMuseumTable }
+					new QuestCondition
+					{
+						type = QuestConditionType.PlaceOnOwner,
+						areaId = QuestSceneAutoWire.AreaStarting,
+						requiredCount = 1,
+						filterByCategory = true,
+						requiredCategory = TreasureCategory.Artifact,
+						excludeGoldBars = true
+					}
 				}
 			}
 		};
-		return quest;
+		quest.objectives = System.Array.Empty<QuestObjective>();
 	}
 
-	static QuestDefinition BuildFinal()
+	public static void PopulateMainQuest( QuestDefinition quest )
 	{
-		QuestDefinition quest = ScriptableObject.CreateInstance<QuestDefinition>();
-		quest.id = "quest_final";
-		quest.displayTitle = "Organise the Hoard";
-		quest.onStartDialogue = new[]
+		quest.displayTitle = "The Hoard";
+		quest.onStartDialogue = System.Array.Empty<QuestDialogueLine>();
+		quest.onCompleteDialogue = System.Array.Empty<QuestDialogueLine>();
+		quest.events = new[]
 		{
-			Line( "You have cleared the way." ),
-			Line( "You have counted the gold." ),
-			Line( "You have arranged the gems." ),
-			Line( "And you have given my treasures somewhere worthy of them.", 1.2f ),
-			Line( "I believe you understand your duties.", 0.5f )
+			new QuestEvent
+			{
+				id = "enter_hallway",
+				dialogue = new[]
+				{
+					Line( "Now, Hoardkeeper..." )
+				},
+				conditions = new[]
+				{
+					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeHallwayEnter }
+				}
+			},
+			new QuestEvent
+			{
+				id = "see_hoard",
+				dialogue = new[]
+				{
+					Line( "I believe we have rather a lot of work to do.", 0.4f )
+				},
+				conditions = new[]
+				{
+					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeHallwayEnd }
+				}
+			}
 		};
-		quest.steps = new[]
+		quest.objectives = new[]
 		{
-			new QuestStep
+			new QuestObjective
+			{
+				id = "walk_hallway",
+				objectiveText = "Walk to the end of the hallway",
+				markerTargetId = QuestSceneAutoWire.IdVolumeHallwayEnd,
+				conditions = new[]
+				{
+					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeHallwayEnd }
+				}
+			},
+			new QuestObjective
 			{
 				id = "organise_hoard",
-				objectiveText = "Organise the dragon's hoard — clear and sort all gold piles",
+				objectiveText = "Clear and sort the whole hoard",
 				conditions = new[]
 				{
 					new QuestCondition { type = QuestConditionType.SectionSorted, sectionId = "Section 1" }
 				}
 			}
 		};
-		return quest;
 	}
 
-	static QuestDialogueLine Line( string text, float pauseAfter = 0.25f )
+	public static void AssignMainQuestStinger( QuestDefinition quest, AudioClip stinger )
+	{
+		if ( quest == null || quest.events == null )
+			return;
+		for ( int i = 0; i < quest.events.Length; i++ )
+		{
+			if ( quest.events[ i ] != null && quest.events[ i ].id == "see_hoard" )
+			{
+				quest.events[ i ].stinger = stinger;
+				quest.events[ i ].stingerVol = 0.85f;
+			}
+		}
+	}
+
+	static QuestObjective SubObjective( string id, string text, string markerId, QuestCondition condition )
+	{
+		return new QuestObjective
+		{
+			id = id,
+			objectiveText = text,
+			markerTargetId = markerId,
+			conditions = new[] { condition }
+		};
+	}
+
+	public static QuestDialogueLine Line( string text, float pauseAfter = 0.25f )
 	{
 		return new QuestDialogueLine
 		{

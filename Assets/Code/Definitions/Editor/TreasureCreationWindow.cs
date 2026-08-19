@@ -353,6 +353,10 @@ public class TreasureCreationWindow : EditorWindow
 		_request.Weight = EditorGUILayout.IntField( "Weight", _request.Weight );
 		_request.ExclusiveCarry = EditorGUILayout.Toggle( "Exclusive Carry", _request.ExclusiveCarry );
 		_request.UsesHeavyThrow = EditorGUILayout.Toggle( "Uses Heavy Throw", _request.UsesHeavyThrow );
+		_request.CannotThrow = EditorGUILayout.Toggle( "Cannot Throw", _request.CannotThrow );
+		_request.PlaceOnGroundOrArtifactSlotOnly = EditorGUILayout.Toggle(
+			"Ground / Artifact Slot Only",
+			_request.PlaceOnGroundOrArtifactSlotOnly );
 		_request.ThrowForceScale = EditorGUILayout.FloatField( "Throw Force Scale", _request.ThrowForceScale );
 		_request.ThrowUpBiasScale = EditorGUILayout.FloatField( "Throw Up Bias Scale", _request.ThrowUpBiasScale );
 		EditorGUI.indentLevel--;

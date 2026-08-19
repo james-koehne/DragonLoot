@@ -169,7 +169,7 @@ half4 CoinLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor * metallic);
 
-    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
+    half4 color = DragonLootFragmentStylized(inputData, surfaceData);
 
     // Reflection floor on final lit result (probes + specular + ambient).
     color.rgb = max(color.rgb, ambientFloor * metallic);

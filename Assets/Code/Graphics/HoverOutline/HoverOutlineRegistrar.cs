@@ -20,6 +20,7 @@ public static class HoverOutlineRegistrar
 
 	static HoverOutlineVisualSettings _settings;
 	static Owner _owner;
+	static int _sourceId;
 
 	public static bool HasTarget => _owner != Owner.None && ActiveRenderers.Count > 0 && _settings != null;
 
@@ -34,15 +35,32 @@ public static class HoverOutlineRegistrar
 		ActiveRenderers.Clear();
 		_settings = null;
 		_owner = Owner.None;
+		_sourceId = 0;
 	}
 
 	public static void ClearIfOwner( Owner owner )
 	{
-		if ( _owner == owner )
-			Clear();
+		ClearIfOwner( owner, 0 );
+	}
+
+	public static void ClearIfOwner( Owner owner, int sourceId )
+	{
+		if ( _owner != owner )
+			return;
+		if ( sourceId != 0 && _sourceId != 0 && sourceId != _sourceId )
+			return;
+		if ( sourceId == 0 && _sourceId != 0 )
+			return;
+
+		Clear();
 	}
 
 	public static void SetTarget( Owner owner, IReadOnlyList<Renderer> renderers, HoverOutlineVisualSettings settings )
+	{
+		SetTarget( owner, renderers, settings, 0 );
+	}
+
+	public static void SetTarget( Owner owner, IReadOnlyList<Renderer> renderers, HoverOutlineVisualSettings settings, int sourceId )
 	{
 		ActiveRenderers.Clear();
 		if ( renderers != null )
@@ -66,6 +84,7 @@ public static class HoverOutlineRegistrar
 			_settings = null;
 
 		_owner = ActiveRenderers.Count > 0 && _settings != null ? owner : Owner.None;
+		_sourceId = _owner != Owner.None ? sourceId : 0;
 		if ( _owner == Owner.None )
 		{
 			ActiveRenderers.Clear();

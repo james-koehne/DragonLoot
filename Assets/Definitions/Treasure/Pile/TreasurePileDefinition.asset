@@ -73,6 +73,32 @@ MonoBehaviour:
     count: 10
   - treasure: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
     count: 10
+  - treasure: {fileID: 11400000, guid: 5008023952abdb34fa9823990fb73a5e, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: de2b4f4841bd0ef459c2a7c6482eaa71, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 9d83555ba26b5f34c91ce87d8bed7657, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 9d5a6db41d5f2d84b957288219c033ee, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: b42e58a72036e8245a4a33f1fdeea89e, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 7eb5469632ec42943af0e8049eb39ab6, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 02510f8badbdd964794c819908ff6b54, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 91fa27ff54b8f0c4ba69ed14df4bacd7, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: bebc5fc773d218946be54a2dab21aa63, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 1dbba633fa68b474094ac5fbb6134f87, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
+    count: 100
+  - treasure: {fileID: 11400000, guid: 23642d676ec0a1e4d91eb72e042eefcd, type: 2}
+    count: 64
+  - treasure: {fileID: 11400000, guid: 2c15bfa856325ef41afef1fea6904e64, type: 2}
+    count: 16
   - treasure: {fileID: 11400000, guid: b8ff7f56e1131614fa3ac882993c160d, type: 2}
     count: 3
   - treasure: {fileID: 11400000, guid: 1b45042b9e8c93a45aa79fa446b6c7cf, type: 2}
@@ -86,7 +112,8 @@ MonoBehaviour:
   heightResolution: 256
   worldSize: 32
   maxHeight: 12
-  groundLevelHeight: 0.01
+  groundLevelHeight: 0.1
+  lootGroundLevelHeight: 0.6
   meshResolution: 256
   meshDeformNormalSoften: 0
   meshDeformSampleBlur: 0
@@ -100,10 +127,12 @@ MonoBehaviour:
   placementScaleJitter: 0.1
   coinSurfaceHeightFraction: 0.01
   coinPullToCarveCount: 2
-  treasureRadialPower: 1.1
-  treasureHeightBias: 0.4
-  treasurePickupOutsideFraction: 0.4
+  treasureRadialPower: 1
+  treasureHeightBias: 0
+  treasureXZSpread: 1
+  treasurePickupOutsideFraction: 0.3
   treasureReleaseOutsideFraction: 0.9
+  latentSurfaceNeighborhoodCells: 1
   preferBakedLatents: 1
   latentVolumeMaxAttempts: 24
   latentRetryNoOccupancyPasses: 1

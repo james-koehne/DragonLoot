@@ -1,78 +1,141 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
+
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Edit-mode: parents overlapping curated props (artifacts, chests, keys) under a pile's _AuthoredLoot.
-/// Debounced — not every frame.
+/// Edit-mode: parents overlapping curated props under a pile's _AuthoredLoot.
+/// Only tests objects that actually changed — never scans every renderer in the scene.
 /// </summary>
 [InitializeOnLoad]
 static class TreasurePileAuthoredLootAbsorber
 {
-	const double ScanIntervalSeconds = 0.15;
+	const double ScanIntervalSeconds = 0.35;
+	static readonly HashSet<int> PendingIds = new HashSet<int>();
+	static readonly Dictionary<string, TreasureDefinition> DefinitionByVisualName =
+		new Dictionary<string, TreasureDefinition>();
 	static double _nextScanTime;
-	static bool _dirty;
 	static bool _scanning;
 
 	static TreasurePileAuthoredLootAbsorber()
 	{
-		EditorApplication.hierarchyChanged += MarkDirty;
-		Undo.undoRedoPerformed += MarkDirty;
+		Undo.undoRedoPerformed += QueueSelection;
 		ObjectChangeEvents.changesPublished += OnObjectChanges;
 		EditorApplication.update += OnUpdate;
+		Selection.selectionChanged += QueueSelection;
 		EditorSceneManager.sceneOpened += OnSceneOpened;
 	}
 
 	static void OnSceneOpened( Scene scene, OpenSceneMode mode )
 	{
-		MarkDirty();
+		QueueSelection();
+	}
+
+	static void QueueSelection()
+	{
+		if ( Application.isPlaying || _scanning )
+			return;
+
+		Object[] selected = Selection.gameObjects;
+		for ( int i = 0; i < selected.Length; i++ )
+		{
+			if ( selected[ i ] != null )
+				PendingIds.Add( selected[ i ].GetInstanceID() );
+		}
 	}
 
 	static void OnObjectChanges( ref ObjectChangeEventStream stream )
 	{
-		MarkDirty();
-	}
-
-	static void MarkDirty()
-	{
 		if ( Application.isPlaying || _scanning )
 			return;
-		_dirty = true;
+
+		for ( int i = 0; i < stream.length; i++ )
+		{
+			switch ( stream.GetEventType( i ) )
+			{
+				case ObjectChangeKind.ChangeGameObjectParent:
+				{
+					stream.GetChangeGameObjectParentEvent( i, out ChangeGameObjectParentEventArgs args );
+					PendingIds.Add( args.instanceId );
+					break;
+				}
+				case ObjectChangeKind.CreateGameObjectHierarchy:
+				{
+					stream.GetCreateGameObjectHierarchyEvent( i, out CreateGameObjectHierarchyEventArgs args );
+					PendingIds.Add( args.instanceId );
+					break;
+				}
+				case ObjectChangeKind.ChangeGameObjectOrComponentProperties:
+				{
+					stream.GetChangeGameObjectOrComponentPropertiesEvent(
+						i,
+						out ChangeGameObjectOrComponentPropertiesEventArgs args );
+					Object changed = EditorUtility.InstanceIDToObject( args.instanceId );
+					if ( changed is Transform || changed is GameObject || changed is TreasureItem
+						|| changed is TreasurePileAuthoredItem )
+						PendingIds.Add( args.instanceId );
+					break;
+				}
+			}
+		}
 	}
 
 	static void OnUpdate()
 	{
-		if ( Application.isPlaying || !_dirty )
+		if ( Application.isPlaying || PendingIds.Count == 0 )
 			return;
 		if ( EditorApplication.isPlayingOrWillChangePlaymode )
 			return;
 		if ( EditorApplication.timeSinceStartup < _nextScanTime )
 			return;
 
-		_dirty = false;
 		_nextScanTime = EditorApplication.timeSinceStartup + ScanIntervalSeconds;
-		ScanOpenScenes();
+		ProcessPending();
 	}
 
-	static void ScanOpenScenes()
+	static void ProcessPending()
 	{
 		_scanning = true;
 		try
 		{
-			for ( int s = 0; s < SceneManager.sceneCount; s++ )
+			TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
+				FindObjectsInactive.Exclude,
+				FindObjectsSortMode.None );
+			if ( piles == null || piles.Length == 0 )
 			{
-				Scene scene = SceneManager.GetSceneAt( s );
-				if ( !scene.IsValid() || !scene.isLoaded )
-					continue;
-
-				GameObject[] roots = scene.GetRootGameObjects();
-				for ( int r = 0; r < roots.Length; r++ )
-					ScanHierarchyForPiles( roots[ r ].transform );
+				PendingIds.Clear();
+				return;
 			}
 
-			AbsorbLooseItems();
+			int[] ids = new int[ PendingIds.Count ];
+			PendingIds.CopyTo( ids );
+			PendingIds.Clear();
+
+			for ( int i = 0; i < ids.Length; i++ )
+			{
+				Object obj = EditorUtility.InstanceIDToObject( ids[ i ] );
+				GameObject go = obj as GameObject;
+				if ( go == null )
+				{
+					Component component = obj as Component;
+					if ( component != null )
+						go = component.gameObject;
+				}
+
+				if ( go == null )
+					continue;
+
+				ProcessCandidate( go, piles );
+			}
+
+			for ( int p = 0; p < piles.Length; p++ )
+			{
+				if ( piles[ p ] != null )
+					EnsureAuthoredChildrenMarked( piles[ p ] );
+			}
 		}
 		finally
 		{
@@ -80,17 +143,30 @@ static class TreasurePileAuthoredLootAbsorber
 		}
 	}
 
-	static void ScanHierarchyForPiles( Transform root )
+	static void ProcessCandidate( GameObject go, TreasurePileVisual[] piles )
 	{
-		if ( root == null )
+		if ( go == null || !IsAbsorbCandidate( go ) )
+			return;
+		if ( IsBlockedByNonPileOwner( go ) )
 			return;
 
-		TreasurePileVisual pile = root.GetComponent<TreasurePileVisual>();
-		if ( pile != null )
-			EnsureAuthoredChildrenMarked( pile );
+		Bounds worldBounds = GetWorldBounds( go );
+		TryAbsorbGameObject( go, piles, worldBounds );
+	}
 
-		for ( int i = 0; i < root.childCount; i++ )
-			ScanHierarchyForPiles( root.GetChild( i ) );
+	static bool IsAbsorbCandidate( GameObject go )
+	{
+		if ( go == null )
+			return false;
+		if ( go.GetComponent<TreasurePileAuthoredItem>() != null )
+			return true;
+		if ( go.GetComponent<TreasureItem>() != null )
+			return true;
+
+		string name = StripCloneSuffix( go.name );
+		if ( name.EndsWith( "Visual" ) )
+			return true;
+		return false;
 	}
 
 	static void EnsureAuthoredChildrenMarked( TreasurePileVisual pile )
@@ -99,126 +175,164 @@ static class TreasurePileAuthoredLootAbsorber
 		if ( authoredRoot == null )
 			return;
 
-		TreasureItem[] items = authoredRoot.GetComponentsInChildren<TreasureItem>( true );
-		for ( int i = 0; i < items.Length; i++ )
+		for ( int i = 0; i < authoredRoot.childCount; i++ )
 		{
-			TreasureItem item = items[ i ];
-			if ( item == null || !TreasurePileAuthoredItem.IsCuratable( item.Definition ) )
+			Transform child = authoredRoot.GetChild( i );
+			if ( child == null )
+				continue;
+			if ( child.name == TreasurePileVisual.LatentBakePreviewRootName )
 				continue;
 
-			TreasurePileAuthoredItem marker = item.GetComponent<TreasurePileAuthoredItem>();
-			if ( marker == null )
-			{
-				marker = Undo.AddComponent<TreasurePileAuthoredItem>( item.gameObject );
-				marker.BindItem( item );
-				EditorUtility.SetDirty( item.gameObject );
-			}
-			else
-				marker.BindItem( item );
+			EnsureMarkerOnGameObject( child.gameObject );
 		}
 	}
 
-	static void AbsorbLooseItems()
+	static string StripCloneSuffix( string name )
 	{
-		TreasureItem[] allItems = Object.FindObjectsByType<TreasureItem>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
-		if ( allItems == null || allItems.Length == 0 )
+		if ( string.IsNullOrEmpty( name ) )
+			return string.Empty;
+
+		int clone = name.IndexOf( "(Clone)" );
+		if ( clone >= 0 )
+			name = name.Substring( 0, clone ).Trim();
+		return name;
+	}
+
+	static void TryAbsorbGameObject( GameObject go, TreasurePileVisual[] piles, Bounds worldBounds )
+	{
+		if ( go == null || piles == null )
 			return;
 
-		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
-		if ( piles == null || piles.Length == 0 )
-			return;
-
+		TreasurePileVisual parentPile = go.GetComponentInParent<TreasurePileVisual>();
+		TreasurePileVisual bestPile = null;
 		for ( int p = 0; p < piles.Length; p++ )
 		{
 			TreasurePileVisual pile = piles[ p ];
 			if ( pile == null )
 				continue;
-			pile.EnsureEditorPreview();
 			if ( pile.Heightfield == null || !pile.Heightfield.IsInitialized )
 				continue;
+
+			if ( parentPile != null && parentPile != pile )
+				continue;
+
+			if ( !GoldPileTreasurePlacement.WorldAabbIntersectsSolidMound(
+				pile.Heightfield,
+				pile.transform,
+				worldBounds ) )
+				continue;
+
+			bestPile = pile;
+			break;
 		}
 
-		for ( int i = 0; i < allItems.Length; i++ )
-		{
-			TreasureItem item = allItems[ i ];
-			if ( item == null || !TreasurePileAuthoredItem.IsCuratable( item.Definition ) )
-				continue;
-			if ( IsBlockedByNonPileOwner( item ) )
-				continue;
+		if ( bestPile == null )
+			return;
 
-			TreasurePileVisual parentPile = item.GetComponentInParent<TreasurePileVisual>();
-			Bounds worldBounds = GetItemWorldBounds( item );
-
-			TreasurePileVisual bestPile = null;
-			for ( int p = 0; p < piles.Length; p++ )
-			{
-				TreasurePileVisual pile = piles[ p ];
-				if ( pile == null || pile.Heightfield == null || !pile.Heightfield.IsInitialized )
-					continue;
-
-				if ( parentPile != null && parentPile != pile )
-					continue;
-
-				if ( !GoldPileTreasurePlacement.WorldAabbIntersectsSolidMound(
-					pile.Heightfield,
-					pile.transform,
-					worldBounds ) )
-					continue;
-
-				bestPile = pile;
-				break;
-			}
-
-			if ( bestPile == null )
-				continue;
-
-			AbsorbIntoPile( item, bestPile );
-		}
+		AbsorbIntoPile( go, bestPile );
 	}
 
-	static void AbsorbIntoPile( TreasureItem item, TreasurePileVisual pile )
+	static void AbsorbIntoPile( GameObject go, TreasurePileVisual pile )
 	{
-		if ( item == null || pile == null )
+		if ( go == null || pile == null )
 			return;
 
 		Transform authoredRoot = pile.EnsureAuthoredLootRoot();
-		Transform itemTransform = item.transform;
+		Transform itemTransform = go.transform;
+		bool parented = false;
 
-		if ( itemTransform.parent == authoredRoot )
+		if ( itemTransform.parent != authoredRoot )
 		{
-			EnsureMarker( item );
-			return;
+			if ( IsOwnedByNonTargetInteractable( go, pile ) )
+				return;
+
+			Undo.SetTransformParent( itemTransform, authoredRoot, "Absorb Authored Pile Loot" );
+			parented = true;
 		}
 
-		if ( IsOwnedByNonTargetInteractable( item, pile ) )
-			return;
-
-		Undo.SetTransformParent( itemTransform, authoredRoot, "Absorb Authored Pile Loot" );
-		EnsureMarker( item );
-		EditorUtility.SetDirty( item.gameObject );
-		EditorUtility.SetDirty( pile.gameObject );
-		EditorSceneManager.MarkSceneDirty( pile.gameObject.scene );
+		bool marked = EnsureMarkerOnGameObject( go );
+		if ( parented || marked )
+		{
+			EditorSceneManager.MarkSceneDirty( pile.gameObject.scene );
+		}
 	}
 
-	static void EnsureMarker( TreasureItem item )
+	static bool EnsureMarkerOnGameObject( GameObject go )
 	{
-		TreasurePileAuthoredItem marker = item.GetComponent<TreasurePileAuthoredItem>();
+		if ( go == null )
+			return false;
+
+		bool changed = false;
+		TreasurePileAuthoredItem marker = go.GetComponent<TreasurePileAuthoredItem>();
 		if ( marker == null )
-			marker = Undo.AddComponent<TreasurePileAuthoredItem>( item.gameObject );
-		marker.BindItem( item );
+		{
+			marker = Undo.AddComponent<TreasurePileAuthoredItem>( go );
+			changed = true;
+		}
+
+		TreasureItem item = go.GetComponent<TreasureItem>();
+		if ( item != null )
+			marker.BindItem( item );
+
+		if ( marker.Definition == null )
+		{
+			TreasureDefinition def = FindDefinitionForVisual( go );
+			if ( def != null )
+			{
+				marker.BindDefinition( def );
+				changed = true;
+			}
+		}
+
+		if ( changed )
+			EditorUtility.SetDirty( go );
+
+		return changed;
 	}
 
-	/// <summary>Tables, stacks, carry, etc. — never steal from those owners.</summary>
-	static bool IsBlockedByNonPileOwner( TreasureItem item )
+	static TreasureDefinition FindDefinitionForVisual( GameObject go )
 	{
-		if ( item == null )
+		if ( go == null )
+			return null;
+
+		string name = StripCloneSuffix( go.name );
+		if ( name.EndsWith( "Visual" ) )
+			name = name.Substring( 0, name.Length - "Visual".Length );
+
+		if ( string.IsNullOrEmpty( name ) )
+			return null;
+
+		if ( DefinitionByVisualName.TryGetValue( name, out TreasureDefinition cached ) )
+			return cached;
+
+		string[] guids = AssetDatabase.FindAssets( name + " t:TreasureDefinition" );
+		TreasureDefinition resolved = null;
+		for ( int i = 0; i < ( guids != null ? guids.Length : 0 ); i++ )
+		{
+			string path = AssetDatabase.GUIDToAssetPath( guids[ i ] );
+			TreasureDefinition def = AssetDatabase.LoadAssetAtPath<TreasureDefinition>( path );
+			if ( def == null )
+				continue;
+			if ( def.name == name || def.id == name )
+			{
+				resolved = def;
+				break;
+			}
+
+			if ( resolved == null )
+				resolved = def;
+		}
+
+		DefinitionByVisualName[ name ] = resolved;
+		return resolved;
+	}
+
+	static bool IsBlockedByNonPileOwner( GameObject go )
+	{
+		if ( go == null )
 			return true;
 
-		InteractableBase[] interactables = item.GetComponentsInParent<InteractableBase>( true );
+		InteractableBase[] interactables = go.GetComponentsInParent<InteractableBase>( true );
 		for ( int i = 0; i < interactables.Length; i++ )
 		{
 			InteractableBase interactable = interactables[ i ];
@@ -234,12 +348,12 @@ static class TreasurePileAuthoredLootAbsorber
 		return false;
 	}
 
-	static bool IsOwnedByNonTargetInteractable( TreasureItem item, TreasurePileVisual targetPile )
+	static bool IsOwnedByNonTargetInteractable( GameObject go, TreasurePileVisual targetPile )
 	{
-		if ( item == null )
+		if ( go == null )
 			return true;
 
-		InteractableBase[] interactables = item.GetComponentsInParent<InteractableBase>( true );
+		InteractableBase[] interactables = go.GetComponentsInParent<InteractableBase>( true );
 		TreasurePileInteractable targetInteractable = targetPile != null
 			? targetPile.GetComponent<TreasurePileInteractable>()
 			: null;
@@ -266,17 +380,13 @@ static class TreasurePileAuthoredLootAbsorber
 		return false;
 	}
 
-	static Bounds GetItemWorldBounds( TreasureItem item )
+	static Bounds GetWorldBounds( GameObject go )
 	{
-		Collider col = item.GetComponent<Collider>();
-		if ( col != null )
-			return col.bounds;
+		TreasurePileAuthoredItem authored = go.GetComponent<TreasurePileAuthoredItem>();
+		if ( authored != null )
+			return authored.GetWorldBounds();
 
-		Renderer renderer = item.GetComponentInChildren<Renderer>();
-		if ( renderer != null )
-			return renderer.bounds;
-
-		return new Bounds( item.transform.position, Vector3.one * 0.5f );
+		return TreasureItem.GetCombinedRendererWorldBounds( go.transform, go.transform.position );
 	}
 }
 #endif

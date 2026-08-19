@@ -13,5 +13,7 @@ public enum TreasureOwnerKind
 	Minecart,
 	Conveyor,
 	CoinSortingStation,
-	CleaningStation
+	CleaningStation,
+	GroundGoldBarStack,
+	GoldBarTable
 }

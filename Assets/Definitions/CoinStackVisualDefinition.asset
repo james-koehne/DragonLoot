@@ -27,3 +27,4 @@ MonoBehaviour:
   heightLerpSpeed: 18
   minCountForCylinder: 2
   groundMaxStackHeight: 1000
+  minCoinsForPlayerCollision: 20

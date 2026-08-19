@@ -11,7 +11,9 @@ public enum QuestConditionType
 	CompleteConstellation = 4,
 	CompleteArtifactTable = 5,
 	CompleteCoinDisplay = 6,
-	SectionSorted = 7
+	SectionSorted = 7,
+	CompleteGoldBarDisplay = 8,
+	PickupTreasure = 9
 }
 
 public enum QuestConditionMode
@@ -43,22 +45,33 @@ public class QuestCondition
 {
 	public QuestConditionType type;
 
-	[Tooltip( "QuestTarget / QuestVolume id for this condition." )]
+	[Tooltip( "QuestTarget / QuestVolume id for this condition. Empty + areaId = all matching in that area." )]
 	public string targetId;
+
+	[Tooltip( "When set, matches QuestTarget.areaId. Empty targetId means every matching station in the area." )]
+	public string areaId;
 
 	[Tooltip( "Required place count for PlaceOnOwner. Ignored by other types." )]
 	[Min( 1 )]
 	public int requiredCount = 1;
 
-	[Tooltip( "Optional treasure filter for PlaceOnOwner. Null = any treasure." )]
+	[Tooltip( "Optional treasure filter for PlaceOnOwner / PickupTreasure. Null = any treasure." )]
 	public TreasureDefinition requiredTreasure;
+
+	[Tooltip( "When true, PlaceOnOwner / PickupTreasure also filter by requiredCategory." )]
+	public bool filterByCategory;
+
+	public TreasureCategory requiredCategory;
+
+	[Tooltip( "When true, PickupTreasure / PlaceOnOwner ignore gold bars." )]
+	public bool excludeGoldBars;
 
 	[Tooltip( "Optional section id for SectionSorted. Empty = any section." )]
 	public string sectionId;
 }
 
 [Serializable]
-public class QuestStep
+public class QuestObjective
 {
 	public string id;
 
@@ -68,17 +81,37 @@ public class QuestStep
 	[Tooltip( "QuestTarget / QuestMarkerAnchor id for compass + world marker. Empty = hide marker." )]
 	public string markerTargetId;
 
-	public QuestDialogueLine[] onEnterDialogue;
+	[Tooltip( "Optional objectives never block parent / quest completion." )]
+	public bool optional;
 
 	public QuestDialogueLine[] onCompleteDialogue;
 
 	public QuestConditionMode conditionMode = QuestConditionMode.All;
 
 	public QuestCondition[] conditions;
+
+	[Tooltip( "Parallel children of this objective. Required children must all complete." )]
+	public QuestObjective[] subObjectives;
+}
+
+[Serializable]
+public class QuestEvent
+{
+	public string id;
+
+	public QuestCondition[] conditions;
+
+	public QuestDialogueLine[] dialogue;
+
+	[Tooltip( "Optional one-shot played when this event fires (FeedbackSystem)." )]
+	public AudioClip stinger;
+
+	[Range( 0f, 1f )]
+	public float stingerVol = 0.8f;
 }
 
 /// <summary>
-/// One linear quest. Asset name does not need to match type; resolved via <see cref="QuestCatalogDefinition"/>.
+/// Quest or subquest. Asset name does not need to match type; resolved via <see cref="QuestCatalogDefinition"/>.
 /// </summary>
 [CreateAssetMenu( fileName = "QuestDefinition", menuName = "Definitions/QuestDefinition" )]
 public class QuestDefinition : ScriptableObject
@@ -91,7 +124,17 @@ public class QuestDefinition : ScriptableObject
 
 	public QuestDialogueLine[] onCompleteDialogue;
 
-	public QuestStep[] steps;
+	public QuestObjective[] objectives;
+
+	public QuestEvent[] events;
+
+	public QuestDefinition[] subquests;
+
+	[Tooltip( "When this asset is a subquest, reveal while the parent objective with this id is active." )]
+	public string revealWhenParentObjectiveId;
+
+	[Tooltip( "When this asset is a subquest, completing the parent row with this id also completes this subquest." )]
+	public string linkedParentObjectiveId;
 
 	public string ResolveTitle()
 	{

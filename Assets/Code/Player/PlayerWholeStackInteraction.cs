@@ -22,13 +22,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	static readonly List<TreasureDefinition> TypeBatchScratch = new List<TreasureDefinition>( 64 );
 	static readonly List<TreasureDefinition> RemainderScratch = new List<TreasureDefinition>( 128 );
 
-	static InteractionProgressRingUI s_ring;
-
-	public static void Register( InteractionProgressRingUI ring )
-	{
-		s_ring = ring;
-	}
-
 	PlayerController _player;
 	PlayerInteraction _interaction;
 	PlayerPlacement _placement;
@@ -39,6 +32,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	float _holdSeconds = 5f;
 	object _pickupTargetKey;
 	GroundCoinStack _pickupCoinStack;
+	GroundGoldBarStack _pickupGoldBarStack;
 	GemPyramidCluster _pickupPyramid;
 	ITreasureDisplayStackOwner _pickupDisplay;
 	int _pickupDisplaySlot = -1;
@@ -46,6 +40,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	Quaternion _placeRot;
 	bool _placeValid;
 	GroundCoinStack _placeCoinTarget;
+	GroundGoldBarStack _placeGoldBarTarget;
 	CoinSortingHopper _placeHopper;
 	ITreasureDisplayStackOwner _placeDisplay;
 	int _placeDisplaySlot = -1;
@@ -57,6 +52,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 	public bool IsChargingPickup => _mode == ChargeMode.Pickup;
 	public bool IsChargingPlace => _mode == ChargeMode.Place;
+	public bool IsPlaceChargeInvalid => _mode == ChargeMode.Place && !_placeValid;
 
 	public bool CanOfferWholeStackPickup
 	{
@@ -64,10 +60,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		{
 			ResolvePickupTarget(
 				out GroundCoinStack stack,
+				out GroundGoldBarStack barStack,
 				out GemPyramidCluster pyramid,
 				out ITreasureDisplayStackOwner display,
 				out int displaySlot );
 			return stack != null
+				|| barStack != null
 				|| pyramid != null
 				|| ( display != null && displaySlot >= 0 );
 		}
@@ -81,7 +79,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			if ( carry == null || carry.Count <= 0 )
 				return false;
 
-			return TryResolveWholePlace( out _, out _, out _, out _, out _, out _, out _ );
+			return TryResolveWholePlace( out _, out _, out _, out _, out _, out _, out _, out _ );
 		}
 	}
 
@@ -142,31 +140,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		CancelCharge();
 	}
 
-	void LateUpdate()
-	{
-		InteractionProgressRingUI ring = s_ring;
-		if ( ring == null )
-			return;
-
-		PlayerSorterReposition sorter = _player != null ? _player.SorterReposition : null;
-		if ( sorter != null && sorter.IsCharging )
-			return;
-
-		float size = 48f;
-		CarryDefinition resolved = null;
-		resolved = RuntimeDefinition.Resolve( ref resolved );
-		if ( resolved != null )
-			size = resolved.wholeStackProgressRingSize;
-
-		ring.SetRingSize( size );
-
-		float progress = ChargeProgress01;
-		if ( _mode == ChargeMode.Place && !_placeValid )
-			ring.SetProgress( progress, valid: false );
-		else
-			ring.SetProgress( progress, valid: true );
-	}
-
 	void RefreshHoldSeconds()
 	{
 		PlayerCarry carry = _player != null ? _player.Carry : null;
@@ -181,6 +154,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		{
 			if ( _pickupCoinStack != null )
 				quantity = _pickupCoinStack.Count;
+			else if ( _pickupGoldBarStack != null )
+				quantity = _pickupGoldBarStack.Count;
 			else if ( _pickupPyramid != null )
 				quantity = _pickupPyramid.Count;
 			else if ( _pickupDisplay != null && _pickupDisplaySlot >= 0 )
@@ -192,12 +167,15 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		}
 		else if ( ResolvePickupTarget(
 			out GroundCoinStack stack,
+			out GroundGoldBarStack barStack,
 			out GemPyramidCluster pyramid,
 			out ITreasureDisplayStackOwner display,
 			out int displaySlot ) )
 		{
 			if ( stack != null )
 				quantity = stack.Count;
+			else if ( barStack != null )
+				quantity = barStack.Count;
 			else if ( pyramid != null )
 				quantity = pyramid.Count;
 			else
@@ -241,6 +219,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	{
 		if ( !ResolvePickupTarget(
 			out GroundCoinStack stack,
+			out GroundGoldBarStack barStack,
 			out GemPyramidCluster pyramid,
 			out ITreasureDisplayStackOwner display,
 			out int displaySlot ) )
@@ -249,7 +228,11 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 		}
 
-		object key = stack != null ? (object)stack : pyramid != null ? (object)pyramid : display;
+		object key = stack != null
+			? (object)stack
+			: barStack != null
+				? (object)barStack
+				: pyramid != null ? (object)pyramid : display;
 		bool sameTarget = _mode == ChargeMode.Pickup
 			&& ReferenceEquals( _pickupTargetKey, key )
 			&& _pickupDisplaySlot == displaySlot;
@@ -259,14 +242,17 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			_charge = 0f;
 			_pickupTargetKey = key;
 			_pickupCoinStack = stack;
+			_pickupGoldBarStack = barStack;
 			_pickupPyramid = pyramid;
 			_pickupDisplay = display;
 			_pickupDisplaySlot = displaySlot;
 			_placeCoinTarget = null;
+			_placeGoldBarTarget = null;
 		}
 		else
 		{
 			_pickupCoinStack = stack;
+			_pickupGoldBarStack = barStack;
 			_pickupPyramid = pyramid;
 			_pickupDisplay = display;
 			_pickupDisplaySlot = displaySlot;
@@ -287,6 +273,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			out Quaternion rot,
 			out bool valid,
 			out GroundCoinStack coinTarget,
+			out GroundGoldBarStack barTarget,
 			out CoinSortingHopper hopper,
 			out ITreasureDisplayStackOwner display,
 			out int displaySlot ) )
@@ -301,6 +288,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			_charge = 0f;
 			_pickupTargetKey = null;
 			_pickupCoinStack = null;
+			_pickupGoldBarStack = null;
 			_pickupPyramid = null;
 			_pickupDisplay = null;
 			_pickupDisplaySlot = -1;
@@ -310,6 +298,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		_placeRot = rot;
 		_placeValid = valid;
 		_placeCoinTarget = coinTarget;
+		_placeGoldBarTarget = barTarget;
 		_placeHopper = hopper;
 		_placeDisplay = display;
 		_placeDisplaySlot = displaySlot;
@@ -338,6 +327,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( _pickupCoinStack != null )
 		{
 			CompleteCoinStackPickup( carry, _pickupCoinStack );
+			return;
+		}
+
+		if ( _pickupGoldBarStack != null )
+		{
+			CompleteGoldBarStackPickup( carry, _pickupGoldBarStack );
 			return;
 		}
 
@@ -375,6 +370,32 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		FlyCoinStackToHand( carry, taken, startPos, startRot, seed );
 	}
 
+	void CompleteGoldBarStackPickup( PlayerCarry carry, GroundGoldBarStack stack )
+	{
+		if ( stack == null || carry == null )
+			return;
+
+		ItemScratch.Clear();
+		if ( !stack.TryConsumeAllItems( ItemScratch ) || ItemScratch.Count == 0 )
+		{
+			ItemScratch.Clear();
+			return;
+		}
+
+		carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
+		if ( !carry.TryAbsorbAtHeldBottom( ItemScratch ) )
+		{
+			for ( int i = 0; i < ItemScratch.Count; i++ )
+			{
+				TreasureItem member = ItemScratch[ i ];
+				if ( member == null )
+					continue;
+				member.EnterPhysics( member.transform.position, member.transform.rotation );
+			}
+		}
+		ItemScratch.Clear();
+	}
+
 	void CompleteDisplaySlotPickup( PlayerCarry carry, ITreasureDisplayStackOwner display, int slotIndex )
 	{
 		if ( carry == null || display == null )
@@ -395,6 +416,13 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		for ( int i = 0; i < DefinitionScratch.Count; i++ )
 			taken.Add( DefinitionScratch[ i ] );
 		DefinitionScratch.Clear();
+
+		if ( display is GoldBarDisplayTableInteractable || ( taken[ 0 ] != null && GoldBarStack.IsStackable( taken[ 0 ] ) ) )
+		{
+			carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
+			carry.TryAbsorbDefinitionsAtHeldBottom( taken, CarryBucketKind.Artifact );
+			return;
+		}
 
 		FlyCoinStackToHand( carry, taken, startPos, startRot, 1f );
 	}
@@ -509,9 +537,42 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 
 		if ( bucket == CarryBucketKind.Gem )
+		{
 			PlaceGemCollection( items, _placePos );
-		else
-			PlaceArtifactCollection( items, _placePos, _placeRot );
+			return;
+		}
+
+		PlaceScratch.Clear();
+		ItemScratch.Clear();
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			TreasureItem member = items[ i ];
+			if ( member == null )
+				continue;
+			if ( GoldBarStack.IsStackable( member ) )
+				PlaceScratch.Add( member );
+			else
+				ItemScratch.Add( member );
+		}
+
+		GoldBarDisplayTableInteractable goldTable = _placeDisplay as GoldBarDisplayTableInteractable;
+		if ( goldTable != null && _placeDisplaySlot >= 0 )
+		{
+			if ( PlaceScratch.Count > 0 )
+				PlaceGoldBarCollectionOnDisplay( goldTable, _placeDisplaySlot, PlaceScratch );
+			if ( ItemScratch.Count > 0 )
+				carry.TryAbsorbAtHeldBottom( ItemScratch );
+			PlaceScratch.Clear();
+			ItemScratch.Clear();
+			return;
+		}
+
+		if ( PlaceScratch.Count > 0 )
+			PlaceGoldBarCollection( PlaceScratch, _placePos, _placeRot, _placeGoldBarTarget );
+		if ( ItemScratch.Count > 0 )
+			PlaceArtifactCollection( ItemScratch, _placePos, _placeRot );
+		PlaceScratch.Clear();
+		ItemScratch.Clear();
 	}
 
 	void PlaceCoinDefinitionsOnDisplay(
@@ -930,13 +991,103 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			_placement.PlayPlaceLandFeedback( firstPlaced );
 	}
 
+	void PlaceGoldBarCollection(
+		List<TreasureItem> items,
+		Vector3 contact,
+		Quaternion rotation,
+		GroundGoldBarStack preferred )
+	{
+		if ( items == null || items.Count == 0 )
+			return;
+
+		TreasureItem first = null;
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			if ( items[ i ] == null )
+				continue;
+			first = items[ i ];
+			break;
+		}
+
+		if ( first == null )
+			return;
+
+		GroundGoldBarStack stack = preferred;
+		if ( stack != null && !stack.IsFull && stack.CanAccept( first.Definition ) )
+		{
+			AppendGoldBarsToStack( stack, items );
+			return;
+		}
+
+		float joinRadius = GoldBarStack.ResolveJoinRadius( first.Definition );
+		stack = GroundGoldBarStack.FindNearest( contact, joinRadius );
+		if ( stack == null || stack.IsFull || !stack.CanAccept( first.Definition ) )
+			stack = GroundGoldBarStack.CreateAt( contact, rotation );
+
+		AppendGoldBarsToStack( stack, items );
+	}
+
+	static void AppendGoldBarsToStack( GroundGoldBarStack stack, List<TreasureItem> items )
+	{
+		if ( stack == null || items == null )
+			return;
+
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			TreasureItem member = items[ i ];
+			if ( member == null )
+				continue;
+			if ( !stack.CanAccept( member.Definition ) )
+			{
+				member.EnterPhysics( member.transform.position, member.transform.rotation );
+				continue;
+			}
+
+			stack.BeginAppendFlight( member );
+		}
+
+		stack.AbsorbNearbyLooseBars();
+	}
+
+	void PlaceGoldBarCollectionOnDisplay(
+		GoldBarDisplayTableInteractable table,
+		int slotIndex,
+		List<TreasureItem> items )
+	{
+		if ( table == null || items == null || items.Count == 0 || slotIndex < 0 )
+			return;
+
+		DefinitionScratch.Clear();
+		for ( int i = 0; i < items.Count; i++ )
+		{
+			TreasureItem member = items[ i ];
+			if ( member == null )
+				continue;
+
+			if ( table.GetSlotCoinAppendCapacity( slotIndex, member.Definition ) <= DefinitionScratch.Count )
+			{
+				member.EnterPhysics( member.transform.position, member.transform.rotation );
+				continue;
+			}
+
+			DefinitionScratch.Add( member.Definition );
+			TreasureItemFactory.Despawn( member );
+		}
+
+		if ( DefinitionScratch.Count > 0 )
+			table.TryAppendSlotDefinitions( slotIndex, DefinitionScratch );
+		DefinitionScratch.Clear();
+	}
+
 	bool ResolvePickupTarget(
 		out GroundCoinStack stack,
+		out GroundGoldBarStack barStack,
 		out GemPyramidCluster pyramid,
 		out ITreasureDisplayStackOwner display,
 		out int displaySlot )
 	{
 		stack = null;
+		barStack = null;
 		pyramid = null;
 		display = null;
 		displaySlot = -1;
@@ -954,6 +1105,13 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return true;
 		}
 
+		GroundGoldBarStack goldBarStack = focus as GroundGoldBarStack;
+		if ( goldBarStack != null && goldBarStack.Count > 0 )
+		{
+			barStack = goldBarStack;
+			return true;
+		}
+
 		TreasureItemInteractable itemInteractable = focus as TreasureItemInteractable;
 		if ( itemInteractable == null )
 			return false;
@@ -962,10 +1120,10 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( item == null || item.Definition == null )
 			return false;
 
-		if ( item.Definition.category == TreasureCategory.Coin
-			&& item.Owner is ITreasureDisplayStackOwner displayOwner
+		if ( item.Owner is ITreasureDisplayStackOwner displayOwner
 			&& displayOwner.TryGetSlotIndex( item, out int slotIndex )
-			&& displayOwner.GetSlotCount( slotIndex ) > 0 )
+			&& displayOwner.GetSlotCount( slotIndex ) > 0
+			&& ( item.Definition.category == TreasureCategory.Coin || GoldBarStack.IsStackable( item ) ) )
 		{
 			display = displayOwner;
 			displaySlot = slotIndex;
@@ -988,6 +1146,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		out Quaternion rotation,
 		out bool valid,
 		out GroundCoinStack coinTarget,
+		out GroundGoldBarStack barTarget,
 		out CoinSortingHopper hopper,
 		out ITreasureDisplayStackOwner display,
 		out int displaySlot )
@@ -996,6 +1155,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		rotation = Quaternion.identity;
 		valid = false;
 		coinTarget = null;
+		barTarget = null;
 		hopper = null;
 		display = null;
 		displaySlot = -1;
@@ -1042,6 +1202,19 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				position = focusStack.ContactPosition;
 				rotation = focusStack.transform.rotation;
 				valid = true;
+				return true;
+			}
+		}
+
+		if ( bucket == CarryBucketKind.Artifact )
+		{
+			GroundGoldBarStack focusBars = _interaction.Current as GroundGoldBarStack;
+			if ( focusBars != null && !focusBars.IsFull && carry.GetBucketCount( CarryBucketKind.Artifact ) > 0 )
+			{
+				barTarget = focusBars;
+				position = focusBars.ContactPosition;
+				rotation = focusBars.transform.rotation;
+				valid = HasCarriedGoldBars( carry );
 				return true;
 			}
 		}
@@ -1102,6 +1275,32 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return true;
 		}
 
+		GroundGoldBarStack hitBarStack = hit.collider != null
+			? hit.collider.GetComponentInParent<GroundGoldBarStack>()
+			: null;
+		if ( bucket == CarryBucketKind.Artifact && hitBarStack != null && !hitBarStack.IsFull )
+		{
+			barTarget = hitBarStack;
+			position = hitBarStack.ContactPosition;
+			rotation = hitBarStack.transform.rotation;
+			valid = HasCarriedGoldBars( carry );
+			return true;
+		}
+
+		if ( bucket == CarryBucketKind.Artifact
+			&& TryResolveDisplayGoldBarPlace(
+				hit,
+				carry,
+				out display,
+				out displaySlot,
+				out position,
+				out rotation,
+				out bool goldDisplayValid ) )
+		{
+			valid = goldDisplayValid;
+			return true;
+		}
+
 		if ( !PlacementFloorSurface.IsWalkableFloorHit( in hit ) )
 		{
 			position = hit.point;
@@ -1126,6 +1325,22 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			{
 				position = coinTarget.transform.position;
 				rotation = coinTarget.transform.rotation;
+			}
+
+			valid = true;
+			return true;
+		}
+
+		if ( bucket == CarryBucketKind.Artifact )
+		{
+			TreasureDefinition def = null;
+			carry.TryPeekActive( out def );
+			float radius = Mathf.Max( 0.42f, GoldBarStack.ResolveJoinRadius( def ) );
+			barTarget = GroundGoldBarStack.FindNearest( position, radius );
+			if ( barTarget != null )
+			{
+				position = barTarget.transform.position;
+				rotation = barTarget.transform.rotation;
 			}
 
 			valid = true;
@@ -1196,6 +1411,88 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		return false;
 	}
 
+	bool TryResolveDisplayGoldBarPlace(
+		RaycastHit hit,
+		PlayerCarry carry,
+		out ITreasureDisplayStackOwner display,
+		out int slotIndex,
+		out Vector3 position,
+		out Quaternion rotation,
+		out bool placeValid )
+	{
+		display = null;
+		slotIndex = -1;
+		position = hit.point;
+		rotation = Quaternion.identity;
+		placeValid = false;
+
+		if ( hit.collider == null || carry == null )
+			return false;
+
+		GoldBarDisplayTableInteractable goldTable = hit.collider.GetComponentInParent<GoldBarDisplayTableInteractable>();
+		if ( goldTable == null || goldTable.AcceptedBar == null )
+			return false;
+
+		if ( !HasCarriedGoldBars( carry, goldTable.AcceptedBar ) )
+			return false;
+
+		TreasureItem probeItem = null;
+		carry.TryPeekActive( out probeItem );
+
+		PlacementQuery query = new PlacementQuery
+		{
+			Player = _player,
+			Hit = hit,
+			HasHit = true,
+			AutoFindValidSlot = true
+		};
+
+		if ( probeItem != null
+			&& GoldBarStack.IsStackable( probeItem )
+			&& goldTable.TryResolveWholeCoinPlaceSlot( probeItem, in query, out slotIndex, out position, out rotation ) )
+		{
+			display = goldTable;
+			placeValid = goldTable.GetSlotCoinAppendCapacity( slotIndex, goldTable.AcceptedBar ) > 0;
+			return true;
+		}
+
+		for ( int i = 0; i < goldTable.SlotCount; i++ )
+		{
+			if ( goldTable.GetSlotCoinAppendCapacity( i, goldTable.AcceptedBar ) <= 0 )
+				continue;
+
+			if ( !goldTable.TryGetSlotAppendPose( i, out position, out rotation ) )
+				continue;
+
+			display = goldTable;
+			slotIndex = i;
+			placeValid = true;
+			return true;
+		}
+
+		return false;
+	}
+
+	static bool HasCarriedGoldBars( PlayerCarry carry )
+	{
+		return HasCarriedGoldBars( carry, null );
+	}
+
+	static bool HasCarriedGoldBars( PlayerCarry carry, TreasureDefinition accepted )
+	{
+		if ( carry == null )
+			return false;
+
+		return carry.BucketHasMatching( CarryBucketKind.Artifact, def =>
+		{
+			if ( !GoldBarStack.IsStackable( def ) )
+				return false;
+			if ( accepted != null && def != accepted )
+				return false;
+			return true;
+		} );
+	}
+
 	CoinSortingHopper ResolveHopperFromFocus()
 	{
 		if ( _interaction == null )
@@ -1228,10 +1525,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		_charge = 0f;
 		_pickupTargetKey = null;
 		_pickupCoinStack = null;
+		_pickupGoldBarStack = null;
 		_pickupPyramid = null;
 		_pickupDisplay = null;
 		_pickupDisplaySlot = -1;
 		_placeCoinTarget = null;
+		_placeGoldBarTarget = null;
 		_placeHopper = null;
 		_placeDisplay = null;
 		_placeDisplaySlot = -1;

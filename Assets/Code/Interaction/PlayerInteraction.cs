@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class PlayerInteraction : MonoBehaviour
 {
@@ -17,6 +18,7 @@ public class PlayerInteraction : MonoBehaviour
 	LayerMask _resolvedMask;
 	IInteractable _current;
 	IInteractable _previousPrimaryFocus;
+	bool _beginContextSubscribed;
 	RaycastHit _lastHit;
 	bool _hasLastHit;
 	RaycastHit _surfaceHit;
@@ -48,6 +50,8 @@ public class PlayerInteraction : MonoBehaviour
 			return _interactRange;
 		}
 	}
+
+	public float PlacementAimRange => RuntimeDefinition.Get( Definition, d => d.placementAimRange, 6f );
 
 	public LayerMask InteractMask
 	{
@@ -372,6 +376,46 @@ public class PlayerInteraction : MonoBehaviour
 		_maskInitialized = false;
 		EnsureInteractMask();
 		EnsurePickableOutlineSettings();
+		SubscribeBeginContextRendering();
+	}
+
+	void OnEnable()
+	{
+		SubscribeBeginContextRendering();
+	}
+
+	void OnDisable()
+	{
+		UnsubscribeBeginContextRendering();
+		ClearPickableIndicator();
+	}
+
+	void SubscribeBeginContextRendering()
+	{
+		if ( _beginContextSubscribed )
+			return;
+		RenderPipelineManager.beginContextRendering += OnBeginContextRendering;
+		_beginContextSubscribed = true;
+	}
+
+	void UnsubscribeBeginContextRendering()
+	{
+		if ( !_beginContextSubscribed )
+			return;
+		RenderPipelineManager.beginContextRendering -= OnBeginContextRendering;
+		_beginContextSubscribed = false;
+	}
+
+	void OnBeginContextRendering( ScriptableRenderContext context, List<Camera> cameras )
+	{
+		if ( !_inputEnabled || _player == null || _cameraLook == null )
+			return;
+
+		PlayerSorterReposition sorter = _player.SorterReposition;
+		if ( sorter != null && sorter.IsCarrying )
+			return;
+
+		UpdatePickableIndicator();
 	}
 
 	void EnsurePickableOutlineSettings()
@@ -453,7 +497,9 @@ public class PlayerInteraction : MonoBehaviour
 		EnsureInteractMask();
 		Ray ray = new Ray( cam.position, _cameraLook.GetCameraForward() );
 		float interactRange = InteractRange;
-		float aimRayLength = Mathf.Max( interactRange + 8f, interactRange * 3f );
+		float placementAimRange = PlacementAimRange;
+		float maxRange = Mathf.Max( interactRange, placementAimRange );
+		float aimRayLength = Mathf.Max( maxRange + 8f, maxRange * 3f );
 		int hitCount = Physics.RaycastNonAlloc(
 			ray,
 			_rayHits,
@@ -494,16 +540,17 @@ public class PlayerInteraction : MonoBehaviour
 			if ( IsPlayerOwnedHit( hit.collider, playerRoot ) )
 				continue;
 
-			bool within3dRange = hit.distance <= interactRange + 0.001f;
+			bool withinPickRange = hit.distance <= interactRange + 0.001f;
+			bool withinPlacementRange = hit.distance <= placementAimRange + 0.001f;
 
-			if ( within3dRange && ( !hasNearest || hit.distance < nearestDist ) )
+			if ( withinPlacementRange && ( !hasNearest || hit.distance < nearestDist ) )
 			{
 				nearestDist = hit.distance;
 				nearestHit = hit;
 				hasNearest = true;
 			}
 
-			if ( within3dRange && PlacementFloorSurface.IsFloorCollider( hit.collider ) )
+			if ( withinPlacementRange && PlacementFloorSurface.IsFloorCollider( hit.collider ) )
 			{
 				if ( !hasSurface || hit.distance < surfaceDist )
 				{
@@ -520,7 +567,7 @@ public class PlayerInteraction : MonoBehaviour
 
 			interactable = PromoteStackedCoinToOwnerStack( interactable );
 
-			if ( !IsWithinFocusRange( interactable, hit, playerPos, interactRange, rangeSq ) )
+			if ( !withinPickRange || !IsWithinFocusRange( interactable, hit, playerPos, interactRange, rangeSq ) )
 				continue;
 
 			bool canInteract = interactable.CanInteract( _player );
@@ -687,7 +734,7 @@ public class PlayerInteraction : MonoBehaviour
 			return interactable;
 
 		CoinSortingStation station = collider.GetComponentInParent<CoinSortingStation>();
-		if ( station == null )
+		if ( station == null || !station.RepositionEnabled )
 			return interactable;
 
 		GroundCoinStack stack = interactable as GroundCoinStack;
@@ -968,26 +1015,27 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( _current == null )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetInstanceID() );
 			return;
 		}
 
 		IReadOnlyList<Renderer> renderers = HoverOutlineTargetUtility.CollectFromFocus( _current );
 		if ( renderers == null || renderers.Count == 0 )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetInstanceID() );
 			return;
 		}
 
 		HoverOutlineRegistrar.SetTarget(
 			HoverOutlineRegistrar.Owner.Pickable,
 			renderers,
-			_cachedPickableOutline );
+			_cachedPickableOutline,
+			GetInstanceID() );
 	}
 
 	void ClearPickableIndicator()
 	{
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetInstanceID() );
 	}
 
 	static GameInput GetGameInput()

@@ -28,6 +28,9 @@ public class CoinSortingStationMoveInteractable : InteractableBase
 		if ( !IsAvailable || player == null || station == null )
 			return false;
 
+		if ( !station.RepositionEnabled )
+			return false;
+
 		if ( station.IsRepositioning )
 			return false;
 

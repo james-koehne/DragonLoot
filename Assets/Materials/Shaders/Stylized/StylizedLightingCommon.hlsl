@@ -52,8 +52,9 @@ float DragonLootGlobalDirectLightScale()
 
 float DragonLootGlobalAmbientIntensity()
 {
-    float v = _DragonLoot_AmbientIntensity;
-    return v > 1e-4 ? v : 1.0;
+    if (DragonLootGlobalsUnset())
+        return 1.0;
+    return max(_DragonLoot_AmbientIntensity, 0.0);
 }
 
 float DragonLootGlobalSaturation()
@@ -316,11 +317,12 @@ half3 DragonLootShadeSurface(InputData inputData, DragonLootStylizedSurface s)
     MixRealtimeAndBakedGI(mainLight, s.normalWS, inputData.bakedGI);
 
     half3 ambientTint = half3(_DragonLoot_AmbientTint.rgb);
-    if (dot(ambientTint, ambientTint) < 1e-6h)
+    if (DragonLootGlobalsUnset() && dot(ambientTint, ambientTint) < 1e-6h)
         ambientTint = half3(1, 1, 1);
+    half ambientIntensity = half(DragonLootGlobalAmbientIntensity());
     half ambientFloor = _DragonLoot_AmbientFloor;
-    half3 ambient = inputData.bakedGI * ambientTint * half(DragonLootGlobalAmbientIntensity()) * s.occlusion;
-    ambient = max(ambient, s.albedo * ambientFloor);
+    half3 ambient = inputData.bakedGI * ambientTint * ambientIntensity * s.occlusion;
+    ambient = max(ambient, s.albedo * ambientTint * ambientIntensity * ambientFloor);
 #if defined(_SCREEN_SPACE_OCCLUSION)
     ambient *= aoFactor.indirectAmbientOcclusion;
 #endif
@@ -358,6 +360,39 @@ half3 DragonLootShadeSurface(InputData inputData, DragonLootStylizedSurface s)
     color += s.emission;
     color = DragonLootGrade(color);
     return color;
+}
+
+void DragonLootInitStylizedSurface(
+    InputData inputData,
+    SurfaceData surfaceData,
+    half receiveShadows,
+    out DragonLootStylizedSurface s)
+{
+    s = (DragonLootStylizedSurface)0;
+    s.albedo = surfaceData.albedo;
+    s.metallic = surfaceData.metallic;
+    s.smoothness = surfaceData.smoothness;
+    s.occlusion = surfaceData.occlusion;
+    s.emission = surfaceData.emission;
+    s.normalWS = inputData.normalWS;
+    s.viewDirWS = inputData.viewDirectionWS;
+    s.rimIntensityScale = 1.0h;
+    s.specularIntensityScale = 1.0h;
+    s.wrapOverride = -1.0h;
+    s.receiveShadows = receiveShadows;
+    s.reflections = 1.0h;
+}
+
+half4 DragonLootFragmentStylized(InputData inputData, SurfaceData surfaceData, half receiveShadows)
+{
+    DragonLootStylizedSurface s;
+    DragonLootInitStylizedSurface(inputData, surfaceData, receiveShadows, s);
+    return half4(DragonLootShadeSurface(inputData, s), surfaceData.alpha);
+}
+
+half4 DragonLootFragmentStylized(InputData inputData, SurfaceData surfaceData)
+{
+    return DragonLootFragmentStylized(inputData, surfaceData, 1.0h);
 }
 
 /// <summary>

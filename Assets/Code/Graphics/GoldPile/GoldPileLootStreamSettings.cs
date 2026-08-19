@@ -1,6 +1,16 @@
 using UnityEngine;
 
 /// <summary>
+/// How GPU coin seats pick XZ when <see cref="GoldPileLootStreamSettings.enforceCoinOverlap"/> is on.
+/// JitteredGrid is the cheap path; BridsonQuery keeps hash dart-throw look with an O(1) occupancy test.
+/// </summary>
+public enum CoinOverlapMode
+{
+	JitteredGrid = 0,
+	BridsonQuery = 1
+}
+
+/// <summary>
 /// Tunables for treasure-linked loot instance chunk streaming, LOD density, prop stream distances, and debug.
 /// </summary>
 [CreateAssetMenu( fileName = "GoldPileLootStreamSettings", menuName = "DragonLoot/Graphics/Gold Pile/Loot Stream Settings" )]
@@ -82,8 +92,11 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	[Min( 0.01f )]
 	public float coinPlacementMinSpacing = 0.18f;
 
-	[Tooltip( "When true, reject new coin seats that are too close to existing untaken seats." )]
+	[Tooltip( "When true, new coin seats use CoinSeatOccupancy so XZ spacing is enforced cheaply." )]
 	public bool enforceCoinOverlap = true;
+
+	[Tooltip( "JitteredGrid claims free occupancy cells (cheap). BridsonQuery keeps hash sampling with an O(1) 5x5 test." )]
+	public CoinOverlapMode coinOverlapMode = CoinOverlapMode.JitteredGrid;
 
 	[Header( "Coin Dig Modes (A/B)" )]
 	[Tooltip( "Mode A: place volume / shallow-embed seats that dig can reveal and release." )]
@@ -109,6 +122,14 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	[Tooltip( "Carve inventory units per spawn roll (rolls = floor(carveUnits / this))." )]
 	[Min( 0.01f )]
 	public float digPhysicalUnitsPerRoll = 1f;
+
+	[Tooltip( "Max new surface decor GPU seats spawned per dig TopUp pass (Mode B)." )]
+	[Range( 0, 48 )]
+	public int digDecorTopUpMax = 10;
+
+	[Tooltip( "Max surface decor coins re-snapped per dig stick pass (Mode B)." )]
+	[Range( 0, 48 )]
+	public int digStickMax = 16;
 
 	[Header( "Density (legacy — unused for coins; kept for asset compatibility)" )]
 	[Tooltip( "Legacy hash density. Coins use lodNInstancesPerChunk instead." )]

@@ -10,9 +10,14 @@ public class QuestTarget : MonoBehaviour
 	string id;
 
 	[SerializeField]
+	string areaId;
+
+	[SerializeField]
 	QuestMarkerAnchor markerAnchor;
 
 	public string Id => id;
+
+	public string AreaId => areaId;
 
 	public Transform MarkerTransform
 	{
@@ -22,6 +27,22 @@ public class QuestTarget : MonoBehaviour
 				return markerAnchor.MarkerTransform;
 			return transform;
 		}
+	}
+
+	/// <summary>
+	/// Host transform for quest outlines. Scene targets are often marker children with no meshes.
+	/// </summary>
+	public Transform ResolveOutlineRoot()
+	{
+		Transform self = transform;
+		if ( HoverOutlineTargetUtility.HasEnabledMeshRenderers( self.gameObject ) )
+			return self;
+
+		Transform parent = self.parent;
+		if ( parent != null )
+			return parent;
+
+		return self;
 	}
 
 	void Awake()
@@ -43,6 +64,13 @@ public class QuestTarget : MonoBehaviour
 	public void SetId( string value )
 	{
 		id = value;
+		if ( isActiveAndEnabled )
+			QuestTargetRegistry.Register( this );
+	}
+
+	public void SetAreaId( string value )
+	{
+		areaId = value;
 		if ( isActiveAndEnabled )
 			QuestTargetRegistry.Register( this );
 	}

@@ -169,7 +169,7 @@ public class CarryDefinition : ScriptableObject
 
 	[Tooltip( "Radius of the circular progress ring around the crosshair." )]
 	[Min( 8f )]
-	public float wholeStackProgressRingSize = 48f;
+	public float wholeStackProgressRingSize = 96f;
 
 	[Tooltip( "How quickly absorbed items ease into the left-hand stack base." )]
 	[Min( 0.05f )]

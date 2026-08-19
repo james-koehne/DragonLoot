@@ -33,6 +33,8 @@ public class WorldTreasurePersistence : MonoBehaviour
 	{
 		if ( _instance != null )
 			return;
+		if ( !Application.isPlaying )
+			return;
 
 		GameObject go = new GameObject( "WorldTreasurePersistence" );
 		_instance = go.AddComponent<WorldTreasurePersistence>();
@@ -43,8 +45,13 @@ public class WorldTreasurePersistence : MonoBehaviour
 	{
 		if ( item == null )
 			return;
+		if ( !Application.isPlaying )
+			return;
 
 		EnsureExists();
+		if ( _instance == null )
+			return;
+
 		_instance._tracked.Add( item );
 	}
 

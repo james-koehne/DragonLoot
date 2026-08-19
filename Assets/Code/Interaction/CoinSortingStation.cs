@@ -79,6 +79,15 @@ public class CoinSortingStation : MonoBehaviour
 
 	public bool IsRepositioning => _isRepositioning;
 
+	public bool RepositionEnabled
+	{
+		get
+		{
+			CoinSortingStationDefinition def = ResolveDefinition();
+			return def != null && def.repositionEnabled;
+		}
+	}
+
 	public CoinSortingStationDefinition Definition => ResolveDefinition();
 
 	public Rigidbody Body => EnsureBody();
@@ -291,6 +300,9 @@ public class CoinSortingStation : MonoBehaviour
 
 	public void BeginRepositioning()
 	{
+		if ( !RepositionEnabled )
+			return;
+
 		_isRepositioning = true;
 		EnsureBody();
 	}

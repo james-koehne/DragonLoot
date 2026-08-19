@@ -18,6 +18,10 @@ Shader "DragonLoot/Artifact"
         [Header(Reflection)]
         _ReflectionFloor("Reflection Floor", Range(0, 0.5)) = 0.08
 
+        [Header(Emission)]
+        [HDR] _EmissionColor("Emission Color", Color) = (0, 0, 0, 1)
+        _EmissionMap("Emission Map", 2D) = "white" {}
+
         [Header(Fresnel)]
         [HDR] _FresnelColor("Fresnel Color", Color) = (1, 0.9, 0.7, 1)
         _FresnelIntensity("Fresnel Intensity", Range(0, 2)) = 0.25

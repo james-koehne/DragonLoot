@@ -19,7 +19,7 @@ MonoBehaviour:
   - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     count: 100
   - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    count: 500
+    count: 250
   treasureContents:
   - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
     count: 6
@@ -34,7 +34,8 @@ MonoBehaviour:
   heightResolution: 32
   worldSize: 4
   maxHeight: 2
-  groundLevelHeight: 0.01
+  groundLevelHeight: 0.1
+  lootGroundLevelHeight: 0.6
   meshResolution: 32
   meshDeformNormalSoften: 0
   meshDeformSampleBlur: 0
@@ -50,10 +51,11 @@ MonoBehaviour:
   coinPullToCarveCount: 2
   treasureRadialPower: 1.1
   treasureHeightBias: 0.4
-  treasurePickupOutsideFraction: 0.4
+  treasureXZSpread: 1
+  treasurePickupOutsideFraction: 0.3
   treasureReleaseOutsideFraction: 0.9
+  latentSurfaceNeighborhoodCells: 1
   preferBakedLatents: 1
-  latentBake: {fileID: 11400000, guid: 6449a208ea6f2c54fbba683c0c65ad6d, type: 2}
   latentVolumeMaxAttempts: 24
   latentRetryNoOccupancyPasses: 1
   latentRetrySaltPasses: 0

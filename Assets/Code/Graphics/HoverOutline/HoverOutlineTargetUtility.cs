@@ -38,6 +38,10 @@ public static class HoverOutlineTargetUtility
 		if ( move != null )
 			return move.CanInteract( player );
 
+		DoorInteractable door = interactable as DoorInteractable;
+		if ( door != null )
+			return door.CanOutlineFocus( player );
+
 		return false;
 	}
 
@@ -151,6 +155,10 @@ public static class HoverOutlineTargetUtility
 			return CollectFromBehaviour( move );
 		}
 
+		DoorInteractable door = focus as DoorInteractable;
+		if ( door != null )
+			return CollectFromBehaviour( door );
+
 		return Buffer;
 	}
 
@@ -199,6 +207,69 @@ public static class HoverOutlineTargetUtility
 
 		AppendRenderers( component.gameObject );
 		return Buffer;
+	}
+
+	public static bool HasEnabledMeshRenderers( GameObject root )
+	{
+		if ( root == null )
+			return false;
+
+		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < renderers.Length; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null || !renderer.enabled )
+				continue;
+
+			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+				continue;
+
+			if ( renderer.sharedMaterial == null )
+				continue;
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Quest outlines: gold piles contribute only the deformed terrain mesh, not seated treasure.
+	/// </summary>
+	public static void AppendQuestOutlineRenderers( GameObject root, List<Renderer> destination )
+	{
+		if ( root == null || destination == null )
+			return;
+
+		GoldPileTerrainMesh terrain = ResolvePileTerrain( root );
+		if ( terrain != null )
+		{
+			Renderer pileRenderer = terrain.PileRenderer;
+			if ( pileRenderer != null && pileRenderer.enabled && pileRenderer.sharedMaterial != null )
+				destination.Add( pileRenderer );
+			return;
+		}
+
+		AppendEnabledMeshRenderers( root, destination );
+	}
+
+	static GoldPileTerrainMesh ResolvePileTerrain( GameObject root )
+	{
+		if ( root == null )
+			return null;
+
+		TreasurePileVisual pile = root.GetComponent<TreasurePileVisual>();
+		if ( pile != null )
+		{
+			if ( pile.TerrainMesh != null )
+				return pile.TerrainMesh;
+
+			GoldPileTerrainMesh onPile = pile.GetComponent<GoldPileTerrainMesh>();
+			if ( onPile != null )
+				return onPile;
+		}
+
+		return root.GetComponent<GoldPileTerrainMesh>();
 	}
 
 	/// <summary>

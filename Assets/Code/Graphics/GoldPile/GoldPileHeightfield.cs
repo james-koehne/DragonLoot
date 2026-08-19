@@ -93,12 +93,15 @@ public sealed class GoldPileHeightfield
 	float _worldSize;
 	float _maxHeight;
 	float _groundLevel = 0.01f;
+	float _lootGroundLevel = 0.6f;
 	float _initialVolume;
 
 	public int Resolution => _resolution;
 	public float WorldSize => _worldSize;
 	public float MaxHeight => _maxHeight;
 	public float GroundLevel => _groundLevel;
+	/// <summary>Seat floor for coins / treasure. Never below the mesh cutoff.</summary>
+	public float LootGroundLevel => Mathf.Max( _groundLevel, _lootGroundLevel );
 	public Texture2D Texture => _texture;
 	public bool IsDirty => _dirty;
 	public bool IsInitialized => _heights != null && _texture != null;
@@ -115,6 +118,7 @@ public sealed class GoldPileHeightfield
 			h = ( h ^ ( uint )FloatToBits( _worldSize ) ) * 16777619u;
 			h = ( h ^ ( uint )FloatToBits( _maxHeight ) ) * 16777619u;
 			h = ( h ^ ( uint )FloatToBits( _groundLevel ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatToBits( LootGroundLevel ) ) * 16777619u;
 			if ( _heights == null )
 				return ( int )h;
 
@@ -133,15 +137,21 @@ public sealed class GoldPileHeightfield
 
 	public void Initialize( int res, float size, float height )
 	{
-		Initialize( res, size, height, groundLevel: 0.01f );
+		Initialize( res, size, height, groundLevel: 0.01f, lootGroundLevel: 0.6f );
 	}
 
 	public void Initialize( int res, float size, float height, float groundLevel )
+	{
+		Initialize( res, size, height, groundLevel, lootGroundLevel: groundLevel );
+	}
+
+	public void Initialize( int res, float size, float height, float groundLevel, float lootGroundLevel )
 	{
 		_resolution = Mathf.Max( 8, res );
 		_worldSize = Mathf.Max( 0.1f, size );
 		_maxHeight = Mathf.Max( 0.01f, height );
 		_groundLevel = Mathf.Max( 0f, groundLevel );
+		_lootGroundLevel = Mathf.Max( 0f, lootGroundLevel );
 
 		int count = _resolution * _resolution;
 		_heights = new float[ count ];
@@ -180,6 +190,11 @@ public sealed class GoldPileHeightfield
 		_groundLevel = next;
 		if ( _heights != null )
 			MarkDirtyFull();
+	}
+
+	public void SetLootGroundLevel( float lootGroundLevel )
+	{
+		_lootGroundLevel = Mathf.Max( 0f, lootGroundLevel );
 	}
 
 	/// <summary>True when the heightfield surface at this local XZ is at or above ground level.</summary>

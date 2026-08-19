@@ -602,6 +602,28 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		return into.Count > 0;
 	}
 
+	public bool BucketHasMatching( CarryBucketKind kind, System.Predicate<TreasureDefinition> match )
+	{
+		if ( match == null )
+			return false;
+
+		CategoryBucket bucket = GetBucket( kind );
+		if ( bucket.Count == 0 )
+			return false;
+
+		if ( bucket.HasActive && bucket.Active.Definition != null && match( bucket.Active.Definition ) )
+			return true;
+
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+		{
+			TreasureDefinition def = bucket.Held[ i ].Definition;
+			if ( def != null && match( def ) )
+				return true;
+		}
+
+		return false;
+	}
+
 	/// <summary>True when every entry shares the same <see cref="TreasureDefinition"/> reference.</summary>
 	public static bool AreCoinDefinitionsUniform(
 		IReadOnlyList<TreasureDefinition> definitions,
@@ -2027,6 +2049,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( item != null )
 			item.BeginFlight();
 
+		if ( playPickupFeedback && item != null )
+			TreasureInteractSfx.PlayPickup( item );
+
 		Coroutine routine = StartCoroutine( HoldTweenRoutine( item, token, durationOverride, playPickupFeedback ) );
 		_holdTweens[ token ] = routine;
 	}
@@ -2220,10 +2245,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( bucket.Kind == CarryBucketKind.Coin && !isActive )
 		{
 			if ( playPickupFeedback )
-			{
 				CoinGemInteractFeedback.PlayPickup( item );
-				TreasureInteractSfx.PlayPickup( item );
-			}
 
 			TreasureItemFactory.Despawn( item );
 			if ( heldIndex >= 0 && heldIndex < bucket.Held.Count )
@@ -2243,7 +2265,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		{
 			SetPoseSettled( bucket, isActive, heldIndex, settled: true );
 			CoinGemInteractFeedback.PlayPickup( item );
-			TreasureInteractSfx.PlayPickup( item );
 		}
 	}
 

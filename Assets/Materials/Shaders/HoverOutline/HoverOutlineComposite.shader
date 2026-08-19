@@ -3,11 +3,8 @@ Shader "DragonLoot/Hover Outline Composite"
 	Properties
 	{
 		[HDR] _OutlineColor ("Outline Color", Color) = (1, 0.85, 0.35, 1)
-		[HDR] _QuestOutlineColor ("Quest Outline Color", Color) = (0.2, 0.95, 1, 1)
 		_OutlineIntensity ("Outline Intensity", Range(0, 2)) = 1
-		_QuestOutlineIntensity ("Quest Outline Intensity", Range(0, 2)) = 1.1
 		_HdrBoost ("HDR Boost", Range(0, 8)) = 1.35
-		_QuestHdrBoost ("Quest HDR Boost", Range(0, 8)) = 1.6
 		_Scale ("Scale (pixels)", Range(1, 8)) = 3
 		_MaskDilatePixels ("Mask Dilate (pixels)", Range(0, 8)) = 2
 		_DepthThreshold ("Depth Threshold", Range(0, 10)) = 1.5
@@ -17,8 +14,6 @@ Shader "DragonLoot/Hover Outline Composite"
 		_NormalEdgeWeight ("Normal Edge Weight", Range(0, 1)) = 1
 		_PulseSpeed ("Pulse Speed", Float) = 1.1
 		_PulseAmount ("Pulse Amount", Range(0, 1)) = 0.1
-		_QuestPulseSpeed ("Quest Pulse Speed", Float) = 1.35
-		_QuestPulseAmount ("Quest Pulse Amount", Range(0, 1)) = 0.14
 	}
 
 	SubShader
@@ -47,15 +42,9 @@ Shader "DragonLoot/Hover Outline Composite"
 			SAMPLER(sampler_HoverOutlineMask);
 			float4 _HoverOutlineMask_TexelSize;
 
-			TEXTURE2D(_QuestOutlineMask);
-			SAMPLER(sampler_QuestOutlineMask);
-
 			float4 _OutlineColor;
-			float4 _QuestOutlineColor;
 			float _OutlineIntensity;
-			float _QuestOutlineIntensity;
 			float _HdrBoost;
-			float _QuestHdrBoost;
 			float _Scale;
 			float _MaskDilatePixels;
 			float _DepthThreshold;
@@ -65,8 +54,6 @@ Shader "DragonLoot/Hover Outline Composite"
 			float _NormalEdgeWeight;
 			float _PulseSpeed;
 			float _PulseAmount;
-			float _QuestPulseSpeed;
-			float _QuestPulseAmount;
 			float4x4 _ClipToView;
 
 			struct Attributes
@@ -91,12 +78,17 @@ Shader "DragonLoot/Hover Outline Composite"
 				return output;
 			}
 
-			float SampleRaw(Texture2D tex, SamplerState samp, float2 uv)
+			float GetPulseAlpha()
 			{
-				return SAMPLE_TEXTURE2D(tex, samp, uv).r;
+				return 1.0 + sin(_Time.y * _PulseSpeed * 6.2831853) * _PulseAmount;
 			}
 
-			float SampleNeighborhood(Texture2D tex, SamplerState samp, float2 uv, float scalePixels, bool dilate)
+			float SampleRawMask(float2 uv)
+			{
+				return SAMPLE_TEXTURE2D(_HoverOutlineMask, sampler_HoverOutlineMask, uv).r;
+			}
+
+			float SampleNeighborhoodMask(float2 uv, float scalePixels, bool dilate)
 			{
 				int radius = (int)round(max(scalePixels, 0.0));
 				float2 texel = _HoverOutlineMask_TexelSize.xy;
@@ -105,14 +97,15 @@ Shader "DragonLoot/Hover Outline Composite"
 				{
 					for (int x = -radius; x <= radius; x++)
 					{
-						float sample = SampleRaw(tex, samp, uv + float2(x, y) * texel);
+						float sample = SampleRawMask(uv + float2(x, y) * texel);
 						mask = dilate ? max(mask, sample) : min(mask, sample);
 					}
 				}
 				return mask;
 			}
 
-			float ComputeMaskSilhouette(Texture2D tex, SamplerState samp, float2 uv, float widthPixels)
+			// Silhouette from the object mask itself — works on smooth cylinders where depth/normal edges fail.
+			float ComputeMaskSilhouette(float2 uv, float widthPixels)
 			{
 				float scale = max(widthPixels, 1.0);
 				float2 texelSize = _HoverOutlineMask_TexelSize.xy;
@@ -124,10 +117,10 @@ Shader "DragonLoot/Hover Outline Composite"
 				float2 bottomRightUV = uv + float2(texelSize.x * halfScaleCeil, -texelSize.y * halfScaleFloor);
 				float2 topLeftUV = uv + float2(-texelSize.x * halfScaleFloor, texelSize.y * halfScaleCeil);
 
-				float m0 = SampleRaw(tex, samp, bottomLeftUV);
-				float m1 = SampleRaw(tex, samp, topRightUV);
-				float m2 = SampleRaw(tex, samp, bottomRightUV);
-				float m3 = SampleRaw(tex, samp, topLeftUV);
+				float m0 = SampleRawMask(bottomLeftUV);
+				float m1 = SampleRawMask(topRightUV);
+				float m2 = SampleRawMask(bottomRightUV);
+				float m3 = SampleRawMask(topLeftUV);
 
 				float d0 = m1 - m0;
 				float d1 = m3 - m2;
@@ -180,31 +173,18 @@ Shader "DragonLoot/Hover Outline Composite"
 			half4 Frag(Varyings input) : SV_Target
 			{
 				float dilate = max(_MaskDilatePixels, _Scale);
-				float hoverMask = SampleNeighborhood(_HoverOutlineMask, sampler_HoverOutlineMask, input.uv, dilate, true);
-				float questMask = SampleNeighborhood(_QuestOutlineMask, sampler_QuestOutlineMask, input.uv, dilate, true);
-				if (max(hoverMask, questMask) <= 0.001)
+				float mask = SampleNeighborhoodMask(input.uv, dilate, true);
+				if (mask <= 0.001)
 					discard;
 
+				float maskSilhouette = ComputeMaskSilhouette(input.uv, _Scale);
 				float sceneEdge = ComputeRoyStanEdge(input.uv, input.viewSpaceDir);
-				float hoverEdge = max(
-					ComputeMaskSilhouette(_HoverOutlineMask, sampler_HoverOutlineMask, input.uv, _Scale),
-					hoverMask > 0.001 ? sceneEdge : 0.0);
-				float questEdge = max(
-					ComputeMaskSilhouette(_QuestOutlineMask, sampler_QuestOutlineMask, input.uv, _Scale),
-					(questMask > 0.001 && hoverMask <= 0.001) ? sceneEdge : 0.0);
-				float edge = max(hoverEdge, questEdge);
+				float edge = max(maskSilhouette, sceneEdge);
 				clip(edge - 0.5);
 
-				bool useHover = hoverEdge > 0.5;
-				float pulseSpeed = useHover ? _PulseSpeed : _QuestPulseSpeed;
-				float pulseAmount = useHover ? _PulseAmount : _QuestPulseAmount;
-				float pulse = 1.0 + sin(_Time.y * pulseSpeed * 6.2831853) * pulseAmount;
-
-				float4 color = useHover ? _OutlineColor : _QuestOutlineColor;
-				float intensity = useHover ? _OutlineIntensity : _QuestOutlineIntensity;
-				float hdr = useHover ? _HdrBoost : _QuestHdrBoost;
-				float alpha = saturate(color.a * intensity * pulse);
-				float3 rgb = color.rgb * hdr * pulse;
+				float pulse = GetPulseAlpha();
+				float alpha = saturate(_OutlineColor.a * _OutlineIntensity * pulse);
+				float3 rgb = _OutlineColor.rgb * _HdrBoost * pulse;
 				return half4(rgb, alpha);
 			}
 			ENDHLSL

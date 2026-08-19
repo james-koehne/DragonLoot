@@ -46,7 +46,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _BandContrast: 1.1
-    - _BumpScale: 1
+    - _BumpScale: 0.1
     - _CapNormalThreshold: 0.55
     - _CoinCount: 1
     - _CoinEdgeBevelStrength: 0.45
@@ -64,7 +64,7 @@ Material:
     - _MeshBoundsMinY: -0.05
     - _MeshBoundsSizeY: 0.1
     - _Metallic: 0.92
-    - _ReflectionFloor: 0.12
+    - _ReflectionFloor: 0.25
     - _RidgeAlbedoBoost: 0.02
     - _RidgeSmoothnessScale: 1
     - _RidgeSoftness: 0.02

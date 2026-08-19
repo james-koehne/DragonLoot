@@ -8,7 +8,7 @@ public class CrosshairUI : MonoBehaviour
 	public Color focusedColor = new Color( 1f, 0.85f, 0.2f, 1f );
 
 	[Header( "Layout" )]
-	public float size = 4f;
+	public float size = 8f;
 
 	Image _image;
 	bool _visible;

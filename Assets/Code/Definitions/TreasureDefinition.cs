@@ -29,6 +29,12 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "When true, uses heavyThrowForce instead of throwForce." )]
 	public bool usesHeavyThrow = false;
 
+	[Tooltip( "When true, this treasure cannot be thrown into empty space. Place it on a valid surface instead." )]
+	public bool cannotThrow = false;
+
+	[Tooltip( "When true, this treasure can only be placed on walkable ground or in an artifact presentation slot. Also prevents throwing." )]
+	public bool placeOnGroundOrArtifactSlotOnly = false;
+
 	[Tooltip( "Multiplier on global throw force for this treasure." )]
 	[Min( 0f )]
 	public float throwForceScale = 1f;
@@ -114,6 +120,9 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "If false, this treasure cannot be stacked onto other loose treasure, coin stacks, or mixed table slots. Gems never floor-stack regardless." )]
 	public bool canStack = true;
 
+	[Tooltip( "When true, floor and gold-bar tables form interleaved pair stacks (two side by side, next pair on top rotated 90). Do not use generic canStack." )]
+	public bool usesInterleavedBarStack;
+
 	[Tooltip( "World-space height each stacked item adds (ground, tables, world coin stacks). Held stacks scale this by heldScale.y / worldScale.y. 0 uses a category fallback." )]
 	[Min( 0f )]
 	public float coinThickness = 0.04f;
@@ -151,6 +160,32 @@ public class TreasureDefinition : ScriptableObject
 
 	[Range( -3f, 3f )]
 	public float placePitchMax = 1f;
+
+	/// <summary>
+	/// False when this treasure cannot be thrown (explicit flag or ground/slot-only placement).
+	/// </summary>
+	public bool GetCanThrow()
+	{
+		return !cannotThrow && !placeOnGroundOrArtifactSlotOnly;
+	}
+
+	/// <summary>
+	/// False when <see cref="placeOnGroundOrArtifactSlotOnly"/> is set and
+	/// <paramref name="target"/> is not walkable ground or an artifact presentation slot.
+	/// </summary>
+	public bool AllowsPlacementTarget( ITreasurePlacementTarget target )
+	{
+		if ( !placeOnGroundOrArtifactSlotOnly )
+			return true;
+
+		if ( target is FloorPlacementTarget )
+			return true;
+
+		if ( target is ArtifactPresentationTableInteractable )
+			return true;
+
+		return false;
+	}
 
 	public float GetStackThickness()
 	{

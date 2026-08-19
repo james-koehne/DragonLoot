@@ -17,6 +17,7 @@ public static class DisplayTablePrefabBuilder
 	const string MixedPrefabPath = TablesFolder + "/MixedDisplayTable.prefab";
 	const string ConstellationPrefabPath = TablesFolder + "/GemConstellation.prefab";
 	const string ArtifactPresentationPrefabPath = TablesFolder + "/ArtifactPresentationTable.prefab";
+	const string GoldBarPrefabPath = TablesFolder + "/GoldBarDisplayTable.prefab";
 	const string TableMeshPrefab = "Assets/ThirdParty/CobraGamesAssets/Stylized_Dungeon_Props_Pack/Prefabs/Furniture/Table_Small.prefab";
 	const string ConstellationShaderFolder = "Assets/Materials/Shaders/Constellation";
 	const string ConstellationLineMaterialPath = ConstellationShaderFolder + "/M_ConstellationLine.mat";
@@ -44,7 +45,7 @@ public static class DisplayTablePrefabBuilder
 		{
 			EnsureConstellationLineMaterialAssigned();
 
-			if ( File.Exists( GemPrefabPath ) && File.Exists( CoinPrefabPath ) && File.Exists( MixedPrefabPath ) && File.Exists( ConstellationPrefabPath ) && File.Exists( ArtifactPresentationPrefabPath ) )
+			if ( File.Exists( GemPrefabPath ) && File.Exists( CoinPrefabPath ) && File.Exists( MixedPrefabPath ) && File.Exists( ConstellationPrefabPath ) && File.Exists( ArtifactPresentationPrefabPath ) && File.Exists( GoldBarPrefabPath ) )
 				return;
 
 			BuildAll( force: false );
@@ -110,11 +111,15 @@ public static class DisplayTablePrefabBuilder
 		if ( force || !File.Exists( ArtifactPresentationPrefabPath ) )
 			BuildArtifactPresentationPrefab( ArtifactPresentationPrefabPath );
 
+		if ( force || !File.Exists( GoldBarPrefabPath ) )
+			BuildTablePrefab( GoldBarPrefabPath, "GoldBarDisplayTable", typeof( GoldBarDisplayTableInteractable ), LayoutKind.GoldBar );
+
 		RegisterAddressable( GemPrefabPath, "Tables/GemDisplayTable" );
 		RegisterAddressable( CoinPrefabPath, "Tables/CoinDisplayTable" );
 		RegisterAddressable( MixedPrefabPath, "Tables/MixedDisplayTable" );
 		RegisterAddressable( ConstellationPrefabPath, "Tables/GemConstellation" );
 		RegisterAddressable( ArtifactPresentationPrefabPath, "Tables/ArtifactPresentationTable" );
+		RegisterAddressable( GoldBarPrefabPath, "Tables/GoldBarDisplayTable" );
 
 		AssetDatabase.SaveAssets();
 		AssetDatabase.Refresh();
@@ -125,7 +130,8 @@ public static class DisplayTablePrefabBuilder
 	{
 		Gem,
 		Coin,
-		Mixed
+		Mixed,
+		GoldBar
 	}
 
 	static void BuildTablePrefab( string path, string rootName, System.Type interactableType, LayoutKind layout )
@@ -169,6 +175,14 @@ public static class DisplayTablePrefabBuilder
 					columnsProp.intValue = 6;
 				if ( spacingProp != null )
 					spacingProp.floatValue = 0.12f;
+				break;
+			case LayoutKind.GoldBar:
+				if ( rowsProp != null )
+					rowsProp.intValue = 2;
+				if ( columnsProp != null )
+					columnsProp.intValue = 3;
+				if ( spacingProp != null )
+					spacingProp.floatValue = 0.45f;
 				break;
 			default:
 				if ( rowsProp != null )

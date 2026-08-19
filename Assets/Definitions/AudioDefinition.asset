@@ -19,7 +19,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 46a0a4232c8edb24c854c5d0ffe62486, type: 3}
   - {fileID: 8300000, guid: 2f18e82f12f075247aa3a91b6cd183ad, type: 3}
   - {fileID: 8300000, guid: b3ddbd6c0b375da41abf02ac13886d84, type: 3}
-  musicVolume: 0.4
+  musicVolume: 0.2
   musicPlaysPerTrack: 3
   musicCrossfadeSeconds: 3
   ambienceTracks:

@@ -220,16 +220,16 @@ public class TreasureCounterHUD : MonoBehaviour
 		_panel.anchorMin = new Vector2( 0f, 1f );
 		_panel.anchorMax = new Vector2( 0f, 1f );
 		_panel.pivot = new Vector2( 0f, 1f );
-		_panel.anchoredPosition = new Vector2( 6f, -8f );
-		_panel.sizeDelta = new Vector2( 148f, 64f );
+		_panel.anchoredPosition = new Vector2( 12f, -16f );
+		_panel.sizeDelta = new Vector2( 296f, 128f );
 
 		Image panelBg = panelGo.GetComponent<Image>();
 		panelBg.color = new Color( 0f, 0f, 0f, 0.28f );
 		panelBg.raycastTarget = false;
 
 		VerticalLayoutGroup layout = panelGo.GetComponent<VerticalLayoutGroup>();
-		layout.padding = new RectOffset( 4, 4, 4, 4 );
-		layout.spacing = 2f;
+		layout.padding = new RectOffset( 8, 8, 8, 8 );
+		layout.spacing = 4f;
 		layout.childAlignment = TextAnchor.UpperLeft;
 		layout.childControlHeight = false;
 		layout.childControlWidth = true;
@@ -240,16 +240,16 @@ public class TreasureCounterHUD : MonoBehaviour
 		fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 		fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-		_sectionTitle = CreateHeaderText( "SectionTitle", 11, FontStyle.Bold );
-		_sectionProgress = CreateHeaderText( "SectionProgress", 9, FontStyle.Normal );
-		_sectionPercent = CreateHeaderText( "SectionPercent", 9, FontStyle.Normal );
+		_sectionTitle = CreateHeaderText( "SectionTitle", 22, FontStyle.Bold );
+		_sectionProgress = CreateHeaderText( "SectionProgress", 18, FontStyle.Normal );
+		_sectionPercent = CreateHeaderText( "SectionPercent", 18, FontStyle.Normal );
 
 		GameObject rowRootGo = new GameObject( "Rows", typeof( RectTransform ), typeof( VerticalLayoutGroup ), typeof( ContentSizeFitter ) );
 		rowRootGo.transform.SetParent( _panel, false );
 		_rowRoot = rowRootGo.GetComponent<RectTransform>();
 
 		VerticalLayoutGroup rowLayout = rowRootGo.GetComponent<VerticalLayoutGroup>();
-		rowLayout.spacing = 2f;
+		rowLayout.spacing = 4f;
 		rowLayout.childAlignment = TextAnchor.UpperLeft;
 		rowLayout.childControlHeight = false;
 		rowLayout.childControlWidth = true;

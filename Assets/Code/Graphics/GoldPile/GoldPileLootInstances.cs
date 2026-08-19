@@ -19,9 +19,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	const float BindSlotWorkBudgetMs = 12f;
 	/// <summary>Hard cap on placement attempts per frame so one pile cannot monopolize a frame.</summary>
 	const int BindSlotsMaxAttemptsPerFrame = 4096;
-	/// <summary>Near-surface top-up spawns per frame during play-mode bind seed.</summary>
-	const int BindSeedSpawnsPerFrame = 128;
+	/// <summary>Near-surface top-up spawns per play-mode seed slice (time budget usually stops first).</summary>
+	const int BindSeedSpawnsPerFrame = 512;
 	const int BindSeedMaxPasses = 64;
+	/// <summary>0 = any pile column above <see cref="GoldPileHeightfield.LootGroundLevel"/>.</summary>
+	const float CoinMinSurfaceHeightFraction = 0f;
+	/// <summary>Full heightfield footprint; empty / below-mesh cells are rejected per-column.</summary>
+	const float CoinPlacementRadiusFraction = 1f;
 
 	struct Slot
 	{
@@ -43,6 +47,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		public int ChunkX;
 		public int ChunkZ;
 		public int MatrixIndex;
+		/// <summary>Index in chunk stream matrices when last built; -1 if unknown/stale.</summary>
+		public int StreamRankInChunk;
 	}
 
 	struct BatchGroup
@@ -111,6 +117,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	public int LastSubmittedSilver { get; private set; }
 	public int LastSubmittedCopper { get; private set; }
 	public int LastSubmittedOther { get; private set; }
+	public int CoinOccupancyCount => _coinOccupancy != null ? _coinOccupancy.Count : 0;
+	public CoinOverlapMode CoinOverlapModeResolved => ResolveCoinOverlapMode();
 	public string AuthoredMixLabel
 	{
 		get
@@ -203,6 +211,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	Transform _pileRoot;
 	TreasurePileDefinition _definition;
 	Slot[] _slots;
+	/// <summary>Live seat count. <see cref="_slots"/> may be longer (geometric growth capacity).</summary>
+	int _slotCount;
 	BatchGroup[] _batches;
 	List<int>[] _cellLists;
 	List<int>[] _drawnCellLists;
@@ -211,6 +221,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	Dictionary<TreasureDefinition, int> _batchKeyByDef;
 	int[] _visibleCountByEntry;
 	List<int> _eligibleScratch;
+	List<int> _streamRebuildDirtyScratch;
+	HashSet<int> _streamMatrixDirtyChunks;
+	List<int> _stickPatchScratch;
 	System.Comparison<int> _coverageComparison;
 	bool[] _cellUsedScratch;
 	bool _ready;
@@ -234,6 +247,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	List<int>[] _mixByEntryScratch;
 	int[] _mixQuotaScratch;
 	int[] _lod0MixQuotas;
+	int[] _defRankInChunkScratch;
+	int[] _entryRankRunningScratch;
 	int[][] _lodMixAssignedByChunk;
 	float _pickRadius = 0.45f;
 	float _buryDepth = 0.18f;
@@ -243,9 +258,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	float _placementMinSpacing = 0.35f;
 	bool _enforcePlacementSpacing = true;
 	float _placementJitter = 0.3f;
-	float _placementRadiusFraction = 0.88f;
 	float _placementScaleJitter = 0.1f;
-	float _coinSurfaceHeightFraction = 0.12f;
 	int _coinPullToCarveCount = 2;
 	float _treasureRadialPower = 1.25f;
 	float _treasureHeightBias = 0.75f;
@@ -264,6 +277,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	float _pendingDensifyRadius;
 	int _pendingDensifyCarveUnits = 1;
 	int _digPhysicalSerial;
+	CoinSeatOccupancy _coinOccupancy;
+	int _occupancySerial;
 	public int LastPhysicalSpawnCount { get; private set; }
 
 	public int TotalRemaining
@@ -337,9 +352,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_placementMinSpacing = Mathf.Max( 0.05f, definition.placementMinSpacing );
 		_enforcePlacementSpacing = definition.enforcePlacementSpacing;
 		_placementJitter = Mathf.Clamp( definition.placementJitter, 0f, 0.49f );
-		_placementRadiusFraction = Mathf.Clamp( definition.placementRadiusFraction, 0.4f, 1f );
 		_placementScaleJitter = Mathf.Clamp( definition.placementScaleJitter, 0f, 0.5f );
-		_coinSurfaceHeightFraction = Mathf.Clamp( definition.coinSurfaceHeightFraction, 0f, 0.5f );
 		_coinPullToCarveCount = Mathf.Max( 0, definition.coinPullToCarveCount );
 		_treasureRadialPower = Mathf.Clamp( definition.treasureRadialPower, 0.25f, 3f );
 		_treasureHeightBias = Mathf.Clamp( definition.treasureHeightBias, 0f, 3f );
@@ -349,6 +362,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_pendingDensify = false;
 
 		EnsureStreamSettings();
+		EnsureCoinOccupancy();
 
 
 		BuildRemaining( definition );
@@ -389,54 +403,75 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	/// <summary>
 	/// Promotes / spawns near-surface coin seats until the steady draw budget is filled.
 	/// Bind-time only — digs use a throttled TopUp pass instead.
-	/// Rebuilds after each TopUp and stops when Drawn does not increase.
+	/// Play mode slices on CPU budget; visibility is rebuilt once at the end (not every spawn batch).
 	/// </summary>
 	async Task SeedSteadyNearSurfaceCoinsAsync( int bindId )
 	{
 		if ( _definition == null || _heightfield == null || _slots == null )
 			return;
 
+		if ( CountRemainingCoinInventory() <= 0 )
+			return;
 
 		float topUpRadius = _heightfield.WorldSize * 0.55f;
 		bool timeSlice = Application.isPlaying;
-		int drawn = CountDrawnCoinSlots();
 		_steadyVisibleBudget = ComputeSteadyVisibleBudget();
+
+		int need = CountUnderfilledChunkSlotsNear( Vector3.zero, topUpRadius );
+		if ( need <= 0 )
+			return;
+
+		EnsureSlotCapacity( _slotCount + need );
+
+		System.Diagnostics.Stopwatch frameWorkSw = timeSlice
+			? System.Diagnostics.Stopwatch.StartNew()
+			: null;
+		bool seeded = false;
 
 		for ( int pass = 0; pass < BindSeedMaxPasses; pass++ )
 		{
 			if ( !IsBindTargetAlive( bindId ) )
 				return;
 
-			int need = CountUnderfilledChunkSlotsNear( Vector3.zero, topUpRadius );
+			need = CountUnderfilledChunkSlotsNear( Vector3.zero, topUpRadius );
 			if ( need <= 0 )
 				break;
 
+			int spawnCap = need;
+			if ( timeSlice )
+				spawnCap = Mathf.Min( need, BindSeedSpawnsPerFrame );
+
+			int start = _slotCount;
 			int spawned = TopUpShallowCoinSeatsNear(
 				Vector3.zero,
 				topUpRadius,
-				Mathf.Min( BindSeedSpawnsPerFrame, need ) );
-			if ( spawned <= 0 )
+				spawnCap,
+				bindSeed: true,
+				workSw: frameWorkSw,
+				budgetMs: timeSlice ? BindSlotWorkBudgetMs : 0f );
+			int marked = MarkAppendedSeatsDrawn( start, _slotCount );
+			if ( spawned <= 0 || marked <= 0 )
 				break;
 
-			// Required to know if TopUp actually increased Drawn (spawned != newly drawn).
-			RebuildVisibility();
+			seeded = true;
 
-			int after = CountDrawnCoinSlots();
-			if ( after <= drawn )
-			{
-				break;
-			}
+			bool overBudget = timeSlice
+				&& frameWorkSw != null
+				&& frameWorkSw.Elapsed.TotalMilliseconds >= BindSlotWorkBudgetMs;
+			if ( !overBudget )
+				continue;
 
-			drawn = after;
-
-			if ( timeSlice )
-			{
-				await Awaitable.NextFrameAsync();
-				if ( !IsBindTargetAlive( bindId ) )
-					return;
-			}
+			RebuildBatchMatrices();
+			MarkStreamDrawCacheDirty();
+			await Awaitable.NextFrameAsync();
+			if ( !IsBindTargetAlive( bindId ) )
+				return;
+			if ( frameWorkSw != null )
+				frameWorkSw.Restart();
 		}
 
+		if ( seeded )
+			RebuildVisibility();
 	}
 
 	bool IsBindTargetAlive( int bindId )
@@ -491,7 +526,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 		}
 
-		int slotCount = _slots != null ? _slots.Length : 0;
+		int slotCount = _slots != null ? _slotCount : 0;
 		System.Text.StringBuilder sb = new System.Text.StringBuilder( 256 );
 		sb.Append( "[GoldPileLootInstances] Initial spawn on '" ).Append( name ).Append( "': " );
 		sb.Append( drawn ).Append( " instanced meshes in draw pool / " );
@@ -578,49 +613,115 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		LastPhysicalSpawnCount = 0;
 		if ( streamSettings != null && streamSettings.spawnPhysicalCoinsOnDig )
+		{
+			System.Diagnostics.Stopwatch physSw = GoldPileEditTiming.StartWatchIfEnabled();
 			LastPhysicalSpawnCount = SpawnPhysicalCoinsForDig( worldCenter, carveUnits );
+			if ( physSw != null )
+			{
+				physSw.Stop();
+				GoldPileEditTiming.Record(
+					"densify.physicalSpawn",
+					physSw.Elapsed.TotalMilliseconds,
+					$"spawned={LastPhysicalSpawnCount}" );
+			}
+		}
 
 		// Coins/gems keep world pose; unsupported coins past release threshold pop to physics.
 		int released = 0;
 		if ( streamSettings == null || streamSettings.releaseEmbeddedSeatsOnDig )
 			released = QueueUnsupportedCoinReleasesNear( local, radius );
 
-		bool eligibilityChanged = released > 0 || LastPhysicalSpawnCount > 0;
-		bool patchedDrawn = false;
+		bool needFullRebuild = released > 0;
 		int scanned = 0;
 
-		ForEachSlotIndexNearLocal( local, radius, slotIndex =>
+		if ( UseSurfaceDecorSeats() )
 		{
-			Slot slot = _slots[ slotIndex ];
-			if ( slot.Taken )
-				return;
+			System.Diagnostics.Stopwatch stickSw = GoldPileEditTiming.StartWatchIfEnabled();
+			int stuck = StickSurfaceDecorCoinsNear( local, radius );
 
-			scanned++;
-			bool eligible = IsEligible( slot );
-			if ( slot.Drawn != eligible )
-				eligibilityChanged = true;
-		} );
+			if ( stickSw != null )
+			{
+				stickSw.Stop();
+				GoldPileEditTiming.Record(
+					"densify.stickDecor",
+					stickSw.Elapsed.TotalMilliseconds,
+					$"stuck={stuck}" );
+			}
 
-		if ( phaseSw != null )
+			System.Diagnostics.Stopwatch promoteSw = GoldPileEditTiming.StartWatchIfEnabled();
+			int promoted = HideOrPromoteSurfaceDecorNearDig( local, radius );
+			if ( promoteSw != null )
+			{
+				promoteSw.Stop();
+				GoldPileEditTiming.Record(
+					"densify.promoteDecor",
+					promoteSw.Elapsed.TotalMilliseconds,
+					$"promoted={promoted}" );
+			}
+		}
+		else
 		{
-			phaseSw.Stop();
-			GoldPileEditTiming.Record(
-				"densify.eligibility",
-				phaseSw.Elapsed.TotalMilliseconds,
-				$"near={scanned} queuedRelease={released} physical={LastPhysicalSpawnCount} slots={_slots.Length}" );
+			ForEachSlotIndexNearLocal( local, radius, slotIndex =>
+			{
+				Slot slot = _slots[ slotIndex ];
+				if ( slot.Taken )
+					return;
+
+				scanned++;
+				bool eligible = IsEligible( slot );
+				if ( slot.Drawn != eligible )
+					needFullRebuild = true;
+			} );
+
+			if ( phaseSw != null )
+			{
+				phaseSw.Stop();
+				GoldPileEditTiming.Record(
+					"densify.eligibility",
+					phaseSw.Elapsed.TotalMilliseconds,
+					$"near={scanned} queuedRelease={released} physical={LastPhysicalSpawnCount} slots={_slotCount}" );
+			}
 		}
 
-		if ( eligibilityChanged )
-			RebuildVisibility();
-		else if ( patchedDrawn )
-			_drawCacheDirty = true;
+		if ( UseSurfaceDecorSeats() && phaseSw != null )
+			phaseSw.Stop();
 
 		// Throttled refill so digs keep near-surface density without hitching the carve frame.
 		float topUpRadius = Mathf.Max( radius * 1.5f, _pickRadius * 4f );
 		Vector3 topUpLocal = local;
-		int topped = TopUpShallowCoinSeatsNear( topUpLocal, topUpRadius, maxSpawn: 48 );
-		if ( topped > 0 )
+		int topUpMax = streamSettings != null ? streamSettings.digDecorTopUpMax : 10;
+		System.Diagnostics.Stopwatch topUpSw = GoldPileEditTiming.StartWatchIfEnabled();
+		int topped = TopUpShallowCoinSeatsNear( topUpLocal, topUpRadius, maxSpawn: topUpMax );
+		if ( topUpSw != null )
+		{
+			topUpSw.Stop();
+			GoldPileEditTiming.Record(
+				"densify.topUp",
+				topUpSw.Elapsed.TotalMilliseconds,
+				$"spawned={topped} max={topUpMax}" );
+		}
+		if ( topped > 0 && !UseSurfaceDecorSeats() )
+			needFullRebuild = true;
+		else if ( topped > 0 )
+			MarkStreamDrawCacheDirty();
+
+		if ( needFullRebuild )
+		{
+			System.Diagnostics.Stopwatch rebuildSw = GoldPileEditTiming.StartWatchIfEnabled();
 			RebuildVisibility();
+			if ( rebuildSw != null )
+			{
+				rebuildSw.Stop();
+				GoldPileEditTiming.Record(
+					"densify.rebuildVisibilityCall",
+					rebuildSw.Elapsed.TotalMilliseconds,
+					$"topped={topped} released={released}" );
+			}
+		}
+		else if ( _streamMatrixDirtyChunks != null && _streamMatrixDirtyChunks.Count > 0 )
+		{
+			MarkStreamDrawCacheDirty();
+		}
 
 		GoldPileEditTiming.End();
 
@@ -640,7 +741,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int queued = 0;
 		const int maxQueue = 48;
 
-		for ( int i = 0; i < _slots.Length && queued < maxQueue; i++ )
+		for ( int i = 0; i < _slotCount && queued < maxQueue; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || slot.Definition == null )
@@ -711,7 +812,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	async Task ReleaseCoinSeatToWorldAsync( int slotIndex )
 	{
-		if ( !_ready || _slots == null || slotIndex < 0 || slotIndex >= _slots.Length || _pileRoot == null )
+		if ( !_ready || _slots == null || slotIndex < 0 || slotIndex >= _slotCount || _pileRoot == null )
 			return;
 
 		Slot slot = _slots[ slotIndex ];
@@ -944,7 +1045,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	public bool TryTakeSlot( int slotIndex, out TreasureDefinition definition )
 	{
 		definition = null;
-		if ( !_ready || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( !_ready || slotIndex < 0 || slotIndex >= _slotCount )
 			return false;
 
 		Slot slot = _slots[ slotIndex ];
@@ -961,8 +1062,12 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		slot.Taken = true;
 		_slots[ slotIndex ] = slot;
 		if ( wasDrawn )
+		{
 			UnmarkDrawn( slotIndex );
+			MarkStreamDrawCacheDirty();
+		}
 		RemoveFromCell( slotIndex );
+		ReleaseCoinSeat( slot.LocalPos );
 		definition = slot.Definition;
 		return true;
 	}
@@ -1120,8 +1225,12 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		slot.Taken = true;
 		_slots[ slotIndex ] = slot;
 		if ( wasDrawn )
+		{
 			UnmarkDrawn( slotIndex );
+			MarkStreamDrawCacheDirty();
+		}
 		RemoveFromCell( slotIndex );
+		ReleaseCoinSeat( slot.LocalPos );
 		return true;
 	}
 
@@ -1219,7 +1328,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( dst == null || _slots == null )
 			return;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( !slot.FixedVolumePose || slot.Taken )
@@ -1238,7 +1347,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( dst == null || _slots == null )
 			return;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( !slot.FixedVolumePose || slot.Taken )
@@ -1253,7 +1362,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return -1;
 
 		int fallback = -1;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || slot.Definition != definition )
@@ -1331,8 +1440,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 						slotIndex,
 						localPreferred,
 						Mathf.Max( _pickRadius * 3f, 1.25f ),
-						_placementRadiusFraction,
-						_coinSurfaceHeightFraction,
+						CoinPlacementRadiusFraction,
+						CoinMinSurfaceHeightFraction,
 						slot.Scale * 0.5f,
 						out Vector3 placeLocal,
 						out float surface ) )
@@ -1356,6 +1465,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 			_slots[ slotIndex ] = slot;
 			AssignCell( slotIndex );
+			OccupyCoinSeat( slotIndex, slot.LocalPos );
 		}
 
 		RebuildVisibility();
@@ -1408,7 +1518,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	void RollbackVisibleDeposit( TreasureDefinition definition, int slotIndex )
 	{
 		RollbackDepositIncrement( definition );
-		if ( slotIndex < 0 || _slots == null || slotIndex >= _slots.Length )
+		if ( slotIndex < 0 || _slots == null || slotIndex >= _slotCount )
 			return;
 
 		_pickPrioritySlots.Remove( slotIndex );
@@ -1417,12 +1527,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		slot.Drawn = false;
 		_slots[ slotIndex ] = slot;
 		RemoveFromCell( slotIndex );
+		ReleaseCoinSeat( slot.LocalPos );
 		RebuildVisibility();
 	}
 
 	void EnsureDepositedSlotVisible( int slotIndex )
 	{
-		if ( !_ready || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( !_ready || slotIndex < 0 || slotIndex >= _slotCount )
 			return;
 
 		Slot slot = _slots[ slotIndex ];
@@ -1468,7 +1579,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int n = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			if ( !_slots[ i ].Taken && _slots[ i ].Drawn && _slots[ i ].Definition == definition )
 				n++;
@@ -1485,7 +1596,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		Vector3 local = _pileRoot.InverseTransformPoint( worldPos );
 		int best = -1;
 		float bestDist = float.MaxValue;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( !slot.Taken || slot.Definition != definition )
@@ -1562,7 +1673,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	void AddToCell( int slotIndex )
 	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length || _cellLists == null )
+		if ( _slots == null || slotIndex < 0 || slotIndex >= _slotCount || _cellLists == null )
 			return;
 
 		Slot slot = _slots[ slotIndex ];
@@ -1591,23 +1702,63 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			streamSettings.PushCoinDitherGlobals();
 
 		GoldPileEditTiming.Begin( "GoldPile.RefreshStreamState" );
+		System.Diagnostics.Stopwatch streamSw = GoldPileEditTiming.StartWatchIfEnabled();
 		bool streamChanged = RefreshStreamState();
 		bool settingsChanged = StreamFilterSettingsChanged();
 		if ( settingsChanged )
 			_drawCacheFullRebuild = true;
 		if ( streamChanged || settingsChanged )
 			_drawCacheDirty = true;
+		if ( streamSw != null )
+		{
+			streamSw.Stop();
+			GoldPileEditTiming.Record(
+				"stream.refreshState",
+				streamSw.Elapsed.TotalMilliseconds,
+				$"changed={streamChanged} settings={settingsChanged} dirty={_drawCacheDirty}" );
+		}
 		GoldPileEditTiming.End();
 
 		if ( _drawCacheDirty )
 		{
-			GoldPileEditTiming.Begin( "GoldPile.RebuildStreamDrawCache" );
-			RebuildStreamDrawCache();
-			GoldPileEditTiming.End();
+			if ( _streamRebuildDirtyScratch == null )
+				_streamRebuildDirtyScratch = new List<int>( 32 );
+			CollectStreamRebuildDirtyChunks( _streamRebuildDirtyScratch );
+			if ( !_drawCacheFullRebuild && _streamRebuildDirtyScratch.Count == 0 )
+			{
+				_drawCacheDirty = false;
+			}
+			else
+			{
+				GoldPileEditTiming.Begin( "GoldPile.RebuildStreamDrawCache" );
+				System.Diagnostics.Stopwatch cacheSw = GoldPileEditTiming.StartWatchIfEnabled();
+				bool willIncremental = _streamingEnabled && streamSettings != null && !_drawCacheFullRebuild
+					&& _streamRebuildDirtyScratch.Count > 0;
+				int dirtyCount = _streamRebuildDirtyScratch.Count;
+				RebuildStreamDrawCache();
+				if ( cacheSw != null )
+				{
+					cacheSw.Stop();
+					GoldPileEditTiming.Record(
+						"stream.rebuildDrawCache",
+						cacheSw.Elapsed.TotalMilliseconds,
+						$"incr={willIncremental} dirty={dirtyCount} full={!willIncremental}" );
+				}
+				GoldPileEditTiming.End();
+			}
 		}
 
 		GoldPileEditTiming.Begin( "GoldPile.DrawFromStreamCache" );
+		System.Diagnostics.Stopwatch drawSw = GoldPileEditTiming.StartWatchIfEnabled();
 		DrawFromStreamCache();
+		if ( drawSw != null )
+		{
+			drawSw.Stop();
+			GoldPileEditTiming.Record(
+				"stream.drawFromCache",
+				drawSw.Elapsed.TotalMilliseconds,
+				$"drawn={LastDrawnCount}" );
+		}
 		GoldPileEditTiming.End();
 	}
 
@@ -1615,6 +1766,52 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	{
 		_drawCacheDirty = true;
 		_drawCacheFullRebuild = true;
+	}
+
+	void MarkStreamDrawCacheDirty()
+	{
+		_drawCacheDirty = true;
+	}
+
+	void MarkStreamChunkDirty( int chunkIndex )
+	{
+		if ( chunkIndex < 0 )
+			return;
+		if ( _streamMatrixDirtyChunks == null )
+			_streamMatrixDirtyChunks = new HashSet<int>();
+		_streamMatrixDirtyChunks.Add( chunkIndex );
+	}
+
+	void MarkStreamChunkDirty( int chunkX, int chunkZ )
+	{
+		if ( _chunkGrid == null )
+			return;
+		int chunkIndex = chunkZ * _chunkGrid.CountX + chunkX;
+		MarkStreamChunkDirty( chunkIndex );
+	}
+
+	void CollectStreamRebuildDirtyChunks( List<int> outDirty )
+	{
+		outDirty.Clear();
+		if ( _streamMatrixDirtyChunks != null )
+		{
+			foreach ( int c in _streamMatrixDirtyChunks )
+			{
+				if ( c >= 0 && !outDirty.Contains( c ) )
+					outDirty.Add( c );
+			}
+		}
+
+		if ( _streamer != null && _streamer.DirtyChunkIndices != null )
+		{
+			IReadOnlyList<int> fromTick = _streamer.DirtyChunkIndices;
+			for ( int i = 0; i < fromTick.Count; i++ )
+			{
+				int c = fromTick[ i ];
+				if ( c >= 0 && !outDirty.Contains( c ) )
+					outDirty.Add( c );
+			}
+		}
 	}
 
 	/// <summary>
@@ -1713,6 +1910,88 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return _placementMinSpacing;
 	}
 
+	CoinOverlapMode ResolveCoinOverlapMode()
+	{
+		if ( streamSettings != null )
+			return streamSettings.coinOverlapMode;
+		return CoinOverlapMode.JitteredGrid;
+	}
+
+	void EnsureCoinOccupancy()
+	{
+		if ( _heightfield == null || !ResolveEnforceCoinOverlap() )
+		{
+			_coinOccupancy = null;
+			return;
+		}
+
+		float world = _heightfield.WorldSize;
+		float spacing = ResolveCoinPlacementSpacing();
+		if ( _coinOccupancy != null && _coinOccupancy.Matches( world, spacing ) )
+		{
+			_coinOccupancy.Clear();
+			return;
+		}
+
+		_coinOccupancy = new CoinSeatOccupancy( world, spacing );
+	}
+
+	void RebuildCoinOccupancyFromSlots()
+	{
+		if ( _coinOccupancy == null )
+			return;
+
+		_coinOccupancy.Clear();
+		if ( _slots == null )
+			return;
+
+		for ( int i = 0; i < _slotCount; i++ )
+		{
+			Slot slot = _slots[ i ];
+			if ( slot.Taken )
+				continue;
+			if ( !slot.FixedVolumePose && !slot.CoinVisual )
+				continue;
+			_coinOccupancy.TryAdd( i, slot.LocalPos.x, slot.LocalPos.z );
+		}
+	}
+
+	void OccupyCoinSeat( int id, Vector3 localPos )
+	{
+		if ( _coinOccupancy == null )
+			return;
+		_coinOccupancy.TryAdd( id, localPos.x, localPos.z );
+	}
+
+	void ReleaseCoinSeat( Vector3 localPos )
+	{
+		if ( _coinOccupancy == null )
+			return;
+		_coinOccupancy.Remove( localPos.x, localPos.z );
+	}
+
+	GoldPileTreasurePlacement.CoinXzClaimParams GetCoinXzClaimParams(
+		int unitIndex,
+		Vector3 preferNear,
+		float searchRadius,
+		int bridsonAttempts )
+	{
+		GoldPileTreasurePlacement.CoinXzClaimParams claim = default;
+		claim.Occupancy = _coinOccupancy;
+		claim.Mode = ResolveCoinOverlapMode();
+		claim.PileSeed = _pileLootSeed;
+		claim.UnitIndex = unitIndex;
+		claim.OccupyId = ++_occupancySerial;
+		claim.PlacementRadiusFraction = CoinPlacementRadiusFraction;
+		claim.MinSurfaceFraction = CoinMinSurfaceHeightFraction;
+		claim.Jitter = _placementJitter;
+		claim.PreferNear = preferNear;
+		claim.SearchRadius = searchRadius;
+		claim.BridsonAttempts = bridsonAttempts;
+		claim.OccupancyEnabled = ResolveEnforceCoinOverlap() && _coinOccupancy != null;
+		return claim;
+	}
+
 	bool ResolveEnforceCoinOverlap()
 	{
 		if ( streamSettings != null )
@@ -1737,6 +2016,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	{
 		if ( !ResolveEnforceCoinOverlap() )
 			return false;
+
+		if ( _coinOccupancy != null )
+			return _coinOccupancy.IsTooClose( localPos.x, localPos.z );
 
 		float spacing = ResolveCoinPlacementSpacing();
 		return IsTooCloseToDrawn( localPos, spacing * spacing )
@@ -1847,10 +2129,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		int chunkCount = _chunkGrid.ChunkCount;
 		bool filter = _streamingEnabled && streamSettings != null && chunkCount > 0;
+
+		if ( _streamRebuildDirtyScratch == null )
+			_streamRebuildDirtyScratch = new List<int>( 32 );
+		CollectStreamRebuildDirtyChunks( _streamRebuildDirtyScratch );
+
 		bool incremental = filter
 			&& !_drawCacheFullRebuild
-			&& _streamer.DirtyChunkIndices != null
-			&& _streamer.DirtyChunkIndices.Count > 0;
+			&& _streamRebuildDirtyScratch.Count > 0;
 
 		if ( incremental )
 		{
@@ -1870,10 +2156,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 		}
 
-		LastDirtyChunkRebuildCount = incremental ? _streamer.DirtyChunkIndices.Count : chunkCount;
+		LastDirtyChunkRebuildCount = incremental ? _streamRebuildDirtyScratch.Count : chunkCount;
 
 		if ( incremental )
-			RebuildStreamDrawCacheIncremental( chunkCount );
+			RebuildStreamDrawCacheIncremental( chunkCount, _streamRebuildDirtyScratch );
 		else
 			RebuildStreamDrawCacheFull( filter, chunkCount );
 
@@ -1914,7 +2200,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 			int poolCount = group.SlotIndices.Count;
 			if ( group.StreamMatrices == null || group.StreamMatrices.Length < poolCount )
-				group.StreamMatrices = new Matrix4x4[ Mathf.Max( poolCount, 16 ) ];
+				group.StreamMatrices = GrowMatrixArray( group.StreamMatrices, poolCount );
 
 			if ( filter && !group.AlwaysDraw )
 				EnsureChunkStreamBuffers( ref group, chunkCount, poolCount );
@@ -1980,7 +2266,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					continue;
 				}
 
-				AppendChunkStreamMatrix( ref group, slot, matrix, chunkCount );
+				AppendChunkStreamMatrix( ref group, slotIndex, ref slot, matrix, chunkCount );
+				_slots[ slotIndex ] = slot;
 			}
 
 			if ( group.AlwaysDraw || !filter )
@@ -1995,9 +2282,11 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		RecountChunkLastDrawnCounts( chunkCount );
 	}
 
-	void RebuildStreamDrawCacheIncremental( int chunkCount )
+	void RebuildStreamDrawCacheIncremental( int chunkCount, List<int> dirty )
 	{
-		IReadOnlyList<int> dirty = _streamer.DirtyChunkIndices;
+		if ( dirty == null || dirty.Count == 0 )
+			return;
+
 		IReadOnlyList<GoldPileChunk> chunks = _chunkGrid.Chunks;
 
 		for ( int d = 0; d < dirty.Count; d++ )
@@ -2007,6 +2296,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				continue;
 
 			chunks[ chunkIndex ].LastDrawnCount = 0;
+			_streamMatrixDirtyChunks?.Remove( chunkIndex );
 
 			for ( int b = 0; b < _batches.Length; b++ )
 			{
@@ -2023,13 +2313,26 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			List<int> drawnSlots = _chunkDrawnSlots != null && chunkIndex < _chunkDrawnSlots.Length
 				? _chunkDrawnSlots[ chunkIndex ]
 				: null;
+			if ( drawnSlots != null )
+			{
+				for ( int s = 0; s < drawnSlots.Count; s++ )
+				{
+					int slotIndex = drawnSlots[ s ];
+					if ( slotIndex < 0 || slotIndex >= _slotCount )
+						continue;
+					Slot slot = _slots[ slotIndex ];
+					slot.StreamRankInChunk = -1;
+					_slots[ slotIndex ] = slot;
+				}
+			}
+
 			if ( drawnSlots == null )
 				continue;
 
 			for ( int s = 0; s < drawnSlots.Count; s++ )
 			{
 				int slotIndex = drawnSlots[ s ];
-				if ( slotIndex < 0 || slotIndex >= _slots.Length )
+				if ( slotIndex < 0 || slotIndex >= _slotCount )
 					continue;
 
 				Slot slot = _slots[ slotIndex ];
@@ -2051,9 +2354,11 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					if ( group.Matrices == null || matrixIndex < 0 || matrixIndex >= group.Matrices.Length )
 						continue;
 
-					AppendChunkStreamMatrix( ref group, slot, group.Matrices[ matrixIndex ], chunkCount );
+					AppendChunkStreamMatrix( ref group, slotIndex, ref slot, group.Matrices[ matrixIndex ], chunkCount );
 					_batches[ b ] = group;
 				}
+
+				_slots[ slotIndex ] = slot;
 			}
 		}
 
@@ -2105,7 +2410,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return matrixIndex;
 	}
 
-	void AppendChunkStreamMatrix( ref BatchGroup group, Slot slot, Matrix4x4 matrix, int chunkCount )
+	void AppendChunkStreamMatrix( ref BatchGroup group, int slotIndex, ref Slot slot, Matrix4x4 matrix, int chunkCount )
 	{
 		int chunkIndex = slot.ChunkZ * _chunkGrid.CountX + slot.ChunkX;
 		if ( chunkIndex < 0
@@ -2128,6 +2433,21 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		chunkMats[ chunkFill ] = matrix;
 		group.ChunkStreamCounts[ chunkIndex ] = chunkFill + 1;
+		slot.StreamRankInChunk = chunkFill;
+		_slots[ slotIndex ] = slot;
+	}
+
+	static Matrix4x4[] GrowMatrixArray( Matrix4x4[] current, int needed )
+	{
+		int cap = current != null ? current.Length : 16;
+		if ( cap < 16 )
+			cap = 16;
+		while ( cap < needed )
+			cap *= 2;
+		Matrix4x4[] grown = new Matrix4x4[ cap ];
+		if ( current != null && current.Length > 0 )
+			System.Array.Copy( current, grown, current.Length );
+		return grown;
 	}
 
 	static void EnsureChunkStreamBuffers( ref BatchGroup group, int chunkCount, int poolCount )
@@ -2159,7 +2479,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			total += group.ChunkStreamCounts[ c ];
 
 		if ( group.StreamMatrices == null || group.StreamMatrices.Length < total )
-			group.StreamMatrices = new Matrix4x4[ Mathf.Max( total, 16 ) ];
+			group.StreamMatrices = GrowMatrixArray( group.StreamMatrices, total );
 
 		int fill = 0;
 		for ( int c = 0; c < n; c++ )
@@ -2175,6 +2495,57 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 
 		group.StreamCount = fill;
+	}
+
+	int ComputeChunkStreamFlatOffset( BatchGroup group, int chunkCount, int chunkIndex )
+	{
+		if ( group.ChunkStreamCounts == null || chunkIndex < 0 )
+			return -1;
+
+		int n = Mathf.Min( chunkCount, group.ChunkStreamCounts.Length );
+		if ( chunkIndex >= n )
+			return -1;
+
+		int offset = 0;
+		for ( int c = 0; c < chunkIndex; c++ )
+			offset += group.ChunkStreamCounts[ c ];
+		return offset;
+	}
+
+	bool TryPatchStreamMatrixFlat(
+		ref BatchGroup group,
+		int chunkCount,
+		int chunkIndex,
+		int streamIndex,
+		Matrix4x4 matrix )
+	{
+		if ( group.ChunkStreamCounts == null || group.ChunkStreamMatrices == null )
+			return false;
+
+		int n = Mathf.Min( chunkCount, group.ChunkStreamCounts.Length );
+		if ( chunkIndex < 0 || chunkIndex >= n )
+			return false;
+
+		int count = group.ChunkStreamCounts[ chunkIndex ];
+		if ( streamIndex < 0 || streamIndex >= count )
+			return false;
+
+		Matrix4x4[] chunkMats = group.ChunkStreamMatrices[ chunkIndex ];
+		if ( chunkMats == null || streamIndex >= chunkMats.Length )
+			return false;
+
+		chunkMats[ streamIndex ] = matrix;
+
+		int flatOffset = ComputeChunkStreamFlatOffset( group, chunkCount, chunkIndex );
+		if ( flatOffset < 0 )
+			return false;
+
+		int flatIndex = flatOffset + streamIndex;
+		if ( group.StreamMatrices == null || flatIndex >= group.StreamMatrices.Length )
+			return false;
+
+		group.StreamMatrices[ flatIndex ] = matrix;
+		return true;
 	}
 
 	void DrawFromStreamCache()
@@ -2207,7 +2578,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			if ( group.SlotIndices.Count > 0 )
 			{
 				int sample = group.SlotIndices[ 0 ];
-				if ( sample >= 0 && sample < _slots.Length )
+				if ( sample >= 0 && sample < _slotCount )
 					def = _slots[ sample ].Definition;
 			}
 
@@ -2538,7 +2909,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			for ( int i = 0; i < drawn.Count; i++ )
 			{
 				int idx = drawn[ i ];
-				if ( idx < 0 || idx >= _slots.Length )
+				if ( idx < 0 || idx >= _slotCount )
 					continue;
 				int entry = _slots[ idx ].EntryIndex;
 				if ( entry >= 0 && entry < entryCount )
@@ -2622,15 +2993,15 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return -1;
 
 		int rank = 0;
-		TreasureDefinition def = slot.Definition;
+		int entry = slot.EntryIndex;
 		for ( int i = 0; i < list.Count; i++ )
 		{
 			int idx = list[ i ];
 			if ( idx == slotIndex )
 				return rank;
-			if ( idx < 0 || idx >= _slots.Length )
+			if ( idx < 0 || idx >= _slotCount )
 				continue;
-			if ( _slots[ idx ].Definition == def )
+			if ( _slots[ idx ].EntryIndex == entry )
 				rank++;
 		}
 
@@ -3209,6 +3580,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( coinContents == null || coinContents.Length == 0 )
 		{
 			_slots = new Slot[ 0 ];
+			_slotCount = 0;
 			_batches = new BatchGroup[ 0 ];
 			_visibleCountByEntry = null;
 			return;
@@ -3419,12 +3791,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				}
 
 				if ( placed )
-				{
-					if ( RejectCoinSeatOverlap( volumeSlot.LocalPos ) )
-						placed = false;
-					else
-						list.Add( volumeSlot );
-				}
+					list.Add( volumeSlot );
 
 
 				if ( !timeSlice )
@@ -3470,16 +3837,17 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		List<BatchGroup> batches,
 		bool rebuildVisibility )
 	{
-		int prevCount = _slots != null ? _slots.Length : 0;
+		int prevCount = _slots != null ? _slotCount : 0;
 		Slot[] prevSlots = _slots;
 
 		_batches = batches.ToArray();
 		_slots = list.ToArray();
+		_slotCount = _slots.Length;
 
 		// Intermediate grows must keep Drawn/MatrixIndex or sparse draw state is wiped.
 		if ( !rebuildVisibility && prevSlots != null )
 		{
-			int keep = Mathf.Min( prevCount, _slots.Length );
+			int keep = Mathf.Min( prevCount, _slotCount );
 			for ( int i = 0; i < keep; i++ )
 			{
 				Slot s = _slots[ i ];
@@ -3513,9 +3881,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 		}
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 			AssignCell( i );
 
+		RebuildCoinOccupancyFromSlots();
 
 		if ( !rebuildVisibility )
 		{
@@ -3524,7 +3893,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		RebuildVisibility();
 		// Keep the working list in sync so later ToArray commits do not wipe Drawn flags.
-		for ( int i = 0; i < _slots.Length && i < list.Count; i++ )
+		for ( int i = 0; i < _slotCount && i < list.Count; i++ )
 			list[ i ] = _slots[ i ];
 	}
 
@@ -3545,17 +3914,27 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( definition == null || _heightfield == null )
 			return false;
 
-		if ( !GoldPileTreasurePlacement.TrySampleVolumePose(
+		GoldPileTreasurePlacement.CoinXzClaimParams claim = GetCoinXzClaimParams(
+			unitIndex,
+			Vector3.zero,
+			0f,
+			64 );
+		if ( !GoldPileTreasurePlacement.TryClaimCoinSeatXZ( _heightfield, claim, out float lx, out float lz ) )
+			return false;
+
+		if ( !GoldPileTreasurePlacement.TrySampleVolumeYAtXZ(
 			_heightfield,
 			_pileLootSeed,
 			unitIndex,
-			_placementRadiusFraction,
 			scale,
 			probe,
 			_treasureRadialPower,
 			_treasureHeightBias,
+			lx,
+			lz,
 			out GoldPileTreasurePlacement.VolumePose pose ) )
 		{
+			GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 			return false;
 		}
 
@@ -3586,7 +3965,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				scale,
 				meshBounds,
 				embed,
-				_coinSurfaceHeightFraction,
+				CoinMinSurfaceHeightFraction,
 				GetCoinPoseParams( surfaceDecor: false ) ) )
 			{
 				localPos = conformPos;
@@ -3597,11 +3976,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 			else if ( !GoldPileTreasurePlacement.IsCoinPivotInside( _heightfield, localPos ) )
 			{
+				GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 				return false;
 			}
 		}
 		else if ( !GoldPileTreasurePlacement.IsCoinPivotInside( _heightfield, localPos ) )
 		{
+			GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 			return false;
 		}
 
@@ -3626,7 +4007,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			Taken = false,
 			Drawn = false,
 			BatchKey = batchKey,
-			MatrixIndex = -1
+			MatrixIndex = -1,
+			StreamRankInChunk = -1
 		};
 		return true;
 	}
@@ -3650,19 +4032,28 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( definition == null || _heightfield == null )
 			return false;
 
-		if ( !GoldPileTreasurePlacement.TrySampleShallowCoinPose(
+		GoldPileTreasurePlacement.CoinXzClaimParams claim = GetCoinXzClaimParams(
+			unitIndex,
+			preferNear,
+			searchRadius,
+			24 );
+		if ( !GoldPileTreasurePlacement.TryClaimCoinSeatXZ( _heightfield, claim, out float lx, out float lz ) )
+			return false;
+
+		if ( !GoldPileTreasurePlacement.TryFinishShallowY(
 			_heightfield,
 			_pileLootSeed,
 			unitIndex,
-			_placementRadiusFraction,
 			scale,
 			probe,
 			buryBand,
-			_coinSurfaceHeightFraction,
-			preferNear,
-			searchRadius,
+			CoinMinSurfaceHeightFraction,
+			requireInside: true,
+			lx,
+			lz,
 			out GoldPileTreasurePlacement.VolumePose pose ) )
 		{
+			GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 			return false;
 		}
 
@@ -3688,9 +4079,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			scale,
 			meshBounds,
 			embed,
-			_coinSurfaceHeightFraction,
+			CoinMinSurfaceHeightFraction,
 			GetCoinPoseParams( surfaceDecor: false ) ) )
 		{
+			GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 			return false;
 		}
 
@@ -3698,7 +4090,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			* _heightfield.MaxHeight;
 		embed = Mathf.Max( 0.01f, surface - localPos.y );
 		if ( !GoldPileTreasurePlacement.IsCoinPivotInside( _heightfield, localPos ) )
+		{
+			GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 			return false;
+		}
 
 		localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
 			localPos,
@@ -3721,7 +4116,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			Taken = false,
 			Drawn = false,
 			BatchKey = batchKey,
-			MatrixIndex = -1
+			MatrixIndex = -1,
+			StreamRankInChunk = -1
 		};
 		return true;
 	}
@@ -3745,54 +4141,33 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( definition == null || _heightfield == null )
 			return false;
 
-		if ( !GoldPileTreasurePlacement.TrySampleShallowCoinPose(
-			_heightfield,
-			_pileLootSeed,
+		_ = buryBand;
+		GoldPileTreasurePlacement.CoinXzClaimParams claim = GetCoinXzClaimParams(
 			unitIndex,
-			_placementRadiusFraction,
-			scale,
-			probe,
-			buryBand,
-			_coinSurfaceHeightFraction,
 			preferNear,
 			searchRadius,
-			out GoldPileTreasurePlacement.VolumePose pose ) )
-		{
+			8 );
+		if ( !GoldPileTreasurePlacement.TryClaimCoinSeatXZ( _heightfield, claim, out float lx, out float lz ) )
 			return false;
-		}
 
 		GoldPileTreasurePlacement.CoinPoseParams poseParams = GetCoinPoseParams( surfaceDecor: true );
-		Quaternion coinRot = GoldPileTreasurePlacement.CoinSurfaceTiltRotation(
-			_heightfield,
-			_pileLootSeed,
-			unitIndex,
-			pose.LocalPos.x,
-			pose.LocalPos.z,
-			poseParams );
-		Vector3 localPos = pose.LocalPos;
-		Bounds meshBounds = GetCoinMeshBounds( definition );
-		float surface = _heightfield.SampleNormalized( localPos.x, localPos.z )
-			* _heightfield.MaxHeight;
-		float embed = Mathf.Max( 0.001f, scale * Mathf.Max( 0.01f, poseParams.EmbedSinkFraction ) );
-
-		if ( !GoldPileTreasurePlacement.ConformCoinToPileSurface(
+		Vector3 localPos = new Vector3( lx, 0f, lz );
+		Quaternion coinRot = Quaternion.identity;
+		if ( !GoldPileTreasurePlacement.FastSnapCoinToSurface(
 			_heightfield,
 			_pileLootSeed,
 			unitIndex,
 			ref localPos,
 			ref coinRot,
 			scale,
-			meshBounds,
-			embed,
-			_coinSurfaceHeightFraction,
-			poseParams ) )
+			CoinMinSurfaceHeightFraction,
+			poseParams,
+			out float surface,
+			out float embed ) )
 		{
+			GoldPileTreasurePlacement.ReleaseClaimedCoinXZ( _coinOccupancy, lx, lz );
 			return false;
 		}
-
-		surface = _heightfield.SampleNormalized( localPos.x, localPos.z )
-			* _heightfield.MaxHeight;
-		embed = Mathf.Max( 0.001f, surface - localPos.y );
 
 		localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
 			localPos,
@@ -3815,7 +4190,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			Taken = false,
 			Drawn = false,
 			BatchKey = batchKey,
-			MatrixIndex = -1
+			MatrixIndex = -1,
+			StreamRankInChunk = -1
 		};
 		return true;
 	}
@@ -3830,7 +4206,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int recycled = 0;
 		const int maxRecycle = 32;
 
-		for ( int i = 0; i < _slots.Length && recycled < maxRecycle; i++ )
+		for ( int i = 0; i < _slotCount && recycled < maxRecycle; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || !slot.FixedVolumePose || slot.Definition == null )
@@ -3847,6 +4223,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 			int unitIndex = _coinUnitSerial++;
 			Mesh coinMesh = GetCoinMesh( slot.Definition );
+			Vector3 oldPos = slot.LocalPos;
+			ReleaseCoinSeat( oldPos );
 			if ( !TryCreateShallowCoinSlot(
 				slot.Definition,
 				slot.EntryIndex,
@@ -3861,6 +4239,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				out Slot reseated,
 				out _ ) )
 			{
+				OccupyCoinSeat( i, oldPos );
 				continue;
 			}
 
@@ -3892,7 +4271,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int stuck = 0;
 		const int maxStick = 48;
 
-		for ( int i = 0; i < _slots.Length && stuck < maxStick; i++ )
+		for ( int i = 0; i < _slotCount && stuck < maxStick; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || !slot.FixedVolumePose || slot.Definition == null )
@@ -3928,7 +4307,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				slot.Scale,
 				meshBounds,
 				embed,
-				_coinSurfaceHeightFraction,
+				CoinMinSurfaceHeightFraction,
 				GetCoinPoseParams( surfaceDecor: false ) ) )
 			{
 				continue;
@@ -3971,30 +4350,210 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return stuck;
 	}
 
-	int TopUpShallowCoinSeatsNear( Vector3 localCenter, float radius, int maxSpawn = 48 )
+	/// <summary>
+	/// Mode B dig: fast snap existing surface decor at same XZ; hide drawn seats on dead columns.
+	/// </summary>
+	int StickSurfaceDecorCoinsNear( Vector3 localCenter, float radius )
+	{
+		if ( _slots == null || _heightfield == null )
+			return 0;
+
+		int maxStick = streamSettings != null ? streamSettings.digStickMax : 16;
+		if ( maxStick <= 0 )
+			return 0;
+
+		int stuck = 0;
+		if ( _stickPatchScratch == null )
+			_stickPatchScratch = new List<int>( maxStick );
+		else
+			_stickPatchScratch.Clear();
+
+		GoldPileTreasurePlacement.CoinPoseParams poseParams = GetCoinPoseParams( surfaceDecor: true );
+		float sinkFraction = Mathf.Max( 0f, poseParams.EmbedSinkFraction );
+
+		ForEachSlotIndexNearLocal( localCenter, radius, slotIndex =>
+		{
+			if ( stuck >= maxStick )
+				return;
+
+			Slot slot = _slots[ slotIndex ];
+			if ( slot.Taken || !slot.CoinVisual || slot.Definition == null )
+				return;
+
+			if ( !_heightfield.ExistsAtLocal( slot.LocalPos.x, slot.LocalPos.z ) )
+			{
+				if ( slot.Drawn )
+					UnmarkDrawn( slotIndex );
+				return;
+			}
+
+			float currentSurface = _heightfield.SampleNormalized( slot.LocalPos.x, slot.LocalPos.z )
+				* _heightfield.MaxHeight;
+			if ( currentSurface < _heightfield.GroundLevel )
+			{
+				if ( slot.Drawn )
+					UnmarkDrawn( slotIndex );
+				return;
+			}
+
+			float floatEps = Mathf.Max( 0.02f, slot.Scale * 0.08f );
+			if ( slot.LocalPos.y <= currentSurface + floatEps )
+				return;
+
+			float visualSink = Mathf.Max( 0.004f, slot.Scale * sinkFraction );
+			float pivotY = currentSurface - visualSink;
+			if ( pivotY < _heightfield.GroundLevel )
+				pivotY = _heightfield.GroundLevel;
+
+			Quaternion localRot = GoldPileTreasurePlacement.CoinSurfaceTiltRotation(
+				_heightfield,
+				_pileLootSeed,
+				slotIndex,
+				slot.LocalPos.x,
+				slot.LocalPos.z,
+				poseParams );
+			Vector3 localPos = new Vector3( slot.LocalPos.x, pivotY, slot.LocalPos.z );
+
+			if ( ( localPos - slot.LocalPos ).sqrMagnitude < 1e-8f
+				&& localRot == slot.LocalRot )
+			{
+				return;
+			}
+
+			bool keepDrawn = slot.Drawn && slot.MatrixIndex >= 0;
+			slot.LocalPos = localPos;
+			slot.LocalRot = localRot;
+			slot.PlaceSurfaceHeight = currentSurface;
+			slot.EmbedDepth = Mathf.Max( 0.001f, currentSurface - pivotY );
+			_slots[ slotIndex ] = slot;
+
+			if ( keepDrawn )
+				_stickPatchScratch.Add( slotIndex );
+
+			stuck++;
+		} );
+
+		for ( int p = 0; p < _stickPatchScratch.Count; p++ )
+			PatchDrawnSlotMatrixPoseOnly( _stickPatchScratch[ p ] );
+
+		FlushStreamMatrixPatches( _stickPatchScratch );
+
+		return stuck;
+	}
+
+	/// <summary>
+	/// Incrementally promote eligible undrawn surface decor near a dig without full RebuildVisibility.
+	/// </summary>
+	int HideOrPromoteSurfaceDecorNearDig( Vector3 localCenter, float radius )
+	{
+		if ( _slots == null || _heightfield == null || _chunkDrawnSlots == null || _chunkGrid.ChunkCount <= 0 )
+			return 0;
+
+		int perChunkCap = GetLod0InstancesPerChunk();
+		int chunkCount = _chunkGrid.ChunkCount;
+		int promoted = 0;
+
+		if ( _eligibleByChunkScratch == null || _eligibleByChunkScratch.Length != chunkCount )
+		{
+			_eligibleByChunkScratch = new List<int>[ chunkCount ];
+			for ( int c = 0; c < chunkCount; c++ )
+				_eligibleByChunkScratch[ c ] = new List<int>( 32 );
+		}
+
+		for ( int c = 0; c < chunkCount; c++ )
+			_eligibleByChunkScratch[ c ].Clear();
+
+		ForEachSlotIndexNearLocal( localCenter, radius, slotIndex =>
+		{
+			Slot slot = _slots[ slotIndex ];
+			if ( slot.Taken || !slot.CoinVisual || slot.Drawn )
+				return;
+
+			if ( !IsEligible( slot ) )
+				return;
+
+			int chunkIndex = slot.ChunkZ * _chunkGrid.CountX + slot.ChunkX;
+			if ( chunkIndex < 0 || chunkIndex >= chunkCount )
+				return;
+
+			_eligibleByChunkScratch[ chunkIndex ].Add( slotIndex );
+		} );
+
+		for ( int c = 0; c < chunkCount; c++ )
+		{
+			List<int> bucket = _eligibleByChunkScratch[ c ];
+			if ( bucket == null || bucket.Count == 0 )
+				continue;
+
+			int drawn = _chunkDrawnSlots[ c ] != null ? _chunkDrawnSlots[ c ].Count : 0;
+			int capRemaining = perChunkCap - drawn;
+			if ( capRemaining <= 0 )
+				continue;
+
+			int markedBefore = promoted;
+			promoted += MarkDrawnChunkWithAuthoredMix( bucket, capRemaining );
+			if ( promoted > markedBefore )
+				MarkStreamChunkDirty( c );
+		}
+
+		if ( promoted > 0 )
+		{
+			RebuildBatchMatrices();
+			MarkStreamDrawCacheDirty();
+			RecountChunkDrawnPoolStats();
+		}
+
+		return promoted;
+	}
+
+	int TopUpShallowCoinSeatsNear(
+		Vector3 localCenter,
+		float radius,
+		int maxSpawn = 48,
+		bool bindSeed = false,
+		System.Diagnostics.Stopwatch workSw = null,
+		float budgetMs = 0f )
 	{
 		if ( _definition == null || _definition.coinContents == null || _batchKeyByDef == null )
 			return 0;
 
-		int remaining = CountRemainingCoinInventory();
-		if ( remaining <= 0 )
-			return HideAllCoinVisuals();
+		if ( !bindSeed )
+		{
+			int remaining = CountRemainingCoinInventory();
+			if ( remaining <= 0 )
+				return HideAllCoinVisuals();
+		}
 
-		// Fill under-filled chunks near the focus so density stays uniform.
-		int need = CountUnderfilledChunkSlotsNear( localCenter, radius );
-		if ( need <= 0 )
+		int need = maxSpawn;
+		if ( !bindSeed )
+		{
+			need = CountUnderfilledChunkSlotsNear( localCenter, radius );
+			if ( need <= 0 )
+				return 0;
+			need = Mathf.Min( need, Mathf.Max( 1, maxSpawn ) );
+		}
+		else if ( need <= 0 )
+		{
 			return 0;
+		}
 
-		need = Mathf.Min( need, Mathf.Max( 1, maxSpawn ) );
 		float buryBand = Mathf.Max( _buryDepth, _initialRevealDepth );
 		int seatCap = _maxVisibleTotal;
-		int untaken = CountUntakenCoinSlots();
+		int untaken = bindSeed ? _slotCount : CountUntakenCoinSlots();
 		int spawned = 0;
 
 		TreasurePileEntry[] coinContents = _definition.coinContents;
+		int mixWeight = ComputeGpuCoinMixWeight( coinContents );
 		for ( int n = 0; n < need; n++ )
 		{
-			if ( !TryPickCoinDefForVisualTopUp( coinContents, out TreasureDefinition def, out int entryIndex ) )
+			if ( budgetMs > 0f
+				&& workSw != null
+				&& workSw.Elapsed.TotalMilliseconds >= budgetMs )
+			{
+				break;
+			}
+
+			if ( !TryPickCoinDefForVisualTopUp( coinContents, mixWeight, out TreasureDefinition def, out int entryIndex ) )
 				break;
 
 			if ( !_batchKeyByDef.TryGetValue( def, out int batchKey ) )
@@ -4071,19 +4630,22 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					out _ );
 			}
 
-			if ( !placed || RejectCoinSeatOverlap( slot.LocalPos ) )
+			if ( !placed )
 				continue;
 
-			if ( TryReuseTakenCoinSlot( def, slot ) )
+			if ( !bindSeed )
 			{
-				spawned++;
-				continue;
-			}
+				if ( TryReuseTakenCoinSlot( def, slot ) )
+				{
+					spawned++;
+					continue;
+				}
 
-			if ( TryPromoteBuriedUntakenSeat( def, slot ) )
-			{
-				spawned++;
-				continue;
+				if ( TryPromoteBuriedUntakenSeat( def, slot ) )
+				{
+					spawned++;
+					continue;
+				}
 			}
 
 			if ( untaken < seatCap )
@@ -4094,17 +4656,52 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				continue;
 			}
 
-			// Seat pool full — reuse any Taken coin seat regardless of type.
-			if ( TryReuseTakenCoinSlot( null, slot ) )
+			if ( !bindSeed && TryReuseTakenCoinSlot( null, slot ) )
 			{
 				spawned++;
 				continue;
 			}
 
+			ReleaseCoinSeat( slot.LocalPos );
 			break;
 		}
 
 		return spawned;
+	}
+
+	int MarkAppendedSeatsDrawn( int startIndex, int endIndex )
+	{
+		if ( _slots == null || startIndex >= endIndex )
+			return 0;
+
+		int perChunk = GetLod0InstancesPerChunk();
+		int chunkCount = _chunkGrid.ChunkCount;
+		int marked = 0;
+		for ( int i = startIndex; i < endIndex; i++ )
+		{
+			Slot slot = _slots[ i ];
+			if ( slot.Taken || slot.Drawn )
+				continue;
+			if ( !slot.CoinVisual && !slot.FixedVolumePose )
+				continue;
+			if ( !IsEligible( slot ) )
+				continue;
+
+			if ( _chunkDrawnSlots != null && chunkCount > 0 )
+			{
+				int chunkIndex = slot.ChunkZ * _chunkGrid.CountX + slot.ChunkX;
+				if ( chunkIndex < 0 || chunkIndex >= chunkCount )
+					continue;
+				int drawn = _chunkDrawnSlots[ chunkIndex ] != null ? _chunkDrawnSlots[ chunkIndex ].Count : 0;
+				if ( drawn >= perChunk )
+					continue;
+			}
+
+			MarkDrawn( i );
+			marked++;
+		}
+
+		return marked;
 	}
 
 	int CountUnderfilledChunkSlotsNear( Vector3 localCenter, float radius )
@@ -4143,7 +4740,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int hidden = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken )
@@ -4157,25 +4754,20 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			if ( wasDrawn )
 				UnmarkDrawn( i );
 			RemoveFromCell( i );
+			ReleaseCoinSeat( slot.LocalPos );
 			hidden++;
 		}
+
+		if ( hidden > 0 )
+			MarkStreamDrawCacheDirty();
 
 		return hidden;
 	}
 
-	/// <summary>
-	/// Pick a coin type for visual densify by authored mix weight, preferring under-drawn types.
-	/// Inventory remaining only gates whether the pile still shows coins at all.
-	/// </summary>
-	bool TryPickCoinDefForVisualTopUp(
-		TreasurePileEntry[] coinContents,
-		out TreasureDefinition definition,
-		out int entryIndex )
+	int ComputeGpuCoinMixWeight( TreasurePileEntry[] coinContents )
 	{
-		definition = null;
-		entryIndex = -1;
 		if ( coinContents == null )
-			return false;
+			return 0;
 
 		int totalWeight = 0;
 		for ( int e = 0; e < coinContents.Length; e++ )
@@ -4188,7 +4780,22 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			totalWeight += entry.count;
 		}
 
-		if ( totalWeight <= 0 )
+		return totalWeight;
+	}
+
+	/// <summary>
+	/// Pick a coin type for visual densify by authored mix weight, preferring under-drawn types.
+	/// Inventory remaining only gates whether the pile still shows coins at all.
+	/// </summary>
+	bool TryPickCoinDefForVisualTopUp(
+		TreasurePileEntry[] coinContents,
+		int totalWeight,
+		out TreasureDefinition definition,
+		out int entryIndex )
+	{
+		definition = null;
+		entryIndex = -1;
+		if ( coinContents == null || totalWeight <= 0 )
 			return false;
 
 		float bestScore = float.MaxValue;
@@ -4201,7 +4808,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				continue;
 
 			float wantShare = entry.count / ( float )totalWeight;
-			int drawn = CountDrawnForDefinition( entry.treasure );
+			int drawn = 0;
+			if ( _visibleCountByEntry != null && e < _visibleCountByEntry.Length )
+				drawn = _visibleCountByEntry[ e ];
 			float haveShare = drawn / ( float )Mathf.Max( 1, _steadyVisibleBudget );
 			float score = haveShare - wantShare;
 			if ( score < bestScore )
@@ -4270,7 +4879,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int n = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || slot.Definition != definition || !slot.FixedVolumePose )
@@ -4288,7 +4897,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _slots == null || definition == null )
 			return false;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot existing = _slots[ i ];
 			if ( existing.Taken || existing.Definition != definition || !existing.FixedVolumePose )
@@ -4297,6 +4906,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				continue;
 
 			RemoveFromCell( i );
+			ReleaseCoinSeat( existing.LocalPos );
 			reseated.Taken = false;
 			reseated.Drawn = false;
 			reseated.MatrixIndex = -1;
@@ -4313,7 +4923,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _slots == null )
 			return false;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot existing = _slots[ i ];
 			if ( !existing.Taken )
@@ -4375,7 +4985,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int n = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			if ( _slots[ i ].Drawn
 				&& !_slots[ i ].Taken
@@ -4392,7 +5002,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int n = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			if ( !_slots[ i ].Taken && ( _slots[ i ].FixedVolumePose || _slots[ i ].CoinVisual ) )
 				n++;
@@ -4407,7 +5017,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int n = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			if ( !_slots[ i ].Taken && _slots[ i ].Definition == definition )
 				n++;
@@ -4431,11 +5041,27 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return n;
 	}
 
+	void EnsureSlotCapacity( int needed )
+	{
+		if ( needed <= 0 )
+			return;
+		if ( _slots != null && _slots.Length >= needed )
+			return;
+
+		int cap = _slots != null ? _slots.Length : 16;
+		if ( cap < 16 )
+			cap = 16;
+		while ( cap < needed )
+			cap *= 2;
+		System.Array.Resize( ref _slots, cap );
+	}
+
 	void AppendCoinSlot( Slot slot )
 	{
-		int index = _slots != null ? _slots.Length : 0;
-		System.Array.Resize( ref _slots, index + 1 );
+		int index = _slotCount;
+		EnsureSlotCapacity( index + 1 );
 		_slots[ index ] = slot;
+		_slotCount = index + 1;
 		AssignCell( index );
 	}
 
@@ -4449,11 +5075,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _heightfield == null )
 			return false;
 
-		float half = _heightfield.WorldSize * 0.5f * _placementRadiusFraction;
-		float usable = Mathf.Max( 0.05f, half - Mathf.Max( 0f, coinInsetRadius ) );
-		float minSurface = Mathf.Max(
-			_heightfield.GroundLevel,
-			_heightfield.MaxHeight * Mathf.Clamp01( _coinSurfaceHeightFraction ) );
+		float half = _heightfield.WorldSize * 0.5f * CoinPlacementRadiusFraction;
+		float usable = Mathf.Max( 0.05f, half );
+		float minSurface = _heightfield.LootGroundLevel;
 
 		for ( int attempt = 0; attempt < 64; attempt++ )
 		{
@@ -4521,7 +5145,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	bool TryReseatCoinSlot( int slotIndex, Vector3 nearLocal, bool preserveDrawState )
 	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( _slots == null || slotIndex < 0 || slotIndex >= _slotCount )
 			return false;
 
 		Slot slot = _slots[ slotIndex ];
@@ -4536,6 +5160,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		if ( slot.FixedVolumePose )
 		{
+			Vector3 oldPos = slot.LocalPos;
+			ReleaseCoinSeat( oldPos );
 			if ( !TryCreateShallowCoinSlot(
 				slot.Definition,
 				slot.EntryIndex,
@@ -4550,6 +5176,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				out Slot reseated,
 				out _ ) )
 			{
+				OccupyCoinSeat( slotIndex, oldPos );
 				return false;
 			}
 
@@ -4595,8 +5222,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			slotIndex,
 			nearLocal,
 			digRadius,
-			_placementRadiusFraction,
-			_coinSurfaceHeightFraction,
+			CoinPlacementRadiusFraction,
+			CoinMinSurfaceHeightFraction,
 			slot.Scale * 0.5f,
 			out Vector3 pos,
 			out float surface ) )
@@ -4613,6 +5240,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int oldCellZLegacy = slot.CellZ;
 
 		RemoveFromCell( slotIndex );
+		ReleaseCoinSeat( slot.LocalPos );
 		slot.LocalPos = pos;
 		slot.PlaceSurfaceHeight = surface;
 		slot.EmbedDepth = Mathf.Min( _initialRevealDepth * 0.35f, _buryDepth );
@@ -4631,6 +5259,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		ConformSlot( slotIndex, ref slot );
 		_slots[ slotIndex ] = slot;
 		AssignCell( slotIndex );
+		OccupyCoinSeat( slotIndex, slot.LocalPos );
 
 		if ( keepDrawnLegacy )
 		{
@@ -4704,7 +5333,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 
 		Dictionary<TreasureDefinition, int> activeByDef = new Dictionary<TreasureDefinition, int>();
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || slot.Definition == null )
@@ -4720,7 +5349,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 
 		// Deactivate excess when remaining drops below active visuals.
-		for ( int i = 0; i < _slots.Length; i++ )
+		bool unmarkedDrawn = false;
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken || slot.Definition == null )
@@ -4739,14 +5369,21 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			slot.Taken = true;
 			_slots[ i ] = slot;
 			if ( wasDrawn )
+			{
 				UnmarkDrawn( i );
+				unmarkedDrawn = true;
+			}
 			RemoveFromCell( i );
+			ReleaseCoinSeat( slot.LocalPos );
 			activeByDef[ slot.Definition ] = active - 1;
 			// Excess removal is incremental — no full RebuildVisibility.
 		}
 
+		if ( unmarkedDrawn )
+			MarkStreamDrawCacheDirty();
+
 		int drawnTotal = 0;
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot slot = _slots[ i ];
 			if ( slot.Taken )
@@ -4773,7 +5410,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				if ( need <= 0 )
 					continue;
 
-				for ( int i = 0; i < _slots.Length && need > 0 && moveBudget > 0; i++ )
+				for ( int i = 0; i < _slotCount && need > 0 && moveBudget > 0; i++ )
 				{
 					Slot slot = _slots[ i ];
 					if ( slot.Definition != entry.treasure )
@@ -4824,7 +5461,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			float bestDistSq = farMinSq;
 			bool bestBuried = false;
 
-			for ( int i = 0; i < _slots.Length; i++ )
+			for ( int i = 0; i < _slotCount; i++ )
 			{
 				Slot slot = _slots[ i ];
 				if ( slot.Taken || slot.Definition == null )
@@ -4884,7 +5521,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		GoldPileEditTiming.Begin( "GoldPile.RebuildVisibility" );
 		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			Slot s = _slots[ i ];
 			s.Drawn = false;
@@ -4920,21 +5557,16 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		List<int> eligible = _eligibleScratch;
 		if ( eligible == null )
 		{
-			eligible = new List<int>( _slots.Length );
+			eligible = new List<int>( _slotCount );
 			_eligibleScratch = eligible;
 		}
 		else
 			eligible.Clear();
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < _slotCount; i++ )
 		{
 			if ( _slots[ i ].Taken )
 				continue;
-
-			// Large props stay surface-visible so they aren't stuck ineligible under gold.
-			if ( !_slots[ i ].FixedVolumePose
-				&& GetLootStreamCullTier( _slots[ i ].Definition ) >= LootStreamCullTierLarge )
-				ForceSlotSurfaceVisible( i );
 
 			if ( IsEligible( _slots[ i ] ) )
 				eligible.Add( i );
@@ -4979,13 +5611,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				_eligibleByChunkScratch[ chunkIndex ].Add( idx );
 			}
 
+			int[] mixQuotas = _definition != null ? _definition.ComputeMixQuotas( perChunkCap ) : null;
 			for ( int c = 0; c < chunkCount; c++ )
 			{
 				List<int> bucket = _eligibleByChunkScratch[ c ];
 				if ( bucket == null || bucket.Count == 0 )
 					continue;
 
-				drawnTotal += MarkDrawnChunkWithAuthoredMix( bucket, perChunkCap );
+				drawnTotal += MarkDrawnChunkWithAuthoredMix( bucket, perChunkCap, mixQuotas );
 			}
 		}
 		else
@@ -5091,6 +5724,11 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	int MarkDrawnChunkWithAuthoredMix( List<int> bucket, int cap )
 	{
+		return MarkDrawnChunkWithAuthoredMix( bucket, cap, quotas: null );
+	}
+
+	int MarkDrawnChunkWithAuthoredMix( List<int> bucket, int cap, int[] quotas )
+	{
 		int entryCount = MixEntryCount();
 		if ( entryCount <= 0 || _definition == null )
 		{
@@ -5111,7 +5749,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			_mixByEntryScratch[ entry ].Add( idx );
 		}
 
-		int[] quotas = _definition.ComputeMixQuotas( cap );
+		if ( quotas == null || quotas.Length != entryCount )
+			quotas = _definition.ComputeMixQuotas( cap );
 		int marked = 0;
 		int leftover = cap;
 
@@ -5260,8 +5899,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			slotIndex,
 			near,
 			Mathf.Max( _pickRadius * 3f, 1.25f ),
-			_placementRadiusFraction,
-			_coinSurfaceHeightFraction,
+			CoinPlacementRadiusFraction,
+			CoinMinSurfaceHeightFraction,
 			slot.Scale * 0.5f,
 			out Vector3 candidate,
 			out float surface ) )
@@ -5274,12 +5913,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return;
 
 		RemoveFromCell( slotIndex );
+		ReleaseCoinSeat( slot.LocalPos );
 		slot.LocalPos = candidate;
 		slot.PlaceSurfaceHeight = surface;
 		slot.EmbedDepth = Mathf.Min( slot.EmbedDepth, _initialRevealDepth * 0.5f );
 		ConformSlot( slotIndex, ref slot );
 		_slots[ slotIndex ] = slot;
 		AssignCell( slotIndex );
+		OccupyCoinSeat( slotIndex, slot.LocalPos );
 	}
 
 	bool CellHasDrawn( int cell, int ignoreSlot )
@@ -5354,8 +5995,6 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				float currentSurface = _heightfield.SampleNormalized( slot.LocalPos.x, slot.LocalPos.z )
 					* _heightfield.MaxHeight;
 				if ( currentSurface < _heightfield.GroundLevel )
-					return false;
-				if ( !_heightfield.ExistsAtLocal( slot.LocalPos.x, slot.LocalPos.z ) )
 					return false;
 
 				float floatEps = Mathf.Max( 0.02f, slot.Scale * 0.08f );
@@ -5440,7 +6079,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	/// </summary>
 	void UnmarkDrawn( int slotIndex )
 	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( _slots == null || slotIndex < 0 || slotIndex >= _slotCount )
 			return;
 
 		Slot slot = _slots[ slotIndex ];
@@ -5509,8 +6148,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		slot.Drawn = false;
 		slot.MatrixIndex = -1;
+		slot.StreamRankInChunk = -1;
 		_slots[ slotIndex ] = slot;
-		InvalidateDrawCache();
+		MarkStreamChunkDirty( slot.ChunkX, slot.ChunkZ );
 	}
 
 	void AddToDrawnCell( int slotIndex, int cellX, int cellZ )
@@ -5550,12 +6190,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _pileRoot == null || _batches == null )
 			return;
 
+		CacheDefinitionRanksInChunkDrawn();
+
 		for ( int b = 0; b < _batches.Length; b++ )
 		{
 			BatchGroup group = _batches[ b ];
 			int count = group.SlotIndices.Count;
 			if ( group.Matrices == null || group.Matrices.Length < count )
-				group.Matrices = new Matrix4x4[ count ];
+				group.Matrices = GrowMatrixArray( group.Matrices, count );
 
 			for ( int i = 0; i < count; i++ )
 			{
@@ -5576,6 +6218,40 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	}
 
 	void PatchDrawnSlotMatrix( int slotIndex )
+	{
+		PatchDrawnSlotMatrix( slotIndex, syncStream: true );
+	}
+
+	void PatchDrawnSlotMatrixPoseOnly( int slotIndex )
+	{
+		if ( _batches == null || _pileRoot == null )
+			return;
+
+		Slot slot = _slots[ slotIndex ];
+		if ( !slot.Drawn || slot.MatrixIndex < 0 )
+			return;
+
+		if ( slot.BatchKey < 0 || slot.BatchKey >= _batches.Length )
+			return;
+
+		List<int> sharedSlots = _batches[ slot.BatchKey ].SlotIndices;
+		Matrix4x4 rootMatrix = BuildMatrix( slot );
+		for ( int b = 0; b < _batches.Length; b++ )
+		{
+			BatchGroup group = _batches[ b ];
+			if ( group.SlotIndices != sharedSlots )
+				continue;
+			if ( group.Matrices == null || slot.MatrixIndex >= group.Matrices.Length )
+				continue;
+
+			Matrix4x4 matrix = rootMatrix * group.PartLocal;
+			matrix.m33 = group.Matrices[ slot.MatrixIndex ].m33;
+			group.Matrices[ slot.MatrixIndex ] = matrix;
+			_batches[ b ] = group;
+		}
+	}
+
+	void PatchDrawnSlotMatrix( int slotIndex, bool syncStream )
 	{
 		if ( _batches == null || _pileRoot == null )
 			return;
@@ -5602,6 +6278,66 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			group.Matrices[ slot.MatrixIndex ] = matrix;
 			_batches[ b ] = group;
 		}
+
+		if ( syncStream )
+			SyncStreamMatrixForDrawnSlot( slotIndex );
+	}
+
+	void FlushStreamMatrixPatches( List<int> slotIndices )
+	{
+		if ( slotIndices == null || slotIndices.Count == 0 )
+			return;
+
+		for ( int i = 0; i < slotIndices.Count; i++ )
+			SyncStreamMatrixForDrawnSlot( slotIndices[ i ] );
+	}
+
+	void SyncStreamMatrixForDrawnSlot( int slotIndex )
+	{
+		if ( !_streamingEnabled || streamSettings == null || _batches == null )
+			return;
+
+		Slot slot = _slots[ slotIndex ];
+		if ( !slot.Drawn || slot.Taken )
+			return;
+
+		int chunkIndex = slot.ChunkZ * _chunkGrid.CountX + slot.ChunkX;
+		int streamIndex = slot.StreamRankInChunk;
+		if ( streamIndex < 0 )
+			return;
+
+		if ( slot.BatchKey < 0 || slot.BatchKey >= _batches.Length )
+			return;
+
+		int chunkCount = _chunkGrid.ChunkCount;
+		List<int> sharedSlots = _batches[ slot.BatchKey ].SlotIndices;
+		for ( int b = 0; b < _batches.Length; b++ )
+		{
+			BatchGroup group = _batches[ b ];
+			if ( group.AlwaysDraw || group.SlotIndices != sharedSlots )
+				continue;
+
+			int matrixIndex = ResolveMatrixIndex( slot, group, -1 );
+			if ( group.Matrices == null || matrixIndex < 0 || matrixIndex >= group.Matrices.Length )
+				continue;
+			if ( group.ChunkStreamMatrices == null
+				|| chunkIndex >= group.ChunkStreamMatrices.Length
+				|| group.ChunkStreamCounts == null
+				|| chunkIndex >= group.ChunkStreamCounts.Length )
+				continue;
+
+			int count = group.ChunkStreamCounts[ chunkIndex ];
+			if ( streamIndex >= count )
+				continue;
+
+			Matrix4x4[] chunkMats = group.ChunkStreamMatrices[ chunkIndex ];
+			if ( chunkMats == null || streamIndex >= chunkMats.Length )
+				continue;
+
+			chunkMats[ streamIndex ] = group.Matrices[ matrixIndex ];
+			TryPatchStreamMatrixFlat( ref group, chunkCount, chunkIndex, streamIndex, group.Matrices[ matrixIndex ] );
+			_batches[ b ] = group;
+		}
 	}
 
 	void ConformSlot( int slotIndex, ref Slot slot )
@@ -5611,25 +6347,24 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		if ( slot.CoinVisual )
 		{
-			Bounds meshBounds = GetCoinMeshBounds( slot.Definition );
-			if ( !GoldPileTreasurePlacement.ConformCoinToPileSurface(
+			GoldPileTreasurePlacement.CoinPoseParams poseParams = GetCoinPoseParams( surfaceDecor: true );
+			if ( !GoldPileTreasurePlacement.FastSnapCoinToSurface(
 				_heightfield,
 				_pileLootSeed,
 				slotIndex,
 				ref slot.LocalPos,
 				ref slot.LocalRot,
 				slot.Scale,
-				meshBounds,
-				slot.EmbedDepth,
-				_coinSurfaceHeightFraction,
-				GetCoinPoseParams( surfaceDecor: true ) ) )
+				CoinMinSurfaceHeightFraction,
+				poseParams,
+				out float surfaceHeight,
+				out float embedDepth ) )
 			{
 				return;
 			}
 
-			slot.PlaceSurfaceHeight = _heightfield.SampleNormalized(
-				slot.LocalPos.x,
-				slot.LocalPos.z ) * _heightfield.MaxHeight;
+			slot.PlaceSurfaceHeight = surfaceHeight;
+			slot.EmbedDepth = embedDepth;
 			return;
 		}
 
@@ -5725,7 +6460,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		float radiusSq = radius * radius;
 		if ( _cellLists == null || _heightfield == null )
 		{
-			for ( int i = 0; i < _slots.Length; i++ )
+			for ( int i = 0; i < _slotCount; i++ )
 			{
 				float dx = _slots[ i ].LocalPos.x - local.x;
 				float dz = _slots[ i ].LocalPos.z - local.z;
@@ -5757,7 +6492,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				for ( int i = 0; i < cell.Count; i++ )
 				{
 					int slotIndex = cell[ i ];
-					if ( slotIndex < 0 || slotIndex >= _slots.Length )
+					if ( slotIndex < 0 || slotIndex >= _slotCount )
 						continue;
 					float dx = _slots[ slotIndex ].LocalPos.x - local.x;
 					float dz = _slots[ slotIndex ].LocalPos.z - local.z;
@@ -5800,11 +6535,69 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( quota <= 1 )
 			return 0f;
 
-		int rank = RankOfDefinitionInChunkDrawn( slotIndex, slot );
+		int rank = -1;
+		if ( _defRankInChunkScratch != null && slotIndex >= 0 && slotIndex < _defRankInChunkScratch.Length )
+			rank = _defRankInChunkScratch[ slotIndex ];
+		if ( rank < 0 )
+			rank = RankOfDefinitionInChunkDrawn( slotIndex, slot );
 		if ( rank < 0 )
 			return 0f;
 
-		return Mathf.Clamp01( rank / (float)quota );
+		return Mathf.Clamp01( rank / ( float )quota );
+	}
+
+	void CacheDefinitionRanksInChunkDrawn()
+	{
+		if ( _slots == null )
+			return;
+
+		int slotCount = _slotCount;
+		if ( _defRankInChunkScratch == null || _defRankInChunkScratch.Length < slotCount )
+		{
+			int cap = _defRankInChunkScratch != null ? _defRankInChunkScratch.Length : 16;
+			if ( cap < 16 )
+				cap = 16;
+			while ( cap < slotCount )
+				cap *= 2;
+			_defRankInChunkScratch = new int[ cap ];
+		}
+
+		for ( int i = 0; i < slotCount; i++ )
+			_defRankInChunkScratch[ i ] = -1;
+
+		if ( _chunkDrawnSlots == null || _chunkGrid.ChunkCount <= 0 )
+			return;
+
+		int entryCount = MixEntryCount();
+		if ( entryCount <= 0 )
+			return;
+
+		if ( _entryRankRunningScratch == null || _entryRankRunningScratch.Length < entryCount )
+			_entryRankRunningScratch = new int[ entryCount ];
+
+		for ( int c = 0; c < _chunkDrawnSlots.Length; c++ )
+		{
+			List<int> drawn = _chunkDrawnSlots[ c ];
+			if ( drawn == null || drawn.Count == 0 )
+				continue;
+
+			for ( int e = 0; e < entryCount; e++ )
+				_entryRankRunningScratch[ e ] = 0;
+
+			for ( int i = 0; i < drawn.Count; i++ )
+			{
+				int idx = drawn[ i ];
+				if ( idx < 0 || idx >= slotCount )
+					continue;
+
+				int entry = _slots[ idx ].EntryIndex;
+				if ( entry < 0 || entry >= entryCount )
+					continue;
+
+				_defRankInChunkScratch[ idx ] = _entryRankRunningScratch[ entry ];
+				_entryRankRunningScratch[ entry ]++;
+			}
+		}
 	}
 
 	void AssignCell( int slotIndex )

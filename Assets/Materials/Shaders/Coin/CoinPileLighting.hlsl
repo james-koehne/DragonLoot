@@ -160,7 +160,7 @@ half4 CoinPileLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor);
 
-    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
+    half4 color = DragonLootFragmentStylized(inputData, surfaceData, 0.0h);
     color.rgb = max(color.rgb, ambientFloor * metallic);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));

@@ -65,6 +65,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	float _lastColliderCookTime = -1000f;
 	Material _sparkleMaskMaterial;
 	MaterialPropertyBlock _sparkleMaskMpb;
+	MaterialPropertyBlock _outlineMaskMpb;
 	static TreasureSparkleDefinition s_SparkleDefinition;
 
 	public MeshRenderer PileRenderer => _renderer;
@@ -396,6 +397,37 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 			return false;
 
 		bounds = _renderer.bounds;
+		return true;
+	}
+
+	/// <summary>
+	/// Flat grid + GPU deform: outline mask must sample the same height map as the visible pile.
+	/// </summary>
+	public bool TryGetDeformedOutlineDraw( out Mesh mesh, out Matrix4x4 matrix, out MaterialPropertyBlock mpb )
+	{
+		mesh = null;
+		matrix = default;
+		mpb = null;
+		if ( _filter == null || _filter.sharedMesh == null || _renderer == null || !_renderer.enabled )
+			return false;
+		if ( _heightfield == null || _heightfield.Texture == null )
+			return false;
+
+		if ( _outlineMaskMpb == null )
+			_outlineMaskMpb = new MaterialPropertyBlock();
+
+		_outlineMaskMpb.Clear();
+		_outlineMaskMpb.SetFloat( DeformEnabledProp, 1f );
+		_outlineMaskMpb.SetTexture( DeformMapProp, _heightfield.Texture );
+		_outlineMaskMpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
+		_outlineMaskMpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
+		_outlineMaskMpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_outlineMaskMpb.SetFloat( DeformSampleBlurProp, _deformSampleBlur );
+		_outlineMaskMpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
+
+		mesh = _filter.sharedMesh;
+		matrix = _renderer.localToWorldMatrix;
+		mpb = _outlineMaskMpb;
 		return true;
 	}
 

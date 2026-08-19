@@ -14,15 +14,24 @@ public struct CoinSorterUsedEvent
 	public TreasureDefinition Coin;
 }
 
-/// <summary>Active quest / step / objective / marker changed.</summary>
+public struct QuestHudRow
+{
+	public string Text;
+	public int Indent;
+	public bool Optional;
+	public bool Complete;
+}
+
+/// <summary>Active quest / objective / marker changed.</summary>
 public struct QuestHudChangedEvent
 {
 	public string QuestId;
 	public string QuestTitle;
 	public string StepId;
 	public string ObjectiveText;
+	public QuestHudRow[] Rows;
 	public bool HasMarker;
-	public UnityEngine.Vector3 MarkerWorldPosition;
+	public Vector3 MarkerWorldPosition;
 	public bool CatalogComplete;
 }
 

@@ -145,7 +145,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
         // Match Coin Pile: lift ambient for all materials, then floor lit metals.
         half3 ambientFloorFar = coin.albedo * _ReflectionFloor;
         inputFar.bakedGI = max(inputFar.bakedGI, ambientFloorFar);
-        half4 colorFar = DragonLootFragmentPBR(inputFar, surfaceFar);
+        half4 colorFar = DragonLootFragmentStylized(inputFar, surfaceFar);
         colorFar.rgb = max(colorFar.rgb, ambientFloorFar * coin.metallic);
 
         Light pixelLightFar = GetMainLight(
@@ -184,7 +184,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = coin.albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor);
 
-    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
+    half4 color = DragonLootFragmentStylized(inputData, surfaceData);
     color.rgb = max(color.rgb, ambientFloor * coin.metallic);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));

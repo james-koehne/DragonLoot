@@ -200,30 +200,19 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half3 ambientFloor = albedo * _ReflectionFloor;
     inputData.bakedGI = max(inputData.bakedGI, ambientFloor);
 
-    half4 color = DragonLootFragmentPBR(inputData, surfaceData);
-    color.rgb = max(color.rgb, ambientFloor * metallic);
-
-    Light mainLight = GetMainLight();
-    half3 lightDirWS = mainLight.direction;
-    half3 halfDir = SafeNormalize(lightDirWS + inputData.viewDirectionWS);
-    half ndoth = saturate(dot(inputData.normalWS, halfDir));
-    half specularPeek = pow(ndoth, max(_SpecularPower, 8.0h));
     half shineMul = 1.0h + saturate(_ShineBoost);
-    color.rgb += albedo * specularPeek * _SpecularIntensity * metallic * shineMul * mainLight.color * mainLight.distanceAttenuation;
+    DragonLootStylizedSurface surface;
+    DragonLootInitStylizedSurface(inputData, surfaceData, 0.0h, surface);
+    surface.specularIntensityScale = max(_SpecularIntensity, 0.0h) / 0.45h * shineMul;
+
+    half4 color = half4(DragonLootShadeSurface(inputData, surface), 1.0h);
+    color.rgb = max(color.rgb, ambientFloor * metallic);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));
     half fresnel = CoinStackSchlickFresnel(ndotv, _FresnelPower);
     half litGate = saturate(Luminance(color.rgb) * 2.0h + _ReflectionFloor);
     half fresnelAmt = _FresnelIntensity * shineMul;
     color.rgb += fresnelRgb * fresnel * fresnelAmt * metallic * litGate;
-
-    // Local sparkles disabled — global TreasureSparkleRendererFeature owns glints.
-    // color.rgb += CoinStackSparkle(
-    //     input.positionWS,
-    //     inputData.normalWS,
-    //     inputData.viewDirectionWS,
-    //     lightDirWS,
-    //     metallic);
 
     color.rgb = MixFog(color.rgb, inputData.fogCoord);
     return color;

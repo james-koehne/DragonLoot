@@ -79,6 +79,18 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public float TotalHeight => SettledHeight;
 	public float VariationSeed => _variationSeed > 0.0001f ? _variationSeed : 1f;
 
+	int MinCoinsForPlayerCollision
+	{
+		get
+		{
+			CoinStackVisualDefinition def = null;
+			def = RuntimeDefinition.Resolve( ref def );
+			if ( def == null )
+				return 0;
+			return Mathf.Max( 0, def.minCoinsForPlayerCollision );
+		}
+	}
+
 	/// <summary>XZ footprint radius used for gem push-apart and merge queries.</summary>
 	public float FootprintRadius => ResolveDiameter() * 0.5f;
 
@@ -1447,6 +1459,14 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_capsule.height = Mathf.Max( height + radius * 2f, radius * 2f );
 		// Pivot is contact (bottom); center stays on the coin mid-height.
 		_capsule.center = new Vector3( 0f, height * 0.5f, 0f );
+		ApplyPlayerCollisionLayer();
+	}
+
+	void ApplyPlayerCollisionLayer()
+	{
+		int minCoins = MinCoinsForPlayerCollision;
+		bool collide = !_machineBuffer && minCoins > 0 && Count >= minCoins;
+		PhysicsLayers.SetRootCollidesWithPlayer( gameObject, collide );
 	}
 
 	float ResolveDiameter()

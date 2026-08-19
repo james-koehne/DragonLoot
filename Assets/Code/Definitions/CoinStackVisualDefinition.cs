@@ -60,6 +60,10 @@ public class CoinStackVisualDefinition : ScriptableObject
 	[Min( 0 )]
 	public int groundMaxStackHeight = 1000;
 
+	[Tooltip( "Ground coin stacks with at least this many coins physically block the player. 0 = never." )]
+	[Min( 0 )]
+	public int minCoinsForPlayerCollision = 20;
+
 	public Material ResolveMaterial( TreasureDefinition treasure )
 	{
 		string variant = treasure != null ? treasure.variant : null;

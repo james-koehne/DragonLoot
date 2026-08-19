@@ -12,6 +12,7 @@ CBUFFER_START(UnityPerMaterial)
     half _BumpScale;
     half _OcclusionStrength;
     half _ReflectionFloor;
+    half4 _EmissionColor;
     half4 _FresnelColor;
     half _FresnelIntensity;
     half _FresnelPower;
@@ -40,5 +41,6 @@ TEXTURE2D(_MetallicGlossMap);   SAMPLER(sampler_MetallicGlossMap);
 TEXTURE2D(_OcclusionMap);       SAMPLER(sampler_OcclusionMap);
 TEXTURE2D(_DirtMap);            SAMPLER(sampler_DirtMap);
 TEXTURE2D(_MatCap);             SAMPLER(sampler_MatCap);
+TEXTURE2D(_EmissionMap);        SAMPLER(sampler_EmissionMap);
 
 #endif

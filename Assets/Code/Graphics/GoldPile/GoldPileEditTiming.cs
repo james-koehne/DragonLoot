@@ -15,7 +15,6 @@ public static class GoldPileEditTiming
 	/// <summary>When true, also logs each phase as it completes (noisy).</summary>
 	public static bool Verbose;
 	public static string LastSummary { get; private set; } = "";
-	public static int LastCarveId { get; private set; }
 
 	struct Phase
 	{
@@ -75,7 +74,6 @@ public static class GoldPileEditTiming
 
 		s_nextCarveId++;
 		s_activeCarveId = s_nextCarveId;
-		LastCarveId = s_activeCarveId;
 		s_units = Mathf.Max( 1, units );
 		s_context = context;
 		s_sessionDetail = detail;
@@ -120,6 +118,7 @@ public static class GoldPileEditTiming
 
 		LastSummary = BuildSummary( "deferred", s_activeCarveId, s_units, s_deferred, SumMs( s_deferred ) );
 		LogIfEnabled( LastSummary, s_context as Object );
+
 		s_deferred.Clear();
 		s_hasDeferred = false;
 		s_deferRecordFrame = -1;

@@ -38,6 +38,7 @@ public static class DragonLootMenus
 	public const string TreasureInstallArtifacts = Root + "/Treasure/Install Fantasy Pack Artifacts";
 	public const string TreasureInstallChests = Root + "/Treasure/Install Chests & Keys";
 	public const string TreasureBuildDisplayTables = Root + "/Treasure/Build Display Table Prefabs";
+	public const string TreasureInstallGoldBarStackSettings = Root + "/Treasure/Install Gold Bar Stack Settings";
 	public const string TreasurePurgeSlotOrphans = Root + "/Treasure/Purge Artifact Slot Indicator Orphans";
 
 	// --- Stations ---
@@ -65,7 +66,7 @@ public static class DragonLootMenus
 
 	// --- Quests ---
 	public const string QuestsInstallCatalog = Root + "/Quests/Install Catalog & Content";
-	public const string QuestsWireLevel = Root + "/Quests/Create Standalone Level Setup Objects";
+	public const string QuestsWireLevel = Root + "/Quests/Wire Level";
 
 	// --- UI ---
 	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";

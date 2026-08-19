@@ -117,7 +117,7 @@ public class QuestObjectiveOutline : MonoBehaviour
 		if ( !SeenRoots.Add( id ) )
 			return;
 
-		HoverOutlineTargetUtility.AppendEnabledMeshRenderers( root.gameObject, RendererScratch );
+		HoverOutlineTargetUtility.AppendQuestOutlineRenderers( root.gameObject, RendererScratch );
 	}
 
 	static HoverOutlineVisualSettings ResolveQuestSettings()

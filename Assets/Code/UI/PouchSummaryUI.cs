@@ -15,7 +15,7 @@ public class PouchSummaryUI : MonoBehaviour
 	[SerializeField] Text label;
 
 	[Tooltip( "Extra pixels beyond the panel width used as the off-screen rest position." )]
-	[SerializeField] float offscreenPadding = 24f;
+	[SerializeField] float offscreenPadding = 48f;
 
 	bool _ready;
 	bool _subscribed;
@@ -207,7 +207,7 @@ public class PouchSummaryUI : MonoBehaviour
 
 		float width = Mathf.Max( _rect.rect.width, _rect.sizeDelta.x );
 		if ( width < 1f )
-			width = 280f;
+			width = 560f;
 
 		_hiddenPos = new Vector2( _shownPos.x - width - Mathf.Max( 0f, offscreenPadding ), _shownPos.y );
 	}

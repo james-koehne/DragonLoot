@@ -18,11 +18,23 @@ public class DebugQuestsSection : DebugOverlaySection
 
 		QuestDefinition active = system.ActiveQuest;
 		GUILayout.Label( "Active: " + ( active != null ? active.id : "(none)" ) );
-		GUILayout.Label( "Step: " + system.ActiveStepIndex );
+		GUILayout.Label( "Objective: " + system.ActiveStepIndex );
 		GUILayout.Label( "Catalog complete: " + system.CatalogComplete );
 
+		if ( active != null && active.subquests != null )
+		{
+			GUILayout.Label( "Subquests: " + active.subquests.Length );
+			for ( int i = 0; i < active.subquests.Length; i++ )
+			{
+				QuestDefinition sub = active.subquests[ i ];
+				if ( sub == null )
+					continue;
+				GUILayout.Label( "  " + sub.id );
+			}
+		}
+
 		GUILayout.Space( 6f );
-		if ( GUILayout.Button( "Complete Active Step" ) )
+		if ( GUILayout.Button( "Complete Active Objective" ) )
 			system.DebugCompleteActiveStep();
 
 		if ( GUILayout.Button( "Reset Quest Progress" ) )
@@ -31,16 +43,10 @@ public class DebugQuestsSection : DebugOverlaySection
 		GUILayout.Space( 4f );
 		GUILayout.Label( "Skip to quest:" );
 		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "0" ) )
+		if ( GUILayout.Button( "Starting" ) )
 			system.DebugSkipToQuest( 0 );
-		if ( GUILayout.Button( "1" ) )
+		if ( GUILayout.Button( "Main" ) )
 			system.DebugSkipToQuest( 1 );
-		if ( GUILayout.Button( "2" ) )
-			system.DebugSkipToQuest( 2 );
-		if ( GUILayout.Button( "3" ) )
-			system.DebugSkipToQuest( 3 );
-		if ( GUILayout.Button( "4" ) )
-			system.DebugSkipToQuest( 4 );
 		GUILayout.EndHorizontal();
 
 		if ( GUILayout.Button( "Start / Resume Catalog" ) )

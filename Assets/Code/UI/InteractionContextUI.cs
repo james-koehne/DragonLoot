@@ -10,8 +10,8 @@ using UnityEngine.UI;
 public class InteractionContextUI : MonoBehaviour
 {
 	[Header( "Layout" )]
-	[SerializeField] float bottomOffset = 96f;
-	[SerializeField] int fontSize = 18;
+	[SerializeField] float bottomOffset = 192f;
+	[SerializeField] int fontSize = 36;
 
 	Text _label;
 	bool _ready;
@@ -81,6 +81,8 @@ public class InteractionContextUI : MonoBehaviour
 			AppendBound( gameInput.Interact, "Hold to crank" );
 		else if ( focus is CoinSortingStationMoveInteractable )
 			AppendBound( gameInput.Interact, "Hold to move sorter" );
+		else if ( focus is DoorInteractable doorFocus && doorFocus.ShowsLockedPrompt )
+			AppendPlain( "Locked" );
 		else if ( focus != null && focus.CanInteract( player ) )
 		{
 			string primary = FormatPrimaryPrompt( focus, carry );
@@ -189,7 +191,7 @@ public class InteractionContextUI : MonoBehaviour
 				return "Take coin";
 		}
 
-		if ( focus is ChestInteractable || focus is SkeletonKeyDisplayCase )
+		if ( focus is ChestInteractable || focus is SkeletonKeyDisplayCase || focus is DoorInteractable )
 			return focus.InteractionName;
 
 		if ( focus is TreasureItemInteractable || focus is PickupInteractable )
@@ -266,6 +268,16 @@ public class InteractionContextUI : MonoBehaviour
 			return;
 
 		AppendLine( binding, prompt );
+	}
+
+	void AppendPlain( string prompt )
+	{
+		if ( string.IsNullOrEmpty( prompt ) )
+			return;
+
+		if ( _builder.Length > 0 )
+			_builder.Append( '\n' );
+		_builder.Append( prompt );
 	}
 
 	void AppendLine( string binding, string action )
@@ -385,7 +397,7 @@ public class InteractionContextUI : MonoBehaviour
 		rect.anchorMax = new Vector2( 0.5f, 0f );
 		rect.pivot = new Vector2( 0.5f, 0f );
 		rect.anchoredPosition = new Vector2( 0f, bottomOffset );
-		rect.sizeDelta = new Vector2( 640f, 110f );
+		rect.sizeDelta = new Vector2( 1280f, 220f );
 
 		_label = go.GetComponent<Text>();
 		_label.font = Resources.GetBuiltinResource<Font>( "LegacyRuntime.ttf" );

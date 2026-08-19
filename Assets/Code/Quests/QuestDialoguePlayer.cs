@@ -5,24 +5,27 @@ using UnityEngine;
 
 /// <summary>
 /// Queues dragon dialogue lines and drives <see cref="QuestDialogueChangedEvent"/>.
+/// Enqueue appends without dropping the current line or finish callbacks.
 /// </summary>
 public class QuestDialoguePlayer
 {
 	readonly Queue<QuestDialogueLine> _queue = new Queue<QuestDialogueLine>();
+	readonly Queue<Action> _onFinished = new Queue<Action>();
 
 	QuestDialogueLine _current;
 	float _lineEndsAt = -1f;
 	bool _playing;
-	Action _onFinished;
 
 	public bool IsPlaying => _playing;
 
 	public void Play( QuestDialogueLine[] lines, Action onFinished = null )
 	{
-		_queue.Clear();
-		_current = null;
-		_onFinished = onFinished;
+		Enqueue( lines, onFinished );
+	}
 
+	public void Enqueue( QuestDialogueLine[] lines, Action onFinished = null )
+	{
+		int added = 0;
 		if ( lines != null )
 		{
 			for ( int i = 0; i < lines.Length; i++ )
@@ -31,15 +34,19 @@ public class QuestDialoguePlayer
 				if ( line == null || string.IsNullOrEmpty( line.text ) )
 					continue;
 				_queue.Enqueue( line );
+				added++;
 			}
 		}
 
-		if ( _queue.Count == 0 )
+		if ( onFinished != null )
+			_onFinished.Enqueue( onFinished );
+
+		if ( _playing )
+			return;
+
+		if ( added == 0 && _queue.Count == 0 )
 		{
-			_playing = false;
-			PublishHidden();
-			if ( onFinished != null )
-				onFinished();
+			InvokeFinished();
 			return;
 		}
 
@@ -69,9 +76,9 @@ public class QuestDialoguePlayer
 	public void Stop()
 	{
 		_queue.Clear();
+		_onFinished.Clear();
 		_current = null;
 		_playing = false;
-		_onFinished = null;
 		PublishHidden();
 	}
 
@@ -79,13 +86,10 @@ public class QuestDialoguePlayer
 	{
 		if ( _queue.Count == 0 )
 		{
-			Action done = _onFinished;
-			_onFinished = null;
 			_current = null;
 			_playing = false;
 			PublishHidden();
-			if ( done != null )
-				done();
+			InvokeFinished();
 			return;
 		}
 
@@ -104,11 +108,20 @@ public class QuestDialoguePlayer
 		} );
 	}
 
+	void InvokeFinished()
+	{
+		while ( _onFinished.Count > 0 )
+		{
+			Action done = _onFinished.Dequeue();
+			if ( done != null )
+				done();
+		}
+	}
+
 	static float EstimateReadSeconds( string text )
 	{
 		if ( string.IsNullOrEmpty( text ) )
 			return 1.5f;
-		// ~18 chars/sec reading pace, clamped.
 		return Mathf.Clamp( text.Length / 18f, 1.75f, 8f );
 	}
 

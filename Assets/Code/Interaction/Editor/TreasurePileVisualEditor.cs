@@ -47,11 +47,7 @@ public class TreasurePileVisualEditor : Editor
 		Undo.undoRedoPerformed += OnUndoRedo;
 		TreasurePileVisual visual = target as TreasurePileVisual;
 		if ( visual != null && !Application.isPlaying )
-		{
 			RebuildPreview( visual );
-			if ( visual.LatentBake != null && visual.LatentBake.PoseCount > 0 )
-				RefreshLatentBakePreview( visual );
-		}
 	}
 
 	void OnDisable()
@@ -79,14 +75,15 @@ public class TreasurePileVisualEditor : Editor
 		EditorGUILayout.Space( 8f );
 		EditorGUILayout.LabelField( "Artifact Latent Bake", EditorStyles.boldLabel );
 		EditorGUILayout.HelpBox(
-			"Bakes deterministic latent poses from this pile's authored height + layout seed. "
-			+ "Curated props under _AuthoredLoot reserve occupancy; bake stores the auto-fill remainder. "
-			+ "Each pile needs its own bake (heightmaps differ).",
-			MessageType.None );
+			"Curated loot: drop an artifact/chest/key *Visual prefab so it overlaps the mound "
+			+ "(or parent it under _AuthoredLoot). Assign Treasure Definition on TreasurePileAuthoredItem. "
+			+ "Move with gizmos — the mesh stays visible. Then Bake Latents For This Pile. "
+			+ "Bake fills definition gems/artifacts around your piece, only where Treasure surface paint is below. "
+			+ "Coins/gems are not curated.",
+			MessageType.Info );
 
 		int authoredCount = visual.CountAuthoredItems();
-		if ( authoredCount > 0 )
-			EditorGUILayout.LabelField( "Curated authored props", authoredCount.ToString() );
+		EditorGUILayout.LabelField( "Curated authored props", authoredCount.ToString() );
 
 		if ( !Application.isPlaying && visual.IsLatentBakeStale() )
 		{
@@ -369,7 +366,7 @@ public class TreasurePileVisualEditor : Editor
 		}
 
 		Undo.RecordObject( bake, "Bake Treasure Pile Latents" );
-		props.BakeLatentsInto(
+		GoldPileArtifactProps.LatentFillReport report = props.BakeLatentsInto(
 			visual,
 			definition,
 			visual.Heightfield,
@@ -380,10 +377,24 @@ public class TreasurePileVisualEditor : Editor
 		EditorUtility.SetDirty( bake );
 		AssetDatabase.SaveAssets();
 		RefreshLatentBakePreview( visual );
+		int authored = visual.CountAuthoredItems();
+		if ( !report.Complete )
+		{
+			string perType = string.IsNullOrEmpty( report.PerType ) ? "" : "\n" + report.PerType;
+			EditorUtility.DisplayDialog(
+				"Bake Latents",
+				$"Wrote {bake.PoseCount} of {report.Expected} remainder poses to {bake.name} for pile '{visual.name}' "
+				+ $"(+ {authored} curated authored).\n"
+				+ $"Missing {Mathf.Max( 0, report.Expected - report.Placed )} — all treasure needs to spawn.{perType}\n"
+				+ "Check Treasure surface paint, neighborhood radius, and Placement Radius Fraction.",
+				"OK" );
+			return;
+		}
+
 		EditorUtility.DisplayDialog(
 			"Bake Latents",
 			$"Wrote {bake.PoseCount} remainder poses to {bake.name} for pile '{visual.name}' "
-			+ $"(+ {visual.CountAuthoredItems()} curated authored).",
+			+ $"(+ {authored} curated authored).",
 			"OK" );
 	}
 
@@ -398,10 +409,17 @@ public class TreasurePileVisualEditor : Editor
 			return;
 
 		Transform root = EnsureLatentBakePreviewRoot( visual );
+		int neighborhood = 1;
+		TreasurePileDefinition definition = visual.ResolveDefinitionForEditor();
+		if ( definition != null )
+			neighborhood = definition.ResolveLatentSurfaceNeighborhoodCells();
+
 		for ( int i = 0; i < bake.poses.Length; i++ )
 		{
 			TreasurePileLatentBake.Pose pose = bake.poses[ i ];
 			if ( pose.definition == null )
+				continue;
+			if ( !GoldPileTreasurePlacement.HasTreasureSurfaceBelow( visual.transform, pose.localPos, neighborhood ) )
 				continue;
 
 			Vector3 worldPos = visual.transform.TransformPoint( pose.localPos );

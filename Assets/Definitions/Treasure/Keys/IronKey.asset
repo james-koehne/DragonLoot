@@ -20,6 +20,8 @@ MonoBehaviour:
   weight: 1
   exclusiveCarry: 1
   usesHeavyThrow: 0
+  cannotThrow: 0
+  placeOnGroundOrArtifactSlotOnly: 0
   throwForceScale: 1
   throwUpBiasScale: 1
   rigidbodyMass: 0.1
@@ -38,7 +40,7 @@ MonoBehaviour:
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
   prefab:
-    m_AssetGUID: 
+    m_AssetGUID: 11f22fe81851ede4ab6a7ea146a0f759
     m_SubObjectName: 
     m_SubObjectType: 
     m_SubObjectGUID: 

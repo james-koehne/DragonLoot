@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CarryDefinition
   maxCarryWeight: 100
   minBurdenedMoveSpeedScale: 1
-  holdLocalOffset: {x: -0.5, y: -0.2, z: 0.45}
+  holdLocalOffset: {x: -0.52, y: -0.25, z: 0.45}
   holdLocalEuler: {x: 0, y: 0, z: 0}
-  activeItemOffset: {x: 0.4, y: -0.2, z: 0.45}
+  activeItemOffset: {x: 0.45, y: -0.25, z: 0.45}
   activeLocalEuler: {x: 0, y: 0, z: 0}
   heldStackOffset: {x: 0, y: 0, z: 0}
   heldStackHorizontalSpread: 0.012
@@ -44,6 +44,9 @@ MonoBehaviour:
   categoryRestOffset: {x: 0, y: -0.35, z: -0.2}
   categoryRestEuler: {x: 25, y: 0, z: 0}
   categorySwapDuration: 0.35
+  pouchSummaryFadeIn: 0.2
+  pouchSummaryHold: 2
+  pouchSummaryFadeOut: 0.35
   heldVisualMaxCoins: 128
   wholeStackHoldSeconds: 5
   wholeStackHoldCurve:
@@ -71,7 +74,7 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   wholeStackHoldMaxSeconds: 6
-  wholeStackProgressRingSize: 48
+  wholeStackProgressRingSize: 96
   wholeStackAbsorbTweenDuration: 0.28
   activeRefillTweenDuration: 0.22
   pileStealStaggerSeconds: 0.06

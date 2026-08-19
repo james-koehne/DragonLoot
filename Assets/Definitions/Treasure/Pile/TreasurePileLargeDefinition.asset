@@ -86,7 +86,8 @@ MonoBehaviour:
   heightResolution: 512
   worldSize: 64
   maxHeight: 32
-  groundLevelHeight: 0.01
+  groundLevelHeight: 0.1
+  lootGroundLevelHeight: 0.6
   meshResolution: 512
   meshDeformNormalSoften: 0
   meshDeformSampleBlur: 0
@@ -102,8 +103,10 @@ MonoBehaviour:
   coinPullToCarveCount: 3
   treasureRadialPower: 1.1
   treasureHeightBias: 0.4
-  treasurePickupOutsideFraction: 0.4
+  treasureXZSpread: 1
+  treasurePickupOutsideFraction: 0.3
   treasureReleaseOutsideFraction: 0.9
+  latentSurfaceNeighborhoodCells: 1
   preferBakedLatents: 1
   latentVolumeMaxAttempts: 24
   latentRetryNoOccupancyPasses: 1

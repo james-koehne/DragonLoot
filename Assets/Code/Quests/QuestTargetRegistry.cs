@@ -8,6 +8,7 @@ using UnityEngine;
 public static class QuestTargetRegistry
 {
 	static readonly Dictionary<string, QuestTarget> Targets = new Dictionary<string, QuestTarget>();
+	static readonly List<QuestTarget> AllTargets = new List<QuestTarget>();
 	static readonly Dictionary<string, QuestVolume> Volumes = new Dictionary<string, QuestVolume>();
 
 #if UNITY_EDITOR
@@ -15,6 +16,7 @@ public static class QuestTargetRegistry
 	static void ResetStatics()
 	{
 		Targets.Clear();
+		AllTargets.Clear();
 		Volumes.Clear();
 	}
 #endif
@@ -25,15 +27,21 @@ public static class QuestTargetRegistry
 			return;
 
 		Targets[ target.Id ] = target;
+		if ( !AllTargets.Contains( target ) )
+			AllTargets.Add( target );
 	}
 
 	public static void Unregister( QuestTarget target )
 	{
-		if ( target == null || string.IsNullOrEmpty( target.Id ) )
+		if ( target == null )
 			return;
 
-		if ( Targets.TryGetValue( target.Id, out QuestTarget existing ) && existing == target )
+		if ( !string.IsNullOrEmpty( target.Id ) &&
+		     Targets.TryGetValue( target.Id, out QuestTarget existing ) &&
+		     existing == target )
 			Targets.Remove( target.Id );
+
+		AllTargets.Remove( target );
 	}
 
 	public static void Register( QuestVolume volume )
@@ -95,6 +103,22 @@ public static class QuestTargetRegistry
 
 	public static string ResolveTargetId( Component component )
 	{
+		QuestTarget target = ResolveTarget( component );
+		if ( target == null )
+			return null;
+		return target.Id;
+	}
+
+	public static string ResolveAreaId( Component component )
+	{
+		QuestTarget target = ResolveTarget( component );
+		if ( target == null )
+			return null;
+		return target.AreaId;
+	}
+
+	public static QuestTarget ResolveTarget( Component component )
+	{
 		if ( component == null )
 			return null;
 
@@ -103,9 +127,37 @@ public static class QuestTargetRegistry
 			target = component.GetComponentInParent<QuestTarget>();
 		if ( target == null )
 			target = component.GetComponentInChildren<QuestTarget>( true );
-		if ( target == null )
-			return null;
+		return target;
+	}
 
-		return target.Id;
+	public static string GetAreaIdByTargetId( string targetId )
+	{
+		if ( !TryGetTarget( targetId, out QuestTarget target ) || target == null )
+			return null;
+		return target.AreaId;
+	}
+
+	public static void CollectInArea<T>( string areaId, List<T> into ) where T : Component
+	{
+		if ( into == null || string.IsNullOrEmpty( areaId ) )
+			return;
+
+		for ( int i = 0; i < AllTargets.Count; i++ )
+		{
+			QuestTarget target = AllTargets[ i ];
+			if ( target == null || target.AreaId != areaId )
+				continue;
+
+			T match = target.GetComponent<T>();
+			if ( match == null )
+				match = target.GetComponentInParent<T>();
+			if ( match == null )
+				match = target.GetComponentInChildren<T>( true );
+			if ( match == null )
+				continue;
+			if ( into.Contains( match ) )
+				continue;
+			into.Add( match );
+		}
 	}
 }

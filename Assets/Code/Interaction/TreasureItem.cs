@@ -837,6 +837,12 @@ public class TreasureItem : MonoBehaviour
 		previous.ReleaseTreasure( this );
 	}
 
+	/// <summary>Clears owner without <see cref="ITreasureOwner.ReleaseTreasure"/> (owner is transferring or destroying).</summary>
+	public void DetachOwnerSilently()
+	{
+		_owner = null;
+	}
+
 	public void SetHeldShadows( bool enabled )
 	{
 		EnsureRendererCache();
@@ -869,6 +875,40 @@ public class TreasureItem : MonoBehaviour
 			if ( _renderers[ i ] != null )
 				_renderers[ i ].enabled = visible;
 		}
+	}
+
+	/// <summary>
+	/// Combined world AABB of all child renderers. Collider hulls are often smaller than the mesh
+	/// (convex statue colliders), so visibility / occupancy should use this instead.
+	/// </summary>
+	public static Bounds GetCombinedRendererWorldBounds( Transform root, Vector3 fallbackCenter )
+	{
+		if ( root == null )
+			return new Bounds( fallbackCenter, Vector3.one * 0.5f );
+
+		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
+		bool any = false;
+		Bounds bounds = default;
+		for ( int i = 0; i < renderers.Length; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null )
+				continue;
+
+			if ( !any )
+			{
+				bounds = renderer.bounds;
+				any = true;
+			}
+			else
+				bounds.Encapsulate( renderer.bounds );
+		}
+
+		if ( !any )
+			return new Bounds( fallbackCenter, Vector3.one * 0.5f );
+
+		bounds.Expand( 0.05f );
+		return bounds;
 	}
 
 	void EnsureRendererCache()
@@ -1216,6 +1256,9 @@ public class TreasureItem : MonoBehaviour
 		EnsureCollidersEnabledForPickup();
 		_body.Sleep();
 		_stableTimer = 0f;
+
+		if ( GoldBarStack.IsStackable( this ) )
+			GroundGoldBarStack.TryJoinLoose( this );
 	}
 
 	/// <summary>

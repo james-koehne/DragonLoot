@@ -13,34 +13,83 @@ MonoBehaviour:
   m_Name: Quest_Final
   m_EditorClassIdentifier: Assembly-CSharp::QuestDefinition
   id: quest_final
-  displayTitle: Organise the Hoard
-  onStartDialogue:
-  - speaker: Dragon
-    text: You have cleared the way.
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: You have counted the gold.
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: You have arranged the gems.
-    pauseAfter: 0.25
-  - speaker: Dragon
-    text: And you have given my treasures somewhere worthy of them.
-    pauseAfter: 1.2
-  - speaker: Dragon
-    text: I believe you understand your duties.
-    pauseAfter: 0.5
+  displayTitle: The Hoard
+  onStartDialogue: []
   onCompleteDialogue: []
-  steps:
+  objectives:
+  - id: walk_hallway
+    objectiveText: Walk to the end of the hallway
+    markerTargetId: volume_hallway_end
+    optional: 0
+    onCompleteDialogue: []
+    conditionMode: 0
+    conditions:
+    - type: 0
+      targetId: volume_hallway_end
+      areaId: 
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
+      sectionId: 
+    subObjectives: []
   - id: organise_hoard
-    objectiveText: "Organise the dragon's hoard \u2014 clear and sort all gold piles"
+    objectiveText: Clear and sort the whole hoard
     markerTargetId: 
-    onEnterDialogue: []
+    optional: 0
     onCompleteDialogue: []
     conditionMode: 0
     conditions:
     - type: 7
       targetId: 
+      areaId: 
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
       sectionId: Section 1
+    subObjectives: []
+  events:
+  - id: enter_hallway
+    conditions:
+    - type: 0
+      targetId: volume_hallway_enter
+      areaId: 
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
+      sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: Now, Hoardkeeper...
+      pauseAfter: 0.25
+      sfx: {fileID: 8300000, guid: f13adbb4656cc064083454976bf75b28, type: 3}
+      sfxVol: 0.5
+    stinger: {fileID: 0}
+    stingerVol: 0.8
+  - id: see_hoard
+    conditions:
+    - type: 0
+      targetId: volume_hallway_end
+      areaId: 
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
+      sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: I believe we have rather a lot of work to do.
+      pauseAfter: 0.4
+      sfx: {fileID: 8300000, guid: 1500440cf0c3c744ab95f203dbed073a, type: 3}
+      sfxVol: 0.5
+    stinger: {fileID: 8300000, guid: d3e697627ddd77d459697c5b28638c72, type: 3}
+    stingerVol: 0.85
+  subquests: []
+  revealWhenParentObjectiveId: 
+  linkedParentObjectiveId: 

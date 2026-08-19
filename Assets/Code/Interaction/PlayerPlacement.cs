@@ -77,7 +77,7 @@ public class PlayerPlacement : MonoBehaviour
 		PlacementQuery query = BuildQuery();
 
 		if ( !query.HasHit || query.Hit.collider == null )
-			return SecondaryContextAction.Throw;
+			return ItemCanThrow( item ) ? SecondaryContextAction.Throw : SecondaryContextAction.CannotPlace;
 
 		if ( _hasPreview )
 		{
@@ -94,6 +94,9 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( aimTarget != null && aimTarget != _floorTarget )
 		{
+			if ( !ItemAllowsTarget( item, aimTarget ) )
+				return SecondaryContextAction.CannotPlace;
+
 			query.AutoFindValidSlot = true;
 			if ( !aimTarget.CanPlace( item, in query ) )
 			{
@@ -196,7 +199,8 @@ public class PlayerPlacement : MonoBehaviour
 		ITreasurePlacementTarget target = ResolveTarget( in query );
 		if ( target is GemConstellationInteractable
 			&& item.Definition != null
-			&& item.Definition.category != TreasureCategory.Gem )
+			&& item.Definition.category != TreasureCategory.Gem
+			&& ItemCanThrow( item ) )
 		{
 			// Non-gems throw through the constellation — no invalid placement ghost.
 			ClearPreview();
@@ -229,12 +233,18 @@ public class PlayerPlacement : MonoBehaviour
 				return;
 			}
 
-			// Coin floor deposits create/join GroundCoinStack — prefer that target for ghost + place.
+			// Coin / gold-bar floor deposits create/join owned stacks — prefer that target for ghost + place.
 			if ( GroundCoinStack.IsGroundStackableCoin( item ) )
 			{
 				GroundCoinStack nearby = FindNearbyGroundCoinStack( in query );
 				if ( nearby != null )
 					target = nearby;
+			}
+			else if ( GoldBarStack.IsStackable( item ) )
+			{
+				GroundGoldBarStack nearbyBars = FindNearbyGroundGoldBarStack( in query );
+				if ( nearbyBars != null )
+					target = nearbyBars;
 			}
 		}
 
@@ -244,7 +254,7 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
-		if ( target is GroundCoinStack || target == _groundStackTarget )
+		if ( target is GroundCoinStack || target is GroundGoldBarStack || target == _groundStackTarget )
 		{
 			if ( !ShowGroundStackPreview )
 			{
@@ -252,7 +262,8 @@ public class PlayerPlacement : MonoBehaviour
 				return;
 			}
 		}
-		else if ( target == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
+		else if ( target == _floorTarget
+			&& ( GroundCoinStack.IsGroundStackableCoin( item ) || GoldBarStack.IsStackable( item ) ) )
 		{
 			if ( !ShowGroundStackPreview )
 			{
@@ -270,6 +281,9 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
+		if ( !ItemAllowsTarget( item, target ) )
+			preview.IsValid = false;
+
 		preview = SmoothPreview( in preview );
 
 		_activeTarget = target;
@@ -278,7 +292,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( preview.GhostStyle == PlacementGhostStyle.Suppressed )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
 			if ( _ghost != null )
 				_ghost.SetVisible( false );
 			return;
@@ -294,7 +308,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( UsesWholeMeshPlacementOutline( target ) )
 			UpdatePlacementTargetOutline( target, preview.IsValid );
 		else
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
 	}
 
 	static bool UsesWholeMeshPlacementOutline( ITreasurePlacementTarget target )
@@ -313,7 +327,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		// Only coin placement yields to gem/artifact pickup outlines.
 		// Holding a gem/artifact must keep a floor ghost so place lands where aimed.
-		if ( !GroundCoinStack.IsGroundStackableCoin( heldItem ) )
+		if ( !GroundCoinStack.IsGroundStackableCoin( heldItem ) && !GoldBarStack.IsStackable( heldItem ) )
 			return false;
 
 		IInteractable focus = _interaction.Current;
@@ -326,7 +340,7 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 
 		// Stackable coins keep stack-join placement/outline instead of pickup.
-		if ( GroundCoinStack.IsGroundStackableCoin( focused ) )
+		if ( GroundCoinStack.IsGroundStackableCoin( focused ) || GoldBarStack.IsStackable( focused ) )
 			return false;
 
 		return true;
@@ -347,14 +361,15 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( renderers.Count == 0 )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
 			return;
 		}
 
 		HoverOutlineRegistrar.SetTarget(
 			HoverOutlineRegistrar.Owner.StackVolume,
 			renderers,
-			settings );
+			settings,
+			GetInstanceID() );
 	}
 
 	HoverOutlineVisualSettings ResolveStackOutlineSettings( bool valid )
@@ -409,6 +424,15 @@ public class PlayerPlacement : MonoBehaviour
 			IReadOnlyList<Renderer> collected = HoverOutlineTargetUtility.CollectFromBehaviour( groundStack );
 			for ( int i = 0; i < collected.Count; i++ )
 				renderers.Add( collected[ i ] );
+			return;
+		}
+
+		GroundGoldBarStack goldBarStack = target as GroundGoldBarStack;
+		if ( goldBarStack != null )
+		{
+			IReadOnlyList<Renderer> collectedBars = HoverOutlineTargetUtility.CollectFromBehaviour( goldBarStack );
+			for ( int i = 0; i < collectedBars.Count; i++ )
+				renderers.Add( collectedBars[ i ] );
 			return;
 		}
 
@@ -602,9 +626,9 @@ public class PlayerPlacement : MonoBehaviour
 		RefreshDefinitionTuning();
 		PlacementQuery query = BuildQuery();
 
-		// Empty space (no aim hit): throw Active item.
+		// Empty space (no aim hit): throw Active item when allowed.
 		if ( !query.HasHit || query.Hit.collider == null )
-			return TryThrowActive();
+			return ItemCanThrow( item ) && TryThrowActive();
 
 		// Honor the LateUpdate ghost — preview and place must use the same target.
 		if ( _hasPreview )
@@ -630,6 +654,9 @@ public class PlayerPlacement : MonoBehaviour
 		// Aimed at a dedicated surface: place only if accepted — never throw / soft-drop.
 		if ( aimTarget != null && aimTarget != _floorTarget )
 		{
+			if ( !ItemAllowsTarget( item, aimTarget ) )
+				return false;
+
 			query.AutoFindValidSlot = true;
 			if ( !aimTarget.CanPlace( item, in query ) )
 			{
@@ -662,7 +689,26 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !( target is GemConstellationInteractable ) || item == null || item.Definition == null )
 			return false;
 
-		return item.Definition.category != TreasureCategory.Gem;
+		if ( item.Definition.category == TreasureCategory.Gem )
+			return false;
+
+		return ItemCanThrow( item );
+	}
+
+	static bool ItemCanThrow( TreasureItem item )
+	{
+		if ( item == null || item.Definition == null )
+			return true;
+
+		return item.Definition.GetCanThrow();
+	}
+
+	static bool ItemAllowsTarget( TreasureItem item, ITreasurePlacementTarget target )
+	{
+		if ( item == null || item.Definition == null )
+			return true;
+
+		return item.Definition.AllowsPlacementTarget( target );
 	}
 
 	/// <summary>
@@ -691,6 +737,9 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !SupportsAutoFindValidSlot( target ) || item == null )
 			return false;
 
+		if ( !ItemAllowsTarget( item, target ) )
+			return false;
+
 		PlacementQuery query = BuildQuery();
 		query.AutoFindValidSlot = true;
 		return target.CanPlace( item, in query );
@@ -703,8 +752,10 @@ public class PlayerPlacement : MonoBehaviour
 
 		ITreasurePlacementTarget target = _activeTarget;
 
-		// Floor coin ItemMesh ghost seeds/joins GroundCoinStack, not FloorPlacementTarget.
+		// Floor coin / gold-bar ItemMesh ghost seeds/joins owned stacks, not FloorPlacementTarget.
 		if ( target == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
+			return TryPlaceOnFloor();
+		if ( target == _floorTarget && GoldBarStack.IsStackable( item ) )
 			return TryPlaceOnFloor();
 
 		PlacementQuery query = target == _floorTarget ? BuildFloorQuery() : BuildQuery();
@@ -717,6 +768,15 @@ public class PlayerPlacement : MonoBehaviour
 				return false;
 
 			return ExecutePlace( previewStack, item, in query );
+		}
+
+		GroundGoldBarStack previewBarStack = target as GroundGoldBarStack;
+		if ( previewBarStack != null )
+		{
+			if ( previewBarStack.IsFull || !previewBarStack.CanPlace( item, in query ) )
+				return false;
+
+			return ExecutePlace( previewBarStack, item, in query );
 		}
 
 		if ( target == _groundStackTarget )
@@ -770,6 +830,9 @@ public class PlayerPlacement : MonoBehaviour
 			PublishFailed( null, null, PlacementFailReason.NoHeldItem );
 			return false;
 		}
+
+		if ( !ItemCanThrow( item ) )
+			return false;
 
 		Vector3 throwVelocity = useSoftVelocity
 			? interaction.GetSoftReleaseVelocity()
@@ -927,6 +990,18 @@ public class PlayerPlacement : MonoBehaviour
 			return TryPlaceCreatingGroundCoinStackOnFloor( item, in query );
 		}
 
+		if ( GoldBarStack.IsStackable( item ) )
+		{
+			if ( !CanPlaceCoinOnFloorSurface( item, in query ) )
+				return false;
+
+			GroundGoldBarStack nearbyBars = FindNearbyGroundGoldBarStack( in query );
+			if ( nearbyBars != null )
+				return ExecutePlace( nearbyBars, item, in query );
+
+			return TryPlaceCreatingGroundGoldBarStackOnFloor( item, in query );
+		}
+
 		if ( !_floorTarget.CanPlace( item, in query ) )
 			return false;
 
@@ -984,6 +1059,35 @@ public class PlayerPlacement : MonoBehaviour
 		return true;
 	}
 
+	bool TryPlaceCreatingGroundGoldBarStackOnFloor( TreasureItem item, in PlacementQuery query )
+	{
+		PlayerController player = query.Player;
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry == null || item == null || _floorTarget == null )
+			return false;
+
+		if ( !_floorTarget.TryGetPlacementPreview( item, in query, out PlacementPreview preview ) )
+			return false;
+
+		if ( !carry.TryConsumeActive( out TreasureItem one ) || one == null )
+			return false;
+
+		float joinRadius = Mathf.Max( GroundStackSnapRadius, GoldBarStack.ResolveJoinRadius( one.Definition ) );
+		GroundGoldBarStack stack = GroundGoldBarStack.FindNearest( preview.Position, joinRadius );
+		if ( stack == null || stack.IsFull || !stack.CanAccept( one.Definition ) )
+			stack = GroundGoldBarStack.CreateAt( preview.Position, preview.Rotation );
+
+		if ( !stack.CanAccept( one.Definition ) )
+		{
+			one.EnterPhysics( one.transform.position, one.transform.rotation );
+			return false;
+		}
+
+		stack.BeginAppendFlight( one );
+		stack.AbsorbNearbyLooseBars();
+		return true;
+	}
+
 	public void NotifyPlacementFailed( PlacementFailReason reason )
 	{
 		PlayerCarry carry = _player != null ? _player.Carry : null;
@@ -997,6 +1101,9 @@ public class PlayerPlacement : MonoBehaviour
 	bool ExecutePlace( ITreasurePlacementTarget target, TreasureItem item, in PlacementQuery query )
 	{
 		if ( target == null || item == null )
+			return false;
+
+		if ( !ItemAllowsTarget( item, target ) )
 			return false;
 
 		TreasureDefinition definition = item.Definition;
@@ -1067,7 +1174,7 @@ public class PlayerPlacement : MonoBehaviour
 		PlacementQuery query = new PlacementQuery
 		{
 			Player = _player,
-			InteractRange = _interaction != null ? _interaction.InteractRange : 3f
+			InteractRange = _interaction != null ? _interaction.PlacementAimRange : 6f
 		};
 
 		if ( _interaction != null && _interaction.TryGetLastHit( out RaycastHit hit ) )
@@ -1174,7 +1281,7 @@ public class PlayerPlacement : MonoBehaviour
 		PlacementQuery query = new PlacementQuery
 		{
 			Player = _player,
-			InteractRange = _interaction != null ? _interaction.InteractRange : 3f
+			InteractRange = _interaction != null ? _interaction.PlacementAimRange : 6f
 		};
 
 		if ( _interaction != null && _interaction.TryGetSurfaceHit( out RaycastHit surfaceHit ) )
@@ -1317,6 +1424,46 @@ public class PlayerPlacement : MonoBehaviour
 		// while the stack sits slightly off-axis within snap radius).
 		if ( _interaction != null && _interaction.TryGetAimRay( out Ray ray ) )
 			return GroundCoinStack.FindNearestAlongRay( ray, radius, query.InteractRange > 0.01f ? query.InteractRange : 8f );
+
+		return null;
+	}
+
+	GroundGoldBarStack FindNearbyGroundGoldBarStack( in PlacementQuery query )
+	{
+		if ( query.HasHit && query.Hit.collider != null )
+		{
+			GroundGoldBarStack onHit = query.Hit.collider.GetComponentInParent<GroundGoldBarStack>();
+			if ( onHit != null && !onHit.IsFull )
+				return onHit;
+		}
+
+		float radius = GroundStackSnapRadius;
+		if ( radius <= 0.0001f )
+			radius = GoldBarStackSettings.DefaultJoinRadius;
+
+		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
+		TreasureItem held = null;
+		if ( carry != null )
+			carry.TryPeekActive( out held );
+		if ( held != null && held.Definition != null )
+			radius = Mathf.Max( radius, GoldBarStack.ResolveJoinRadius( held.Definition ) );
+
+		Vector3 probe = query.HasHit ? query.Hit.point : default;
+		if ( !query.HasHit )
+		{
+			if ( _interaction == null || !_interaction.TryGetAimRay( out Ray aimRay ) )
+				return null;
+
+			float range = query.InteractRange > 0.01f ? query.InteractRange : _interaction.InteractRange;
+			probe = aimRay.GetPoint( Mathf.Min( range, 8f ) );
+		}
+
+		GroundGoldBarStack nearest = GroundGoldBarStack.FindNearest( probe, radius );
+		if ( nearest != null && !nearest.IsFull )
+			return nearest;
+
+		if ( _interaction != null && _interaction.TryGetAimRay( out Ray ray ) )
+			return GroundGoldBarStack.FindNearestAlongRay( ray, radius, query.InteractRange > 0.01f ? query.InteractRange : 8f );
 
 		return null;
 	}
@@ -1687,7 +1834,7 @@ public class PlayerPlacement : MonoBehaviour
 		_hasPreview = false;
 		_activePreview = default;
 		_hasSmoothedPreview = false;
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
 	}

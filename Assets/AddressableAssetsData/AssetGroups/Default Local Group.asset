@@ -15,6 +15,11 @@ MonoBehaviour:
   m_GroupName: Default Local Group
   m_GUID: 55fb90f59465a4740b6794ccaf71392a
   m_SerializeEntries:
+  - m_GUID: 039b34dc0dde57244969183d1d54486a
+    m_Address: Assets/Addressables/Treasure/Chests/GoldChest.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 06edff88c45ba794daed0970af205e82
     m_Address: Assets/Addressables/Treasure/Artifacts/RuneLedgerVisual.prefab
     m_ReadOnly: 0
@@ -26,6 +31,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 0def08d90b86bf342ba813e655524296
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_10Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 0eaa497ede230864da009d12dcdc9024
     m_Address: Assets/Addressables/Treasure/Artifacts/BronzeChaliceVisual.prefab
     m_ReadOnly: 0
@@ -33,6 +43,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 0f14770d213a7db4d8bef173d215d8eb
     m_Address: Assets/Addressables/Treasure/Artifacts/EmeraldGobletVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 11f22fe81851ede4ab6a7ea146a0f759
+    m_Address: Assets/Addressables/Treasure/Keys/IronKeyVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -48,11 +63,26 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 242fa6f2fe9bb294ca07a3afaa348d48
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_02Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 25acb71897fabd943b3ab7239da496c8
     m_Address: UpgradeCatalogDefinition
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2601138775f2407499a6c441d9b42a54
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_03Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 26baddbb8754ade428abc52be7839395
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_04Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 287c2924858783c4ea90ae9d96082f59
     m_Address: Assets/FunkClient/Addressables/FunkClient.prefab
@@ -64,13 +94,39 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 29779fd0bc7be974a895a2063cd3e729
+    m_Address: Tables/GoldBarDisplayTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2f5a7be54e8c1694394a748e10b1cf5b
+    m_Address: GoldBarStackSettings
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 33f858fcbd78876408c1b36350f373c4
+    m_Address: Assets/Addressables/Treasure/Keys/GoldKeyVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 349ada3a129f93143bdcfad1b7cd05fc
     m_Address: Assets/Addressables/Treasure/Artifacts/RoyalCoronaVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 35a2a6e9b2146a148981df44b69ac70d
+    m_Address: Assets/Addressables/Treasure/Artifacts/Statue_02Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 397cb9fd433e156418871285f189f9c4
     m_Address: Assets/Addressables/Treasure/Artifacts/AncientTomeVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3a14898b103c2c6459cc5530fa74ae8d
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bone_02Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -96,6 +152,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4f9d543d0d4d0564a91b9f7c9159439d
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_07Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 50d0b586433eeae46804a5f21702c850
     m_Address: QuestCatalogDefinition
     m_ReadOnly: 0
@@ -119,6 +180,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 564e24a10c51bb043b14e65c08e8f4b2
     m_Address: Assets/Addressables/Treasure/EmeraldVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 57f0fbbbbb1d80b449b7fa387655b0ad
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_05Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -153,14 +219,34 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 7eea7f1ff47cb984db4fcb128570d4d5
+    m_Address: Assets/Addressables/Treasure/Keys/SkeletonKeyVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 7f5fa3720a8883148915756329168deb
     m_Address: Assets/Definitions/DebugDefinition.asset
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 84ce32da0d1fb184e9c2d264f955ee4a
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_06Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8d06fbf3cf89be244b29face4480968c
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_08Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8e218ffb89412394c9546fd36bc3c9db
     m_Address: Assets/Addressables/Treasure/Artifacts/SealedCodexVisual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8edf2ac77769e2449a9d58424686fada
+    m_Address: Assets/Addressables/Treasure/Chests/IronChest.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -207,6 +293,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a3c9e57d0b8d2e06a7e1f564c9d2b803
     m_Address: Tables/CoinDisplayTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a41aee193f74df647a846aa00a8650a0
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_01Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -323,6 +414,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d6946a582d733614788848e43bbd38e5
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_09Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d6e16621bc6cbfe4b8aed51808076553
     m_Address: TreasureSparkleDefinition
     m_ReadOnly: 0
@@ -339,11 +435,26 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e017ebf56463832419dd4fa74d758d61
+    m_Address: Assets/Addressables/Treasure/Artifacts/Statue_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e1bfaf5b80ff3454e9baa76a828cfa95
+    m_Address: Assets/Addressables/Treasure/Artifacts/Bone_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e68806ba61a378d42bc41ff7654957ae
     m_Address: GoldPileCarveDefinition
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e93114dd0d25b2c4b934a6ea15bfd1d1
+    m_Address: Assets/Addressables/Treasure/Artifacts/GoldBar_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: ee80806408e6f154ca5e948598832dca
     m_Address: CoinSortingStationDefinition

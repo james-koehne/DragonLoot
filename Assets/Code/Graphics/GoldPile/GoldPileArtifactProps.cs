@@ -29,6 +29,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 		public bool Exposed;
 		public bool IsAuthored;
 		public int PropIndex;
+		public bool LoggedMissingSpawn;
+	}
+
+	public struct LatentFillReport
+	{
+		public int Expected;
+		public int Placed;
+		public string PerType;
+
+		public bool Complete => Placed >= Expected;
 	}
 
 	struct PropEntry
@@ -59,10 +69,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 	Camera _cachedCamera;
 	int _bindSerial;
 	int _revealGeneration;
-	float _placementRadiusFraction = 0.88f;
+	float _placementRadiusFraction = 1f;
 	float _placementMinSpacing = 0.35f;
 	float _treasureRadialPower = 1.25f;
 	float _treasureHeightBias = 0.75f;
+	float _treasureXZSpread = 1f;
+	int _latentSurfaceNeighborhoodCells = 1;
 	float _treasurePickupOutsideFraction = 0.4f;
 	float _treasureReleaseOutsideFraction = 0.9f;
 	int _pileLootSeed = 1;
@@ -147,7 +159,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 	/// Editor-only: procedural remainder latent build into a pure-data bake asset (no reveal / no scene props).
 	/// Authored curated props stay on scene objects; only auto-fill poses are written to the bake.
 	/// </summary>
-	public void BakeLatentsInto(
+	public LatentFillReport BakeLatentsInto(
 		TreasurePileVisual owner,
 		TreasurePileDefinition definition,
 		GoldPileHeightfield heightfield,
@@ -157,15 +169,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 		TreasurePileLatentBake bake )
 	{
 		if ( bake == null || definition == null || heightfield == null )
-			return;
+			return default;
 
 		BeginBind( owner, definition, heightfield, pileRoot, loot, null, authoredLayoutSeed );
 		LatentBindSettings settings = ResolveLatentBindSettings();
 		CreateOccupancy( settings, out List<Bounds> occupiedBounds, out VolumeOccupancyGrid occupancyGrid );
 		SeedOccupancyFromAuthoredScene( occupiedBounds, occupancyGrid );
-		PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
+		LatentFillReport report = PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
 		WriteBakeAsset( bake, authoredLayoutSeed );
 		ClearAll();
+		return report;
 	}
 
 	int BeginBind(
@@ -200,6 +213,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 			_placementMinSpacing = Mathf.Max( 0.05f, definition.placementMinSpacing );
 			_treasureRadialPower = Mathf.Clamp( definition.treasureRadialPower, 0.25f, 3f );
 			_treasureHeightBias = Mathf.Clamp( definition.treasureHeightBias, 0f, 3f );
+			_treasureXZSpread = definition.treasureXZSpread < 0.25f
+				? 1f
+				: Mathf.Clamp( definition.treasureXZSpread, 0.25f, 3f );
+			_latentSurfaceNeighborhoodCells = definition.ResolveLatentSurfaceNeighborhoodCells();
 			_treasurePickupOutsideFraction = Mathf.Clamp( definition.treasurePickupOutsideFraction, 0.05f, 0.95f );
 			_treasureReleaseOutsideFraction = Mathf.Clamp( definition.treasureReleaseOutsideFraction, 0.5f, 1f );
 		}
@@ -542,8 +559,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 	/// </summary>
 	public void QueueRevealAfterCarve( Vector3 worldCenter, float radius )
 	{
+		float r = Mathf.Max( 0.05f, radius );
+		if ( _pendingReveal )
+		{
+			_pendingRevealWorld = worldCenter;
+			_pendingRevealRadius = Mathf.Max( _pendingRevealRadius, r );
+			return;
+		}
+
 		_pendingRevealWorld = worldCenter;
-		_pendingRevealRadius = Mathf.Max( 0.05f, radius );
+		_pendingRevealRadius = r;
 		_pendingReveal = true;
 		_revealCursor = 0;
 	}
@@ -756,18 +781,30 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return false;
 		}
 
+		int skippedSurface = 0;
+		int skippedInvalid = 0;
+		int added = 0;
 		for ( int i = 0; i < bake.poses.Length; i++ )
 		{
 			TreasurePileLatentBake.Pose pose = bake.poses[ i ];
 			TreasureDefinition def = pose.definition;
 			if ( def == null || !IsLargeProp( def ) )
+			{
+				skippedInvalid++;
 				continue;
+			}
 
 			float scale = pose.scale;
 			if ( scale < 0.01f )
 				scale = def.worldScale.x > 0.01f ? def.worldScale.x : 1f;
 
 			Bounds localBounds = new Bounds( pose.boundsCenter, pose.boundsSize );
+			if ( !GoldPileTreasurePlacement.HasTreasureSurfaceBelow( _pileRoot, pose.localPos, _latentSurfaceNeighborhoodCells ) )
+			{
+				skippedSurface++;
+				continue;
+			}
+
 			_latent.Add( new LatentEntry
 			{
 				Definition = def,
@@ -781,6 +818,17 @@ public class GoldPileArtifactProps : MonoBehaviour
 				IsAuthored = false,
 				PropIndex = -1
 			} );
+			added++;
+		}
+
+		int expected = CountExpectedRemainderLatents();
+		if ( added < expected )
+		{
+			WarnTreasureMissing(
+				"baked bind",
+				expected,
+				added,
+				$"bake poses={bake.poses.Length} skipped no-surface={skippedSurface} skipped invalid={skippedInvalid}" );
 		}
 
 		return true;
@@ -890,7 +938,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 	bool TryBuildAuthoredLatent( TreasurePileAuthoredItem authored, out LatentEntry latent )
 	{
 		latent = default;
-		if ( authored == null || authored.Item == null || authored.Definition == null || _pileRoot == null )
+		if ( authored == null || authored.Definition == null || _pileRoot == null )
 			return false;
 		if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
 			return false;
@@ -904,7 +952,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( lossy > 0.01f )
 			scale = lossy;
 
-		Bounds worldBounds = GetItemBounds( authored.Item );
+		Bounds worldBounds = authored.GetWorldBounds();
 		Bounds localBounds = WorldBoundsToLocal( worldBounds );
 		if ( localBounds.size.sqrMagnitude < 1e-6f )
 			localBounds = GoldPileTreasurePlacement.LocalAabbFromPose( localPos, localRot, scale, null );
@@ -936,6 +984,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 		System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
 		int attemptsThisFrame = 0;
+		int expected = 0;
+		int placed = 0;
+		string perType = "";
 
 		for ( int e = 0; e < _definition.treasureContents.Length; e++ )
 		{
@@ -948,6 +999,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 				continue;
 
 			int count = entry.count;
+			expected += count;
+			int got = 0;
 			for ( int i = 0; i < count; i++ )
 			{
 				if ( !IsBindStillValid( bindId ) )
@@ -965,20 +1018,28 @@ public class GoldPileArtifactProps : MonoBehaviour
 				}
 
 				int unitIndex = WorldLootSeed.StableUnitIndex( e, i );
-				PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid );
+				if ( PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid ) )
+					got++;
 				attemptsThisFrame++;
 			}
+
+			placed += got;
+			perType = AppendMissingType( perType, def, got, count );
 		}
+
+		WarnTreasureMissing( "procedural bind", expected, placed, perType );
 	}
 
-	void PlaceDefinitionContents(
+	LatentFillReport PlaceDefinitionContents(
 		LatentBindSettings settings,
 		List<Bounds> occupiedBounds,
 		VolumeOccupancyGrid occupancyGrid )
 	{
+		LatentFillReport report = default;
 		if ( _definition == null || _definition.treasureContents == null || _heightfield == null )
-			return;
+			return report;
 
+		string perType = "";
 		for ( int e = 0; e < _definition.treasureContents.Length; e++ )
 		{
 			TreasurePileEntry entry = _definition.treasureContents[ e ];
@@ -987,12 +1048,22 @@ public class GoldPileArtifactProps : MonoBehaviour
 				continue;
 
 			int count = entry.count;
+			report.Expected += count;
+			int got = 0;
 			for ( int i = 0; i < count; i++ )
 			{
 				int unitIndex = WorldLootSeed.StableUnitIndex( e, i );
-				PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid );
+				if ( PlaceLatentUnit( def, unitIndex, settings, occupiedBounds, occupancyGrid ) )
+					got++;
 			}
+
+			report.Placed += got;
+			perType = AppendMissingType( perType, def, got, count );
 		}
+
+		report.PerType = perType;
+		WarnTreasureMissing( "latent fill", report.Expected, report.Placed, perType );
+		return report;
 	}
 
 	async Task BuildLatentEntriesAsync( int bindId, LatentBindSettings settings )
@@ -1040,7 +1111,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 	}
 
-	void PlaceLatentUnit(
+	bool PlaceLatentUnit(
 		TreasureDefinition def,
 		int unitIndex,
 		LatentBindSettings settings,
@@ -1107,28 +1178,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 
 		if ( !placed )
-		{
-			Debug.LogWarning(
-				$"[GoldPileArtifactProps] Forced latent seat failed for {def.name} unit {unitIndex}; using mound center fallback.",
-				this );
-			float half = _heightfield.WorldSize * 0.25f;
-			float lx = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 3, -half, half );
-			float lz = GoldPileTreasurePlacement.HashRange( _pileLootSeed, unitIndex * 17 + 5, -half, half );
-			float surface = _heightfield.SampleNormalized( lx, lz ) * _heightfield.MaxHeight;
-			float embed = Mathf.Max( 0.05f, probe );
-			pose = new GoldPileTreasurePlacement.VolumePose
-			{
-				LocalPos = new Vector3( lx, surface - embed, lz ),
-				LocalRot = GoldPileTreasurePlacement.HashRotation( _pileLootSeed, unitIndex ),
-				Scale = scale,
-				ProbeRadius = probe
-			};
-			localBounds = GoldPileTreasurePlacement.LocalAabbFromPose(
-				pose.LocalPos,
-				pose.LocalRot,
-				scale,
-				null );
-		}
+			return false;
 
 		if ( occupancyGrid != null )
 			occupancyGrid.Add( localBounds );
@@ -1148,6 +1198,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			IsAuthored = false,
 			PropIndex = -1
 		} );
+		return true;
 	}
 
 	bool TrySampleLatentPose(
@@ -1179,7 +1230,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 			out pose,
 			out localBounds,
 			maxAttempts,
-			occupancyGrid );
+			occupancyGrid,
+			_pileRoot,
+			_treasureXZSpread,
+			_latentSurfaceNeighborhoodCells );
 	}
 
 	async Task RefreshRevealAsync(
@@ -1260,6 +1314,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 				}
 
 				if ( !touchesOutside )
+					continue;
+
+				if ( !CanSpawnBakedLatent( latent ) )
 					continue;
 
 				latent.Exposed = true;
@@ -1426,6 +1483,23 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( latent.Spawned && reuse == null )
 			return;
 
+		if ( reuse == null && !CanSpawnBakedLatent( latent ) )
+		{
+			if ( !latent.LoggedMissingSpawn )
+			{
+				latent.LoggedMissingSpawn = true;
+				_latent[ latentIndex ] = latent;
+				string defName = latent.Definition != null ? latent.Definition.name : "null";
+				Vector3 worldPosBlocked = _pileRoot.TransformPoint( latent.LocalPos );
+				Debug.LogWarning(
+					$"[GoldPileArtifactProps] Pile '{PileLogName()}' could not spawn '{defName}' at {worldPosBlocked} "
+					+ "(no Treasure surface pad below). All treasure needs to spawn.",
+					this );
+			}
+
+			return;
+		}
+
 		TreasureDefinition definition = latent.Definition;
 		Vector3 worldPos = _pileRoot.TransformPoint( latent.LocalPos );
 		Quaternion worldRot = _pileRoot.rotation * latent.LocalRot;
@@ -1438,6 +1512,14 @@ public class GoldPileArtifactProps : MonoBehaviour
 		{
 			if ( item != null && reuse == null )
 				TreasureItemFactory.Despawn( item );
+			if ( item == null && reuse == null )
+			{
+				Debug.LogWarning(
+					$"[GoldPileArtifactProps] Pile '{PileLogName()}' failed to instantiate '{definition.name}' at {worldPos}. "
+					+ "All treasure needs to spawn.",
+					this );
+			}
+
 			return;
 		}
 
@@ -1526,7 +1608,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _heightfield != null
 			&& GoldPileTreasurePlacement.ViolatesGroundEmbed(
 				latent.LocalBounds,
-				_heightfield.GroundLevel,
+				_heightfield.LootGroundLevel,
 				maxEmbed ) )
 		{
 			if ( TryResampleLatentSeat( latentIndex, probe ) )
@@ -1646,7 +1728,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 			out GoldPileTreasurePlacement.VolumePose pose,
 			out Bounds localBounds,
 			settings.VolumeMaxAttempts,
-			occupancyGrid ) )
+			occupancyGrid,
+			_pileRoot,
+			_treasureXZSpread,
+			_latentSurfaceNeighborhoodCells ) )
 		{
 			return false;
 		}
@@ -1664,27 +1749,21 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return;
 
 		entry.CachedCollider = item.GetComponent<Collider>();
-		if ( entry.CachedCollider != null )
-			entry.WorldBounds = entry.CachedCollider.bounds;
-		else
-			entry.WorldBounds = GetItemBounds( item );
+		entry.WorldBounds = GetItemBounds( item );
 	}
 
 	void RefreshPropWorldBoundsIfNeeded()
 	{
-		if ( _pileRoot == null || !_pileRoot.hasChanged )
+		if ( _pileRoot == null )
 			return;
 
-		_pileRoot.hasChanged = false;
 		for ( int i = 0; i < _props.Count; i++ )
 		{
 			PropEntry entry = _props[ i ];
-			if ( entry.Item == null )
-				continue;
-
-			if ( entry.CachedCollider != null )
-				entry.WorldBounds = entry.CachedCollider.bounds;
-			else
+			int latentIndex = entry.LatentIndex;
+			if ( latentIndex >= 0 && latentIndex < _latent.Count )
+				entry.WorldBounds = LocalBoundsToWorld( _latent[ latentIndex ].LocalBounds );
+			else if ( entry.Item != null && entry.RenderVisible )
 				entry.WorldBounds = GetItemBounds( entry.Item );
 
 			_props[ i ] = entry;
@@ -1715,7 +1794,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( prop.Item == null )
 			return;
 
-		bool enabled = prop.RenderVisible && prop.Pickable;
+		// Solid pile obstacles (statues, chests) collide as soon as they are seated.
+		// Pickup still waits for outside-fraction; frustum hide must not drop player collision.
+		bool solidOnPile = prop.Definition != null && prop.Definition.collideWithPlayerOnPile;
+		bool enabled = solidOnPile || ( prop.RenderVisible && prop.Pickable );
 		Collider[] cols = prop.Item.GetComponentsInChildren<Collider>( true );
 		for ( int i = 0; i < cols.Length; i++ )
 		{
@@ -1783,7 +1865,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( scale < 0.01f )
 			scale = 1f;
 		float probe = Mathf.Max( 0.08f, scale * 0.35f );
-		float floorY = GoldPileTreasurePlacement.FloorClearanceY( _heightfield.GroundLevel, probe );
+		float floorY = GoldPileTreasurePlacement.FloorClearanceY( _heightfield.LootGroundLevel, probe );
 		float yMax = Mathf.Max( floorY, surface - probe * 0.35f );
 		local.y = Mathf.Clamp( local.y, floorY, yMax );
 		local = GoldPileTreasurePlacement.ClampAboveFloor( _heightfield, local, probe );
@@ -1855,7 +1937,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 				out GoldPileTreasurePlacement.VolumePose pose,
 				out Bounds validBounds,
 				settings.VolumeMaxAttempts,
-				occupancyGrid ) )
+				occupancyGrid,
+				_pileRoot,
+				_treasureXZSpread,
+				_latentSurfaceNeighborhoodCells ) )
 			{
 				return -1;
 			}
@@ -1908,7 +1993,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 					out GoldPileTreasurePlacement.VolumePose pose,
 					out Bounds validBounds,
 					settings.VolumeMaxAttempts,
-					occupancyGrid ) )
+					occupancyGrid,
+					_pileRoot,
+					_treasureXZSpread,
+					_latentSurfaceNeighborhoodCells ) )
 				{
 					return -1;
 				}
@@ -1970,7 +2058,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 				continue;
 
 			bool visible = true;
-			if ( useChunkFrustum )
+			if ( useChunkFrustum && !PropBoundsExceedChunk( entry ) )
 			{
 				GoldPileChunk chunk = _loot.ChunkGrid.GetChunk( entry.ChunkX, entry.ChunkZ );
 				if ( chunk != null && !chunk.FrustumVisible )
@@ -1990,17 +2078,22 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 	}
 
+	bool PropBoundsExceedChunk( PropEntry entry )
+	{
+		if ( _loot == null || _loot.ChunkGrid == null )
+			return true;
+
+		float chunkSize = _loot.ChunkGrid.ChunkSize;
+		Vector3 size = entry.WorldBounds.size;
+		return size.x > chunkSize * 0.5f || size.z > chunkSize * 0.5f || size.y > chunkSize;
+	}
+
 	static Bounds GetItemBounds( TreasureItem item )
 	{
-		Collider col = item.GetComponent<Collider>();
-		if ( col != null )
-			return col.bounds;
+		if ( item == null )
+			return new Bounds( Vector3.zero, Vector3.one * 0.5f );
 
-		Renderer renderer = item.GetComponentInChildren<Renderer>();
-		if ( renderer != null )
-			return renderer.bounds;
-
-		return new Bounds( item.transform.position, Vector3.one * 0.5f );
+		return TreasureItem.GetCombinedRendererWorldBounds( item.transform, item.transform.position );
 	}
 
 	Bounds WorldBoundsToLocal( Bounds worldBounds )
@@ -2018,6 +2111,23 @@ public class GoldPileArtifactProps : MonoBehaviour
 			Mathf.Abs( x.y ) + Mathf.Abs( y.y ) + Mathf.Abs( z.y ),
 			Mathf.Abs( x.z ) + Mathf.Abs( y.z ) + Mathf.Abs( z.z ) );
 		return new Bounds( c, localExtents * 2f );
+	}
+
+	Bounds LocalBoundsToWorld( Bounds localBounds )
+	{
+		if ( _pileRoot == null )
+			return localBounds;
+
+		Vector3 c = _pileRoot.TransformPoint( localBounds.center );
+		Vector3 e = localBounds.extents;
+		Vector3 x = _pileRoot.TransformVector( new Vector3( e.x, 0f, 0f ) );
+		Vector3 y = _pileRoot.TransformVector( new Vector3( 0f, e.y, 0f ) );
+		Vector3 z = _pileRoot.TransformVector( new Vector3( 0f, 0f, e.z ) );
+		Vector3 worldExtents = new Vector3(
+			Mathf.Abs( x.x ) + Mathf.Abs( y.x ) + Mathf.Abs( z.x ),
+			Mathf.Abs( x.y ) + Mathf.Abs( y.y ) + Mathf.Abs( z.y ),
+			Mathf.Abs( x.z ) + Mathf.Abs( y.z ) + Mathf.Abs( z.z ) );
+		return new Bounds( c, worldExtents * 2f );
 	}
 
 	Camera ResolveCamera()
@@ -2144,6 +2254,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
 				continue;
 
+			if ( !CanSpawnBakedLatent( latent ) )
+				continue;
+
 			Vector3 worldCenter = _pileRoot.TransformPoint( latent.LocalBounds.center );
 			float spawnDistSqr = PlanarDistanceSqr( playerPos, worldCenter );
 			if ( !IsCategoryInStreamRange( latent.Definition.category, spawnDistSqr, currentlyResident: false ) )
@@ -2239,6 +2352,14 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 
 		_props.RemoveAt( last );
+	}
+
+	bool CanSpawnBakedLatent( LatentEntry latent )
+	{
+		if ( latent.IsAuthored )
+			return true;
+
+		return GoldPileTreasurePlacement.HasTreasureSurfaceBelow( _pileRoot, latent.LocalPos, _latentSurfaceNeighborhoodCells );
 	}
 
 	bool IsLatentInStreamRange( int latentIndex, bool currentlyResident )
@@ -2374,6 +2495,54 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return false;
 
 		return definition.category != TreasureCategory.Coin;
+	}
+
+	int CountExpectedRemainderLatents()
+	{
+		if ( _definition == null || _definition.treasureContents == null )
+			return 0;
+
+		int total = 0;
+		for ( int i = 0; i < _definition.treasureContents.Length; i++ )
+		{
+			TreasurePileEntry entry = _definition.treasureContents[ i ];
+			if ( entry.treasure == null || !IsLargeProp( entry.treasure ) || entry.count <= 0 )
+				continue;
+			total += entry.count;
+		}
+
+		return total;
+	}
+
+	static string AppendMissingType( string perType, TreasureDefinition def, int placed, int expected )
+	{
+		if ( def == null || placed >= expected )
+			return perType;
+
+		string piece = $"{def.name} {placed}/{expected}";
+		if ( string.IsNullOrEmpty( perType ) )
+			return piece;
+		return perType + "; " + piece;
+	}
+
+	string PileLogName()
+	{
+		if ( _owner != null )
+			return _owner.name;
+		return name;
+	}
+
+	void WarnTreasureMissing( string phase, int expected, int placed, string details )
+	{
+		int missing = Mathf.Max( 0, expected - placed );
+		if ( missing <= 0 )
+			return;
+
+		string extra = string.IsNullOrEmpty( details ) ? "" : " " + details + ".";
+		Debug.LogWarning(
+			$"[GoldPileArtifactProps] {phase}: pile '{PileLogName()}' placed {placed}/{expected} definition latents "
+			+ $"({missing} missing). All treasure needs to spawn.{extra}",
+			this );
 	}
 
 	public bool IsPickable( TreasureItem item )

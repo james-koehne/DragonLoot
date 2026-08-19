@@ -38,11 +38,23 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Active linear quest id (null when catalog complete or not started).</summary>
 	public string activeQuestId;
 
-	/// <summary>Step index within <see cref="activeQuestId"/>.</summary>
+	/// <summary>Sequential objective index within <see cref="activeQuestId"/>.</summary>
 	public int activeStepIndex;
 
 	/// <summary>Completed quest ids in catalog order.</summary>
 	public List<string> completedQuestIds;
+
+	/// <summary>Completed objective keys as questId/objectiveId.</summary>
+	public List<string> completedObjectiveIds;
+
+	/// <summary>Fired event keys as questId/eventId.</summary>
+	public List<string> firedEventIds;
+
+	/// <summary>Doors unlocked via <see cref="DoorUnlockedEvent"/> (by door id).</summary>
+	public List<string> eventUnlockedDoorIds;
+
+	/// <summary>Door ids currently in an open pose.</summary>
+	public List<string> openDoorIds;
 
 	/// <summary>User master volume (0–1). Combined with <see cref="AudioDefinition.masterVolume"/>.</summary>
 	public float masterVolume = 1f;
@@ -82,6 +94,7 @@ public class ProfileSaveData : IGameStats
 			upgradeLevels = new Dictionary<string, int>();
 
 		EnsureQuestProgress();
+		EnsureDoorProgress();
 
 		if ( float.IsNaN( masterVolume ) || float.IsInfinity( masterVolume ) )
 			masterVolume = 1f;
@@ -93,8 +106,22 @@ public class ProfileSaveData : IGameStats
 	{
 		if ( completedQuestIds == null )
 			completedQuestIds = new List<string>();
+		if ( completedObjectiveIds == null )
+			completedObjectiveIds = new List<string>();
+		if ( firedEventIds == null )
+			firedEventIds = new List<string>();
 		if ( activeStepIndex < 0 )
 			activeStepIndex = 0;
+
+		EnsureDoorProgress();
+	}
+
+	public void EnsureDoorProgress()
+	{
+		if ( eventUnlockedDoorIds == null )
+			eventUnlockedDoorIds = new List<string>();
+		if ( openDoorIds == null )
+			openDoorIds = new List<string>();
 	}
 
 	/// <summary>
@@ -183,6 +210,9 @@ public class ProfileSaveData : IGameStats
 			}
 		}
 
+		changed |= MergeIdList( completedObjectiveIds, other.completedObjectiveIds );
+		changed |= MergeIdList( firedEventIds, other.firedEventIds );
+
 		int selfScore = ComputeQuestProgressScore( this );
 		int otherScore = ComputeQuestProgressScore( other );
 		if ( otherScore > selfScore )
@@ -190,6 +220,49 @@ public class ProfileSaveData : IGameStats
 			activeQuestId = other.activeQuestId;
 			activeStepIndex = other.activeStepIndex;
 			changed = true;
+		}
+
+		changed |= MergeDoorProgressFrom( other );
+
+		return changed;
+	}
+
+	/// <summary>Union event-unlocked and open door ids from <paramref name="other"/>.</summary>
+	public bool MergeDoorProgressFrom( ProfileSaveData other )
+	{
+		if ( other == null )
+			return false;
+
+		EnsureDoorProgress();
+		other.EnsureDoorProgress();
+
+		bool changed = false;
+		if ( other.eventUnlockedDoorIds != null )
+		{
+			for ( int i = 0; i < other.eventUnlockedDoorIds.Count; i++ )
+			{
+				string id = other.eventUnlockedDoorIds[ i ];
+				if ( string.IsNullOrEmpty( id ) )
+					continue;
+				if ( eventUnlockedDoorIds.Contains( id ) )
+					continue;
+				eventUnlockedDoorIds.Add( id );
+				changed = true;
+			}
+		}
+
+		if ( other.openDoorIds != null )
+		{
+			for ( int i = 0; i < other.openDoorIds.Count; i++ )
+			{
+				string id = other.openDoorIds[ i ];
+				if ( string.IsNullOrEmpty( id ) )
+					continue;
+				if ( openDoorIds.Contains( id ) )
+					continue;
+				openDoorIds.Add( id );
+				changed = true;
+			}
 		}
 
 		return changed;
@@ -203,6 +276,24 @@ public class ProfileSaveData : IGameStats
 		int completed = save.completedQuestIds != null ? save.completedQuestIds.Count : 0;
 		int step = Mathf.Max( 0, save.activeStepIndex );
 		return completed * 1000 + step;
+	}
+
+	static bool MergeIdList( List<string> dest, List<string> source )
+	{
+		if ( dest == null || source == null )
+			return false;
+
+		bool changed = false;
+		for ( int i = 0; i < source.Count; i++ )
+		{
+			string id = source[ i ];
+			if ( string.IsNullOrEmpty( id ) || dest.Contains( id ) )
+				continue;
+			dest.Add( id );
+			changed = true;
+		}
+
+		return changed;
 	}
 }
 

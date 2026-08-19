@@ -18,31 +18,34 @@ MonoBehaviour:
   lod1End: 16
   lod2End: 24
   lodHysteresisFrames: 8
-  lod0InstancesPerChunk: 125
-  lod1InstancesPerChunk: 75
-  lod2InstancesPerChunk: 40
+  lod0InstancesPerChunk: 64
+  lod1InstancesPerChunk: 32
+  lod2InstancesPerChunk: 16
   ditherFadeWidth: 5
   coinTiltStrength: 1
   coinTipJitterDegrees: 6
   coinYawJitterDegrees: 360
   coinEmbedSinkFraction: 0.16
   coinScaleJitter: 0
-  coinPlacementMinSpacing: 0.18
-  enforceCoinOverlap: 0
+  coinPlacementMinSpacing: 0.3
+  enforceCoinOverlap: 1
+  coinOverlapMode: 1
   useEmbeddedVolumeSeats: 0
   useSurfaceDecorSeats: 1
   releaseEmbeddedSeatsOnDig: 0
   spawnPhysicalCoinsOnDig: 1
-  digPhysicalSpawnChance: 0.1
+  digPhysicalSpawnChance: 0.05
   digPhysicalMaxPerCarve: 3
   digPhysicalUnitsPerRoll: 1
+  digDecorTopUpMax: 10
+  digStickMax: 16
   lod0Density: 1
   lod1Density: 0.6
   lod2Density: 0.25
   gemNeverCull: 0
   gemMaxStreamDistance: 48
-  artifactNeverCull: 1
-  artifactMaxStreamDistance: 48
+  artifactNeverCull: 0
+  artifactMaxStreamDistance: 32
   propStreamHysteresisMeters: 2
   drawChunkGizmos: 1
   drawOverlayStats: 1

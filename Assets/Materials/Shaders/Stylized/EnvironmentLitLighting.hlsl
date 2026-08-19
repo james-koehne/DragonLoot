@@ -49,6 +49,9 @@ void EnvironmentLitInitializeBakedGIData(Varyings input, inout InputData inputDa
     inputData.bakedGI = SAMPLE_GI(input.staticLightmapUV, input.vertexSH, inputData.normalWS);
     inputData.shadowMask = SAMPLE_SHADOWMASK(input.staticLightmapUV);
 #endif
+#if defined(LIGHTMAP_ON)
+    inputData.bakedGI = max(inputData.bakedGI, SampleSHPixel(half3(0, 0, 0), inputData.normalWS));
+#endif
 }
 
 void EnvironmentLitInitializeInputData(Varyings input, half3 normalWS, out InputData inputData)
@@ -125,6 +128,9 @@ half4 EnvironmentLitFrag(Varyings input) : SV_Target
 
     InputData inputData;
     EnvironmentLitInitializeInputData(input, normalWS, inputData);
+
+    // Unbaked environment GI is often ~0; lift with albedo so ambient tint/intensity reach shadows.
+    inputData.bakedGI = max(inputData.bakedGI, albedo);
 
     DragonLootStylizedSurface surface;
     surface.albedo = albedo;

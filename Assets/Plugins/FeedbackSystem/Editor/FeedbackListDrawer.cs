@@ -111,8 +111,9 @@ namespace FeedbackSystem.Editor
 
 				if ( iterator.isArray && IsFeedbackList( iterator ) )
 				{
+					SerializedProperty nestedList = iterator.Copy();
 					EditorGUI.indentLevel++;
-					Draw( iterator, ObjectNames.NicifyVariableName( iterator.displayName ) );
+					Draw( nestedList, ObjectNames.NicifyVariableName( iterator.displayName ) );
 					EditorGUI.indentLevel--;
 					continue;
 				}
@@ -123,6 +124,9 @@ namespace FeedbackSystem.Editor
 
 		static void ShowAddMenu( SerializedProperty listProperty, int insertIndex )
 		{
+			SerializedObject serializedObject = listProperty.serializedObject;
+			string propertyPath = listProperty.propertyPath;
+
 			GenericMenu menu = new GenericMenu();
 			FeedbackTypeCache.Entry[] entries = FeedbackTypeCache.GetEntries();
 			for ( int i = 0; i < entries.Length; i++ )
@@ -131,17 +135,21 @@ namespace FeedbackSystem.Editor
 				Type type = entry.Type;
 				menu.AddItem( new GUIContent( entry.Path ), false, () =>
 				{
-					listProperty.serializedObject.Update();
+					serializedObject.Update();
+					SerializedProperty list = serializedObject.FindProperty( propertyPath );
+					if ( list == null || !list.isArray )
+						return;
+
 					int index = insertIndex;
-					if ( index < 0 || index > listProperty.arraySize )
-						index = listProperty.arraySize;
-					listProperty.arraySize++;
-					if ( index < listProperty.arraySize - 1 )
-						listProperty.MoveArrayElement( listProperty.arraySize - 1, index );
-					SerializedProperty element = listProperty.GetArrayElementAtIndex( index );
+					if ( index < 0 || index > list.arraySize )
+						index = list.arraySize;
+					list.arraySize++;
+					if ( index < list.arraySize - 1 )
+						list.MoveArrayElement( list.arraySize - 1, index );
+					SerializedProperty element = list.GetArrayElementAtIndex( index );
 					element.managedReferenceValue = Activator.CreateInstance( type );
 					element.isExpanded = true;
-					listProperty.serializedObject.ApplyModifiedProperties();
+					serializedObject.ApplyModifiedProperties();
 				} );
 			}
 
@@ -166,7 +174,8 @@ namespace FeedbackSystem.Editor
 				return first != null && first.propertyType == SerializedPropertyType.ManagedReference;
 			}
 
-			return property.arrayElementType == "managedReference";
+			string elementType = property.arrayElementType;
+			return elementType == "managedReference" || ( !string.IsNullOrEmpty( elementType ) && elementType.StartsWith( "managedReference" ) );
 		}
 
 		static Type GetManagedType( SerializedProperty property )

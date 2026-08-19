@@ -2,19 +2,66 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Circular progress ring around the crosshair for charge interactions (whole-stack E/F).
+/// Circular progress ring around the crosshair for hold charges
+/// (sorter pickup and whole-stack E/F).
 /// </summary>
 public class InteractionProgressRingUI : MonoBehaviour
 {
 	Image _ring;
-	float _size = 48f;
+	float _size = 96f;
 
 	public void Setup()
 	{
 		EnsureUi();
 		SetProgress( 0f );
-		PlayerWholeStackInteraction.Register( this );
-		PlayerSorterReposition.Register( this );
+	}
+
+	void LateUpdate()
+	{
+		RefreshFromPlayer();
+	}
+
+	void RefreshFromPlayer()
+	{
+		EnsureUi();
+		if ( _ring == null )
+			return;
+
+		if ( GameMode.Instance == null )
+		{
+			SetProgress( 0f );
+			return;
+		}
+
+		PlayerController player = GameMode.Instance.Player;
+		if ( player == null )
+		{
+			SetProgress( 0f );
+			return;
+		}
+
+		float size = 96f;
+		CarryDefinition resolved = null;
+		resolved = RuntimeDefinition.Resolve( ref resolved );
+		if ( resolved != null )
+			size = resolved.wholeStackProgressRingSize;
+		SetRingSize( size );
+
+		PlayerSorterReposition sorter = player.SorterReposition;
+		if ( sorter != null && sorter.IsCharging )
+		{
+			SetProgress( sorter.ChargeProgress01, valid: true );
+			return;
+		}
+
+		PlayerWholeStackInteraction wholeStack = player.WholeStack;
+		if ( wholeStack != null && wholeStack.ChargeProgress01 > 0.001f )
+		{
+			SetProgress( wholeStack.ChargeProgress01, valid: !wholeStack.IsPlaceChargeInvalid );
+			return;
+		}
+
+		SetProgress( 0f );
 	}
 
 	public void SetRingSize( float size )
@@ -63,6 +110,17 @@ public class InteractionProgressRingUI : MonoBehaviour
 		GameObject ringGo = new GameObject( "ProgressRing", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
 		ringGo.transform.SetParent( transform, false );
 
+		RectTransform host = transform as RectTransform;
+		if ( host != null )
+		{
+			Vector2 hostSize = host.sizeDelta;
+			if ( hostSize.x < _size )
+				hostSize.x = _size;
+			if ( hostSize.y < _size )
+				hostSize.y = _size;
+			host.sizeDelta = hostSize;
+		}
+
 		RectTransform rect = ringGo.GetComponent<RectTransform>();
 		rect.anchorMin = new Vector2( 0.5f, 0.5f );
 		rect.anchorMax = new Vector2( 0.5f, 0.5f );
@@ -105,7 +163,7 @@ public class InteractionProgressRingUI : MonoBehaviour
 			}
 		}
 
-		tex.Apply( false, true );
+		tex.Apply( false, false );
 		return Sprite.Create( tex, new Rect( 0f, 0f, size, size ), new Vector2( 0.5f, 0.5f ), 100f );
 	}
 }

@@ -307,6 +307,8 @@ public static class ArtifactMaterialInstaller
 		TryCopyFloat( source, dest, "_Smoothness", "_Smoothness", "_Glossiness" );
 		TryCopyTexture( source, dest, "_OcclusionMap", "_OcclusionMap" );
 		TryCopyFloat( source, dest, "_OcclusionStrength", "_OcclusionStrength" );
+		TryCopyTexture( source, dest, "_EmissionMap", "_EmissionMap" );
+		TryCopyColor( source, dest, "_EmissionColor", "_EmissionColor" );
 	}
 
 	static void TryCopyTexture( Material source, Material dest, string destProp, params string[] sourceProps )

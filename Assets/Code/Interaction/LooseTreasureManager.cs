@@ -33,6 +33,8 @@ public class LooseTreasureManager : MonoBehaviour
 	{
 		if ( _instance != null )
 			return;
+		if ( !Application.isPlaying )
+			return;
 
 		GameObject go = new GameObject( "LooseTreasureManager" );
 		_instance = go.AddComponent<LooseTreasureManager>();
@@ -46,6 +48,9 @@ public class LooseTreasureManager : MonoBehaviour
 			return;
 
 		EnsureExists();
+		if ( _instance == null )
+			return;
+
 		if ( !Loose.Contains( item ) )
 			Loose.Add( item );
 

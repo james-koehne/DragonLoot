@@ -106,6 +106,9 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( placingDef.category == TreasureCategory.Gem || ontoDef.category == TreasureCategory.Gem )
 			return false;
 
+		if ( placingDef.usesInterleavedBarStack || ontoDef.usesInterleavedBarStack )
+			return false;
+
 		return placingDef.canStack && ontoDef.canStack;
 	}
 

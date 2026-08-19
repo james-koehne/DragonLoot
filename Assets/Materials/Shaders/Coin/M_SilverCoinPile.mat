@@ -37,13 +37,13 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _BumpScale: 1
+    - _BumpScale: 0.1
     - _Cull: 2
     - _Cutoff: 0.5
     - _FresnelIntensity: 0.25
     - _FresnelPower: 4
     - _Metallic: 0.92
-    - _ReflectionFloor: 0.12
+    - _ReflectionFloor: 0.25
     - _Smoothness: 0.75
     - _TintVariation: 0.04
     - _ValueVariation: 0.04

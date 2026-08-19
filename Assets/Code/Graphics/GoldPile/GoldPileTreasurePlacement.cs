@@ -14,6 +14,7 @@ public static class GoldPileTreasurePlacement
 	const int CoinFootprintSamples = 8;
 	const float ArtifactMaxGroundEmbedFraction = 0.25f;
 	const float DefaultCoinVisualSinkFraction = 0.08f;
+	const float CoinInsideEps = 0.001f;
 
 	/// <summary>Authorable coin tilt / sink params (from GoldPileLootStreamSettings).</summary>
 	public struct CoinPoseParams
@@ -32,6 +33,23 @@ public static class GoldPileTreasurePlacement
 			EmbedSinkFraction = DefaultCoinVisualSinkFraction,
 			RequirePivotInside = true
 		};
+	}
+
+	/// <summary>XZ claim against <see cref="CoinSeatOccupancy"/> (jittered cell or hash dart-throw).</summary>
+	public struct CoinXzClaimParams
+	{
+		public CoinSeatOccupancy Occupancy;
+		public CoinOverlapMode Mode;
+		public int PileSeed;
+		public int UnitIndex;
+		public int OccupyId;
+		public float PlacementRadiusFraction;
+		public float MinSurfaceFraction;
+		public float Jitter;
+		public Vector3 PreferNear;
+		public float SearchRadius;
+		public int BridsonAttempts;
+		public bool OccupancyEnabled;
 	}
 
 	struct VolumeCandidate
@@ -107,6 +125,20 @@ public static class GoldPileTreasurePlacement
 	}
 
 	/// <summary>
+	/// True when pile-local XZ has authored traversable Treasure surface underneath,
+	/// including a Chebyshev neighborhood (1 = the cell plus a 1-cell ring).
+	/// </summary>
+	public static bool HasTreasureSurfaceBelow( Transform pileRoot, Vector3 localPos, int neighborhoodCells = 1 )
+	{
+		if ( pileRoot == null )
+			return true;
+
+		return TreasureSurfaceAuthoring.HasTreasureSurfaceBelowWorld(
+			pileRoot.TransformPoint( localPos ),
+			neighborhoodCells );
+	}
+
+	/// <summary>
 	/// Map u∈[0,1] through radial power so 0.5≈base-heavy, 1≈even height, &gt;1≈tip-heavy.
 	/// </summary>
 	public static float ApplyRadialPower( float u01, float radialPower )
@@ -144,6 +176,7 @@ public static class GoldPileTreasurePlacement
 			treasureHeightBias,
 			occupiedLocal: null,
 			minSpacing: 0f,
+			xzSpread: 1f,
 			out pose );
 	}
 
@@ -160,12 +193,41 @@ public static class GoldPileTreasurePlacement
 		float minSpacing,
 		out VolumePose pose )
 	{
+		return TrySampleVolumePose(
+			heightfield,
+			pileSeed,
+			unitIndex,
+			placementRadiusFraction,
+			scale,
+			probeRadius,
+			treasureRadialPower,
+			treasureHeightBias,
+			occupiedLocal,
+			minSpacing,
+			xzSpread: 1f,
+			out pose );
+	}
+
+	public static bool TrySampleVolumePose(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		float placementRadiusFraction,
+		float scale,
+		float probeRadius,
+		float treasureRadialPower,
+		float treasureHeightBias,
+		List<Vector3> occupiedLocal,
+		float minSpacing,
+		float xzSpread,
+		out VolumePose pose )
+	{
 		pose = default;
 		if ( heightfield == null || scale < 0.01f )
 			return false;
 
 		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
-		float ground = heightfield.GroundLevel;
+		float lootGround = heightfield.LootGroundLevel;
 		float maxH = heightfield.MaxHeight;
 		float radialPower = Mathf.Clamp( treasureRadialPower, 0.25f, 3f );
 		float heightBias = Mathf.Clamp( treasureHeightBias, 0f, 3f );
@@ -178,8 +240,6 @@ public static class GoldPileTreasurePlacement
 		{
 			int salt = unitIndex * 64 + attempt;
 			float heightU = Hash01( pileSeed, salt * 4 );
-			float angleU = Hash01( pileSeed, salt * 4 + 1 );
-			float radialU = Hash01( pileSeed, salt * 4 + 2 );
 			float columnU = Hash01( pileSeed, salt * 4 + 3 );
 
 			float heightT = ApplyRadialPower( heightU, radialPower );
@@ -189,28 +249,14 @@ public static class GoldPileTreasurePlacement
 				heightT = Mathf.Lerp( heightT, tipT, Mathf.Clamp01( heightBias * 0.35f ) );
 			}
 
-			// Area-uniform XZ with mild tip pull via radial power.
-			float rNorm = Mathf.Sqrt( radialU );
-			if ( heightBias > 0f )
-			{
-				float tipPull = 1f - ApplyRadialPower( radialU, radialPower );
-				rNorm = Mathf.Lerp( rNorm, tipPull, Mathf.Clamp01( heightBias * 0.2f ) );
-			}
-			rNorm = Mathf.Clamp01( rNorm );
-
-			float angle = angleU * Mathf.PI * 2f;
-			float cos = Mathf.Cos( angle );
-			float sin = Mathf.Sin( angle );
-			float radius = half * rNorm;
-			float lx = cos * radius;
-			float lz = sin * radius;
+			SampleFootprintXZ( pileSeed, salt, half, xzSpread, out float lx, out float lz );
 
 			float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
-			// Empty / below-ground cells are not pile — never seat treasure there, never collapse to origin.
-			if ( surface <= ground + 0.02f || !heightfield.ExistsAtLocal( lx, lz ) )
+			// Empty / below-mesh cells are not pile. Loot also stays above the loot floor.
+			if ( surface <= lootGround + 0.02f || !heightfield.ExistsAtLocal( lx, lz ) )
 				continue;
 
-			float floorY = FloorClearanceY( ground, probe );
+			float floorY = FloorClearanceY( lootGround, probe );
 			float yMin = floorY;
 			float yMax = Mathf.Max( yMin + 0.01f, surface - probe * 0.35f );
 			if ( yMax <= yMin )
@@ -239,11 +285,67 @@ public static class GoldPileTreasurePlacement
 	}
 
 	/// <summary>
+	/// Area-uniform sample in the placement square, then remap toward center (spread &lt; 1) or rim (spread &gt; 1).
+	/// </summary>
+	public static void SampleFootprintXZ(
+		int pileSeed,
+		int salt,
+		float half,
+		float xzSpread,
+		out float lx,
+		out float lz )
+	{
+		float ux = Hash01( pileSeed, salt * 4 + 1 ) * 2f - 1f;
+		float uz = Hash01( pileSeed, salt * 4 + 2 ) * 2f - 1f;
+		RemapFootprintSpread( ref ux, ref uz, xzSpread );
+		lx = ux * half;
+		lz = uz * half;
+	}
+
+	public static void RemapFootprintSpread( ref float ux, ref float uz, float xzSpread )
+	{
+		float spread = Mathf.Clamp( xzSpread, 0.25f, 3f );
+		if ( Mathf.Abs( spread - 1f ) <= 1e-4f )
+			return;
+
+		float cheb = Mathf.Max( Mathf.Abs( ux ), Mathf.Abs( uz ) );
+		if ( cheb <= 1e-5f )
+			return;
+
+		float scale = Mathf.Pow( cheb, 1f / spread ) / cheb;
+		ux *= scale;
+		uz *= scale;
+	}
+
+	/// <summary>
 	/// Local Y that keeps a probe center above the pile floor plane.
 	/// </summary>
 	public static float FloorClearanceY( float groundLevel, float probeRadius )
 	{
 		return groundLevel + Mathf.Max( 0.02f, probeRadius ) * 0.5f;
+	}
+
+	/// <summary>
+	/// Clamp a coin pivot into the legal column: Y &gt;= ground, and optionally strictly under the surface.
+	/// </summary>
+	static bool TryClampCoinPivotY( float surface, float ground, bool requireInside, ref float y )
+	{
+		if ( surface < ground )
+			return false;
+
+		if ( y < ground )
+			y = ground;
+
+		if ( requireInside )
+		{
+			float maxY = surface - CoinInsideEps;
+			if ( maxY < ground )
+				return false;
+			if ( y > maxY )
+				y = maxY;
+		}
+
+		return true;
 	}
 
 	/// <summary>
@@ -257,17 +359,18 @@ public static class GoldPileTreasurePlacement
 		out float floorY,
 		out float ceilingY )
 	{
-		float ground = heightfield != null ? heightfield.GroundLevel : 0f;
+		float meshGround = heightfield != null ? heightfield.GroundLevel : 0f;
+		float lootGround = heightfield != null ? heightfield.LootGroundLevel : 0f;
 		float probe = Mathf.Max( 0.02f, probeRadius );
-		floorY = FloorClearanceY( ground, probe );
+		floorY = FloorClearanceY( lootGround, probe );
 		ceilingY = floorY;
 
 		if ( heightfield == null )
 			return;
 
 		float surface = heightfield.SampleNormalized( localX, localZ ) * heightfield.MaxHeight;
-		if ( surface < ground )
-			surface = ground;
+		if ( surface < meshGround )
+			surface = meshGround;
 
 		ceilingY = Mathf.Max( floorY, surface - probe * 0.35f );
 	}
@@ -282,7 +385,7 @@ public static class GoldPileTreasurePlacement
 			return localPos;
 
 		float probe = Mathf.Max( 0.02f, probeRadius );
-		float floorY = FloorClearanceY( heightfield.GroundLevel, probe );
+		float floorY = FloorClearanceY( heightfield.LootGroundLevel, probe );
 		if ( localPos.y < floorY )
 			localPos.y = floorY;
 
@@ -332,7 +435,7 @@ public static class GoldPileTreasurePlacement
 		if ( ceilingY <= floorY + 0.01f )
 			return true;
 
-		float ground = heightfield.GroundLevel;
+		float ground = heightfield.LootGroundLevel;
 		float minBottom = MinAllowedBottomY( ground, localBounds, maxGroundEmbedFraction );
 		if ( localBounds.min.y >= minBottom - 0.01f )
 			return false;
@@ -449,7 +552,10 @@ public static class GoldPileTreasurePlacement
 		out VolumePose pose,
 		out Bounds localBounds,
 		int maxAttempts,
-		VolumeOccupancyGrid occupancyGrid )
+		VolumeOccupancyGrid occupancyGrid,
+		Transform pileRoot = null,
+		float xzSpread = 1f,
+		int surfaceNeighborhood = 1 )
 	{
 		pose = default;
 		localBounds = default;
@@ -483,10 +589,14 @@ public static class GoldPileTreasurePlacement
 				treasureHeightBias,
 				occupiedLocal: null,
 				minSpacing: 0f,
+				xzSpread,
 				out VolumePose candidatePose ) )
 			{
 				continue;
 			}
+
+			if ( !HasTreasureSurfaceBelow( pileRoot, candidatePose.LocalPos, surfaceNeighborhood ) )
+				continue;
 
 			Bounds candidateBounds = LocalAabbFromPose(
 				candidatePose.LocalPos,
@@ -581,6 +691,8 @@ public static class GoldPileTreasurePlacement
 			category,
 			mesh,
 			maxEmbed,
+			pileRoot,
+			surfaceNeighborhood,
 			out pose,
 			out localBounds ) )
 		{
@@ -606,6 +718,8 @@ public static class GoldPileTreasurePlacement
 		TreasureCategory category,
 		Mesh mesh,
 		float maxGroundEmbedFraction,
+		Transform pileRoot,
+		int surfaceNeighborhood,
 		out VolumePose pose,
 		out Bounds localBounds )
 	{
@@ -615,10 +729,10 @@ public static class GoldPileTreasurePlacement
 			return false;
 
 		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
-		float ground = heightfield.GroundLevel;
+		float lootGround = heightfield.LootGroundLevel;
 		float maxH = heightfield.MaxHeight;
 		int res = Mathf.Max( 4, heightfield.Resolution );
-		float step = heightfield.WorldSize / ( res - 1 );
+		float step = ( 2f * half ) / ( res - 1 );
 
 		float bestScore = float.MaxValue;
 		bool found = false;
@@ -629,18 +743,18 @@ public static class GoldPileTreasurePlacement
 			{
 				float lx = -half + x * step;
 				float lz = -half + z * step;
-				if ( lx * lx + lz * lz > half * half )
-					continue;
 				if ( !heightfield.ExistsAtLocal( lx, lz ) )
+					continue;
+				if ( !HasTreasureSurfaceBelow( pileRoot, new Vector3( lx, 0f, lz ), surfaceNeighborhood ) )
 					continue;
 
 				float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
-				if ( surface <= ground + 0.02f )
+				if ( surface <= lootGround + 0.02f )
 					continue;
 
 				int salt = unitIndex * 131 + x * 17 + z * 43;
 				float columnU = Hash01( pileSeed, salt );
-				float floorY = FloorClearanceY( ground, probeRadius );
+				float floorY = FloorClearanceY( lootGround, probeRadius );
 				float yMax = Mathf.Max( floorY + 0.01f, surface - probeRadius * 0.35f );
 				float ly = Mathf.Lerp( floorY, yMax, columnU );
 
@@ -751,7 +865,7 @@ public static class GoldPileTreasurePlacement
 		if ( heightfield == null )
 			return;
 
-		float ground = heightfield.GroundLevel;
+		float ground = heightfield.LootGroundLevel;
 		float minBottom = MinAllowedBottomY( ground, localBounds, maxGroundEmbedFraction );
 		if ( localBounds.min.y >= minBottom - 0.01f )
 			return;
@@ -964,7 +1078,7 @@ public static class GoldPileTreasurePlacement
 		localPos.y += dy;
 		localBounds.center += new Vector3( 0f, dy, 0f );
 
-		float floorY = FloorClearanceY( heightfield.GroundLevel, 0.05f );
+		float floorY = FloorClearanceY( heightfield.LootGroundLevel, 0.05f );
 		if ( localPos.y < floorY )
 		{
 			float fix = floorY - localPos.y;
@@ -1149,9 +1263,9 @@ public static class GoldPileTreasurePlacement
 			return false;
 
 		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
-		float usableRadius = Mathf.Max( 0.05f, half - Mathf.Max( 0f, coinRadius ) );
+		float usableRadius = Mathf.Max( 0.05f, half );
 		float minSurface = Mathf.Max(
-			heightfield.GroundLevel,
+			heightfield.LootGroundLevel,
 			heightfield.MaxHeight * Mathf.Clamp01( coinSurfaceHeightFraction ) );
 		float search = Mathf.Max( 0.15f, searchRadius );
 		float searchSq = search * search;
@@ -1209,6 +1323,7 @@ public static class GoldPileTreasurePlacement
 	{
 		localPos = Vector3.zero;
 		surfaceHeight = 0f;
+		_ = coinRadius;
 
 		float angle = Hash01( pileSeed, salt * 2 ) * Mathf.PI * 2f;
 		float radial = usableRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 2 + 1 ) );
@@ -1220,12 +1335,7 @@ public static class GoldPileTreasurePlacement
 
 		localPos = new Vector3( lx, 0f, lz );
 		surfaceHeight = surface;
-		return IsCoinFootprintSupported(
-			heightfield,
-			localPos,
-			coinRadius,
-			minSurface,
-			out surfaceHeight );
+		return true;
 	}
 
 	public static bool IsCoinFootprintSupported(
@@ -1239,24 +1349,12 @@ public static class GoldPileTreasurePlacement
 		if ( heightfield == null )
 			return false;
 
-		float radius = Mathf.Max( 0.01f, coinRadius );
+		_ = coinRadius;
 		float centerSurface = heightfield.SampleNormalized( localPos.x, localPos.z ) * heightfield.MaxHeight;
 		if ( centerSurface < minSurface || !heightfield.ExistsAtLocal( localPos.x, localPos.z ) )
 			return false;
 
 		surfaceHeight = centerSurface;
-		for ( int i = 0; i < CoinFootprintSamples; i++ )
-		{
-			float angle = ( i / ( float )CoinFootprintSamples ) * Mathf.PI * 2f;
-			float px = localPos.x + Mathf.Cos( angle ) * radius;
-			float pz = localPos.z + Mathf.Sin( angle ) * radius;
-			float sample = heightfield.SampleNormalized( px, pz ) * heightfield.MaxHeight;
-			if ( sample < minSurface || !heightfield.ExistsAtLocal( px, pz ) )
-				return false;
-
-			surfaceHeight = Mathf.Max( surfaceHeight, sample );
-		}
-
 		return true;
 	}
 
@@ -1276,6 +1374,396 @@ public static class GoldPileTreasurePlacement
 
 		float surface = heightfield.SampleNormalized( localPos.x, localPos.z ) * heightfield.MaxHeight;
 		return localPos.y < surface;
+	}
+
+	/// <summary>
+	/// Pick coin XZ. When occupancy is enabled, jittered-grid claims a free cell or BridsonQuery
+	/// hash-samples then tests the 5x5 neighborhood. Occupies on success when OccupancyEnabled.
+	/// </summary>
+	public static bool TryClaimCoinSeatXZ(
+		GoldPileHeightfield heightfield,
+		CoinXzClaimParams claim,
+		out float lx,
+		out float lz )
+	{
+		lx = 0f;
+		lz = 0f;
+		if ( heightfield == null )
+			return false;
+
+		if ( claim.OccupancyEnabled && claim.Occupancy != null )
+		{
+			if ( claim.Mode == CoinOverlapMode.JitteredGrid )
+				return TryClaimJitteredGridXZ( heightfield, claim, out lx, out lz );
+			return TryClaimBridsonQueryXZ( heightfield, claim, out lx, out lz );
+		}
+
+		int attempts = Mathf.Max( 1, claim.BridsonAttempts );
+		for ( int attempt = 0; attempt < attempts; attempt++ )
+		{
+			if ( TrySampleCoinFootprintXZ(
+				heightfield,
+				claim.PileSeed,
+				claim.UnitIndex,
+				attempt,
+				claim.PlacementRadiusFraction,
+				claim.MinSurfaceFraction,
+				claim.PreferNear,
+				claim.SearchRadius,
+				out lx,
+				out lz ) )
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	public static void ReleaseClaimedCoinXZ( CoinSeatOccupancy occupancy, float lx, float lz )
+	{
+		if ( occupancy == null )
+			return;
+		occupancy.Remove( lx, lz );
+	}
+
+	/// <summary>
+	/// Volume Y in a claimed column (XZ already chosen). One hashed height in the legal band.
+	/// </summary>
+	public static bool TrySampleVolumeYAtXZ(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		float scale,
+		float probeRadius,
+		float treasureRadialPower,
+		float treasureHeightBias,
+		float lx,
+		float lz,
+		out VolumePose pose )
+	{
+		pose = default;
+		if ( heightfield == null || scale < 0.01f )
+			return false;
+
+		float probe = Mathf.Max( 0.02f, probeRadius );
+		float lootGround = heightfield.LootGroundLevel;
+		float maxH = heightfield.MaxHeight;
+		if ( !heightfield.ExistsAtLocal( lx, lz ) )
+			return false;
+
+		float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
+		if ( surface <= lootGround + 0.02f )
+			return false;
+
+		float floorY = FloorClearanceY( lootGround, probe );
+		float yMin = floorY;
+		float yMax = Mathf.Max( yMin + 0.01f, surface - probe * 0.35f );
+		if ( yMax <= yMin )
+			return false;
+
+		int salt = unitIndex * 64;
+		float heightU = Hash01( pileSeed, salt * 4 );
+		float columnU = Hash01( pileSeed, salt * 4 + 3 );
+		float radialPower = Mathf.Clamp( treasureRadialPower, 0.25f, 3f );
+		float heightBias = Mathf.Clamp( treasureHeightBias, 0f, 3f );
+		float heightT = ApplyRadialPower( heightU, radialPower );
+		if ( heightBias > 0f )
+		{
+			float tipT = 1f - Mathf.Pow( 1f - heightT, 1f + heightBias );
+			heightT = Mathf.Lerp( heightT, tipT, Mathf.Clamp01( heightBias * 0.35f ) );
+		}
+
+		float yT = columnU;
+		if ( heightBias > 0f )
+			yT = 1f - Mathf.Pow( 1f - yT, 1f + heightBias );
+		yT = Mathf.Lerp( yT, Mathf.Max( yT, heightT ), 0.35f );
+		float ly = Mathf.Lerp( yMin, yMax, Mathf.Clamp01( yT ) );
+		ly = Mathf.Max( ly, floorY );
+
+		pose.LocalPos = new Vector3( lx, ly, lz );
+		pose.LocalRot = HashRotation( pileSeed, salt );
+		pose.Scale = scale;
+		pose.ProbeRadius = probe;
+		return true;
+	}
+
+	/// <summary>Shallow embed Y in a claimed column before mesh conform.</summary>
+	public static bool TryFinishShallowY(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		float scale,
+		float probeRadius,
+		float buryBand,
+		float minSurfaceFraction,
+		bool requireInside,
+		float lx,
+		float lz,
+		out VolumePose pose )
+	{
+		pose = default;
+		if ( heightfield == null || scale < 0.01f )
+			return false;
+
+		float probe = Mathf.Max( 0.02f, probeRadius );
+		float band = Mathf.Max( probe, buryBand );
+		float minSurface = Mathf.Max(
+			heightfield.LootGroundLevel,
+			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
+		float ground = heightfield.LootGroundLevel;
+		if ( !CoinColumnAcceptsSeat( heightfield, lx, lz, minSurface ) )
+			return false;
+
+		float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
+		int salt = unitIndex * 48;
+		float embed = HashRange( pileSeed, salt * 3 + 2, probe * 0.35f, band );
+		float ly = surface - embed;
+		if ( !TryClampCoinPivotY( surface, ground, requireInside, ref ly ) )
+			return false;
+
+		Vector3 candidate = new Vector3( lx, ly, lz );
+		if ( requireInside && !IsCoinPivotInside( heightfield, candidate ) )
+			return false;
+
+		pose.LocalPos = candidate;
+		pose.LocalRot = Quaternion.identity;
+		pose.Scale = scale;
+		pose.ProbeRadius = probe;
+		return true;
+	}
+
+	static bool TryClaimJitteredGridXZ(
+		GoldPileHeightfield heightfield,
+		CoinXzClaimParams claim,
+		out float lx,
+		out float lz )
+	{
+		lx = 0f;
+		lz = 0f;
+		CoinSeatOccupancy occupancy = claim.Occupancy;
+		if ( occupancy == null )
+			return false;
+
+		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( claim.PlacementRadiusFraction, 0.2f, 1f );
+		float minSurface = Mathf.Max(
+			heightfield.LootGroundLevel,
+			heightfield.MaxHeight * Mathf.Clamp01( claim.MinSurfaceFraction ) );
+		float jitterFrac = Mathf.Clamp( claim.Jitter, 0f, 0.49f );
+		float jitterRadius = occupancy.CellSize * jitterFrac;
+		bool focus = claim.SearchRadius > 0.05f;
+
+		int startX;
+		int startZ;
+		if ( focus )
+		{
+			startX = occupancy.CellX( claim.PreferNear.x );
+			startZ = occupancy.CellZ( claim.PreferNear.z );
+		}
+		else
+		{
+			float seedX = Hash01( claim.PileSeed, claim.UnitIndex * 11 + 3 ) * 2f - 1f;
+			float seedZ = Hash01( claim.PileSeed, claim.UnitIndex * 11 + 7 ) * 2f - 1f;
+			startX = occupancy.CellX( seedX * half );
+			startZ = occupancy.CellZ( seedZ * half );
+		}
+
+		int focusRing = focus
+			? Mathf.Max( 2, Mathf.CeilToInt( claim.SearchRadius / Mathf.Max( 0.01f, occupancy.CellSize ) ) )
+			: 16;
+		int maxRing = Mathf.Min( 24, Mathf.Max( focusRing, 8 ) );
+
+		if ( TryJitteredCell( heightfield, occupancy, claim, startX, startZ, half, minSurface, jitterRadius, out lx, out lz ) )
+			return true;
+
+		for ( int ring = 1; ring <= maxRing; ring++ )
+		{
+			int x = startX - ring;
+			int z = startZ - ring;
+			int side = ring * 2;
+			for ( int edge = 0; edge < 4; edge++ )
+			{
+				int dx = 0;
+				int dz = 0;
+				if ( edge == 0 )
+					dx = 1;
+				else if ( edge == 1 )
+					dz = 1;
+				else if ( edge == 2 )
+					dx = -1;
+				else
+					dz = -1;
+
+				for ( int s = 0; s < side; s++ )
+				{
+					if ( TryJitteredCell(
+						heightfield,
+						occupancy,
+						claim,
+						x,
+						z,
+						half,
+						minSurface,
+						jitterRadius,
+						out lx,
+						out lz ) )
+					{
+						return true;
+					}
+
+					x += dx;
+					z += dz;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	static bool TryJitteredCell(
+		GoldPileHeightfield heightfield,
+		CoinSeatOccupancy occupancy,
+		CoinXzClaimParams claim,
+		int cellX,
+		int cellZ,
+		float half,
+		float minSurface,
+		float jitterRadius,
+		out float lx,
+		out float lz )
+	{
+		lx = 0f;
+		lz = 0f;
+		if ( !occupancy.IsCellEmpty( cellX, cellZ ) )
+			return false;
+
+		occupancy.CellCenter( cellX, cellZ, out float cx, out float cz );
+		const int jitterAttempts = 3;
+		for ( int attempt = 0; attempt < jitterAttempts; attempt++ )
+		{
+			float px = cx;
+			float pz = cz;
+			if ( jitterRadius > 1e-5f && attempt < jitterAttempts - 1 )
+			{
+				int salt = claim.UnitIndex * 29 + cellX * 13 + cellZ * 17 + attempt;
+				float ang = Hash01( claim.PileSeed, salt ) * Mathf.PI * 2f;
+				float r = Hash01( claim.PileSeed, salt + 1 ) * jitterRadius;
+				px += Mathf.Cos( ang ) * r;
+				pz += Mathf.Sin( ang ) * r;
+			}
+
+			if ( Mathf.Abs( px ) > half || Mathf.Abs( pz ) > half )
+				continue;
+			if ( !CoinColumnAcceptsSeat( heightfield, px, pz, minSurface ) )
+				continue;
+			if ( occupancy.IsTooClose( px, pz ) )
+				continue;
+			if ( !occupancy.TryAdd( claim.OccupyId, px, pz ) )
+				continue;
+
+			lx = px;
+			lz = pz;
+			return true;
+		}
+
+		return false;
+	}
+
+	static bool TryClaimBridsonQueryXZ(
+		GoldPileHeightfield heightfield,
+		CoinXzClaimParams claim,
+		out float lx,
+		out float lz )
+	{
+		lx = 0f;
+		lz = 0f;
+		CoinSeatOccupancy occupancy = claim.Occupancy;
+		if ( occupancy == null )
+			return false;
+		int attempts = Mathf.Max( 1, claim.BridsonAttempts );
+		for ( int attempt = 0; attempt < attempts; attempt++ )
+		{
+			if ( !TrySampleCoinFootprintXZ(
+				heightfield,
+				claim.PileSeed,
+				claim.UnitIndex,
+				attempt,
+				claim.PlacementRadiusFraction,
+				claim.MinSurfaceFraction,
+				claim.PreferNear,
+				claim.SearchRadius,
+				out float px,
+				out float pz ) )
+			{
+				continue;
+			}
+
+			if ( occupancy.IsTooClose( px, pz ) )
+				continue;
+			if ( !occupancy.TryAdd( claim.OccupyId, px, pz ) )
+				continue;
+
+			lx = px;
+			lz = pz;
+			return true;
+		}
+
+		return false;
+	}
+
+	static bool TrySampleCoinFootprintXZ(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		int attempt,
+		float placementRadiusFraction,
+		float minSurfaceFraction,
+		Vector3 preferNear,
+		float searchRadius,
+		out float lx,
+		out float lz )
+	{
+		lx = 0f;
+		lz = 0f;
+		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float minSurface = Mathf.Max(
+			heightfield.LootGroundLevel,
+			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
+		bool focus = searchRadius > 0.05f;
+		float focusRadius = Mathf.Max( 0.1f, searchRadius );
+		int salt = unitIndex * 48 + attempt;
+
+		if ( focus )
+		{
+			float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
+			float r = focusRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
+			lx = preferNear.x + Mathf.Cos( angle ) * r;
+			lz = preferNear.z + Mathf.Sin( angle ) * r;
+			if ( Mathf.Abs( lx ) > half || Mathf.Abs( lz ) > half )
+				return false;
+		}
+		else
+		{
+			float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
+			float rNorm = Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
+			float radius = half * rNorm;
+			lx = Mathf.Cos( angle ) * radius;
+			lz = Mathf.Sin( angle ) * radius;
+		}
+
+		return CoinColumnAcceptsSeat( heightfield, lx, lz, minSurface );
+	}
+
+	static bool CoinColumnAcceptsSeat(
+		GoldPileHeightfield heightfield,
+		float lx,
+		float lz,
+		float minSurface )
+	{
+		if ( !heightfield.ExistsAtLocal( lx, lz ) )
+			return false;
+		float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
+		return surface >= minSurface;
 	}
 
 	/// <summary>
@@ -1304,9 +1792,9 @@ public static class GoldPileTreasurePlacement
 		float band = Mathf.Max( probe, buryBand );
 		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
 		float minSurface = Mathf.Max(
-			heightfield.GroundLevel,
+			heightfield.LootGroundLevel,
 			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
-		float ground = heightfield.GroundLevel;
+		float ground = heightfield.LootGroundLevel;
 		bool focus = searchRadius > 0.05f;
 		float focusRadius = Mathf.Max( 0.1f, searchRadius );
 
@@ -1322,7 +1810,7 @@ public static class GoldPileTreasurePlacement
 				float r = focusRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
 				lx = preferNear.x + Mathf.Cos( angle ) * r;
 				lz = preferNear.z + Mathf.Sin( angle ) * r;
-				if ( lx * lx + lz * lz > half * half )
+				if ( Mathf.Abs( lx ) > half || Mathf.Abs( lz ) > half )
 					continue;
 			}
 			else
@@ -1343,9 +1831,8 @@ public static class GoldPileTreasurePlacement
 
 			float embed = HashRange( pileSeed, salt * 3 + 2, probe * 0.35f, band );
 			float ly = surface - embed;
-			float floorY = FloorClearanceY( ground, probe );
-			if ( ly < floorY )
-				ly = floorY;
+			if ( !TryClampCoinPivotY( surface, ground, requireInside: true, ref ly ) )
+				continue;
 
 			Vector3 candidate = new Vector3( lx, ly, lz );
 			if ( !IsCoinPivotInside( heightfield, candidate ) )
@@ -1359,6 +1846,130 @@ public static class GoldPileTreasurePlacement
 		}
 
 		return false;
+	}
+
+	/// <summary>
+	/// Mode B surface decor: pick XZ on the mound without pivot-inside gate (8 attempts).
+	/// </summary>
+	public static bool TrySampleSurfaceDecorXZ(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		float placementRadiusFraction,
+		float scale,
+		float probeRadius,
+		float buryBand,
+		float minSurfaceFraction,
+		Vector3 preferNear,
+		float searchRadius,
+		out VolumePose pose )
+	{
+		pose = default;
+		if ( heightfield == null || scale < 0.01f )
+			return false;
+
+		float probe = Mathf.Max( 0.02f, probeRadius );
+		float band = Mathf.Max( probe, buryBand );
+		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float minSurface = Mathf.Max(
+			heightfield.LootGroundLevel,
+			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
+		float ground = heightfield.LootGroundLevel;
+		bool focus = searchRadius > 0.05f;
+		float focusRadius = Mathf.Max( 0.1f, searchRadius );
+
+		const int attempts = 8;
+		for ( int attempt = 0; attempt < attempts; attempt++ )
+		{
+			int salt = unitIndex * 37 + attempt;
+			float lx;
+			float lz;
+			if ( focus )
+			{
+				float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
+				float r = focusRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
+				lx = preferNear.x + Mathf.Cos( angle ) * r;
+				lz = preferNear.z + Mathf.Sin( angle ) * r;
+				if ( Mathf.Abs( lx ) > half || Mathf.Abs( lz ) > half )
+					continue;
+			}
+			else
+			{
+				float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
+				float rNorm = Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
+				float radius = half * rNorm;
+				lx = Mathf.Cos( angle ) * radius;
+				lz = Mathf.Sin( angle ) * radius;
+			}
+
+			if ( !heightfield.ExistsAtLocal( lx, lz ) )
+				continue;
+
+			float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
+			if ( surface < minSurface )
+				continue;
+
+			float embed = HashRange( pileSeed, salt * 3 + 2, probe * 0.35f, band );
+			float ly = surface - embed;
+			if ( !TryClampCoinPivotY( surface, ground, requireInside: false, ref ly ) )
+				continue;
+
+			pose.LocalPos = new Vector3( lx, ly, lz );
+			pose.LocalRot = Quaternion.identity;
+			pose.Scale = scale;
+			pose.ProbeRadius = probe;
+			return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Mode B fast conform: center height + normal tilt, no footprint or contact solve.
+	/// </summary>
+	public static bool FastSnapCoinToSurface(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int slotIndex,
+		ref Vector3 localPos,
+		ref Quaternion localRot,
+		float scale,
+		float minSurfaceFraction,
+		CoinPoseParams pose,
+		out float surfaceHeight,
+		out float embedDepth )
+	{
+		surfaceHeight = 0f;
+		embedDepth = 0f;
+		if ( heightfield == null )
+			return false;
+		if ( !heightfield.ExistsAtLocal( localPos.x, localPos.z ) )
+			return false;
+
+		float minSurface = Mathf.Max(
+			heightfield.GroundLevel,
+			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
+		surfaceHeight = heightfield.SampleNormalized( localPos.x, localPos.z ) * heightfield.MaxHeight;
+		if ( surfaceHeight < minSurface )
+			return false;
+
+		localRot = CoinSurfaceTiltRotation(
+			heightfield,
+			pileSeed,
+			slotIndex,
+			localPos.x,
+			localPos.z,
+			pose );
+
+		float sinkFraction = Mathf.Max( 0f, pose.EmbedSinkFraction );
+		float visualSink = Mathf.Max( 0.004f, scale * sinkFraction );
+		float pivotY = surfaceHeight - visualSink;
+		if ( !TryClampCoinPivotY( surfaceHeight, heightfield.GroundLevel, pose.RequirePivotInside, ref pivotY ) )
+			return false;
+
+		localPos = new Vector3( localPos.x, pivotY, localPos.z );
+		embedDepth = Mathf.Max( 0.001f, surfaceHeight - pivotY );
+		return true;
 	}
 
 	/// <summary>
@@ -1503,11 +2114,8 @@ public static class GoldPileTreasurePlacement
 
 		if ( pose.RequirePivotInside )
 		{
-			// Contact solve can raise the pivot onto the surface; keep it strictly inside the volume.
-			const float insideEps = 0.005f;
-			float maxInsideY = surfaceHeight - insideEps;
-			if ( pivotY > maxInsideY )
-				pivotY = maxInsideY;
+			if ( !TryClampCoinPivotY( surfaceHeight, heightfield.GroundLevel, requireInside: true, ref pivotY ) )
+				return false;
 
 			Vector3 seated = new Vector3( localPos.x, pivotY, localPos.z );
 			if ( !IsCoinPivotInside( heightfield, seated ) )
@@ -1522,7 +2130,7 @@ public static class GoldPileTreasurePlacement
 		float maxSurfaceY = surfaceHeight - Mathf.Min( visualSink, scale * 0.02f );
 		if ( pivotY > maxSurfaceY )
 			pivotY = maxSurfaceY;
-		if ( pivotY < heightfield.GroundLevel )
+		if ( !TryClampCoinPivotY( surfaceHeight, heightfield.GroundLevel, requireInside: false, ref pivotY ) )
 			return false;
 
 		localRot = tilted;

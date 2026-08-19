@@ -85,9 +85,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		for ( int i = 0; i < items.Length; i++ )
 		{
 			TreasurePileAuthoredItem authored = items[ i ];
-			if ( authored == null || authored.Item == null || authored.Definition == null )
-				continue;
-			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+			if ( authored == null || !authored.IsValidCurated() )
 				continue;
 			results.Add( authored );
 		}
@@ -104,9 +102,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		for ( int i = 0; i < items.Length; i++ )
 		{
 			TreasurePileAuthoredItem authored = items[ i ];
-			if ( authored == null || authored.Item == null || authored.Definition == null )
-				continue;
-			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+			if ( authored == null || !authored.IsValidCurated() )
 				continue;
 			count++;
 		}
@@ -126,9 +122,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		for ( int i = 0; i < items.Length; i++ )
 		{
 			TreasurePileAuthoredItem authored = items[ i ];
-			if ( authored == null || authored.Item == null || authored.Definition == null )
-				continue;
-			if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+			if ( authored == null || !authored.IsValidCurated() )
 				continue;
 			curated++;
 		}
@@ -142,9 +136,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			for ( int i = 0; i < items.Length; i++ )
 			{
 				TreasurePileAuthoredItem authored = items[ i ];
-				if ( authored == null || authored.Item == null || authored.Definition == null )
-					continue;
-				if ( !TreasurePileAuthoredItem.IsCuratable( authored.Definition ) )
+				if ( authored == null || !authored.IsValidCurated() )
 					continue;
 
 				TreasureDefinition def = authored.Definition;
@@ -265,6 +257,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		&& authoredRes >= 8
 		&& authoredHeights.Length == authoredRes * authoredRes;
 	public int AuthoredRevision => authoredRevision;
+	public TreasurePileDefinition Definition => ResolveDefinition();
 	public int AuthoredResolution => authoredRes;
 	public float AuthoredWorldSize => authoredWorldSize;
 	public float AuthoredMaxHeight => authoredMaxHeight;
@@ -272,8 +265,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		get
 		{
-			if ( _definition != null )
-				return _definition.pickRadius;
+			TreasurePileDefinition def = ResolveDefinition();
+			if ( def != null )
+				return def.pickRadius;
 			return DefaultPickRadius;
 		}
 	}
@@ -312,6 +306,47 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		if ( _heightfield == null || !_heightfield.IsInitialized )
 			return false;
 		return _heightfield.ExistsAtWorld( worldPos, transform );
+	}
+
+	/// <summary>
+	/// True when this pile has any height (at or above ground level) under world XZ.
+	/// Uses the live heightfield when initialized; otherwise authored bake data so editor tools work.
+	/// </summary>
+	public bool HasAnyHeightAtWorld( Vector3 worldPos )
+	{
+		if ( _heightfield != null && _heightfield.IsInitialized )
+			return _heightfield.ExistsAtWorld( worldPos, transform );
+
+		if ( !HasAuthoredHeight || authoredWorldSize < 0.01f )
+			return false;
+
+		Vector3 local = transform.InverseTransformPoint( worldPos );
+		float half = authoredWorldSize * 0.5f;
+		if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+			return false;
+
+		float u = Mathf.Clamp01( ( local.x / authoredWorldSize ) + 0.5f );
+		float v = Mathf.Clamp01( ( local.z / authoredWorldSize ) + 0.5f );
+		float fx = u * ( authoredRes - 1 );
+		float fz = v * ( authoredRes - 1 );
+		int x0 = Mathf.Clamp( Mathf.FloorToInt( fx ), 0, authoredRes - 1 );
+		int z0 = Mathf.Clamp( Mathf.FloorToInt( fz ), 0, authoredRes - 1 );
+		int x1 = Mathf.Min( x0 + 1, authoredRes - 1 );
+		int z1 = Mathf.Min( z0 + 1, authoredRes - 1 );
+		float tx = fx - x0;
+		float tz = fz - z0;
+		float n00 = authoredHeights[ z0 * authoredRes + x0 ] / 65535f;
+		float n10 = authoredHeights[ z0 * authoredRes + x1 ] / 65535f;
+		float n01 = authoredHeights[ z1 * authoredRes + x0 ] / 65535f;
+		float n11 = authoredHeights[ z1 * authoredRes + x1 ] / 65535f;
+		float n = Mathf.Lerp( Mathf.Lerp( n00, n10, tx ), Mathf.Lerp( n01, n11, tx ), tz );
+
+		float maxHeight = authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f;
+		float ground = 0.01f;
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( def != null )
+			ground = def.groundLevelHeight;
+		return n * maxHeight >= ground;
 	}
 
 	/// <summary>
@@ -573,7 +608,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	public void Bind( TreasurePileInteractable pile )
 	{
 		_pile = pile;
-		_definition = pile != null ? pile.PileDefinition : null;
+		ResolveDefinition();
 		_emptied = false;
 		_bound = true;
 
@@ -604,8 +639,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		HideLegacyStaticMeshes();
 
-		if ( pileMaterial == null && _definition != null )
-			pileMaterial = _definition.pileMaterial;
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( pileMaterial == null && def != null )
+			pileMaterial = def.pileMaterial;
 
 		if ( pileMaterial == null )
 		{
@@ -619,24 +655,24 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		if ( terrainMesh != null && _heightfield != null )
 		{
-			ConfigureTerrainMesh( terrainMesh, pileMaterial, _heightfield.Resolution, _definition );
+			ConfigureTerrainMesh( terrainMesh, pileMaterial, _heightfield.Resolution, def );
 			// Runtime: defer PhysX cooks across frames (SyncColliderImmediate stalls LoadScene Integrate / first frames).
 			terrainMesh.Bind( _heightfield, syncCollider: false );
 			if ( Application.isPlaying )
 				terrainMesh.BeginDeferredColliderCook();
 		}
 
-		if ( lootInstances != null && _definition != null && _heightfield != null )
-			await lootInstances.BindAsync( this, _definition, _heightfield, transform, lootLayoutSeed );
+		if ( lootInstances != null && def != null && _heightfield != null )
+			await lootInstances.BindAsync( this, def, _heightfield, transform, lootLayoutSeed );
 
 		// Bind may destroy/recreate during Addressables await (domain reload / scene unload).
 		if ( this == null )
 			return;
 
-		if ( artifactProps != null && _definition != null && _heightfield != null )
+		if ( artifactProps != null && def != null && _heightfield != null )
 		{
 			GoldPileLootStreamSettings stream = lootInstances != null ? lootInstances.StreamSettings : null;
-			await artifactProps.BindAsync( this, _definition, _heightfield, transform, lootInstances, stream, lootLayoutSeed );
+			await artifactProps.BindAsync( this, def, _heightfield, transform, lootInstances, stream, lootLayoutSeed );
 		}
 
 		if ( this == null )
@@ -843,9 +879,16 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	GoldPileCarveSettings ResolveCarveSettings( GoldPileCarveSettings settings )
 	{
-		float worldSize = _heightfield != null && _heightfield.IsInitialized
-			? _heightfield.WorldSize
-			: ( _definition != null ? _definition.worldSize : DefaultWorldSize );
+		float worldSize = DefaultWorldSize;
+		if ( _heightfield != null && _heightfield.IsInitialized )
+			worldSize = _heightfield.WorldSize;
+		else
+		{
+			TreasurePileDefinition def = ResolveDefinition();
+			if ( def != null )
+				worldSize = def.worldSize;
+		}
+
 		return settings.ResolvedForPile( worldSize );
 	}
 
@@ -862,8 +905,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		if ( lootInstances != null )
 			return lootInstances.TotalRemainingCoins;
-		if ( _definition != null )
-			return Mathf.Max( 0, _definition.TotalCoinUnits() );
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( def != null )
+			return Mathf.Max( 0, def.TotalCoinUnits() );
 		return 0;
 	}
 
@@ -1044,22 +1088,23 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	public TreasureDefinition GetAnyRemainingDefinition()
 	{
-		if ( lootInstances == null || _definition == null )
-			return _definition != null ? _definition.GetPrimaryTreasure() : null;
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( lootInstances == null || def == null )
+			return def != null ? def.GetPrimaryTreasure() : null;
 
 		// Prefer coins for blank-mound dig / interact probes; gems require aiming an instance.
-		TreasureDefinition coin = FirstRemaining( _definition.coinContents, coinsOnly: true );
+		TreasureDefinition coin = FirstRemaining( def.coinContents, coinsOnly: true );
 		if ( coin != null )
 			return coin;
 
-		TreasureDefinition any = FirstRemaining( _definition.coinContents, coinsOnly: false );
+		TreasureDefinition any = FirstRemaining( def.coinContents, coinsOnly: false );
 		if ( any != null )
 			return any;
-		any = FirstRemaining( _definition.treasureContents, coinsOnly: false );
+		any = FirstRemaining( def.treasureContents, coinsOnly: false );
 		if ( any != null )
 			return any;
 
-		return _definition.GetPrimaryTreasure();
+		return def.GetPrimaryTreasure();
 	}
 
 	TreasureDefinition FirstRemaining( TreasurePileEntry[] entries, bool coinsOnly )
@@ -1092,12 +1137,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		_carveSettings = ResolveGlobalCarveSettings();
 		_totalUnits = 1;
 
-		if ( _definition == null )
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( def == null )
 			return;
 
-		_totalUnits = Mathf.Max( 1, _definition.TotalCoinUnits() );
-		if ( _definition.pileMaterial != null )
-			pileMaterial = _definition.pileMaterial;
+		_totalUnits = Mathf.Max( 1, def.TotalCoinUnits() );
+		if ( def.pileMaterial != null )
+			pileMaterial = def.pileMaterial;
 	}
 
 	void EnsureChildComponents()
@@ -1130,8 +1176,12 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		_heightfield = new GoldPileHeightfield();
 		TreasurePileDefinition def = ResolveDefinition();
-		float groundLevel = def != null ? def.groundLevelHeight : 0.01f;
-		_heightfield.Initialize( res, size, height, groundLevel );
+		_heightfield.Initialize(
+			res,
+			size,
+			height,
+			def != null ? def.groundLevelHeight : 0.01f,
+			def != null ? def.lootGroundLevelHeight : 0.6f );
 
 		if ( HasAuthoredHeight && authoredRes == res )
 			_heightfield.CopyFromNormalizedU16( authoredHeights );
@@ -1139,8 +1189,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			_heightfield.FillMound( 1f );
 
 		_heightfield.UploadIfDirty();
-		_totalUnits = _definition != null
-			? Mathf.Max( 1, _definition.TotalCoinUnits() )
+		_totalUnits = def != null
+			? Mathf.Max( 1, def.TotalCoinUnits() )
 			: Mathf.Max( 1, _pile != null ? _pile.TotalCount : 1 );
 	}
 
@@ -1167,14 +1217,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	TreasurePileDefinition ResolveDefinition()
 	{
-		if ( _definition != null )
-			return _definition;
+		if ( _pile == null )
+			_pile = GetComponent<TreasurePileInteractable>();
 
-		TreasurePileInteractable interactable = _pile != null ? _pile : GetComponent<TreasurePileInteractable>();
-		if ( interactable != null )
-			return interactable.PileDefinition;
+		if ( _pile != null )
+			_definition = _pile.PileDefinition;
 
-		return null;
+		return _definition;
 	}
 
 	/// <summary>Editor bake / tools: resolve definition without requiring runtime Bind.</summary>
@@ -1294,9 +1343,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			return;
 
 		EnsureChildComponents();
-		_definition = ResolveDefinition();
-		if ( pileMaterial == null && _definition != null )
-			pileMaterial = _definition.pileMaterial;
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( pileMaterial == null && def != null )
+			pileMaterial = def.pileMaterial;
 
 		if ( pileMaterial == null )
 		{
@@ -1319,14 +1368,17 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			if ( _heightfield != null )
 				_heightfield.Release();
 			_heightfield = new GoldPileHeightfield();
-			TreasurePileDefinition def = ResolveDefinition();
-			float groundLevel = def != null ? def.groundLevelHeight : 0.01f;
-			_heightfield.Initialize( res, size, height, groundLevel );
+			_heightfield.Initialize(
+				res,
+				size,
+				height,
+				def != null ? def.groundLevelHeight : 0.01f,
+				def != null ? def.lootGroundLevelHeight : 0.6f );
 		}
 		else if ( _heightfield != null )
 		{
-			TreasurePileDefinition def = ResolveDefinition();
 			_heightfield.SetGroundLevel( def != null ? def.groundLevelHeight : 0.01f );
+			_heightfield.SetLootGroundLevel( def != null ? def.lootGroundLevelHeight : 0.6f );
 		}
 
 		if ( HasAuthoredHeight && authoredRes == res )
@@ -1341,7 +1393,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		if ( terrainMesh != null )
 		{
-			ConfigureTerrainMesh( terrainMesh, pileMaterial, res, _definition );
+			ConfigureTerrainMesh( terrainMesh, pileMaterial, res, def );
 			terrainMesh.Bind( _heightfield, syncCollider: false );
 			terrainMesh.SetVisible( true );
 		}
@@ -1500,6 +1552,12 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			if ( renderer == null )
 				continue;
 
+			if ( IsProtectedAuthoringMesh( renderer.transform ) )
+			{
+				renderer.enabled = true;
+				continue;
+			}
+
 			if ( renderer.transform.name == "GoldPileTerrain" )
 				continue;
 
@@ -1507,6 +1565,27 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		}
 
 		StripLegacyMeshColliders();
+	}
+
+	bool IsProtectedAuthoringMesh( Transform t )
+	{
+		if ( t == null )
+			return false;
+
+		Transform cursor = t;
+		while ( cursor != null && cursor != transform )
+		{
+			string name = cursor.name;
+			if ( name == AuthoredLootRootName || name == LatentBakePreviewRootName )
+				return true;
+			if ( cursor.GetComponent<TreasurePileAuthoredItem>() != null )
+				return true;
+			if ( cursor.GetComponent<TreasureItem>() != null )
+				return true;
+			cursor = cursor.parent;
+		}
+
+		return false;
 	}
 
 	/// <summary>
@@ -1526,6 +1605,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			if ( t.name.StartsWith( "ColliderTile_" )
 				|| t.name == "GoldPileColliders"
 				|| t.name == "~GoldPileColliders" )
+				continue;
+			if ( IsProtectedAuthoringMesh( t ) )
 				continue;
 
 			if ( Application.isPlaying )
@@ -1596,14 +1677,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		size = DefaultWorldSize;
 		maxH = DefaultMaxHeight;
 
-		TreasurePileDefinition def = _definition;
-		if ( def == null )
-		{
-			TreasurePileInteractable interactable = _pile != null ? _pile : GetComponent<TreasurePileInteractable>();
-			if ( interactable != null )
-				def = interactable.PileDefinition;
-		}
-
+		TreasurePileDefinition def = ResolveDefinition();
 		if ( def != null )
 		{
 			size = def.worldSize;

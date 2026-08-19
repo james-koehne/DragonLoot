@@ -241,7 +241,12 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 				GUILayout.Label(
 					$"    Modes emb={settings.useEmbeddedVolumeSeats} surf={settings.useSurfaceDecorSeats}  " +
 					$"rel={settings.releaseEmbeddedSeatsOnDig} phys={settings.spawnPhysicalCoinsOnDig}  " +
-					$"overlap={settings.enforceCoinOverlap} spacing={settings.coinPlacementMinSpacing:0.##}" );
+					$"topUp={settings.digDecorTopUpMax}  overlap={settings.enforceCoinOverlap} {settings.coinOverlapMode} occ={loot.CoinOccupancyCount} spacing={settings.coinPlacementMinSpacing:0.##}" );
+				if ( settings.useSurfaceDecorSeats )
+				{
+					GUILayout.Label(
+						$"    Surf decor: fast snap/conform (Mode B); embedded uses full Conform when emb on" );
+				}
 				GUILayout.Label(
 					$"    Pose tilt={settings.coinTiltStrength:0.##} tip={settings.coinTipJitterDegrees:0.#}  " +
 					$"yaw={settings.coinYawJitterDegrees:0.#} sink={settings.coinEmbedSinkFraction:0.###}  " +

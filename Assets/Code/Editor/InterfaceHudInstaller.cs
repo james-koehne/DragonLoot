@@ -68,7 +68,7 @@ public static class InterfaceHudInstaller
 		panelRect.anchorMin = new Vector2( 0.5f, 0.5f );
 		panelRect.anchorMax = new Vector2( 0.5f, 0.5f );
 		panelRect.pivot = new Vector2( 0.5f, 0.5f );
-		panelRect.sizeDelta = new Vector2( 520f, 620f );
+		panelRect.sizeDelta = new Vector2( 1040f, 1240f );
 		panelRect.anchoredPosition = Vector2.zero;
 
 		Image panelBg = panel.GetComponent<Image>();
@@ -78,9 +78,9 @@ public static class InterfaceHudInstaller
 		panelBg.raycastTarget = true;
 
 		Font font = ResolveFont();
-		Text controls = EnsureChildText( panel.transform, "Controls", font, new Vector2( 0f, 36f ), new Vector2( 460f, 480f ), 18, TextAnchor.UpperLeft, "Controls" );
-		Button resume = EnsureChildButton( panel.transform, "ResumeButton", "Resume", font, new Vector2( -110f, -260f ) );
-		Button quit = EnsureChildButton( panel.transform, "QuitButton", "Quit", font, new Vector2( 110f, -260f ) );
+		Text controls = EnsureChildText( panel.transform, "Controls", font, new Vector2( 0f, 72f ), new Vector2( 920f, 960f ), 36, TextAnchor.UpperLeft, "Controls" );
+		Button resume = EnsureChildButton( panel.transform, "ResumeButton", "Resume", font, new Vector2( -220f, -520f ) );
+		Button quit = EnsureChildButton( panel.transform, "QuitButton", "Quit", font, new Vector2( 220f, -520f ) );
 
 		PauseMenuUI ui = pauseRoot.GetComponent<PauseMenuUI>();
 		if ( ui == null )
@@ -105,8 +105,8 @@ public static class InterfaceHudInstaller
 		rootRect.anchorMin = new Vector2( 0f, 0.5f );
 		rootRect.anchorMax = new Vector2( 0f, 0.5f );
 		rootRect.pivot = new Vector2( 0f, 0.5f );
-		rootRect.anchoredPosition = new Vector2( 36f, 0f );
-		rootRect.sizeDelta = new Vector2( 280f, 220f );
+		rootRect.anchoredPosition = new Vector2( 72f, 0f );
+		rootRect.sizeDelta = new Vector2( 560f, 440f );
 		rootRect.localScale = Vector3.one;
 
 		CanvasGroup group = root.GetComponent<CanvasGroup>();
@@ -117,7 +117,7 @@ public static class InterfaceHudInstaller
 		group.interactable = false;
 
 		Font font = ResolveFont();
-		Text label = EnsureChildText( root.transform, "Label", font, Vector2.zero, Vector2.zero, 18, TextAnchor.MiddleLeft, string.Empty );
+		Text label = EnsureChildText( root.transform, "Label", font, Vector2.zero, Vector2.zero, 36, TextAnchor.MiddleLeft, string.Empty );
 		RectTransform labelRect = label.rectTransform;
 		labelRect.anchorMin = Vector2.zero;
 		labelRect.anchorMax = Vector2.one;
@@ -196,7 +196,7 @@ public static class InterfaceHudInstaller
 		rect.anchorMax = new Vector2( 0.5f, 0.5f );
 		rect.pivot = new Vector2( 0.5f, 0.5f );
 		rect.anchoredPosition = anchoredPos;
-		rect.sizeDelta = new Vector2( 180f, 44f );
+		rect.sizeDelta = new Vector2( 360f, 88f );
 
 		Image image = go.GetComponent<Image>();
 		if ( image == null )
@@ -224,7 +224,7 @@ public static class InterfaceHudInstaller
 		if ( text == null )
 			text = labelGo.AddComponent<Text>();
 		text.font = font;
-		text.fontSize = 20;
+		text.fontSize = 40;
 		text.fontStyle = FontStyle.Bold;
 		text.alignment = TextAnchor.MiddleCenter;
 		text.color = Color.white;

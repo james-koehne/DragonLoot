@@ -1,0 +1,144 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f99b73591a7b6c459e9c44d1b904580, type: 3}
+  m_Name: TreasurePileSmallDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileDefinition
+  displayName: Treasure Pile
+  coinContents:
+  - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    count: 10000
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 10000
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 50000
+  treasureContents:
+  - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
+    count: 60
+  - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
+    count: 50
+  - treasure: {fileID: 11400000, guid: b6e1d4a8c2f53970e8a5b1d7c4f0e268, type: 2}
+    count: 35
+  - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
+    count: 25
+  - treasure: {fileID: 11400000, guid: 3f8a2d6c9e1b4570a4d8c2f6b0e5a937, type: 2}
+    count: 15
+  - treasure: {fileID: 11400000, guid: 5252608b20a5b26478a15dc5c333597f, type: 2}
+    count: 10
+  - treasure: {fileID: 11400000, guid: 950345e010709da49a63b1fbdf37dd7a, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 24a987b32945df74897fe318bdf5ec63, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: be8f4835c8bbc2442a00b08bb29ffc22, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 05d5d2fd31947fe4ebeed539f39d7807, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 9588dd1d013c528408e3b6fb631e0d17, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 792b6a35dddfd4f46ba25841600e5188, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: ba4a35e32aef89647a1af12e0e4943d5, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 3073ae38ac57d00409a1b67710e99118, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 02e3d057e3793dd4cbae94217b2a8620, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 47ad14e2b2115474d81361177437f397, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 6241500a6033635408a00c4292cca732, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 9e6564c223ccf604a80295e7e8d81328, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 5d4d1e4e2999a704b8774dadd64afe64, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 708909205ca41f6458d828ac46dd70d6, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: 3a43154c7a487c74f8e609fcf994a049, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: 67c51721da18e6347b5216fcf9e0e018, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: 9f5e72d31aff7904cb448c492e72e20e, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: cd64ade1fb4d5ce48838d9808d5f6c52, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: b257758264e283847bc12dbe26874dc4, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: 5008023952abdb34fa9823990fb73a5e, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: de2b4f4841bd0ef459c2a7c6482eaa71, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 9d83555ba26b5f34c91ce87d8bed7657, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 9d5a6db41d5f2d84b957288219c033ee, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: b42e58a72036e8245a4a33f1fdeea89e, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 7eb5469632ec42943af0e8049eb39ab6, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 02510f8badbdd964794c819908ff6b54, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 91fa27ff54b8f0c4ba69ed14df4bacd7, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: bebc5fc773d218946be54a2dab21aa63, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 1dbba633fa68b474094ac5fbb6134f87, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
+    count: 50
+  - treasure: {fileID: 11400000, guid: 23642d676ec0a1e4d91eb72e042eefcd, type: 2}
+    count: 16
+  - treasure: {fileID: 11400000, guid: 2c15bfa856325ef41afef1fea6904e64, type: 2}
+    count: 4
+  - treasure: {fileID: 11400000, guid: b8ff7f56e1131614fa3ac882993c160d, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 1b45042b9e8c93a45aa79fa446b6c7cf, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 9fbccced7b04e6548be78a79e698ade1, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
+    count: 1
+  maxVisibleTotal: 16384
+  coinVisibleBufferFraction: 0.1
+  heightResolution: 256
+  worldSize: 32
+  maxHeight: 12
+  groundLevelHeight: 0.1
+  lootGroundLevelHeight: 0.6
+  meshResolution: 256
+  meshDeformNormalSoften: 0
+  meshDeformSampleBlur: 0
+  pickRadius: 0.45
+  buryDepth: 0.18
+  initialRevealDepth: 0.06
+  placementMinSpacing: 0.18
+  enforcePlacementSpacing: 1
+  placementJitter: 0.3
+  placementRadiusFraction: 0.78
+  placementScaleJitter: 0.1
+  coinSurfaceHeightFraction: 0.01
+  coinPullToCarveCount: 2
+  treasureRadialPower: 1
+  treasureHeightBias: 0
+  treasureXZSpread: 1
+  treasurePickupOutsideFraction: 0.3
+  treasureReleaseOutsideFraction: 0.9
+  latentSurfaceNeighborhoodCells: 1
+  preferBakedLatents: 1
+  latentVolumeMaxAttempts: 24
+  latentRetryNoOccupancyPasses: 1
+  latentRetrySaltPasses: 0
+  latentUseSpatialHash: 1
+  latentAvoidCoinSeats: 0
+  latentBuildBudgetMs: 12
+  latentBuildMaxAttemptsPerFrame: 64
+  pileMaterial: {fileID: 0}

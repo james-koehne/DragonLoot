@@ -16,68 +16,131 @@ MonoBehaviour:
   displayTitle: Clear the Way
   onStartDialogue:
   - speaker: Dragon
-    text: Ah. There you are, little Hoardkeeper.
+    text: Ah. Welcome, little Hoardkeeper.
     pauseAfter: 0.25
-    sfx: {fileID: 8300000, guid: f13adbb4656cc064083454976bf75b28, type: 3}
+    sfx: {fileID: 8300000, guid: 1500440cf0c3c744ab95f203dbed073a, type: 3}
     sfxVol: 0.5
   - speaker: Dragon
-    text: I have been... busy.
+    text: My hoard has grown somewhat... unwieldy.
     pauseAfter: 0.6
-    sfx: {fileID: 8300000, guid: 2e550f1b77600864197bcd1410237943, type: 3}
+    sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
     sfxVol: 0.5
   onCompleteDialogue:
   - speaker: Dragon
-    text: Now, Hoardkeeper...
+    text: That is much better.
     pauseAfter: 0.25
-    sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
-    sfxVol: 0.5
-  - speaker: Dragon
-    text: I believe we have rather a lot of work to do.
-    pauseAfter: 0.4
     sfx: {fileID: 8300000, guid: edcb23291bd8d9949bbdeea2451b8043, type: 3}
     sfxVol: 0.5
-  steps:
-  - id: view_doorway_gold
-    objectiveText: Look toward the gold blocking the doorway
-    markerTargetId: volume_doorway_gold
-    onEnterDialogue: []
-    onCompleteDialogue:
-    - speaker: Dragon
-      text: Oh.
-      pauseAfter: 0.25
-      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
-      sfxVol: 0.5
-    - speaker: Dragon
-      text: My hoard has grown somewhat... unwieldy.
-      pauseAfter: 0.25
-      sfx: {fileID: 8300000, guid: cbc4534d57c0c6643bd64230f0e78b81, type: 3}
-      sfxVol: 0.5
-    - speaker: Dragon
-      text: You'll need to dig your way out...
-      pauseAfter: 0.5
-      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
-      sfxVol: 0.5
+  - speaker: Dragon
+    text: I will now unlock the door.
+    pauseAfter: 0.4
+    sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
+    sfxVol: 0.5
+  objectives:
+  - id: clear_and_sort
+    objectiveText: Clear and sort all treasure
+    markerTargetId: starting_door_pile
+    optional: 0
+    onCompleteDialogue: []
     conditionMode: 0
+    conditions: []
+    subObjectives:
+    - id: gems_in_constellation
+      objectiveText: Gems in constellation
+      markerTargetId: constellation
+      optional: 0
+      onCompleteDialogue: []
+      conditionMode: 0
+      conditions:
+      - type: 4
+        targetId: constellation
+        areaId: starting_area
+        requiredCount: 1
+        requiredTreasure: {fileID: 0}
+        filterByCategory: 0
+        requiredCategory: 0
+        excludeGoldBars: 0
+        sectionId: 
+      subObjectives: []
+    - id: coins_stacked
+      objectiveText: Coins stacked
+      markerTargetId: coin_sorter
+      optional: 0
+      onCompleteDialogue: []
+      conditionMode: 0
+      conditions:
+      - type: 6
+        targetId: 
+        areaId: starting_area
+        requiredCount: 1
+        requiredTreasure: {fileID: 0}
+        filterByCategory: 0
+        requiredCategory: 0
+        excludeGoldBars: 0
+        sectionId: 
+      subObjectives: []
+    - id: gold_bars_stacked
+      objectiveText: Gold bars stacked
+      markerTargetId: gold_bar_table
+      optional: 0
+      onCompleteDialogue: []
+      conditionMode: 0
+      conditions:
+      - type: 8
+        targetId: 
+        areaId: starting_area
+        requiredCount: 1
+        requiredTreasure: {fileID: 0}
+        filterByCategory: 0
+        requiredCategory: 0
+        excludeGoldBars: 0
+        sectionId: 
+      subObjectives: []
+    - id: artifacts_sorted
+      objectiveText: Artifacts sorted
+      markerTargetId: museum_table
+      optional: 0
+      onCompleteDialogue: []
+      conditionMode: 0
+      conditions:
+      - type: 5
+        targetId: 
+        areaId: starting_area
+        requiredCount: 1
+        requiredTreasure: {fileID: 0}
+        filterByCategory: 0
+        requiredCategory: 0
+        excludeGoldBars: 0
+        sectionId: 
+      subObjectives: []
+  events:
+  - id: volume_doorway_gold
     conditions:
     - type: 0
       targetId: volume_doorway_gold
+      areaId: 
       requiredCount: 1
       requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
       sectionId: 
-  - id: clear_and_sort
-    objectiveText: Clear the doorway pile and place the loot on the sorting plinth
-    markerTargetId: starting_door_pile
-    onEnterDialogue: []
-    onCompleteDialogue: []
-    conditionMode: 0
-    conditions:
-    - type: 1
-      targetId: starting_door_pile
-      requiredCount: 1
-      requiredTreasure: {fileID: 0}
-      sectionId: 
-    - type: 2
-      targetId: starting_sorting_plinth
-      requiredCount: 5
-      requiredTreasure: {fileID: 0}
-      sectionId: 
+    dialogue:
+    - speaker: Dragon
+      text: Oh.
+      pauseAfter: 0.25
+      sfx: {fileID: 8300000, guid: f13adbb4656cc064083454976bf75b28, type: 3}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: You'll need to clear that pile too
+      pauseAfter: 0.25
+      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+      sfxVol: 0.5
+    stinger: {fileID: 0}
+    stingerVol: 0.8
+  subquests:
+  - {fileID: 11400000, guid: 3aa285b06dae95b42bf97c932472d686, type: 2}
+  - {fileID: 11400000, guid: 9dca3591abf4ba043b084282e3d14f83, type: 2}
+  - {fileID: 11400000, guid: a1d59ab30e4aec24786512a7802d16b6, type: 2}
+  revealWhenParentObjectiveId: 
+  linkedParentObjectiveId: 
