@@ -202,7 +202,71 @@ public sealed class GoldPileHeightfield
 	{
 		if ( _heights == null )
 			return false;
-		return SampleNormalized( localX, localZ ) * _maxHeight >= _groundLevel;
+		return SampleSurfaceHeight( localX, localZ ) >= _groundLevel;
+	}
+
+	/// <summary>World-space mound surface at local XZ (not clamped to ground).</summary>
+	public float SampleSurfaceHeight( float localX, float localZ )
+	{
+		if ( _heights == null )
+			return 0f;
+		return SampleNormalized( localX, localZ ) * _maxHeight;
+	}
+
+	/// <summary>World-space size of one heightfield grid step along X or Z.</summary>
+	public float LocalCellSize => _worldSize / Mathf.Max( 1, _resolution - 1 );
+
+	public float GetCellNormalizedHeight( int cellX, int cellZ )
+	{
+		if ( _heights == null )
+			return 0f;
+
+		cellX = Mathf.Clamp( cellX, 0, _resolution - 1 );
+		cellZ = Mathf.Clamp( cellZ, 0, _resolution - 1 );
+		return _heights[ Index( cellX, cellZ ) ];
+	}
+
+	public void CellCenterLocal( int cellX, int cellZ, out float localX, out float localZ )
+	{
+		float half = _worldSize * 0.5f;
+		float cell = LocalCellSize;
+		localX = -half + cellX * cell;
+		localZ = -half + cellZ * cell;
+	}
+
+	public bool TryLocalToCell( float localX, float localZ, out int cellX, out int cellZ )
+	{
+		cellX = 0;
+		cellZ = 0;
+		if ( _heights == null )
+			return false;
+
+		float half = _worldSize * 0.5f;
+		float cell = LocalCellSize;
+		cellX = Mathf.Clamp( Mathf.RoundToInt( ( localX + half ) / cell ), 0, _resolution - 1 );
+		cellZ = Mathf.Clamp( Mathf.RoundToInt( ( localZ + half ) / cell ), 0, _resolution - 1 );
+		return true;
+	}
+
+	public int CellIndex( int cellX, int cellZ )
+	{
+		return cellZ * _resolution + cellX;
+	}
+
+	/// <summary>
+	/// True when the column has little or no volume left above the loot floor — same cutoff used
+	/// when rejecting new coin seats (surface at or barely above <see cref="LootGroundLevel"/>).
+	/// </summary>
+	public bool IsColumnNearLootGround( float localX, float localZ, float margin = 0.02f )
+	{
+		if ( _heights == null )
+			return false;
+
+		float surface = SampleSurfaceHeight( localX, localZ );
+		if ( surface < _groundLevel )
+			return true;
+
+		return surface <= LootGroundLevel + Mathf.Max( 0f, margin );
 	}
 
 	/// <summary>True when the heightfield surface under this world point is at or above ground level.</summary>

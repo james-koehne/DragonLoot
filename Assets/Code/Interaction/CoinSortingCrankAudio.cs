@@ -1,8 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Crank one-shots: play on press, then every <see cref="CoinSortingStationDefinition.crankPlayInterval"/>
-/// while pulses continue. The previous clip fades out quickly so the new one can overlap.
+/// Crank clicks plus prize-wheel one-shots while the station is sorting.
 /// </summary>
 [DisallowMultipleComponent]
 public class CoinSortingCrankAudio : MonoBehaviour
@@ -12,11 +11,19 @@ public class CoinSortingCrankAudio : MonoBehaviour
 
 	AudioSource _current;
 	AudioSource _fading;
+	AudioSource _sortCurrent;
+	AudioSource _sortFading;
 	int _clipIndex = -1;
+	int _sortClipIndex = -1;
 	float _nextPlayTime;
+	float _nextSortPlayTime;
 	float _fadeRemaining;
 	float _fadeDuration;
 	float _fadeStartVolume;
+	float _sortFadeRemaining;
+	float _sortFadeDuration;
+	float _sortFadeStartVolume;
+	bool _wasProcessing;
 
 	void Awake()
 	{
@@ -32,10 +39,14 @@ public class CoinSortingCrankAudio : MonoBehaviour
 		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
 		{
 			StopSources();
+			StopSortSources();
+			_wasProcessing = false;
 			return;
 		}
 
 		TickFade();
+		TickSortFade();
+		TickSortLoop();
 	}
 
 	public void NotifyPulse()
@@ -62,6 +73,49 @@ public class CoinSortingCrankAudio : MonoBehaviour
 		PlayNext( def );
 	}
 
+	void TickSortLoop()
+	{
+		if ( _station == null || _station.IsRepositioning )
+		{
+			if ( _wasProcessing )
+			{
+				BeginSortFadePrevious( _station != null ? _station.Definition : null );
+				_wasProcessing = false;
+			}
+
+			return;
+		}
+
+		bool processing = _station.IsProcessing;
+		if ( !processing )
+		{
+			if ( _wasProcessing )
+			{
+				BeginSortFadePrevious( _station.Definition );
+				_wasProcessing = false;
+			}
+
+			return;
+		}
+
+		CoinSortingStationDefinition def = _station.Definition;
+		if ( def == null || !HasSortClips( def ) )
+			return;
+
+		if ( !_wasProcessing )
+		{
+			_wasProcessing = true;
+			_nextSortPlayTime = 0f;
+		}
+
+		if ( Time.time < _nextSortPlayTime )
+			return;
+
+		float interval = Mathf.Max( 0.05f, def.sortPlayInterval );
+		_nextSortPlayTime = Time.time + interval;
+		PlayNextSort( def );
+	}
+
 	void PlayNext( CoinSortingStationDefinition def )
 	{
 		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
@@ -85,9 +139,37 @@ public class CoinSortingCrankAudio : MonoBehaviour
 
 		_current.clip = clip;
 		_current.loop = false;
-		_current.pitch = SamplePitch( def.crankPitchMin, def.crankPitchMax );
-		_current.volume = Mathf.Clamp01( def.crankVolume );
+		_current.pitch = ResolvePitch( def );
+		_current.volume = ResolveVolume( def );
 		_current.Play();
+	}
+
+	void PlayNextSort( CoinSortingStationDefinition def )
+	{
+		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
+			return;
+
+		EnsureSources();
+		if ( _sortCurrent == null || def == null )
+			return;
+
+		AudioClip[] clips = def.sortLoopClips;
+		int next = NextValidIndex( clips, _sortClipIndex );
+		if ( next < 0 )
+			return;
+
+		_sortClipIndex = next;
+		AudioClip clip = clips[ _sortClipIndex ];
+		if ( clip == null )
+			return;
+
+		BeginSortFadePrevious( def );
+
+		_sortCurrent.clip = clip;
+		_sortCurrent.loop = false;
+		_sortCurrent.pitch = SamplePitch( def.sortPitchMin, def.sortPitchMax );
+		_sortCurrent.volume = Mathf.Clamp01( def.sortVolume );
+		_sortCurrent.Play();
 	}
 
 	void BeginFadePrevious( CoinSortingStationDefinition def )
@@ -115,6 +197,31 @@ public class CoinSortingCrankAudio : MonoBehaviour
 		_fadeRemaining = fade;
 	}
 
+	void BeginSortFadePrevious( CoinSortingStationDefinition def )
+	{
+		if ( _sortCurrent == null || !_sortCurrent.isPlaying )
+			return;
+
+		if ( _sortFading != null && _sortFading.isPlaying )
+			_sortFading.Stop();
+
+		AudioSource previous = _sortCurrent;
+		_sortCurrent = _sortFading;
+		_sortFading = previous;
+
+		float fade = def != null ? Mathf.Max( 0f, def.crankOverlapFadeSeconds ) : 0.12f;
+		if ( fade < 0.0001f )
+		{
+			_sortFading.Stop();
+			_sortFadeRemaining = 0f;
+			return;
+		}
+
+		_sortFadeStartVolume = _sortFading.volume;
+		_sortFadeDuration = fade;
+		_sortFadeRemaining = fade;
+	}
+
 	void TickFade()
 	{
 		if ( _fading == null || _fadeRemaining <= 0f )
@@ -133,6 +240,24 @@ public class CoinSortingCrankAudio : MonoBehaviour
 		_fading.volume = _fadeStartVolume * Mathf.Clamp01( t );
 	}
 
+	void TickSortFade()
+	{
+		if ( _sortFading == null || _sortFadeRemaining <= 0f )
+			return;
+
+		_sortFadeRemaining -= Time.deltaTime;
+		if ( _sortFadeRemaining <= 0f || !_sortFading.isPlaying )
+		{
+			_sortFading.Stop();
+			_sortFading.volume = 0f;
+			_sortFadeRemaining = 0f;
+			return;
+		}
+
+		float t = _sortFadeDuration > 0.0001f ? _sortFadeRemaining / _sortFadeDuration : 0f;
+		_sortFading.volume = _sortFadeStartVolume * Mathf.Clamp01( t );
+	}
+
 	void StopSources()
 	{
 		if ( _current != null && _current.isPlaying )
@@ -142,12 +267,25 @@ public class CoinSortingCrankAudio : MonoBehaviour
 		_fadeRemaining = 0f;
 	}
 
+	void StopSortSources()
+	{
+		if ( _sortCurrent != null && _sortCurrent.isPlaying )
+			_sortCurrent.Stop();
+		if ( _sortFading != null && _sortFading.isPlaying )
+			_sortFading.Stop();
+		_sortFadeRemaining = 0f;
+	}
+
 	void EnsureSources()
 	{
 		if ( _current == null )
 			_current = CreateSource( "CrankAudioA" );
 		if ( _fading == null )
 			_fading = CreateSource( "CrankAudioB" );
+		if ( _sortCurrent == null )
+			_sortCurrent = CreateSource( "SortAudioA" );
+		if ( _sortFading == null )
+			_sortFading = CreateSource( "SortAudioB" );
 	}
 
 	AudioSource CreateSource( string hostName )
@@ -172,7 +310,16 @@ public class CoinSortingCrankAudio : MonoBehaviour
 
 	static bool HasClips( CoinSortingStationDefinition def )
 	{
-		AudioClip[] clips = def != null ? def.crankLoopClips : null;
+		return HasClipArray( def != null ? def.crankLoopClips : null );
+	}
+
+	static bool HasSortClips( CoinSortingStationDefinition def )
+	{
+		return HasClipArray( def != null ? def.sortLoopClips : null );
+	}
+
+	static bool HasClipArray( AudioClip[] clips )
+	{
 		if ( clips == null || clips.Length == 0 )
 			return false;
 
@@ -191,6 +338,29 @@ public class CoinSortingCrankAudio : MonoBehaviour
 		float hi = Mathf.Clamp( Mathf.Max( min, max ), -3f, 3f );
 		float pitch = Mathf.Approximately( lo, hi ) ? lo : Random.Range( lo, hi );
 		return pitch <= 0f ? 1f : pitch;
+	}
+
+	float ResolvePitch( CoinSortingStationDefinition def )
+	{
+		float lo = def != null ? def.crankPitchMin : 0.85f;
+		float hi = def != null ? def.crankPitchMax : 1.25f;
+		float t = _station != null ? _station.ReserveNormalized : 0f;
+		float pitch = Mathf.Lerp( lo, hi, t );
+		float warning = def != null ? def.gaugeEmptyWarningNormalized : 0.15f;
+		if ( _station != null && t <= warning )
+			pitch *= 0.88f;
+		if ( pitch <= 0f )
+			return 1f;
+		return Mathf.Clamp( pitch, -3f, 3f );
+	}
+
+	float ResolveVolume( CoinSortingStationDefinition def )
+	{
+		float volume = def != null ? Mathf.Clamp01( def.crankVolume ) : 0.7f;
+		float warning = def != null ? def.gaugeEmptyWarningNormalized : 0.15f;
+		if ( _station != null && _station.ReserveNormalized <= warning )
+			volume *= 0.55f;
+		return volume;
 	}
 
 	static int NextValidIndex( AudioClip[] clips, int current )

@@ -110,6 +110,55 @@ public static class TreasureSurfaceOps
 		} );
 	}
 
+	public static void PaintTraversableInBounds(
+		TreasureSurfaceWorld world,
+		Bounds worldBounds,
+		bool traversable )
+	{
+		if ( world == null || !world.IsInitialized )
+			return;
+
+		byte value = traversable ? ( byte )1 : ( byte )0;
+		world.ForEachCellInBounds( worldBounds, ( chunk, x, z, wx, wz, distSq, radiusSq ) =>
+		{
+			chunk.PaintTraversable[ chunk.Index( x, z ) ] = value;
+			chunk.ExpandDirtyRect( x, x, z, z );
+			chunk.Dirty = true;
+		} );
+		world.RebuildDirtyChunksImmediate();
+	}
+
+	public static void RestoreTraversableInBounds( TreasureSurfaceWorld world, Bounds worldBounds )
+	{
+		if ( world == null || !world.IsInitialized )
+			return;
+
+		TreasureSurfaceAuthoring authoring = TreasureSurfaceAuthoring.Instance;
+		bool defaultNonTraversable = authoring != null && authoring.DefaultNonTraversable;
+		byte fallback = defaultNonTraversable ? ( byte )0 : ( byte )1;
+
+		world.ForEachCellInBounds( worldBounds, ( chunk, x, z, wx, wz, distSq, radiusSq ) =>
+		{
+			byte value = fallback;
+			if ( authoring != null )
+			{
+				Vector3 worldPos = new Vector3( wx, 0f, wz );
+				if ( authoring.TryWorldToCell( worldPos, out int cellX, out int cellZ ) )
+				{
+					bool cellTraversable;
+					TreasureSurfaceMaterial material;
+					if ( authoring.TryGetPaint( cellX, cellZ, out cellTraversable, out material ) )
+						value = cellTraversable ? ( byte )1 : ( byte )0;
+				}
+			}
+
+			chunk.PaintTraversable[ chunk.Index( x, z ) ] = value;
+			chunk.ExpandDirtyRect( x, x, z, z );
+			chunk.Dirty = true;
+		} );
+		world.RebuildDirtyChunksImmediate();
+	}
+
 	public static void PaintMaterial(
 		TreasureSurfaceWorld world,
 		Vector3 worldCenter,

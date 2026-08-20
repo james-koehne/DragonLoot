@@ -66,6 +66,8 @@ public class DebugCoinSortingStationSection : DebugOverlaySection
 		GUILayout.Label( $"Station level: {station.StationLevel}" );
 		GUILayout.Label( $"Hopper stack: {station.BufferedCount} / {station.HopperCapacity}" );
 		GUILayout.Label( $"Processing: {station.IsProcessing}  Crank: {station.IsCrankActive}" );
+		GUILayout.Label( $"Reserve: {station.ReserveSeconds:0.00}s  Fill: {station.ReserveNormalized:0.00}" );
+		GUILayout.Label( $"Charging: {station.IsCranking}  Discharging: {station.IsReserveDischarging}" );
 
 		if ( GUILayout.Button( "Force process one" ) )
 			station.DebugForceProcessOne();

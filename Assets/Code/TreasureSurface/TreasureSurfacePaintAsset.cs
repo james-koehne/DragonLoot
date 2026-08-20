@@ -12,7 +12,8 @@ using UnityEditor;
 /// Level paint grids for <see cref="TreasureSurfaceAuthoring"/>.
 /// Paint bytes are NOT Unity-serialized on this ScriptableObject (Inspector-safe).
 /// Editor: sidecar <c>.paintbin</c> next to this asset.
-/// Player: optional <see cref="bakedPaint"/> TextAsset (.bytes) assigned for builds.
+/// Player: StreamingAssets copy of that sidecar (injected at build), or optional
+/// <see cref="bakedPaint"/> TextAsset (.bytes).
 /// </summary>
 [CreateAssetMenu(
 	fileName = "TreasureSurfacePaint",
@@ -24,6 +25,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 	const int FileVersion = 2;
 	const int FileVersionV1 = 1;
 	public const string SidecarExtension = ".paintbin";
+	public const string StreamingFolder = "TreasureSurface";
 
 	[SerializeField]
 	int cellsX;
@@ -31,7 +33,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 	[SerializeField]
 	int cellsZ;
 
-	[Tooltip( "Optional build-time paint blob (.bytes). Editor prefers the .paintbin sidecar." )]
+	[Tooltip( "Optional extra paint blob. Player builds also copy the .paintbin sidecar into StreamingAssets automatically." )]
 	[SerializeField]
 	TextAsset bakedPaint;
 
@@ -122,6 +124,8 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 
 	public bool IsDirty => _dirty;
 
+	public string StreamingAssetsRelativePath => StreamingFolder + "/" + name + SidecarExtension;
+
 	void OnEnable()
 	{
 #if UNITY_EDITOR
@@ -168,6 +172,11 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			MarkDirty();
 			return;
 		}
+
+#if !UNITY_EDITOR
+		if ( _traversablePaint == null )
+			return;
+#endif
 
 		byte[] newTrav = new byte[ count ];
 		byte[] newMat = new byte[ count ];
@@ -296,10 +305,26 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			return;
 		}
 
+		if ( TryLoadFromStreamingAssets() )
+		{
+			_loaded = true;
+			return;
+		}
+
 		_traversablePaint = null;
 		_materialPaint = null;
 		_heightPaint = null;
 		_loaded = true;
+
+		if ( Application.isPlaying )
+		{
+			Debug.LogError(
+				$"TreasureSurfacePaintAsset '{name}' has no paint data. "
+				+ "Player builds copy the .paintbin sidecar into StreamingAssets/"
+				+ StreamingFolder
+				+ ". Rebuild the player after painting, or assign Baked Paint.",
+				this );
+		}
 	}
 
 	bool TryLoadFromBakedTextAsset()
@@ -316,13 +341,35 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 			out float[] height ) )
 			return false;
 
+		ApplyLoadedPaint( x, z, trav, mat, height );
+		return true;
+	}
+
+	bool TryLoadFromStreamingAssets()
+	{
+		string root = Application.streamingAssetsPath;
+		if ( string.IsNullOrEmpty( root ) )
+			return false;
+
+		string path = Path.Combine( root, StreamingFolder, name + SidecarExtension );
+		if ( !File.Exists( path ) )
+			return false;
+
+		if ( !TryReadPaintFile( path, out int x, out int z, out byte[] trav, out byte[] mat, out float[] height ) )
+			return false;
+
+		ApplyLoadedPaint( x, z, trav, mat, height );
+		return true;
+	}
+
+	void ApplyLoadedPaint( int x, int z, byte[] trav, byte[] mat, float[] height )
+	{
 		cellsX = x;
 		cellsZ = z;
 		_traversablePaint = trav;
 		_materialPaint = mat;
 		_heightPaint = height;
 		_dirty = false;
-		return true;
 	}
 
 #if UNITY_EDITOR
@@ -392,12 +439,7 @@ public class TreasureSurfacePaintAsset : ScriptableObject
 		if ( !TryReadPaintFile( abs, out int x, out int z, out byte[] trav, out byte[] mat, out float[] height ) )
 			return false;
 
-		cellsX = x;
-		cellsZ = z;
-		_traversablePaint = trav;
-		_materialPaint = mat;
-		_heightPaint = height;
-		_dirty = false;
+		ApplyLoadedPaint( x, z, trav, mat, height );
 		return true;
 	}
 

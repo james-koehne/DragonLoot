@@ -17,23 +17,23 @@ MonoBehaviour:
   onStartDialogue:
   - speaker: Dragon
     text: Ah. Welcome, little Hoardkeeper.
-    pauseAfter: 0.25
+    pauseAfter: 2
     sfx: {fileID: 8300000, guid: 1500440cf0c3c744ab95f203dbed073a, type: 3}
     sfxVol: 0.5
   - speaker: Dragon
     text: My hoard has grown somewhat... unwieldy.
-    pauseAfter: 0.6
+    pauseAfter: 2
     sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
     sfxVol: 0.5
   onCompleteDialogue:
   - speaker: Dragon
     text: That is much better.
-    pauseAfter: 0.25
+    pauseAfter: 2
     sfx: {fileID: 8300000, guid: edcb23291bd8d9949bbdeea2451b8043, type: 3}
     sfxVol: 0.5
   - speaker: Dragon
     text: I will now unlock the door.
-    pauseAfter: 0.4
+    pauseAfter: 2
     sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
     sfxVol: 0.5
   objectives:
@@ -46,7 +46,7 @@ MonoBehaviour:
     conditions: []
     subObjectives:
     - id: gems_in_constellation
-      objectiveText: Gems in constellation
+      objectiveText: Place gems on constellation
       markerTargetId: constellation
       optional: 0
       onCompleteDialogue: []
@@ -60,27 +60,29 @@ MonoBehaviour:
         filterByCategory: 0
         requiredCategory: 0
         excludeGoldBars: 0
+        requireGoldBars: 0
         sectionId: 
       subObjectives: []
     - id: coins_stacked
-      objectiveText: Coins stacked
+      objectiveText: Stack all coins
       markerTargetId: coin_sorter
       optional: 0
       onCompleteDialogue: []
       conditionMode: 0
       conditions:
-      - type: 6
-        targetId: 
+      - type: 11
+        targetId: starting_door_pile
         areaId: starting_area
         requiredCount: 1
         requiredTreasure: {fileID: 0}
         filterByCategory: 0
         requiredCategory: 0
         excludeGoldBars: 0
+        requireGoldBars: 0
         sectionId: 
       subObjectives: []
     - id: gold_bars_stacked
-      objectiveText: Gold bars stacked
+      objectiveText: Stack all gold bars
       markerTargetId: gold_bar_table
       optional: 0
       onCompleteDialogue: []
@@ -94,10 +96,11 @@ MonoBehaviour:
         filterByCategory: 0
         requiredCategory: 0
         excludeGoldBars: 0
+        requireGoldBars: 0
         sectionId: 
       subObjectives: []
     - id: artifacts_sorted
-      objectiveText: Artifacts sorted
+      objectiveText: Return all artifacts
       markerTargetId: museum_table
       optional: 0
       onCompleteDialogue: []
@@ -111,6 +114,7 @@ MonoBehaviour:
         filterByCategory: 0
         requiredCategory: 0
         excludeGoldBars: 0
+        requireGoldBars: 0
         sectionId: 
       subObjectives: []
   events:
@@ -124,16 +128,17 @@ MonoBehaviour:
       filterByCategory: 0
       requiredCategory: 0
       excludeGoldBars: 0
+      requireGoldBars: 0
       sectionId: 
     dialogue:
     - speaker: Dragon
       text: Oh.
-      pauseAfter: 0.25
+      pauseAfter: 1
       sfx: {fileID: 8300000, guid: f13adbb4656cc064083454976bf75b28, type: 3}
       sfxVol: 0.5
     - speaker: Dragon
       text: You'll need to clear that pile too
-      pauseAfter: 0.25
+      pauseAfter: 2
       sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
       sfxVol: 0.5
     stinger: {fileID: 0}
@@ -142,5 +147,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 3aa285b06dae95b42bf97c932472d686, type: 2}
   - {fileID: 11400000, guid: 9dca3591abf4ba043b084282e3d14f83, type: 2}
   - {fileID: 11400000, guid: a1d59ab30e4aec24786512a7802d16b6, type: 2}
+  - {fileID: 11400000, guid: 0de6fb6e821ae194ab004f8ce30396aa, type: 2}
   revealWhenParentObjectiveId: 
   linkedParentObjectiveId: 

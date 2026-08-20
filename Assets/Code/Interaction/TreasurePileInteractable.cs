@@ -19,6 +19,37 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 	public TreasurePileDefinition PileDefinition => pileDefinition;
 	public TreasurePileVisual PileVisual => pileVisual;
 
+	/// <summary>Authored coin units in <see cref="pileDefinition"/> (0 when not coin-driven).</summary>
+	public int ExpectedCoinCount
+	{
+		get
+		{
+			if ( pileDefinition != null )
+				return pileDefinition.TotalCoinUnits();
+			if ( Treasure != null && Treasure.category == TreasureCategory.Coin )
+				return TotalCount;
+			return 0;
+		}
+	}
+
+	/// <summary>Coin inventory still buried in this pile (ignores gems/artifacts).</summary>
+	public int CountRemainingCoinsInPile()
+	{
+		if ( pileVisual == null )
+			pileVisual = GetComponent<TreasurePileVisual>();
+		if ( pileVisual == null )
+			return ExpectedCoinCount > 0 ? RemainingCount : 0;
+
+		GoldPileLootInstances loot = pileVisual.LootInstances;
+		if ( loot != null )
+			return loot.TotalRemainingCoins;
+
+		TreasurePileDefinition def = pileDefinition;
+		if ( def != null && def.TotalCoinUnits() > 0 )
+			return def.TotalCoinUnits();
+		return 0;
+	}
+
 	protected override void Reset()
 	{
 		EnsureFallbackName( "Treasure Pile" );

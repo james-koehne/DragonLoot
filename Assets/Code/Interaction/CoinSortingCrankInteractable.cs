@@ -38,7 +38,7 @@ public class CoinSortingCrankInteractable : InteractableBase
 		if ( level >= 2 )
 			return false;
 
-		return level >= 1 && station.BufferedCount > 0;
+		return level >= 1;
 	}
 
 	public override void Interact( PlayerController player )

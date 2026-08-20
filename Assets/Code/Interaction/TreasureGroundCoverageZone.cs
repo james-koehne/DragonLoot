@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 /// <summary>
@@ -84,6 +86,27 @@ public class TreasureGroundCoverageZone : MonoBehaviour
 	public bool ShowPreview => showPreview;
 	public bool SpawnAtRuntime => spawnAtRuntime;
 
+	public int ExpectedGoldBarCount
+	{
+		get
+		{
+			if ( group == null || group.entries == null )
+				return 0;
+
+			int total = 0;
+			for ( int i = 0; i < group.entries.Length; i++ )
+			{
+				TreasureGroupEntry entry = group.entries[ i ];
+				if ( entry.treasure == null || entry.count <= 0 )
+					continue;
+				if ( GoldBarStack.IsStackable( entry.treasure ) )
+					total += entry.count;
+			}
+
+			return total;
+		}
+	}
+
 	public BoxCollider Box => _box != null ? _box : ( _box = GetComponent<BoxCollider>() );
 
 	BoxCollider _box;
@@ -132,6 +155,38 @@ public class TreasureGroundCoverageZone : MonoBehaviour
 			return new Bounds( transform.position, Vector3.one );
 
 		return box.bounds;
+	}
+
+	public int CountRemainingGoldBarsInZone()
+	{
+		Bounds bounds = GetWorldBounds();
+		int remaining = 0;
+
+		IReadOnlyList<GroundGoldBarStack> stacks = GroundGoldBarStack.ActiveStacks;
+		for ( int i = 0; i < stacks.Count; i++ )
+		{
+			GroundGoldBarStack stack = stacks[ i ];
+			if ( stack == null )
+				continue;
+			if ( !bounds.Contains( stack.transform.position ) )
+				continue;
+			remaining += stack.Count;
+		}
+
+		TreasureItem[] items = Object.FindObjectsByType<TreasureItem>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		for ( int i = 0; i < items.Length; i++ )
+		{
+			TreasureItem item = items[ i ];
+			if ( item == null || !GoldBarStack.IsStackable( item.Definition ) )
+				continue;
+			if ( item.Owner is GroundGoldBarStack || item.Owner is GoldBarDisplayTableInteractable || item.Owner is PlayerCarry )
+				continue;
+			if ( !bounds.Contains( item.transform.position ) )
+				continue;
+			remaining++;
+		}
+
+		return remaining;
 	}
 
 	public int ComputeSettingsFingerprint()

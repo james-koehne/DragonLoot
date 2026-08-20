@@ -20,6 +20,8 @@ MonoBehaviour:
   weight: 1
   exclusiveCarry: 0
   usesHeavyThrow: 0
+  cannotThrow: 0
+  placeOnGroundOrArtifactSlotOnly: 0
   throwForceScale: 1
   throwUpBiasScale: 1
   rigidbodyMass: 0.07
@@ -43,12 +45,13 @@ MonoBehaviour:
     m_SubObjectType: 
     m_SubObjectGUID: 
     m_EditorAssetChanged: 0
-  worldScale: {x: 0.3, y: 0.3, z: 0.3}
+  worldScale: {x: 0.25, y: 0.25, z: 0.25}
   heldScale: {x: 0.2, y: 0.2, z: 0.2}
   activeHeldLocalEuler: {x: 0, y: 0, z: 0}
   heldStackLocalEuler: {x: 0, y: 0, z: 0}
   cleaningRequirement: 0
   canStack: 1
+  usesInterleavedBarStack: 0
   coinThickness: 0.0615
   cartGridSize: {x: 1, y: 1}
   pickupClips:

@@ -48,7 +48,7 @@ MonoBehaviour:
   pouchSummaryHold: 2
   pouchSummaryFadeOut: 0.35
   heldVisualMaxCoins: 128
-  wholeStackHoldSeconds: 5
+  wholeStackHoldSeconds: 2
   wholeStackHoldCurve:
     serializedVersion: 2
     m_Curve:
@@ -56,15 +56,15 @@ MonoBehaviour:
       time: 0
       value: 0.2
       inSlope: 0
-      outSlope: 0.09666667
+      outSlope: 0.03
       tangentMode: 69
       weightedMode: 0
       inWeight: 0
       outWeight: 0
     - serializedVersion: 3
       time: 60
-      value: 6
-      inSlope: 0.09666667
+      value: 2
+      inSlope: 0.03
       outSlope: 0
       tangentMode: 69
       weightedMode: 0
@@ -73,7 +73,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  wholeStackHoldMaxSeconds: 6
+  wholeStackHoldMaxSeconds: 2
   wholeStackProgressRingSize: 96
   wholeStackAbsorbTweenDuration: 0.28
   activeRefillTweenDuration: 0.22

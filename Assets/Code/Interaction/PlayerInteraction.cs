@@ -21,6 +21,8 @@ public class PlayerInteraction : MonoBehaviour
 	bool _beginContextSubscribed;
 	RaycastHit _lastHit;
 	bool _hasLastHit;
+	RaycastHit _placementAimHit;
+	bool _hasPlacementAimHit;
 	RaycastHit _surfaceHit;
 	bool _hasSurfaceHit;
 
@@ -257,6 +259,15 @@ public class PlayerInteraction : MonoBehaviour
 	}
 
 	/// <summary>
+	/// Closest geometry hit along the aim ray within placement range — independent of pick focus.
+	/// </summary>
+	public bool TryGetPlacementAimHit( out RaycastHit hit )
+	{
+		hit = _placementAimHit;
+		return _hasPlacementAimHit;
+	}
+
+	/// <summary>
 	/// Nearest non-treasure / non-interactable surface along the aim ray (for floor placement).
 	/// </summary>
 	public bool TryGetSurfaceHit( out RaycastHit hit )
@@ -488,6 +499,7 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		_current = null;
 		_hasLastHit = false;
+		_hasPlacementAimHit = false;
 		_hasSurfaceHit = false;
 
 		Transform cam = _cameraLook.transform;
@@ -632,6 +644,12 @@ public class PlayerInteraction : MonoBehaviour
 			{
 				bestOther = null;
 			}
+		}
+
+		if ( hasNearest )
+		{
+			_placementAimHit = nearestHit;
+			_hasPlacementAimHit = true;
 		}
 
 		if ( bestItem != null )

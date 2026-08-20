@@ -167,9 +167,12 @@ public class GameMode : MonoBehaviour, IGameMode
 			if ( pouchSummary != null )
 				pouchSummary.Setup();
 
-			QuestSystem quests = QuestSystem.EnsureExists();
-			quests.StartOrResumeCatalog();
-			QuestObjectiveOutline.EnsureExists();
+			if ( QuestSystem.Enabled )
+			{
+				QuestSystem quests = QuestSystem.EnsureExists();
+				quests.StartOrResumeCatalog();
+				QuestObjectiveOutline.EnsureExists();
+			}
 		}
 
 		if ( GetComponent<DebugOverlay>() == null )

@@ -30,14 +30,15 @@ MonoBehaviour:
   events:
   - id: near_constellation
     conditions:
-    - type: 0
-      targetId: volume_constellation
+    - type: 9
+      targetId: 
       areaId: 
       requiredCount: 1
       requiredTreasure: {fileID: 0}
-      filterByCategory: 0
-      requiredCategory: 0
+      filterByCategory: 1
+      requiredCategory: 1
       excludeGoldBars: 0
+      requireGoldBars: 0
       sectionId: 
     dialogue:
     - speaker: Dragon

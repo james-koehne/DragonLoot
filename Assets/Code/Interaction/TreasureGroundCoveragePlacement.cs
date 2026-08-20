@@ -108,7 +108,9 @@ public static class TreasureGroundCoveragePlacement
 		surface.EnsurePaintBuffers();
 		if ( surface.PaintAsset == null || !surface.PaintAsset.HasBuffers )
 		{
-			result.error = "Treasure surface paint is not loaded.";
+			result.error =
+				"Treasure surface paint is not loaded. "
+				+ "Player builds copy the .paintbin sidecar into StreamingAssets; rebuild after painting.";
 			return result;
 		}
 

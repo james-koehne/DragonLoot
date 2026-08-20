@@ -71,7 +71,7 @@ static class CoinSortingStationSetup
 			definition.level4HopperCapacity = 150;
 			definition.baseCoinsPerSecond = 4f;
 			definition.level3CoinsPerSecond = 10f;
-			definition.crankHoldGrace = 0.35f;
+			definition.crankHoldGrace = 0.2f;
 			definition.fullStackLateralOffset = 0.35f;
 			AssetDatabase.CreateAsset( definition, defPath );
 		}
@@ -134,6 +134,14 @@ static class CoinSortingStationSetup
 			UnityEditor.AddressableAssets.Settings.AddressableAssetSettings.ModificationEvent.EntryModified,
 			entry,
 			true );
+	}
+
+	/// <summary>Updates the CoinSortingStation prefab visuals/feedbacks without touching the scene.</summary>
+	public static void BatchConfigurePrefab()
+	{
+		EnsurePrefab();
+		AssetDatabase.SaveAssets();
+		Debug.Log( "CoinSortingStationSetup.BatchConfigurePrefab completed." );
 	}
 
 	static void EnsureInstalled()
@@ -278,6 +286,12 @@ static class CoinSortingStationSetup
 		if ( crank != null )
 			station.EditorSetCrank( crank );
 
+		Transform existingOutput = root.transform.Find( "Output" );
+		Transform output = EnsureOutput( root.transform );
+		station.EditorSetSortedOutput( output );
+		if ( existingOutput == null )
+			dirty = true;
+
 		FeedbackSystem.Feedbacks feedbacks = root.GetComponent<FeedbackSystem.Feedbacks>();
 		if ( feedbacks == null )
 		{
@@ -286,6 +300,21 @@ static class CoinSortingStationSetup
 		}
 
 		if ( EnsureSortedFeedbacks( root, station, crank ) )
+			dirty = true;
+
+		if ( EnsureEnergyGauge( root, station ) )
+			dirty = true;
+
+		if ( EnsureCrankCube( root, station ) )
+			dirty = true;
+
+		if ( EnsureCrankClickFeedbacks( root, station ) )
+			dirty = true;
+
+		if ( EnsureGaugeFullFeedbacks( root, station ) )
+			dirty = true;
+
+		if ( EnsureSortingShakeFeedbacks( root, station ) )
 			dirty = true;
 
 		if ( root.GetComponent<CoinSortingCrankAudio>() == null )
@@ -362,11 +391,14 @@ static class CoinSortingStationSetup
 		crankCol.radius = 0.25f;
 		CoinSortingCrankInteractable crank = crankGo.AddComponent<CoinSortingCrankInteractable>();
 
-		GameObject crankVis = GameObject.CreatePrimitive( PrimitiveType.Sphere );
+		GameObject crankVis = GameObject.CreatePrimitive( PrimitiveType.Cube );
 		crankVis.name = "CrankVisual";
 		crankVis.transform.SetParent( crankGo.transform, false );
 		crankVis.transform.localScale = Vector3.one * 0.35f;
 		Object.DestroyImmediate( crankVis.GetComponent<Collider>() );
+		CoinSortingCrankSpin spin = crankVis.AddComponent<CoinSortingCrankSpin>();
+		spin.EditorSetVisual( crankVis.transform );
+		spin.BindStation( station );
 
 		// Chutes
 		Transform goldChute = CreateChute( root.transform, "Chute_Gold", new Vector3( -0.5f, 0.05f, -0.9f ) );
@@ -384,14 +416,21 @@ static class CoinSortingStationSetup
 			new CoinSortingStation.ChuteBinding { coin = copper, chute = copperChute },
 		};
 
+		Transform output = EnsureOutput( root.transform );
 		station.EditorSetHopper( hopper );
 		station.EditorSetCrank( crank );
 		station.EditorSetMoveInteractable( move );
 		station.EditorSetChutes( bindings );
+		station.EditorSetSortedOutput( output );
 		hopper.BindStation( station );
 		crank.BindStation( station );
 		move.BindStation( station );
+		station.EditorSetCrankSpin( spin );
+		EnsureEnergyGauge( root, station );
 		EnsureSortedFeedbacks( root, station, crank );
+		EnsureCrankClickFeedbacks( root, station );
+		EnsureGaugeFullFeedbacks( root, station );
+		EnsureSortingShakeFeedbacks( root, station );
 		if ( root.GetComponent<CoinSortingCrankAudio>() == null )
 			root.AddComponent<CoinSortingCrankAudio>();
 
@@ -429,23 +468,315 @@ static class CoinSortingStationSetup
 
 		station.EditorSetSortedFeedback( sorted );
 
-		if ( sorted.FeedbackList != null && sorted.FeedbackList.Count > 0 )
-			return dirty;
+		if ( sorted.FeedbackList == null || sorted.FeedbackList.Count == 0 )
+		{
+			Transform crankTarget = crank != null ? crank.transform : root.transform;
+			sorted.AddFeedback( new FeedbackSystem.PunchRotationFeedback
+			{
+				Target = crankTarget,
+				Punch = new Vector3( 80f, 0f, 0f ),
+				Duration = 0.16f
+			} );
+			sorted.AddFeedback( new FeedbackSystem.PunchScaleFeedback
+			{
+				Target = crankTarget,
+				Punch = new Vector3( 0.08f, 0.08f, 0.08f ),
+				Duration = 0.16f
+			} );
+			dirty = true;
+		}
 
-		Transform crankTarget = crank != null ? crank.transform : root.transform;
-		sorted.AddFeedback( new FeedbackSystem.PunchRotationFeedback
+		if ( EnsureSortedShake( sorted, root.transform ) )
+			dirty = true;
+
+		return dirty;
+	}
+
+	static bool EnsureSortedShake( FeedbackSystem.Feedbacks sorted, Transform root )
+	{
+		if ( sorted == null || sorted.FeedbackList == null )
+			return false;
+
+		for ( int i = 0; i < sorted.FeedbackList.Count; i++ )
 		{
-			Target = crankTarget,
-			Punch = new Vector3( 80f, 0f, 0f ),
-			Duration = 0.16f
-		} );
-		sorted.AddFeedback( new FeedbackSystem.PunchScaleFeedback
+			if ( sorted.FeedbackList[ i ] is FeedbackSystem.ShakeTransformFeedback )
+				return false;
+		}
+
+		sorted.AddFeedback( new FeedbackSystem.ShakeTransformFeedback
 		{
-			Target = crankTarget,
-			Punch = new Vector3( 0.08f, 0.08f, 0.08f ),
-			Duration = 0.16f
+			Target = root,
+			Duration = 0.12f,
+			Strength = 0.018f
 		} );
 		return true;
+	}
+
+	static bool EnsureEnergyGauge( GameObject root, CoinSortingStation station )
+	{
+		if ( root == null || station == null )
+			return false;
+
+		CoinSortingEnergyGauge gauge = root.GetComponentInChildren<CoinSortingEnergyGauge>( true );
+		bool dirty = false;
+		Transform body = root.transform.Find( "Body" );
+		Transform parent = body != null ? body : root.transform;
+
+		if ( gauge == null )
+		{
+			Transform existing = parent.Find( "EnergyGauge" );
+			GameObject host = existing != null ? existing.gameObject : new GameObject( "EnergyGauge" );
+			if ( existing == null )
+			{
+				host.transform.SetParent( parent, false );
+				host.transform.localPosition = new Vector3( 0.32f, 0.12f, 0.52f );
+				host.transform.localRotation = Quaternion.identity;
+				host.transform.localScale = Vector3.one;
+			}
+
+			gauge = host.AddComponent<CoinSortingEnergyGauge>();
+			dirty = true;
+		}
+
+		Transform well = gauge.transform.Find( "Well" );
+		if ( well == null )
+		{
+			well = CreateGaugeCube( gauge.transform, "Well", new Vector3( 0.14f, 0.48f, 0.1f ), Vector3.zero );
+			dirty = true;
+		}
+
+		Transform fill = gauge.transform.Find( "Fill" );
+		if ( fill == null )
+		{
+			fill = CreateGaugeCube( gauge.transform, "Fill", new Vector3( 0.1f, 0.04f, 0.06f ), new Vector3( 0f, -0.22f, 0f ) );
+			dirty = true;
+		}
+
+		Renderer fillRenderer = fill.GetComponent<Renderer>();
+		gauge.EditorSetParts( well, fill, fillRenderer );
+		gauge.BindStation( station );
+		station.EditorSetEnergyGauge( gauge );
+		return dirty;
+	}
+
+	static Transform CreateGaugeCube( Transform parent, string name, Vector3 scale, Vector3 localPos )
+	{
+		GameObject cube = GameObject.CreatePrimitive( PrimitiveType.Cube );
+		cube.name = name;
+		cube.transform.SetParent( parent, false );
+		cube.transform.localPosition = localPos;
+		cube.transform.localRotation = Quaternion.identity;
+		cube.transform.localScale = scale;
+		Object.DestroyImmediate( cube.GetComponent<Collider>() );
+		return cube.transform;
+	}
+
+	static bool EnsureCrankCube( GameObject root, CoinSortingStation station )
+	{
+		if ( root == null )
+			return false;
+
+		CoinSortingCrankInteractable crank = root.GetComponentInChildren<CoinSortingCrankInteractable>( true );
+		if ( crank == null )
+			return false;
+
+		Transform visual = crank.transform.Find( "CrankVisual" );
+		if ( visual == null )
+			return false;
+
+		bool dirty = false;
+		MeshFilter filter = visual.GetComponent<MeshFilter>();
+		Mesh cubeMesh = GetBuiltinCubeMesh();
+		if ( filter != null && cubeMesh != null && filter.sharedMesh != cubeMesh )
+		{
+			filter.sharedMesh = cubeMesh;
+			dirty = true;
+		}
+
+		CoinSortingCrankSpin spin = visual.GetComponent<CoinSortingCrankSpin>();
+		if ( spin == null )
+		{
+			spin = visual.gameObject.AddComponent<CoinSortingCrankSpin>();
+			dirty = true;
+		}
+
+		spin.EditorSetVisual( visual );
+		spin.BindStation( station );
+		station.EditorSetCrankSpin( spin );
+		return dirty;
+	}
+
+	static Mesh GetBuiltinCubeMesh()
+	{
+		GameObject temp = GameObject.CreatePrimitive( PrimitiveType.Cube );
+		Mesh mesh = temp.GetComponent<MeshFilter>().sharedMesh;
+		Object.DestroyImmediate( temp );
+		return mesh;
+	}
+
+	static bool EnsureCrankClickFeedbacks( GameObject root, CoinSortingStation station )
+	{
+		if ( root == null || station == null )
+			return false;
+
+		bool dirty = false;
+		Transform existing = root.transform.Find( "OnCrankClickFeedbacks" );
+		GameObject host;
+		if ( existing == null )
+		{
+			host = new GameObject( "OnCrankClickFeedbacks" );
+			host.transform.SetParent( root.transform, false );
+			dirty = true;
+		}
+		else
+		{
+			host = existing.gameObject;
+		}
+
+		FeedbackSystem.Feedbacks feedbacks = host.GetComponent<FeedbackSystem.Feedbacks>();
+		if ( feedbacks == null )
+		{
+			feedbacks = host.AddComponent<FeedbackSystem.Feedbacks>();
+			dirty = true;
+		}
+
+		station.EditorSetCrankClickFeedback( feedbacks );
+		CoinSortingEnergyGauge gauge = root.GetComponentInChildren<CoinSortingEnergyGauge>( true );
+		if ( StripWellPunchScaleFeedbacks( feedbacks, gauge ) )
+			dirty = true;
+		if ( feedbacks.FeedbackList != null && feedbacks.FeedbackList.Count > 0 )
+			return dirty;
+
+		Transform shakeTarget = gauge != null ? gauge.transform : root.transform;
+		feedbacks.AddFeedback( new FeedbackSystem.ShakeTransformFeedback
+		{
+			Target = shakeTarget,
+			Duration = 0.1f,
+			Strength = 0.012f
+		} );
+		return true;
+	}
+
+	static bool EnsureGaugeFullFeedbacks( GameObject root, CoinSortingStation station )
+	{
+		if ( root == null || station == null )
+			return false;
+
+		bool dirty = false;
+		Transform existing = root.transform.Find( "OnGaugeFullFeedbacks" );
+		GameObject host;
+		if ( existing == null )
+		{
+			host = new GameObject( "OnGaugeFullFeedbacks" );
+			host.transform.SetParent( root.transform, false );
+			dirty = true;
+		}
+		else
+		{
+			host = existing.gameObject;
+		}
+
+		FeedbackSystem.Feedbacks feedbacks = host.GetComponent<FeedbackSystem.Feedbacks>();
+		if ( feedbacks == null )
+		{
+			feedbacks = host.AddComponent<FeedbackSystem.Feedbacks>();
+			dirty = true;
+		}
+
+		station.EditorSetGaugeFullFeedback( feedbacks );
+		CoinSortingEnergyGauge gauge = root.GetComponentInChildren<CoinSortingEnergyGauge>( true );
+		if ( StripWellPunchScaleFeedbacks( feedbacks, gauge ) )
+			dirty = true;
+		if ( feedbacks.FeedbackList != null && feedbacks.FeedbackList.Count > 0 )
+			return dirty;
+
+		Transform shakeTarget = gauge != null ? gauge.transform : root.transform;
+		feedbacks.AddFeedback( new FeedbackSystem.ShakeTransformFeedback
+		{
+			Target = shakeTarget,
+			Duration = 0.18f,
+			Strength = 0.03f
+		} );
+		return true;
+	}
+
+	static bool StripWellPunchScaleFeedbacks( FeedbackSystem.Feedbacks feedbacks, CoinSortingEnergyGauge gauge )
+	{
+		if ( feedbacks == null || gauge == null || gauge.Well == null )
+			return false;
+		if ( feedbacks.FeedbackList == null || feedbacks.FeedbackList.Count == 0 )
+			return false;
+
+		Transform well = gauge.Well;
+		bool dirty = false;
+		for ( int i = feedbacks.FeedbackList.Count - 1; i >= 0; i-- )
+		{
+			FeedbackSystem.PunchScaleFeedback punch = feedbacks.FeedbackList[i] as FeedbackSystem.PunchScaleFeedback;
+			if ( punch == null || punch.Target != well )
+				continue;
+
+			feedbacks.FeedbackList.RemoveAt( i );
+			dirty = true;
+		}
+
+		return dirty;
+	}
+
+	static bool EnsureSortingShakeFeedbacks( GameObject root, CoinSortingStation station )
+	{
+		if ( root == null || station == null )
+			return false;
+
+		bool dirty = false;
+		Transform existing = root.transform.Find( "OnSortingShakeFeedbacks" );
+		GameObject host;
+		if ( existing == null )
+		{
+			host = new GameObject( "OnSortingShakeFeedbacks" );
+			host.transform.SetParent( root.transform, false );
+			dirty = true;
+		}
+		else
+		{
+			host = existing.gameObject;
+		}
+
+		FeedbackSystem.Feedbacks feedbacks = host.GetComponent<FeedbackSystem.Feedbacks>();
+		if ( feedbacks == null )
+		{
+			feedbacks = host.AddComponent<FeedbackSystem.Feedbacks>();
+			dirty = true;
+		}
+
+		station.EditorSetSortingShakeFeedback( feedbacks );
+		if ( feedbacks.FeedbackList != null && feedbacks.FeedbackList.Count > 0 )
+			return dirty;
+
+		Transform body = root.transform.Find( "Body" );
+		Transform target = body != null ? body : root.transform;
+		feedbacks.AddFeedback( new LoopShakeTransformFeedback
+		{
+			Target = target,
+			Strength = 0.018f,
+			RotationScale = 22f
+		} );
+		return true;
+	}
+
+	static Transform EnsureOutput( Transform parent )
+	{
+		if ( parent == null )
+			return null;
+
+		Transform existing = parent.Find( "Output" );
+		if ( existing != null )
+			return existing;
+
+		GameObject output = new GameObject( "Output" );
+		output.transform.SetParent( parent, false );
+		output.transform.localPosition = new Vector3( 0f, 0.45f, -0.4f );
+		output.transform.localRotation = Quaternion.identity;
+		return output.transform;
 	}
 
 	static Transform CreateChute( Transform parent, string name, Vector3 localPos )

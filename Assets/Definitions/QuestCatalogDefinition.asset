@@ -12,6 +12,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f1e2a72ecd53757428eae5e1c1675ddd, type: 3}
   m_Name: QuestCatalogDefinition
   m_EditorClassIdentifier: Assembly-CSharp::QuestCatalogDefinition
-  quests:
-  - {fileID: 11400000, guid: 9e0f16c2b6ba6184f93cecaacc82d943, type: 2}
-  - {fileID: 11400000, guid: 217a99e286dfd6e489c1856179b96dc5, type: 2}
+  quests: []

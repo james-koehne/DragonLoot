@@ -18,10 +18,28 @@ MonoBehaviour:
   onCompleteDialogue:
   - speaker: Dragon
     text: Much better. A respectable hoard should be sorted.
-    pauseAfter: 0.4
+    pauseAfter: 2
     sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
     sfxVol: 0.5
   objectives:
+  - id: stack_door_pile_coins
+    objectiveText: Stack all coins from the doorway pile
+    markerTargetId: starting_door_pile
+    optional: 0
+    onCompleteDialogue: []
+    conditionMode: 0
+    conditions:
+    - type: 11
+      targetId: starting_door_pile
+      areaId: starting_area
+      requiredCount: 1
+      requiredTreasure: {fileID: 0}
+      filterByCategory: 0
+      requiredCategory: 0
+      excludeGoldBars: 0
+      requireGoldBars: 0
+      sectionId: 
+    subObjectives: []
   - id: use_coin_sorter
     objectiveText: Use the coin sorter
     markerTargetId: coin_sorter
@@ -29,19 +47,20 @@ MonoBehaviour:
     onCompleteDialogue:
     - speaker: Dragon
       text: That is considerably faster than your manual sorting.
-      pauseAfter: 0.4
+      pauseAfter: 2
       sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
       sfxVol: 0.5
     conditionMode: 0
     conditions:
     - type: 3
       targetId: coin_sorter
-      areaId: 
+      areaId: starting_area
       requiredCount: 1
       requiredTreasure: {fileID: 0}
       filterByCategory: 0
       requiredCategory: 0
       excludeGoldBars: 0
+      requireGoldBars: 0
       sectionId: 
     subObjectives: []
   events:
@@ -55,11 +74,12 @@ MonoBehaviour:
       filterByCategory: 1
       requiredCategory: 0
       excludeGoldBars: 0
+      requireGoldBars: 0
       sectionId: 
     dialogue:
     - speaker: Dragon
       text: Gold is rather easier to appreciate stacked like that.
-      pauseAfter: 0.4
+      pauseAfter: 2
       sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
       sfxVol: 0.5
     stinger: {fileID: 0}

@@ -13,7 +13,9 @@ public enum QuestConditionType
 	CompleteCoinDisplay = 6,
 	SectionSorted = 7,
 	CompleteGoldBarDisplay = 8,
-	PickupTreasure = 9
+	PickupTreasure = 9,
+	CompleteGroundZoneGoldBars = 10,
+	CompleteDoorPileCoins = 11
 }
 
 public enum QuestConditionMode
@@ -65,6 +67,9 @@ public class QuestCondition
 
 	[Tooltip( "When true, PickupTreasure / PlaceOnOwner ignore gold bars." )]
 	public bool excludeGoldBars;
+
+	[Tooltip( "When true, PickupTreasure / PlaceOnOwner only match interleaved gold bars." )]
+	public bool requireGoldBars;
 
 	[Tooltip( "Optional section id for SectionSorted. Empty = any section." )]
 	public string sectionId;

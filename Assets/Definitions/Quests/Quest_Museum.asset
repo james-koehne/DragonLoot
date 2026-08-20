@@ -28,6 +28,7 @@ MonoBehaviour:
       filterByCategory: 1
       requiredCategory: 5
       excludeGoldBars: 1
+      requireGoldBars: 0
       sectionId: 
     dialogue:
     - speaker: Dragon
@@ -47,6 +48,7 @@ MonoBehaviour:
       filterByCategory: 1
       requiredCategory: 5
       excludeGoldBars: 1
+      requireGoldBars: 0
       sectionId: 
     dialogue:
     - speaker: Dragon

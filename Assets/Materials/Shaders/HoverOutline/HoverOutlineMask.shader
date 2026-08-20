@@ -82,7 +82,7 @@ Shader "DragonLoot/Hover Outline Mask"
 					float h = SampleDeformHeight(uv);
 					float worldH = h * _DeformScale;
 					if (worldH < _GroundLevelHeight)
-						positionOS.y = -1000.0;
+						positionOS.y = _GroundLevelHeight;
 					else
 						positionOS.y += worldH;
 				}

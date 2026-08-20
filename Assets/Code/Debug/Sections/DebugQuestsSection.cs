@@ -6,6 +6,12 @@ public class DebugQuestsSection : DebugOverlaySection
 
 	public void Draw()
 	{
+		if ( !QuestSystem.Enabled )
+		{
+			GUILayout.Label( "Quests disabled (QuestSystem.Enabled = false)" );
+			return;
+		}
+
 		QuestSystem system = QuestSystem.Instance;
 		if ( system == null )
 			system = QuestSystem.EnsureExists();

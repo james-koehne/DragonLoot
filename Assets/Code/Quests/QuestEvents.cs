@@ -16,10 +16,12 @@ public struct CoinSorterUsedEvent
 
 public struct QuestHudRow
 {
+	public string ObjectiveId;
 	public string Text;
 	public int Indent;
 	public bool Optional;
 	public bool Complete;
+	public bool ContextualFocus;
 }
 
 /// <summary>Active quest / objective / marker changed.</summary>

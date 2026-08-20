@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: PlayerInteractionDefinition
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInteractionDefinition
   interactRange: 3
-  placementAimRange: 6
+  placementAimRange: 4
   interactMask:
     serializedVersion: 2
     m_Bits: 0

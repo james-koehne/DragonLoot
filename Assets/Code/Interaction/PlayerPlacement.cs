@@ -87,6 +87,9 @@ public class PlayerPlacement : MonoBehaviour
 			if ( CanAutoFindValidSlot( _activeTarget, item ) )
 				return SecondaryContextAction.Place;
 
+			if ( ShouldThrowAtRejectedDedicatedTarget( _activeTarget, item ) )
+				return ItemCanThrow( item ) ? SecondaryContextAction.Throw : SecondaryContextAction.CannotPlace;
+
 			return SecondaryContextAction.CannotPlace;
 		}
 
@@ -102,14 +105,30 @@ public class PlayerPlacement : MonoBehaviour
 			{
 				if ( ShouldThrowAtRejectedConstellation( aimTarget, item ) )
 					return SecondaryContextAction.Throw;
+				if ( ShouldThrowAtRejectedDedicatedTarget( aimTarget, item ) )
+					return ItemCanThrow( item ) ? SecondaryContextAction.Throw : SecondaryContextAction.CannotPlace;
 				return SecondaryContextAction.CannotPlace;
 			}
 
 			return SecondaryContextAction.Place;
 		}
 
-		if ( aimTarget == _floorTarget || IsAimingFloorSurface( in query ) )
+		if ( aimTarget == _floorTarget )
+		{
+			PlacementQuery floorQuery = BuildFloorQuery();
+			if ( GroundCoinStack.IsGroundStackableCoin( item ) || GoldBarStack.IsStackable( item ) )
+			{
+				if ( CanPlaceCoinOnFloorSurface( item, in floorQuery ) )
+					return SecondaryContextAction.Place;
+			}
+			else if ( _floorTarget != null && _floorTarget.CanPlace( item, in floorQuery ) )
+				return SecondaryContextAction.Place;
+
 			return SecondaryContextAction.CannotPlace;
+		}
+
+		if ( ShouldThrowAtInvalidWorldAim( in query, item ) )
+			return SecondaryContextAction.Throw;
 
 		return SecondaryContextAction.CannotPlace;
 	}
@@ -124,7 +143,6 @@ public class PlayerPlacement : MonoBehaviour
 	float PreviewSmoothSpeed => RuntimeDefinition.Get( Definition, d => d.previewSmoothSpeed, 18f );
 
 	static readonly Collider[] StackSnapOverlap = new Collider[ 48 ];
-	static readonly RaycastHit[] StackSnapSphereCastHits = new RaycastHit[ 24 ];
 	static readonly RaycastHit[] ConstellationRayHits = new RaycastHit[ 32 ];
 	static readonly HashSet<int> StackSnapColumnIds = new HashSet<int>();
 	static readonly List<TreasureItem> StackSnapColumnBuffer = new List<TreasureItem>( 32 );
@@ -211,8 +229,8 @@ public class PlayerPlacement : MonoBehaviour
 		{
 			PlacementQuery floorQuery = BuildFloorQuery();
 			EnsureFloorTarget();
-			// Show floor ghost even when invalid (red) so rejected aim isn't invisible.
-			if ( _floorTarget != null && floorQuery.HasHit )
+			if ( _floorTarget != null && floorQuery.HasHit
+				&& PlacementFloorSurface.IsValidWorldPlaceHit( in floorQuery.Hit ) )
 			{
 				target = _floorTarget;
 				query = floorQuery;
@@ -227,7 +245,7 @@ public class PlayerPlacement : MonoBehaviour
 		{
 			// Always seat floor preview on the dedicated surface hit, never a buried secondary hit.
 			query = BuildFloorQuery();
-			if ( !query.HasHit )
+			if ( !query.HasHit || !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
 			{
 				ClearPreview();
 				return;
@@ -608,8 +626,8 @@ public class PlayerPlacement : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Right-click: place on aimed surface when valid; throw into empty space.
-	/// Invalid constellation aim with a non-gem throws normally. Other invalid surfaces do nothing.
+	/// Right-click: place on aimed surface when valid; throw into empty space, walls, and non-traversable floor.
+	/// Invalid constellation aim with a non-gem throws normally. Rejecting stations/tables do nothing.
 	/// </summary>
 	public bool TrySecondaryPlace()
 	{
@@ -642,7 +660,9 @@ public class PlayerPlacement : MonoBehaviour
 			if ( TryPlaceWithAutoFindValidSlot( _activeTarget, item ) )
 				return true;
 
-			// Invalid surface aim: never throw.
+			if ( ShouldThrowAtRejectedDedicatedTarget( _activeTarget, item ) )
+				return ItemCanThrow( item ) && TryThrowActive();
+
 			return false;
 		}
 
@@ -651,7 +671,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		ITreasurePlacementTarget aimTarget = ResolveTarget( in query, allowGroundStack: true );
 
-		// Aimed at a dedicated surface: place only if accepted — never throw / soft-drop.
+		// Aimed at a dedicated surface: place only if accepted.
 		if ( aimTarget != null && aimTarget != _floorTarget )
 		{
 			if ( !ItemAllowsTarget( item, aimTarget ) )
@@ -662,14 +682,16 @@ public class PlayerPlacement : MonoBehaviour
 			{
 				if ( ShouldThrowAtRejectedConstellation( aimTarget, item ) )
 					return TryThrowActive();
+				if ( ShouldThrowAtRejectedDedicatedTarget( aimTarget, item ) )
+					return ItemCanThrow( item ) && TryThrowActive();
 				return false;
 			}
 
 			return ExecutePlace( aimTarget, item, in query );
 		}
 
-		// Aimed at open ground / floor surface: place on floor when valid.
-		if ( aimTarget == _floorTarget || IsAimingFloorSurface( in query ) )
+		// Aimed at traversable treasure surface: place on floor when valid.
+		if ( aimTarget == _floorTarget )
 		{
 			if ( TryPlaceLooseVerticalStack( item, in query ) )
 				return true;
@@ -680,7 +702,9 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 		}
 
-		// Aimed at a non-placeable surface (e.g. interactable without placement): do nothing.
+		if ( ShouldThrowAtInvalidWorldAim( in query, item ) )
+			return ItemCanThrow( item ) && TryThrowActive();
+
 		return false;
 	}
 
@@ -693,6 +717,28 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 
 		return ItemCanThrow( item );
+	}
+
+	static bool ShouldThrowAtRejectedDedicatedTarget( ITreasurePlacementTarget target, TreasureItem item )
+	{
+		if ( target is TreasurePileInteractable )
+			return ItemCanThrow( item );
+
+		return false;
+	}
+
+	bool ShouldThrowAtInvalidWorldAim( in PlacementQuery query, TreasureItem item )
+	{
+		if ( item == null || !ItemCanThrow( item ) )
+			return false;
+
+		if ( !query.HasHit || query.Hit.collider == null )
+			return true;
+
+		if ( !PlacementFloorSurface.IsFloorCollider( query.Hit.collider ) )
+			return false;
+
+		return !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit );
 	}
 
 	static bool ItemCanThrow( TreasureItem item )
@@ -793,14 +839,6 @@ public class PlayerPlacement : MonoBehaviour
 		return ExecutePlace( target, item, in query );
 	}
 
-	bool IsAimingFloorSurface( in PlacementQuery query )
-	{
-		if ( !query.HasHit || query.Hit.collider == null )
-			return false;
-
-		return PlacementFloorSurface.IsFloorCollider( query.Hit.collider );
-	}
-
 	/// <summary>Throws the Active item into empty space with configurable force.</summary>
 	public bool TryThrowActive()
 	{
@@ -879,14 +917,28 @@ public class PlayerPlacement : MonoBehaviour
 					? planarThrow.normalized
 					: Vector3.forward;
 
-				landPos = start + flatDir * 2f;
-				landPos.y = surfaceDef != null ? surfaceDef.baseHeight : start.y;
+				Vector3 fallback = start + flatDir * 2f;
+				fallback.y = surfaceDef != null ? surfaceDef.baseHeight : start.y;
+				if ( !world.TryResolveTraversableEntry( fallback, out landPos, out _ ) )
+				{
+					member.EnterSurface( start, member.transform.rotation, memberVelocity );
+					continue;
+				}
+
 				landVel = planarThrow * landScale;
 				flightTime = 0.35f;
 				path.Clear();
 				path.Add( start, 0f );
 				path.Add( landPos, flightTime );
 				path.LandVelocity = landVel;
+			}
+			else if ( !TreasureSurfaceThrow.IsStrictTraversableLanding( world, landPos ) )
+			{
+				if ( !world.TryResolveTraversableEntry( landPos, out landPos, out _ ) )
+				{
+					member.EnterSurface( start, member.transform.rotation, memberVelocity );
+					continue;
+				}
 			}
 
 			ends[ i ] = landPos;
@@ -1013,7 +1065,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( item == null || !query.HasHit )
 			return false;
 
-		return PlacementFloorSurface.IsWalkableFloorHit( in query.Hit );
+		return PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit );
 	}
 
 	bool TryPlaceCreatingGroundCoinStackOnFloor( TreasureItem item, in PlacementQuery query )
@@ -1177,7 +1229,7 @@ public class PlayerPlacement : MonoBehaviour
 			InteractRange = _interaction != null ? _interaction.PlacementAimRange : 6f
 		};
 
-		if ( _interaction != null && _interaction.TryGetLastHit( out RaycastHit hit ) )
+		if ( _interaction != null && _interaction.TryGetPlacementAimHit( out RaycastHit hit ) && hit.collider != null )
 		{
 			query.Hit = hit;
 			query.HasHit = true;
@@ -1302,8 +1354,14 @@ public class PlayerPlacement : MonoBehaviour
 		// Loose coin columns on the floor still win — the walkable surface is always closer than the coin.
 		if ( IsHitOccludedByCloserFloor( in query ) && !IsAimingLooseStackDeposit( in query ) )
 		{
-			EnsureFloorTarget();
-			return _floorTarget;
+			if ( _interaction != null && _interaction.TryGetSurfaceHit( out RaycastHit surfaceHit )
+				&& PlacementFloorSurface.IsValidWorldPlaceHit( in surfaceHit ) )
+			{
+				EnsureFloorTarget();
+				return _floorTarget;
+			}
+
+			return null;
 		}
 
 		// Whole station (body / hopper / hopper stack) → hopper, ignoring the crank.
@@ -1317,18 +1375,26 @@ public class PlayerPlacement : MonoBehaviour
 		// Never resolve floor placement onto coin piles — deposit uses ITreasurePlacementTarget above.
 		if ( !PlacementFloorSurface.IsFloorCollider( query.Hit.collider ) )
 		{
-			if ( allowGroundStack && TryResolveLooseVerticalStackTarget( in query, out ITreasurePlacementTarget groundStack ) )
+			ITreasurePlacementTarget onHit = query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
+			if ( onHit != null && !ReferenceEquals( onHit, _floorTarget ) && IsDedicatedPlacementTarget( onHit ) )
+				return onHit;
+
+			if ( allowGroundStack && ShouldResolveLooseStackTarget( in query )
+				&& TryResolveLooseVerticalStackTarget( in query, out ITreasurePlacementTarget groundStack ) )
 				return groundStack;
 
-			ITreasurePlacementTarget onHit = query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
 			if ( onHit != null && !ReferenceEquals( onHit, _floorTarget ) )
 				return onHit;
 
 			return null;
 		}
 
-		if ( allowGroundStack && TryResolveLooseVerticalStackTarget( in query, out ITreasurePlacementTarget floorNearbyStack ) )
+		if ( allowGroundStack && ShouldResolveLooseStackTarget( in query )
+			&& TryResolveLooseVerticalStackTarget( in query, out ITreasurePlacementTarget floorNearbyStack ) )
 			return floorNearbyStack;
+
+		if ( !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
+			return null;
 
 		EnsureFloorTarget();
 		return _floorTarget;
@@ -1346,6 +1412,35 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 
 		return surfaceHit.distance < query.Hit.distance - 0.001f;
+	}
+
+	static bool IsDedicatedPlacementTarget( ITreasurePlacementTarget target )
+	{
+		return target != null
+			&& !( target is GroundCoinStack )
+			&& !( target is GroundGoldBarStack );
+	}
+
+	static bool ShouldResolveLooseStackTarget( in PlacementQuery query )
+	{
+		if ( !query.HasHit || query.Hit.collider == null )
+			return false;
+
+		if ( PlacementFloorSurface.IsFloorCollider( query.Hit.collider ) )
+			return true;
+
+		if ( query.Hit.collider.GetComponentInParent<GroundCoinStack>() != null )
+			return true;
+
+		TreasureItem loose = query.Hit.collider.GetComponentInParent<TreasureItem>();
+		if ( loose != null && GroundCoinStack.IsGroundStackableCoin( loose ) )
+			return true;
+
+		ITreasurePlacementTarget onHit = query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
+		if ( IsDedicatedPlacementTarget( onHit ) )
+			return false;
+
+		return true;
 	}
 
 	TreasureItem ResolveGroundStackBase()
@@ -1387,18 +1482,32 @@ public class PlayerPlacement : MonoBehaviour
 	/// </summary>
 	GroundCoinStack FindNearbyGroundCoinStack( in PlacementQuery query )
 	{
-		if ( query.HasHit && query.Hit.collider != null )
+		if ( !query.HasHit || query.Hit.collider == null )
+			return null;
+
+		ITreasurePlacementTarget dedicated =
+			query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
+		if ( IsDedicatedPlacementTarget( dedicated ) )
+			return null;
+
+		GroundCoinStack onHit = query.Hit.collider.GetComponentInParent<GroundCoinStack>();
+		if ( onHit != null && !onHit.IsFull )
+			return onHit;
+
+		TreasureItem looseOnHit = query.Hit.collider.GetComponentInParent<TreasureItem>();
+		if ( looseOnHit != null && GroundCoinStack.IsGroundStackableCoin( looseOnHit ) )
 		{
-			GroundCoinStack onHit = query.Hit.collider.GetComponentInParent<GroundCoinStack>();
-			if ( onHit != null && !onHit.IsFull )
-				return onHit;
+			if ( looseOnHit.Owner is GroundCoinStack owner && !owner.IsFull )
+				return owner;
 		}
+
+		if ( !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
+			return null;
 
 		float radius = GroundStackSnapRadius;
 		if ( radius <= 0.0001f )
 			radius = GroundCoinStack.DefaultJoinRadius;
 
-		// Match merge reach so placing beside a stack joins it instead of creating a twin.
 		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
 		TreasureItem held = null;
 		if ( carry != null )
@@ -1406,36 +1515,24 @@ public class PlayerPlacement : MonoBehaviour
 		if ( held != null && held.Definition != null )
 			radius = Mathf.Max( radius, GroundCoinStack.ResolveJoinRadius( held.Definition ) );
 
-		Vector3 probe = query.HasHit ? query.Hit.point : default;
-		if ( !query.HasHit )
-		{
-			if ( _interaction == null || !_interaction.TryGetAimRay( out Ray aimRay ) )
-				return null;
-
-			float range = query.InteractRange > 0.01f ? query.InteractRange : _interaction.InteractRange;
-			probe = aimRay.GetPoint( Mathf.Min( range, 8f ) );
-		}
-
-		GroundCoinStack nearest = GroundCoinStack.FindNearest( probe, radius );
+		GroundCoinStack nearest = GroundCoinStack.FindNearest( query.Hit.point, radius );
 		if ( nearest != null && !nearest.IsFull )
 			return nearest;
-
-		// Also score stacks by perpendicular distance to the aim ray (hit can be floor underfoot
-		// while the stack sits slightly off-axis within snap radius).
-		if ( _interaction != null && _interaction.TryGetAimRay( out Ray ray ) )
-			return GroundCoinStack.FindNearestAlongRay( ray, radius, query.InteractRange > 0.01f ? query.InteractRange : 8f );
 
 		return null;
 	}
 
 	GroundGoldBarStack FindNearbyGroundGoldBarStack( in PlacementQuery query )
 	{
-		if ( query.HasHit && query.Hit.collider != null )
-		{
-			GroundGoldBarStack onHit = query.Hit.collider.GetComponentInParent<GroundGoldBarStack>();
-			if ( onHit != null && !onHit.IsFull )
-				return onHit;
-		}
+		if ( !query.HasHit || query.Hit.collider == null )
+			return null;
+
+		GroundGoldBarStack onHit = query.Hit.collider.GetComponentInParent<GroundGoldBarStack>();
+		if ( onHit != null && !onHit.IsFull )
+			return onHit;
+
+		if ( !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
+			return null;
 
 		float radius = GroundStackSnapRadius;
 		if ( radius <= 0.0001f )
@@ -1448,22 +1545,9 @@ public class PlayerPlacement : MonoBehaviour
 		if ( held != null && held.Definition != null )
 			radius = Mathf.Max( radius, GoldBarStack.ResolveJoinRadius( held.Definition ) );
 
-		Vector3 probe = query.HasHit ? query.Hit.point : default;
-		if ( !query.HasHit )
-		{
-			if ( _interaction == null || !_interaction.TryGetAimRay( out Ray aimRay ) )
-				return null;
-
-			float range = query.InteractRange > 0.01f ? query.InteractRange : _interaction.InteractRange;
-			probe = aimRay.GetPoint( Mathf.Min( range, 8f ) );
-		}
-
-		GroundGoldBarStack nearest = GroundGoldBarStack.FindNearest( probe, radius );
+		GroundGoldBarStack nearest = GroundGoldBarStack.FindNearest( query.Hit.point, radius );
 		if ( nearest != null && !nearest.IsFull )
 			return nearest;
-
-		if ( _interaction != null && _interaction.TryGetAimRay( out Ray ray ) )
-			return GroundGoldBarStack.FindNearestAlongRay( ray, radius, query.InteractRange > 0.01f ? query.InteractRange : 8f );
 
 		return null;
 	}
@@ -1605,59 +1689,39 @@ public class PlayerPlacement : MonoBehaviour
 
 	TreasureItem FindStackSnapColumnBottom( in PlacementQuery query, TreasureItem held )
 	{
-		if ( held == null || _interaction == null )
+		if ( held == null || _interaction == null || !query.HasHit || query.Hit.collider == null )
+			return null;
+
+		bool validFloor = PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit );
+		bool directCoin = ResolveGroundStackBaseFromHit( query.Hit ) != null;
+		if ( !validFloor && !directCoin )
 			return null;
 
 		float radius = GroundStackSnapRadius;
 		if ( radius <= 0.0001f )
 			return null;
 
-		float range = query.InteractRange > 0.01f ? query.InteractRange : _interaction.InteractRange;
-		LayerMask mask = _interaction != null ? _interaction.InteractMask : (LayerMask)Physics.DefaultRaycastLayers;
+		LayerMask mask = _interaction.InteractMask;
 		StackSnapColumnIds.Clear();
 
 		TreasureItem best = null;
 		float bestScore = float.MaxValue;
 
-		if ( _interaction.TryGetAimRay( out Ray aimRay ) )
+		Vector3 center = query.Hit.point;
+		int overlapCount = Physics.OverlapSphereNonAlloc(
+			center,
+			radius,
+			StackSnapOverlap,
+			mask,
+			QueryTriggerInteraction.Ignore );
+
+		for ( int i = 0; i < overlapCount; i++ )
 		{
-			int castCount = Physics.SphereCastNonAlloc(
-				aimRay.origin,
-				radius,
-				aimRay.direction,
-				StackSnapSphereCastHits,
-				range,
-				mask,
-				QueryTriggerInteraction.Ignore );
+			Collider col = StackSnapOverlap[ i ];
+			if ( col == null )
+				continue;
 
-			for ( int i = 0; i < castCount; i++ )
-			{
-				Collider col = StackSnapSphereCastHits[ i ].collider;
-				if ( col == null )
-					continue;
-
-				TryRegisterStackSnapCandidate( col, held, in query, ref best, ref bestScore );
-			}
-		}
-
-		if ( query.HasHit )
-		{
-			Vector3 center = query.Hit.point;
-			int overlapCount = Physics.OverlapSphereNonAlloc(
-				center,
-				radius,
-				StackSnapOverlap,
-				mask,
-				QueryTriggerInteraction.Ignore );
-
-			for ( int i = 0; i < overlapCount; i++ )
-			{
-				Collider col = StackSnapOverlap[ i ];
-				if ( col == null )
-					continue;
-
-				TryRegisterStackSnapCandidate( col, held, in query, ref best, ref bestScore );
-			}
+			TryRegisterStackSnapCandidate( col, held, in query, ref best, ref bestScore );
 		}
 
 		return best;

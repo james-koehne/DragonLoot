@@ -71,7 +71,10 @@ public sealed class TreasureSurfaceSampler
 		float slope1 = Mathf.Lerp( chunk.Slope[ i01 ], chunk.Slope[ i11 ], tx );
 
 		byte flags = chunk.Flags[ i00 ];
-		bool traversable = ( flags & ( byte )TreasureCellFlags.Traversable ) != 0;
+		bool traversable = chunk.PaintTraversable[ i00 ] != 0
+			&& chunk.PaintTraversable[ i10 ] != 0
+			&& chunk.PaintTraversable[ i01 ] != 0
+			&& chunk.PaintTraversable[ i11 ] != 0;
 		bool stable = ( flags & ( byte )TreasureCellFlags.Stable ) != 0;
 
 		sample.Valid = true;
@@ -86,5 +89,40 @@ public sealed class TreasureSurfaceSampler
 		sample.CellX = x0;
 		sample.CellZ = z0;
 		return true;
+	}
+
+	/// <summary>
+	/// Strict: all four bilinear paint corners must be traversable (matches <see cref="TrySample"/>).
+	/// Lenient: only the floor cell under the point must be traversable.
+	/// </summary>
+	public bool IsTraversableAt( Vector3 worldPos, bool strict )
+	{
+		if ( strict )
+		{
+			return TrySample( worldPos, out TreasureSurfaceSample sample ) && sample.Traversable;
+		}
+
+		if ( _world == null || !_world.IsInitialized )
+			return false;
+		if ( !_world.TryGetChunkCoord( worldPos, out TreasureChunkCoord coord ) )
+			return false;
+
+		TreasureChunk chunk = _world.GetLoadedChunk( coord );
+		if ( chunk == null || !chunk.Loaded || chunk.PaintTraversable == null )
+			return false;
+
+		TreasureSurfaceDefinition def = _world.Definition;
+		float cell = def.CellSize;
+		float halfX = def.worldSizeX * 0.5f;
+		float halfZ = def.worldSizeZ * 0.5f;
+		float localX = worldPos.x - def.worldOrigin.x + halfX;
+		float localZ = worldPos.z - def.worldOrigin.z + halfZ;
+		float chunkOriginX = coord.X * def.chunkSize;
+		float chunkOriginZ = coord.Z * def.chunkSize;
+		float fx = ( localX - chunkOriginX ) / cell;
+		float fz = ( localZ - chunkOriginZ ) / cell;
+		int x = Mathf.Clamp( Mathf.FloorToInt( fx ), 0, chunk.Resolution - 1 );
+		int z = Mathf.Clamp( Mathf.FloorToInt( fz ), 0, chunk.Resolution - 1 );
+		return chunk.PaintTraversable[ chunk.Index( x, z ) ] != 0;
 	}
 }

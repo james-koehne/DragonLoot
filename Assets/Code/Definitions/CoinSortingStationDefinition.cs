@@ -34,7 +34,36 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Header( "Crank" )]
 	[Tooltip( "Seconds after an Interact pulse that L1 still counts as cranking (covers hold-repeat gaps)." )]
 	[Min( 0.05f )]
-	public float crankHoldGrace = 0.35f;
+	public float crankHoldGrace = 0.2f;
+
+	[Tooltip( "Sort-seconds gained per second of cranking. 2 means crank 1s → 2s of sorting." )]
+	[Min( 0.01f )]
+	public float crankToSortMultiplier = 2f;
+
+	[Tooltip( "Maximum stored sort-seconds on the energy gauge." )]
+	[Min( 0.25f )]
+	public float maxReserveSeconds = 8f;
+
+	[Tooltip( "Crank cube spin speed while the player is holding Interact." )]
+	[Min( 0f )]
+	public float crankChargeSpinDegreesPerSecond = 360f;
+
+	[Tooltip( "Crank cube spin speed while reserve is draining after release." )]
+	[Min( 0f )]
+	public float crankDischargeSpinDegreesPerSecond = 140f;
+
+	[Tooltip( "Degrees of crank spin between click SFX / gauge pulses while charging." )]
+	[Min( 15f )]
+	public float crankClickDegrees = 90f;
+
+	[Header( "Energy Gauge" )]
+	public Color gaugeEmptyColor = new Color( 0.92f, 0.12f, 0.1f, 1f );
+	public Color gaugeMidColor = new Color( 1f, 0.55f, 0.08f, 1f );
+	public Color gaugeFullColor = new Color( 0.18f, 0.92f, 0.28f, 1f );
+
+	[Tooltip( "Fill at or below this flickers red and uses quieter / lower clicks." )]
+	[Range( 0.02f, 0.5f )]
+	public float gaugeEmptyWarningNormalized = 0.15f;
 
 	[Header( "Crank Audio" )]
 	[Tooltip( "Clips cycled on each crank one-shot. Wraps forever." )]
@@ -44,14 +73,14 @@ public class CoinSortingStationDefinition : ScriptableObject
 	public float crankVolume = 0.7f;
 
 	[Range( -3f, 3f )]
-	public float crankPitchMin = 0.95f;
+	public float crankPitchMin = 0.85f;
 
 	[Range( -3f, 3f )]
-	public float crankPitchMax = 1.05f;
+	public float crankPitchMax = 1.25f;
 
-	[Tooltip( "Minimum seconds between crank one-shots while held." )]
+	[Tooltip( "Minimum seconds between crank click one-shots (safety gap)." )]
 	[Min( 0.05f )]
-	public float crankPlayInterval = 1f;
+	public float crankPlayInterval = 0.05f;
 
 	[Tooltip( "When a new crank one-shot starts, fade the previous this fast. 0 = stop previous immediately." )]
 	[Min( 0f )]
@@ -61,14 +90,35 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Min( 0f )]
 	public float crankStopFadeSeconds = 0.15f;
 
+	[Header( "Sort Audio" )]
+	[Tooltip( "Clips cycled while the station is processing / sorting. Wraps forever." )]
+	public AudioClip[] sortLoopClips;
+
+	[Range( 0f, 1f )]
+	public float sortVolume = 0.5f;
+
+	[Range( -3f, 3f )]
+	public float sortPitchMin = 0.95f;
+
+	[Range( -3f, 3f )]
+	public float sortPitchMax = 1.05f;
+
+	[Tooltip( "Minimum seconds between sort-loop one-shots while processing." )]
+	[Min( 0.05f )]
+	public float sortPlayInterval = 1f;
+
 	[Header( "Output" )]
 	[Tooltip( "World-space lateral step when starting a new stack beside a full chute stack." )]
 	[Min( 0.05f )]
 	public float fullStackLateralOffset = 0.35f;
 
-	[Tooltip( "Seconds for a sorted coin to fly from the chute onto the output stack." )]
+	[Tooltip( "Seconds for a sorted coin to fly from the machine output onto the chute stack." )]
 	[Min( 0.05f )]
 	public float sortedCoinFlightDuration = 0.28f;
+
+	[Tooltip( "World-space arc height of the sorted-coin flight from output to chute." )]
+	[Min( 0f )]
+	public float sortedCoinFlightArcHeight = 0.35f;
 
 	[Header( "Reposition" )]
 	[Tooltip( "Allow hold-to-move telekinetic reposition of the sorter." )]
@@ -188,5 +238,18 @@ public class CoinSortingStationDefinition : ScriptableObject
 	public bool RequiresCrank( int level )
 	{
 		return level >= 1 && level < 2;
+	}
+
+	public float ResolveMaxReserveSeconds()
+	{
+		return Mathf.Max( 0.25f, maxReserveSeconds );
+	}
+
+	public Color EvaluateGaugeColor( float normalized )
+	{
+		float t = Mathf.Clamp01( normalized );
+		if ( t <= 0.5f )
+			return Color.Lerp( gaugeEmptyColor, gaugeMidColor, t * 2f );
+		return Color.Lerp( gaugeMidColor, gaugeFullColor, ( t - 0.5f ) * 2f );
 	}
 }

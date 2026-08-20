@@ -705,7 +705,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			duration,
 			() =>
 			{
-				if ( display != null )
+				if ( display == null )
+					return;
+
+				if ( display is CoinDisplayTableInteractable coinTable )
+					coinTable.TryAppendWholeStackWithAutoLevel( slotIndex, flying );
+				else
 					display.TryAppendSlotDefinitions( slotIndex, flying );
 
 				CoinStackInteractSfx.PlayStackPlace( endPos );

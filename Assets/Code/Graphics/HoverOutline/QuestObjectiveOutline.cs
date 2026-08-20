@@ -62,6 +62,7 @@ public class QuestObjectiveOutline : MonoBehaviour
 			return;
 		EventBus.Subscribe<QuestHudChangedEvent>( OnQuestHud );
 		EventBus.Subscribe<QuestProgressChangedEvent>( OnQuestProgress );
+		EventBus.Subscribe<PouchChangedEvent>( OnPouchChanged );
 		_subscribed = true;
 	}
 
@@ -71,6 +72,7 @@ public class QuestObjectiveOutline : MonoBehaviour
 			return;
 		EventBus.Unsubscribe<QuestHudChangedEvent>( OnQuestHud );
 		EventBus.Unsubscribe<QuestProgressChangedEvent>( OnQuestProgress );
+		EventBus.Unsubscribe<PouchChangedEvent>( OnPouchChanged );
 		_subscribed = false;
 	}
 
@@ -80,6 +82,11 @@ public class QuestObjectiveOutline : MonoBehaviour
 	}
 
 	void OnQuestProgress( QuestProgressChangedEvent evt )
+	{
+		Refresh();
+	}
+
+	void OnPouchChanged( PouchChangedEvent evt )
 	{
 		Refresh();
 	}

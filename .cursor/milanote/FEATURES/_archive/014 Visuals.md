@@ -87,6 +87,7 @@ Editor installer (`HoverOutlineRendererFeatureInstaller`) auto-adds the feature 
 - `Assets/Code/Interaction/MixedDisplayTableInteractable.cs`
 - `Assets/Code/Interaction/CoinSortingHopper.cs`
 - `Assets/Code/Interaction/CleaningStationInteractable.cs` (outline driven from `PlayerPlacement`)
+- `Assets/Code/Graphics/GoldPile/GoldPileTerrainMesh.cs` (outline mask uses `LootGroundLevel`)
 
 Removed: `PickableFocusIndicator.cs`, mesh-overlay `DragonLoot/Pickable Outline` usage; StackVolume cylinder ghost path.
 
@@ -102,6 +103,7 @@ Removed: `PickableFocusIndicator.cs`, mesh-overlay `DragonLoot/Pickable Outline`
 8. Hold coins, aim sorting hopper — red/green outline on whole station (not crank); hover crank alone — gold crank outline.
 9. Hold dirty artifact, aim cleaning station — ItemMesh + red/green whole-station outline by validity; wrong item — red.
 10. Tune on definition assets: `scalePixels`, `depthThreshold`, `normalThreshold`, `hdrBoost`, `maskDilatePixels`.
+11. Quest objective or hover on a gold pile — outline hugs the mound above `lootGroundLevelHeight` (~0.6 m); no vertical sheet to the floor. Lit pile skirt unchanged.
 
 ## Cursor Notes
 
@@ -109,6 +111,7 @@ Removed: `PickableFocusIndicator.cs`, mesh-overlay `DragonLoot/Pickable Outline`
 - `HoverOutlineRegistrar` uses ownership (`Pickable` vs `StackVolume`) so placement `ClearPreview` no longer wipes gem/artifact hover outlines. Cleaning station and stacks share the StackVolume owner tag for placement outlines.
 - Display-table outline targets the aimed slot only (`AppendPreviewStackOutlineRenderers`), not every column on the table.
 - `SyncFromItem` requires real ghost mesh renderers before early-returning, so leaving outline-only stack aim restores ItemMesh correctly.
+- **Gold pile quest/hover outline:** `GoldPileTerrainMesh.TryGetDeformedOutlineDraw` clips the deformed mask at `LootGroundLevel` (not `GroundLevel`), matching coin seat floor. `HoverOutlineMask.shader` collapses below-ground verts to `_GroundLevelHeight` instead of y=-1000 so edge triangles no longer rasterize a downward curtain.
 
 ## Developer Verification
 

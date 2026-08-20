@@ -108,8 +108,8 @@ MonoBehaviour:
   maxVisibleTotal: 32768
   coinVisibleBufferFraction: 0.2
   heightResolution: 512
-  worldSize: 64
-  maxHeight: 60
+  worldSize: 90
+  maxHeight: 90
   groundLevelHeight: 0.1
   lootGroundLevelHeight: 0.6
   meshResolution: 512

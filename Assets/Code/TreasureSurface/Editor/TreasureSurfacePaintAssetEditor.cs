@@ -19,7 +19,8 @@ public class TreasureSurfacePaintAssetEditor : Editor
 
 		EditorGUILayout.HelpBox(
 			"Paint grids live in a .paintbin sidecar (not Unity-serialized).\n"
-			+ "Selecting this asset stays fast because the Inspector never draws the grids.",
+			+ "Selecting this asset stays fast because the Inspector never draws the grids.\n"
+			+ "Player builds copy that sidecar into StreamingAssets automatically.",
 			MessageType.Info );
 
 		SerializedProperty baked = serializedObject.FindProperty( "bakedPaint" );

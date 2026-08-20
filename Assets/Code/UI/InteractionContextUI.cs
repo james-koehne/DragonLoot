@@ -78,11 +78,11 @@ public class InteractionContextUI : MonoBehaviour
 
 		IInteractable focus = interaction.Current;
 		if ( focus is CoinSortingCrankInteractable crankFocus && crankFocus.CanInteract( player ) )
-			AppendBound( gameInput.Interact, "Hold to crank" );
+			AppendBound( gameInput.Interact, FormatCrankPrompt( crankFocus ) );
 		else if ( focus is CoinSortingStationMoveInteractable )
 			AppendBound( gameInput.Interact, "Hold to move sorter" );
 		else if ( focus is DoorInteractable doorFocus && doorFocus.ShowsLockedPrompt )
-			AppendPlain( "Locked" );
+			AppendBound( gameInput.Interact, "Locked" );
 		else if ( focus != null && focus.CanInteract( player ) )
 		{
 			string primary = FormatPrimaryPrompt( focus, carry );
@@ -152,6 +152,18 @@ public class InteractionContextUI : MonoBehaviour
 		return "Place";
 	}
 
+	static string FormatCrankPrompt( CoinSortingCrankInteractable crank )
+	{
+		if ( crank == null )
+			return "Hold to crank";
+
+		CoinSortingStation station = crank.GetComponentInParent<CoinSortingStation>();
+		if ( station == null || station.ReserveSeconds < 0.05f )
+			return "Hold to crank";
+
+		return "Hold to crank · " + station.ReserveSeconds.ToString( "0.0" ) + "s";
+	}
+
 	static string FormatPrimaryPrompt( IInteractable focus, PlayerCarry carry )
 	{
 		if ( focus == null )
@@ -166,8 +178,8 @@ public class InteractionContextUI : MonoBehaviour
 		if ( focus is MinecartUnloadPoint )
 			return "Unload minecart";
 
-		if ( focus is CoinSortingCrankInteractable )
-			return "Hold to crank";
+		if ( focus is CoinSortingCrankInteractable crankPrompt )
+			return FormatCrankPrompt( crankPrompt );
 
 		if ( focus is CoinSortingStationMoveInteractable )
 			return "Hold to move sorter";

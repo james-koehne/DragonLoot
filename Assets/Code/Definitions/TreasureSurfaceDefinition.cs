@@ -239,6 +239,14 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Range( 0f, 1.5f )]
 	public float throwPileBounceRestitution = 0.45f;
 
+	[Tooltip( "Max times a throw can bounce off the treasure-surface edge or a non-traversable cell (blockers)." )]
+	[Min( 0 )]
+	public int throwBoundaryMaxBounces = 4;
+
+	[Tooltip( "Restitution when throws bounce back from outside the surface or a non-traversable fence." )]
+	[Range( 0f, 1.5f )]
+	public float throwBoundaryBounceRestitution = 0.55f;
+
 	[Tooltip( "Heavy bounce damping for crowns/artifacts (much lower than coins/gems)." )]
 	[Range( 0f, 1.5f )]
 	public float artifactBounceRestitution = 0.08f;

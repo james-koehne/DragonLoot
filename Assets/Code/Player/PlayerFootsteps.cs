@@ -128,7 +128,9 @@ public class PlayerFootsteps : MonoBehaviour
 		float volumeMin = landing ? def.landStepVolumeMin : def.stepVolumeMin;
 		float volumeMax = landing ? def.landStepVolumeMax : def.stepVolumeMax;
 
-		bool onGoldPile = IsOnGoldPile( _player != null ? _player.GroundCollider : null );
+		bool onGoldPile = IsOnGoldPile(
+			_player != null ? _player.GroundCollider : null,
+			_player != null ? _player.transform.position : Vector3.zero );
 		if ( onGoldPile )
 		{
 			ApplyAndPlay(
@@ -193,12 +195,26 @@ public class PlayerFootsteps : MonoBehaviour
 		feedbacks.Play();
 	}
 
-	static bool IsOnGoldPile( Collider ground )
+	static bool IsOnGoldPile( Collider ground, Vector3 worldPos )
 	{
 		if ( ground == null )
 			return false;
 
-		return ground.GetComponentInParent<TreasurePileVisual>() != null;
+		if ( !PlacementFloorSurface.IsHeightfieldPileCollider( ground ) )
+			return false;
+
+		TreasurePileVisual pile = ground.GetComponentInParent<TreasurePileVisual>();
+		if ( pile == null )
+		{
+			TreasurePileInteractable interactable = ground.GetComponentInParent<TreasurePileInteractable>();
+			if ( interactable != null )
+				pile = interactable.PileVisual;
+		}
+
+		if ( pile == null )
+			return false;
+
+		return pile.HasPileSurfaceAt( worldPos );
 	}
 
 	void EnsureFeedbackHosts()

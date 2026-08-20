@@ -83,6 +83,18 @@ public static class TreasureSurfaceThrow
 	const float SettleStartU = 0.88f;
 	const int DefaultPileMaxBounces = 3;
 	const float DefaultPileRestitution = 0.45f;
+	const int DefaultBoundaryMaxBounces = 4;
+	const float DefaultBoundaryRestitution = 0.55f;
+	const float BoundaryNudge = 0.04f;
+
+	public static bool IsStrictTraversableLanding( TreasureSurfaceWorld world, Vector3 landPos )
+	{
+		if ( world == null || world.Sampler == null )
+			return false;
+		if ( IsGoldPileSurfacePoint( landPos ) )
+			return false;
+		return world.Sampler.TrySample( landPos, out TreasureSurfaceSample sample ) && sample.Traversable;
+	}
 
 	public static bool TryPredictLanding(
 		TreasureSurfaceWorld world,
@@ -128,6 +140,8 @@ public static class TreasureSurfaceThrow
 		float landScale = def != null ? def.throwLandingSpeedScale : 0.85f;
 		int pileBouncesLeft = def != null ? Mathf.Max( 0, def.throwPileMaxBounces ) : DefaultPileMaxBounces;
 		float pileRestitution = def != null ? Mathf.Max( 0.05f, def.throwPileBounceRestitution ) : DefaultPileRestitution;
+		int boundaryBouncesLeft = def != null ? Mathf.Max( 0, def.throwBoundaryMaxBounces ) : DefaultBoundaryMaxBounces;
+		float boundaryRestitution = def != null ? Mathf.Max( 0.05f, def.throwBoundaryBounceRestitution ) : DefaultBoundaryRestitution;
 
 		Vector3 p = start;
 		Vector3 v = velocity;
@@ -139,12 +153,68 @@ public static class TreasureSurfaceThrow
 		if ( world.TryGetChunkCoord( start, out TreasureChunkCoord startCoord ) )
 			world.EnsureChunkLoaded( startCoord );
 
+		// Thrown from over a blocker / unpainted cell: send it back toward the surface.
+		if ( !IsThrowFlightPassable( world, start )
+			&& TryRedirectTowardTraversable( world, start, ref v, boundaryRestitution ) )
+		{
+			boundaryBouncesLeft = Mathf.Max( 0, boundaryBouncesLeft - 1 );
+		}
+
 		for ( int step = 0; step < MaxBallisticSteps; step++ )
 		{
 			Vector3 prev = p;
 			v.y -= g * BallisticDt;
 			p += v * BallisticDt;
 			float elapsed = ( step + 1 ) * BallisticDt;
+
+			if ( !IsThrowFlightPassable( world, p ) )
+			{
+				bool fromPassable = IsThrowFlightPassable( world, prev );
+				if ( boundaryBouncesLeft <= 0 )
+				{
+					Vector3 seatFrom = fromPassable ? prev : p;
+					if ( TryLandAt( world, seatFrom, v, landScale, elapsed, path, out landPos, out landVelocity, out flightTime ) )
+						return true;
+					if ( TrySeatAlongThrow( world, start, v, seatFrom, def, out landPos, out landVelocity, out flightTime ) )
+					{
+						if ( path != null )
+						{
+							path.Add( landPos, flightTime );
+							path.LandVelocity = landVelocity;
+						}
+
+						return true;
+					}
+
+					break;
+				}
+
+				if ( fromPassable )
+				{
+					boundaryBouncesLeft--;
+					BounceOffThrowBoundary( world, prev, p, ref v, boundaryRestitution );
+					p = new Vector3( prev.x, p.y, prev.z );
+					Vector3 inward = FlattenHorizontal( v );
+					if ( inward.sqrMagnitude > 0.0001f )
+						p += inward.normalized * BoundaryNudge;
+					if ( !IsThrowFlightPassable( world, p ) )
+						p = new Vector3( prev.x, p.y, prev.z );
+					if ( path != null )
+						path.Add( p, elapsed );
+					continue;
+				}
+
+				if ( TryRedirectTowardTraversable( world, p, ref v, boundaryRestitution ) )
+				{
+					boundaryBouncesLeft--;
+					Vector3 toward = FlattenHorizontal( v );
+					if ( toward.sqrMagnitude > 0.0001f )
+						p += toward.normalized * BoundaryNudge;
+					if ( path != null )
+						path.Add( p, elapsed );
+					continue;
+				}
+			}
 
 			if ( !world.ContainsWorldPoint( p ) )
 			{
@@ -214,6 +284,20 @@ public static class TreasureSurfaceThrow
 
 			if ( !sample.Traversable )
 			{
+				bool hitBlockedFloor = p.y <= sample.Height + HitEpsilonY;
+				if ( boundaryBouncesLeft > 0 && TryRedirectTowardTraversable( world, p, ref v, boundaryRestitution ) )
+				{
+					boundaryBouncesLeft--;
+					if ( hitBlockedFloor && v.y < 1.5f )
+						v.y = 1.5f;
+					Vector3 toward = FlattenHorizontal( v );
+					if ( toward.sqrMagnitude > 0.0001f )
+						p += toward.normalized * BoundaryNudge;
+					if ( path != null )
+						path.Add( p, elapsed );
+					continue;
+				}
+
 				if ( path != null && ( step % 2 == 0 ) )
 					path.Add( p, elapsed );
 				continue;
@@ -230,6 +314,9 @@ public static class TreasureSurfaceThrow
 			if ( p.y <= sample.Height + HitEpsilonY )
 			{
 				landPos = new Vector3( p.x, sample.Height, p.z );
+				if ( !IsStrictTraversableLanding( world, landPos ) )
+					continue;
+
 				landVelocity = FlattenHorizontal( v ) * landScale;
 				flightTime = Mathf.Clamp( elapsed, MinFlightTime * 0.5f, MaxFlightTime );
 				if ( path != null )
@@ -303,6 +390,9 @@ public static class TreasureSurfaceThrow
 				&& sample.Traversable )
 			{
 				landPos = new Vector3( probe.x, sample.Height, probe.z );
+				if ( !IsStrictTraversableLanding( world, landPos ) )
+					continue;
+
 				landVelocity = flat * landScale;
 				flightTime = EstimateFlightTime( start, landPos, velocity, def );
 				return true;
@@ -324,6 +414,9 @@ public static class TreasureSurfaceThrow
 
 				landPos = recovered;
 				landPos.y = recoveredSample.Height;
+				if ( !IsStrictTraversableLanding( world, landPos ) )
+					continue;
+
 				landVelocity = flat * landScale;
 				flightTime = EstimateFlightTime( start, landPos, velocity, def );
 				return true;
@@ -332,7 +425,7 @@ public static class TreasureSurfaceThrow
 
 		if ( world.TryFindNearestTraversable( preferNear, out landPos, out TreasureSurfaceSample nearest, preferStable: false ) )
 		{
-			if ( !IsGoldPileSurfacePoint( landPos ) )
+			if ( !IsGoldPileSurfacePoint( landPos ) && IsStrictTraversableLanding( world, landPos ) )
 			{
 				landPos.y = nearest.Height;
 				landVelocity = flat * landScale;
@@ -624,6 +717,119 @@ public static class TreasureSurfaceThrow
 
 		// Crowns / goblets / helmets / artifacts.
 		spins = def != null ? def.throwArtifactSpins : 1f;
+	}
+
+	static bool IsThrowFlightPassable( TreasureSurfaceWorld world, Vector3 worldPos )
+	{
+		if ( world == null || !world.IsInitialized )
+			return false;
+		if ( !world.ContainsWorldPoint( worldPos ) )
+			return false;
+		if ( IsGoldPileSurfacePoint( worldPos ) )
+			return true;
+		if ( world.Sampler == null )
+			return false;
+		if ( world.TryGetChunkCoord( worldPos, out TreasureChunkCoord coord ) )
+			world.EnsureChunkLoaded( coord );
+		return world.Sampler.TrySample( worldPos, out TreasureSurfaceSample sample ) && sample.Traversable;
+	}
+
+	static bool TryRedirectTowardTraversable(
+		TreasureSurfaceWorld world,
+		Vector3 pos,
+		ref Vector3 velocity,
+		float restitution )
+	{
+		if ( world == null || !world.IsInitialized )
+			return false;
+
+		if ( !world.TryFindNearestTraversable( pos, out Vector3 recovered, out _, preferStable: false ) )
+			return false;
+
+		Vector3 toSurface = FlattenHorizontal( recovered - pos );
+		if ( toSurface.sqrMagnitude < 0.0001f )
+			return false;
+
+		toSurface.Normalize();
+		Vector3 planar = FlattenHorizontal( velocity );
+		float toward = Vector3.Dot( planar, toSurface );
+		if ( toward > 0.35f )
+			return false;
+
+		restitution = Mathf.Clamp( restitution, 0.05f, 1.5f );
+		float speed = Mathf.Max( planar.magnitude, 2.5f ) * restitution;
+		velocity.x = toSurface.x * speed;
+		velocity.z = toSurface.z * speed;
+		if ( velocity.y < 0.75f )
+			velocity.y = 0.75f;
+		return true;
+	}
+
+	static void BounceOffThrowBoundary(
+		TreasureSurfaceWorld world,
+		Vector3 prev,
+		Vector3 blocked,
+		ref Vector3 velocity,
+		float restitution )
+	{
+		restitution = Mathf.Clamp( restitution, 0.05f, 1.5f );
+		bool passX = IsThrowFlightPassable( world, new Vector3( blocked.x, prev.y, prev.z ) );
+		bool passZ = IsThrowFlightPassable( world, new Vector3( prev.x, prev.y, blocked.z ) );
+		float y = velocity.y;
+		if ( !passX && passZ )
+		{
+			float sign = prev.x <= blocked.x ? -1f : 1f;
+			velocity.x = sign * Mathf.Abs( velocity.x );
+		}
+		else if ( passX && !passZ )
+		{
+			float sign = prev.z <= blocked.z ? -1f : 1f;
+			velocity.z = sign * Mathf.Abs( velocity.z );
+		}
+		else
+		{
+			velocity.x = -velocity.x;
+			velocity.z = -velocity.z;
+		}
+
+		velocity.x *= restitution;
+		velocity.z *= restitution;
+		velocity.y = y;
+	}
+
+	static bool TryLandAt(
+		TreasureSurfaceWorld world,
+		Vector3 pos,
+		Vector3 velocity,
+		float landScale,
+		float elapsed,
+		ThrowFlightPath path,
+		out Vector3 landPos,
+		out Vector3 landVelocity,
+		out float flightTime )
+	{
+		landPos = pos;
+		landVelocity = FlattenHorizontal( velocity ) * landScale;
+		flightTime = Mathf.Clamp( elapsed, MinFlightTime * 0.5f, MaxFlightTime );
+		if ( world == null || world.Sampler == null )
+			return false;
+		if ( !world.Sampler.TrySample( pos, out TreasureSurfaceSample sample ) || !sample.Traversable )
+			return false;
+		if ( IsGoldPileSurfacePoint( pos ) )
+			return false;
+
+		landPos = new Vector3( pos.x, sample.Height, pos.z );
+		if ( !IsStrictTraversableLanding( world, landPos ) )
+			return false;
+
+		if ( path != null )
+		{
+			path.Add( landPos, flightTime );
+			path.LandVelocity = landVelocity;
+			path.SeatOnPileFlow = false;
+		}
+
+		return true;
 	}
 
 	static bool IsGoldPileSurfacePoint( Vector3 worldPos )

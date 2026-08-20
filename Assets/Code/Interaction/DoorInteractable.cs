@@ -30,7 +30,7 @@ public struct DoorLeaf
 /// <summary>
 /// Quest/event-gated door with single or double leaf hinged rotation via FeedbackSystem chains.
 /// Setup: DoorInteractable on the assembly root (no collider required). Put a collider on each leaf mesh
-/// so raycasts resolve via GetComponentInParent. Child hinge pivot(s) + OnOpenFeedbacks/OnCloseFeedbacks
+/// so raycasts resolve via GetComponentInParent. Child hinge pivot(s) + OnOpenFeedbacks/OnCloseFeedbacks/OnLockedFeedbacks
 /// with RotateTransformFeedback per leaf (use ParallelFeedback for double doors).
 /// </summary>
 [DisallowMultipleComponent]
@@ -68,6 +68,9 @@ public class DoorInteractable : InteractableBase
 	Feedbacks onCloseFeedback;
 
 	[SerializeField]
+	Feedbacks onLockedFeedback;
+
+	[SerializeField]
 	DoorState state = DoorState.Locked;
 
 	Feedbacks _activeTransitionFeedback;
@@ -82,6 +85,7 @@ public class DoorInteractable : InteractableBase
 
 	void Awake()
 	{
+		EnsureLockedFeedback();
 		RefreshInteractionName();
 	}
 
@@ -99,6 +103,7 @@ public class DoorInteractable : InteractableBase
 		EventBus.Unsubscribe<QuestProgressChangedEvent>( OnQuestProgress );
 		EventBus.Unsubscribe<DoorUnlockedEvent>( OnDoorUnlocked );
 		StopActiveTransitionFeedback();
+		StopLockedFeedback();
 	}
 
 	void Update()
@@ -127,7 +132,7 @@ public class DoorInteractable : InteractableBase
 		if ( !base.CanInteract( player ) || player == null || IsTransitioning )
 			return false;
 
-		return state == DoorState.UnlockedClosed || state == DoorState.Open;
+		return state == DoorState.Locked || state == DoorState.UnlockedClosed || state == DoorState.Open;
 	}
 
 	public override void Interact( PlayerController player )
@@ -135,7 +140,9 @@ public class DoorInteractable : InteractableBase
 		if ( player == null || !CanInteract( player ) )
 			return;
 
-		if ( state == DoorState.UnlockedClosed )
+		if ( state == DoorState.Locked )
+			PlayLockedAttempt();
+		else if ( state == DoorState.UnlockedClosed )
 			BeginOpen();
 		else if ( state == DoorState.Open )
 			BeginClose();
@@ -278,6 +285,9 @@ public class DoorInteractable : InteractableBase
 		if ( string.IsNullOrEmpty( unlockQuestId ) )
 			return false;
 
+		if ( !QuestSystem.Enabled )
+			return true;
+
 		ProfileSaveData save = ProfileManager.Instance != null ? ProfileManager.Instance.ProfileSaveData : null;
 		if ( save == null || save.completedQuestIds == null )
 			return false;
@@ -289,6 +299,7 @@ public class DoorInteractable : InteractableBase
 	{
 		state = DoorState.Opening;
 		RefreshInteractionName();
+		StopLockedFeedback();
 		StopActiveTransitionFeedback();
 		PlayTransitionFeedback( onOpenFeedback, FinishOpenInstant );
 	}
@@ -297,8 +308,79 @@ public class DoorInteractable : InteractableBase
 	{
 		state = DoorState.Closing;
 		RefreshInteractionName();
+		StopLockedFeedback();
 		StopActiveTransitionFeedback();
 		PlayTransitionFeedback( onCloseFeedback, FinishCloseInstant );
+	}
+
+	void PlayLockedAttempt()
+	{
+		EnsureLockedFeedback();
+		if ( onLockedFeedback == null )
+			return;
+
+		if ( IsTransitionFeedbackPlaying( onLockedFeedback ) )
+			return;
+
+		FeedbackContext context = new FeedbackContext();
+		context.Source = gameObject;
+		context.Target = gameObject;
+		context.Position = transform.position;
+		onLockedFeedback.Play( context );
+	}
+
+	void EnsureLockedFeedback()
+	{
+		if ( onLockedFeedback != null )
+		{
+			onLockedFeedback.Initialize();
+			if ( onLockedFeedback.FeedbackList != null && onLockedFeedback.FeedbackList.Count > 0 )
+				return;
+		}
+
+		Transform existing = transform.Find( "LockedFailFeedback" );
+		GameObject host = existing != null ? existing.gameObject : new GameObject( "LockedFailFeedback" );
+		if ( existing == null )
+			host.transform.SetParent( transform, false );
+
+		onLockedFeedback = host.GetComponent<Feedbacks>();
+		if ( onLockedFeedback == null )
+			onLockedFeedback = host.AddComponent<Feedbacks>();
+
+		onLockedFeedback.Initialize();
+		if ( onLockedFeedback.FeedbackList != null && onLockedFeedback.FeedbackList.Count > 0 )
+			return;
+
+		ParallelFeedback parallel = new ParallelFeedback();
+		if ( primaryLeaf.hingePivot != null )
+		{
+			parallel.Feedbacks.Add( new ShakeTransformFeedback
+			{
+				Target = primaryLeaf.hingePivot,
+				Duration = 0.22f,
+				Strength = 0.035f
+			} );
+		}
+
+		if ( layout == DoorLeafLayout.Double && secondaryLeaf.hingePivot != null )
+		{
+			parallel.Feedbacks.Add( new ShakeTransformFeedback
+			{
+				Target = secondaryLeaf.hingePivot,
+				Duration = 0.22f,
+				Strength = 0.035f
+			} );
+		}
+
+		onLockedFeedback.AddFeedback( parallel );
+	}
+
+	void StopLockedFeedback()
+	{
+		if ( onLockedFeedback == null )
+			return;
+
+		onLockedFeedback.Stop();
 	}
 
 	void PlayTransitionFeedback( Feedbacks feedback, Action instantFallback )

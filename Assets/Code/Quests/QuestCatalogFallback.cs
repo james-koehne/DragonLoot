@@ -4,7 +4,6 @@ using UnityEngine;
 
 /// <summary>
 /// Fallback quest catalog used when the Addressables <see cref="QuestCatalogDefinition"/> asset is missing.
-/// Also used by the editor installer to populate quest assets.
 /// </summary>
 public static class QuestCatalogFallback
 {
@@ -21,8 +20,10 @@ public static class QuestCatalogFallback
 		PopulateConstellationSubquest( constellation );
 		QuestDefinition artifacts = CreateRuntime( "quest_museum" );
 		PopulateArtifactsSubquest( artifacts );
+		QuestDefinition goldBars = CreateRuntime( "quest_gold_bars" );
+		PopulateGoldBarsSubquest( goldBars );
 		QuestDefinition starting = CreateRuntime( "quest_starting" );
-		PopulateStartingQuest( starting, coins, constellation, artifacts );
+		PopulateStartingQuest( starting, coins, constellation, artifacts, goldBars );
 		QuestDefinition main = CreateRuntime( "quest_final" );
 		PopulateMainQuest( main );
 
@@ -43,7 +44,8 @@ public static class QuestCatalogFallback
 		QuestDefinition quest,
 		QuestDefinition coins,
 		QuestDefinition constellation,
-		QuestDefinition artifacts )
+		QuestDefinition artifacts,
+		QuestDefinition goldBars )
 	{
 		quest.displayTitle = "Clear the Way";
 		quest.onStartDialogue = new[]
@@ -97,7 +99,8 @@ public static class QuestCatalogFallback
 						QuestSceneAutoWire.IdCoinSorter,
 						new QuestCondition
 						{
-							type = QuestConditionType.CompleteCoinDisplay,
+							type = QuestConditionType.CompleteDoorPileCoins,
+							targetId = QuestSceneAutoWire.IdStartingDoorPile,
 							areaId = QuestSceneAutoWire.AreaStarting
 						} ),
 					SubObjective(
@@ -121,7 +124,7 @@ public static class QuestCatalogFallback
 				}
 			}
 		};
-		quest.subquests = new[] { coins, constellation, artifacts };
+		quest.subquests = new[] { coins, constellation, artifacts, goldBars };
 	}
 
 	public static void PopulateCoinsSubquest( QuestDefinition quest )
@@ -160,6 +163,21 @@ public static class QuestCatalogFallback
 		{
 			new QuestObjective
 			{
+				id = "stack_door_pile_coins",
+				objectiveText = "Stack all coins from the doorway pile",
+				markerTargetId = QuestSceneAutoWire.IdStartingDoorPile,
+				conditions = new[]
+				{
+					new QuestCondition
+					{
+						type = QuestConditionType.CompleteDoorPileCoins,
+						targetId = QuestSceneAutoWire.IdStartingDoorPile,
+						areaId = QuestSceneAutoWire.AreaStarting
+					}
+				}
+			},
+			new QuestObjective
+			{
 				id = "use_coin_sorter",
 				objectiveText = "Use the coin sorter",
 				markerTargetId = QuestSceneAutoWire.IdCoinSorter,
@@ -170,7 +188,12 @@ public static class QuestCatalogFallback
 				},
 				conditions = new[]
 				{
-					new QuestCondition { type = QuestConditionType.UseCoinSorter, targetId = QuestSceneAutoWire.IdCoinSorter }
+					new QuestCondition
+					{
+						type = QuestConditionType.UseCoinSorter,
+						targetId = QuestSceneAutoWire.IdCoinSorter,
+						areaId = QuestSceneAutoWire.AreaStarting
+					}
 				}
 			}
 		};
@@ -200,7 +223,12 @@ public static class QuestCatalogFallback
 				},
 				conditions = new[]
 				{
-					new QuestCondition { type = QuestConditionType.EnterVolume, targetId = QuestSceneAutoWire.IdVolumeConstellation }
+					new QuestCondition
+					{
+						type = QuestConditionType.PickupTreasure,
+						filterByCategory = true,
+						requiredCategory = TreasureCategory.Gem
+					}
 				}
 			}
 		};
@@ -257,6 +285,54 @@ public static class QuestCatalogFallback
 			}
 		};
 		quest.objectives = System.Array.Empty<QuestObjective>();
+	}
+
+	public static void PopulateGoldBarsSubquest( QuestDefinition quest )
+	{
+		quest.displayTitle = "Gold Bars";
+		quest.revealWhenParentObjectiveId = "clear_and_sort";
+		quest.linkedParentObjectiveId = "gold_bars_stacked";
+		quest.onStartDialogue = System.Array.Empty<QuestDialogueLine>();
+		quest.onCompleteDialogue = new[]
+		{
+			Line( "Yes. Bars belong in a proper stack.", 0.4f )
+		};
+		quest.events = new[]
+		{
+			new QuestEvent
+			{
+				id = "first_gold_bar_pickup",
+				dialogue = new[]
+				{
+					Line( "Those bars will look much better on the table.", 0.4f )
+				},
+				conditions = new[]
+				{
+					new QuestCondition
+					{
+						type = QuestConditionType.PickupTreasure,
+						requireGoldBars = true
+					}
+				}
+			}
+		};
+		quest.objectives = new[]
+		{
+			new QuestObjective
+			{
+				id = "stack_ground_gold_bars",
+				objectiveText = "Stack all gold bars on the display table",
+				markerTargetId = QuestSceneAutoWire.IdGoldBarTable,
+				conditions = new[]
+				{
+					new QuestCondition
+					{
+						type = QuestConditionType.CompleteGroundZoneGoldBars,
+						targetId = QuestSceneAutoWire.IdStartingGroundTreasure
+					}
+				}
+			}
+		};
 	}
 
 	public static void PopulateMainQuest( QuestDefinition quest )

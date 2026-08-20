@@ -24,6 +24,9 @@ public sealed class TreasureSurfaceSimulator
 		public TreasureCategory Category;
 		public bool FromRest;
 		public float RestAccelT;
+		public bool HasLastValidPosition;
+		public Vector3 LastValidPosition;
+		public TreasureSurfaceSample LastValidSample;
 	}
 
 	readonly TreasureSurfaceWorld _world;
@@ -82,11 +85,18 @@ public sealed class TreasureSurfaceSimulator
 		float seatLift = TreasureSurfaceSeat.GetStableContactLift( item );
 		float heightAbove = 0f;
 		float verticalVel = velocity.y;
+		bool hasLastValid = false;
+		Vector3 lastValidPos = item.transform.position;
+		TreasureSurfaceSample lastValidSample = default;
 		if ( _world != null
 			&& _world.Sampler != null
 			&& _world.Sampler.TrySample( item.transform.position, out TreasureSurfaceSample sample )
-			&& sample.Valid )
+			&& sample.Valid
+			&& sample.Traversable )
 		{
+			hasLastValid = true;
+			lastValidPos = item.transform.position;
+			lastValidSample = sample;
 			float contactY = sample.Height + seatLift;
 			heightAbove = Mathf.Max( 0f, item.transform.position.y - contactY );
 		}
@@ -107,7 +117,10 @@ public sealed class TreasureSurfaceSimulator
 			Sleeping = false,
 			Category = category,
 			FromRest = fromRest,
-			RestAccelT = 0f
+			RestAccelT = 0f,
+			HasLastValidPosition = hasLastValid,
+			LastValidPosition = lastValidPos,
+			LastValidSample = lastValidSample
 		} );
 	}
 
@@ -295,8 +308,19 @@ public sealed class TreasureSurfaceSimulator
 
 		if ( !sample.Traversable )
 		{
-			Recover( ref body, item, preferStable: true );
-			return;
+			if ( TryDeflectFromBlockedCell( ref body, item, def, ref pos, ref sample, t ) )
+			{
+				if ( !sampler.TrySample( pos, out sample ) || !sample.Traversable )
+				{
+					Recover( ref body, item, preferStable: true );
+					return;
+				}
+			}
+			else
+			{
+				Recover( ref body, item, preferStable: true );
+				return;
+			}
 		}
 
 		ResolveMotionParams( body.Category, sample.Material, def, out float friction, out float bounce, out float speedScale, out float wobble, out bool artifact );
@@ -507,6 +531,7 @@ public sealed class TreasureSurfaceSimulator
 
 		if ( body.Category == TreasureCategory.Gem )
 		{
+			Vector3 prePushPos = pos;
 			ApplyGemPush( ref pos, ref velocity, item, def, sampler );
 			if ( sampler.TrySample( pos, out TreasureSurfaceSample pushedSample ) && pushedSample.Traversable )
 			{
@@ -517,6 +542,10 @@ public sealed class TreasureSurfaceSimulator
 					pos.x = next.x;
 					pos.z = next.z;
 				}
+			}
+			else
+			{
+				pos = prePushPos;
 			}
 		}
 
@@ -564,6 +593,22 @@ public sealed class TreasureSurfaceSimulator
 		float seatedY = contactY + Mathf.Max( 0f, body.HeightAboveSurface );
 		pos.y = Mathf.Max( sample.Height, seatedY );
 
+		if ( !sampler.TrySample( pos, out TreasureSurfaceSample finalSample ) || !finalSample.Traversable )
+		{
+			if ( !TryDeflectFromBlockedCell( ref body, item, def, ref pos, ref finalSample, t ) )
+			{
+				Recover( ref body, item, preferStable: true );
+				return;
+			}
+
+			sample = finalSample;
+			pos.y = Mathf.Max( sample.Height + body.SeatLift, sample.Height + Mathf.Max( 0f, body.HeightAboveSurface ) );
+		}
+		else
+		{
+			sample = finalSample;
+		}
+
 		Quaternion rot = IntegrateRotation( ref body, t.rotation, sample.Normal, velocity, def, dt );
 		t.SetPositionAndRotation( pos, rot );
 		item.SyncRigidbodyToTransform();
@@ -573,6 +618,10 @@ public sealed class TreasureSurfaceSimulator
 			Recover( ref body, item, preferStable: true );
 			return;
 		}
+
+		body.HasLastValidPosition = true;
+		body.LastValidPosition = pos;
+		body.LastValidSample = sample;
 
 		bool stillAirborne = body.HeightAboveSurface > 0.001f || Mathf.Abs( body.VerticalVelocity ) > 0.05f;
 		float speedSq = velocity.sqrMagnitude + body.VerticalVelocity * body.VerticalVelocity;
@@ -601,6 +650,40 @@ public sealed class TreasureSurfaceSimulator
 		}
 
 		body.Velocity = velocity;
+	}
+
+	bool TryDeflectFromBlockedCell(
+		ref SimBody body,
+		TreasureItem item,
+		TreasureSurfaceDefinition def,
+		ref Vector3 pos,
+		ref TreasureSurfaceSample sample,
+		Transform t )
+	{
+		if ( !body.HasLastValidPosition )
+			return false;
+
+		ResolveMotionParams( body.Category, body.LastValidSample.Material, def, out _, out float bounce, out _, out _, out _ );
+		float edgeDeflect = bounce * Mathf.Max( 0.1f, def.softEdgeDeflectScale );
+		Vector2 approach = new Vector2( body.Velocity.x, body.Velocity.z );
+		if ( approach.sqrMagnitude > 0.0001f )
+		{
+			float approachSpeed = approach.magnitude;
+			approach.Normalize();
+			body.Velocity.x = -approach.x * approachSpeed * edgeDeflect;
+			body.Velocity.z = -approach.y * approachSpeed * edgeDeflect;
+		}
+		else
+		{
+			body.Velocity *= edgeDeflect;
+		}
+
+		pos = body.LastValidPosition;
+		pos.y = t.position.y;
+		sample = body.LastValidSample;
+		t.position = pos;
+		item.SyncRigidbodyToTransform();
+		return true;
 	}
 
 	static bool TryAcceptStep(
@@ -1059,10 +1142,14 @@ public sealed class TreasureSurfaceSimulator
 		{
 			dest = _world.Definition.worldOrigin;
 			dest.y = _world.Definition.baseHeight;
+			body.HasLastValidPosition = false;
 		}
 		else
 		{
 			dest.y = sample.Height + TreasureSurfaceSeat.GetStableContactLift( item );
+			body.HasLastValidPosition = true;
+			body.LastValidPosition = dest;
+			body.LastValidSample = sample;
 		}
 
 		item.transform.SetPositionAndRotation( dest, Quaternion.identity );

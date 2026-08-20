@@ -63,8 +63,8 @@ Material:
     - _BumpScale: 1
     - _BurialAmount: 0.4
     - _CellJitter: 1
-    - _CoinDensity: 30
-    - _CoinDiameter: 0.3
+    - _CoinDensity: 40
+    - _CoinDiameter: 0.25
     - _CoinNormalStrength: 0.5
     - _CoinTilt: 0.5
     - _CoinUVScale: 1.35
@@ -100,7 +100,7 @@ Material:
     - _EdgeWidth: 0.12
     - _FresnelIntensity: 0.25
     - _FresnelPower: 4
-    - _GapMetallic: 0
+    - _GapMetallic: 0.7
     - _GapSmoothness: 0.35
     - _GroundLevelHeight: 0.01
     - _HueVariation: 0

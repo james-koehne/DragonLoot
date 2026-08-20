@@ -379,6 +379,18 @@ public class TreasureItem : MonoBehaviour
 		bool snapToSeat,
 		bool fromRest )
 	{
+		TreasureSurfaceWorld world = TreasureSurfaceWorld.EnsureExists();
+		if ( world.TryGetChunkCoord( worldPosition, out TreasureChunkCoord coord ) )
+			world.EnsureChunkLoaded( coord );
+
+		Vector3 entryPos = worldPosition;
+		TreasureSurfaceSample entrySample = default;
+		if ( !world.TryResolveTraversableEntry( worldPosition, out Vector3 resolved, out entrySample ) )
+			return;
+
+		entryPos.x = resolved.x;
+		entryPos.z = resolved.z;
+
 		_inFlight = false;
 		LeavePreviousOwner();
 		TreasureProximitySleep.Unregister( this );
@@ -389,7 +401,7 @@ public class TreasureItem : MonoBehaviour
 		_reclaiming = false;
 		_distanceForcedSleep = false;
 		transform.SetParent( null, true );
-		transform.SetPositionAndRotation( worldPosition, worldRotation );
+		transform.SetPositionAndRotation( entryPos, worldRotation );
 		ApplyCollectableLayer();
 		ApplyWorldScale();
 		ClearRigidbodyConstraints();
@@ -400,19 +412,13 @@ public class TreasureItem : MonoBehaviour
 
 		LooseTreasureManager.Register( this );
 
-		TreasureSurfaceWorld world = TreasureSurfaceWorld.EnsureExists();
-		if ( world.TryGetChunkCoord( worldPosition, out TreasureChunkCoord coord ) )
-			world.EnsureChunkLoaded( coord );
-
-		if ( snapToSeat
-			&& world.Sampler != null
-			&& world.Sampler.TrySample( worldPosition, out TreasureSurfaceSample sample ) )
+		if ( snapToSeat && entrySample.Valid )
 		{
 			// Stable lift for gems/artifacts so throw land → sim seat → settle use the same Y.
 			bool useStableSeat = definition != null && definition.category != TreasureCategory.Coin;
 			float contactY = useStableSeat
-				? sample.Height + TreasureSurfaceSeat.GetStableContactLift( this )
-				: TreasureSurfaceSeat.GetContactY( this, sample, worldRotation );
+				? entrySample.Height + TreasureSurfaceSeat.GetStableContactLift( this )
+				: TreasureSurfaceSeat.GetContactY( this, entrySample, worldRotation );
 			float seatTolerance = 0.12f;
 			if ( definition != null )
 			{
@@ -421,10 +427,10 @@ public class TreasureItem : MonoBehaviour
 					TreasureStackSpacing.GetStep( definition ) + 0.06f );
 			}
 
-			float lift = Mathf.Max( 0f, contactY - sample.Height );
-			if ( worldPosition.y <= contactY + seatTolerance + lift * 0.25f )
+			float lift = Mathf.Max( 0f, contactY - entrySample.Height );
+			if ( entryPos.y <= contactY + seatTolerance + lift * 0.25f )
 			{
-				Vector3 seated = worldPosition;
+				Vector3 seated = entryPos;
 				seated.y = contactY;
 				transform.position = seated;
 				SyncRigidbodyToTransform();

@@ -218,6 +218,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	List<int>[] _drawnCellLists;
 	List<int>[] _chunkDrawnSlots;
 	Dictionary<TreasureDefinition, int> _remaining;
+	float[] _columnCoinReserve;
 	Dictionary<TreasureDefinition, int> _batchKeyByDef;
 	int[] _visibleCountByEntry;
 	List<int> _eligibleScratch;
@@ -337,6 +338,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_drawCacheDirty = true;
 		_pendingCoinWorldReleases.Clear();
 		_coinReleasePassRunning = false;
+		_columnCoinReserve = null;
 		ReleaseVisualHandles();
 		_streamer.Clear();
 		_chunkGrid.Release();
@@ -393,6 +395,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( !IsBindTargetAlive( bindId ) )
 			return;
 
+		RebuildColumnCoinReserves();
 		_ready = _slots != null;
 
 
@@ -612,10 +615,12 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_hasLastDig = true;
 
 		LastPhysicalSpawnCount = 0;
+		int columnSpill = SpawnColumnInventorySpillNear( local, radius );
+		LastPhysicalSpawnCount = columnSpill;
 		if ( streamSettings != null && streamSettings.spawnPhysicalCoinsOnDig )
 		{
 			System.Diagnostics.Stopwatch physSw = GoldPileEditTiming.StartWatchIfEnabled();
-			LastPhysicalSpawnCount = SpawnPhysicalCoinsForDig( worldCenter, carveUnits );
+			LastPhysicalSpawnCount += SpawnPhysicalCoinsForDig( worldCenter, carveUnits );
 			if ( physSw != null )
 			{
 				physSw.Stop();
@@ -628,10 +633,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		// Coins/gems keep world pose; unsupported coins past release threshold pop to physics.
 		int released = 0;
-		if ( streamSettings == null || streamSettings.releaseEmbeddedSeatsOnDig )
+		bool queueCoinReleases = streamSettings == null
+			|| streamSettings.releaseEmbeddedSeatsOnDig
+			|| UseSurfaceDecorSeats();
+		if ( queueCoinReleases )
 			released = QueueUnsupportedCoinReleasesNear( local, radius );
 
-		bool needFullRebuild = released > 0;
+		bool needFullRebuild = released > 0 || columnSpill > 0;
 		int scanned = 0;
 
 		if ( UseSurfaceDecorSeats() )
@@ -739,7 +747,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		float radiusSq = radius * radius;
 		int queued = 0;
-		const int maxQueue = 48;
+		const int maxQueue = 128;
 
 		for ( int i = 0; i < _slotCount && queued < maxQueue; i++ )
 		{
@@ -747,8 +755,6 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			if ( slot.Taken || slot.Definition == null )
 				continue;
 			if ( slot.Definition.category != TreasureCategory.Coin )
-				continue;
-			if ( slot.CoinVisual )
 				continue;
 
 			float dx = slot.LocalPos.x - localCenter.x;
@@ -773,13 +779,221 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	{
 		if ( _heightfield == null )
 			return false;
+
+		// Mode B decor + near-ground columns: inventory spill owns release (see SpawnColumnInventorySpillNear).
 		if ( slot.CoinVisual )
 			return false;
+
 		if ( streamSettings != null && !streamSettings.releaseEmbeddedSeatsOnDig )
+			return false;
+
+		float margin = ColumnSpillMargin( slot );
+		if ( _heightfield.IsColumnNearLootGround( slot.LocalPos.x, slot.LocalPos.z, margin ) )
 			return false;
 
 		// Pivot left the mound volume (or column gone) — same oracle as placement, inverted.
 		return !GoldPileTreasurePlacement.IsCoinPivotInside( _heightfield, slot.LocalPos );
+	}
+
+	static float ColumnSpillMargin( Slot slot )
+	{
+		return Mathf.Max( 0.02f, slot.ProbeRadius * 0.35f );
+	}
+
+	void RebuildColumnCoinReserves()
+	{
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+		{
+			_columnCoinReserve = null;
+			return;
+		}
+
+		int cellCount = _heightfield.Resolution * _heightfield.Resolution;
+		if ( _columnCoinReserve == null || _columnCoinReserve.Length != cellCount )
+			_columnCoinReserve = new float[ cellCount ];
+
+		float sum = _heightfield.SumHeights();
+		int total = CountRemainingCoinInventory();
+		if ( sum < 0.0001f || total <= 0 )
+		{
+			for ( int i = 0; i < cellCount; i++ )
+				_columnCoinReserve[ i ] = 0f;
+			return;
+		}
+
+		int res = _heightfield.Resolution;
+		for ( int z = 0; z < res; z++ )
+		{
+			for ( int x = 0; x < res; x++ )
+			{
+				int idx = _heightfield.CellIndex( x, z );
+				float h = _heightfield.GetCellNormalizedHeight( x, z );
+				_columnCoinReserve[ idx ] = h / sum * total;
+			}
+		}
+	}
+
+	void ConsumeColumnReserveAtLocal( float localX, float localZ, int units )
+	{
+		if ( _columnCoinReserve == null || units <= 0 || _heightfield == null )
+			return;
+		if ( !_heightfield.TryLocalToCell( localX, localZ, out int cellX, out int cellZ ) )
+			return;
+
+		int idx = _heightfield.CellIndex( cellX, cellZ );
+		if ( idx < 0 || idx >= _columnCoinReserve.Length )
+			return;
+
+		_columnCoinReserve[ idx ] = Mathf.Max( 0f, _columnCoinReserve[ idx ] - units );
+	}
+
+	/// <summary>
+	/// Spawns physical coins from pile inventory when a column cannot hold its reserved share
+	/// (volume capacity drops as height is carved, or the column reaches the loot floor).
+	/// </summary>
+	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius )
+	{
+		if ( _heightfield == null || _pileRoot == null || _remaining == null || _columnCoinReserve == null )
+			return 0;
+
+		int remaining = CountRemainingCoinInventory();
+		if ( remaining <= 0 )
+			return 0;
+
+		float volPerCoin = _heightfield.VolumePerCoin( remaining );
+		if ( volPerCoin <= 1e-6f )
+			return 0;
+
+		int spawned = 0;
+		const int maxSpawn = 128;
+		float radiusSq = radius * radius;
+		float half = _heightfield.WorldSize * 0.5f;
+		float cell = _heightfield.LocalCellSize;
+		int res = _heightfield.Resolution;
+		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - radius + half ) / cell ), 0, res - 1 );
+		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + radius + half ) / cell ), 0, res - 1 );
+		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - radius + half ) / cell ), 0, res - 1 );
+		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + radius + half ) / cell ), 0, res - 1 );
+
+		for ( int z = minZ; z <= maxZ && spawned < maxSpawn; z++ )
+		{
+			for ( int x = minX; x <= maxX && spawned < maxSpawn; x++ )
+			{
+				_heightfield.CellCenterLocal( x, z, out float lx, out float lz );
+				float dx = lx - localCenter.x;
+				float dz = lz - localCenter.z;
+				if ( dx * dx + dz * dz > radiusSq )
+					continue;
+
+				int idx = _heightfield.CellIndex( x, z );
+				if ( idx < 0 || idx >= _columnCoinReserve.Length )
+					continue;
+
+				float reserved = _columnCoinReserve[ idx ];
+				if ( reserved < 0.5f )
+					continue;
+
+				float h = _heightfield.GetCellNormalizedHeight( x, z );
+				bool nearGround = _heightfield.IsColumnNearLootGround( lx, lz, 0.02f );
+				float capacity = nearGround ? 0f : h / volPerCoin;
+				int toSpill = nearGround
+					? Mathf.FloorToInt( reserved )
+					: Mathf.Max( 0, Mathf.FloorToInt( reserved - capacity ) );
+				if ( toSpill <= 0 )
+					continue;
+
+				toSpill = Mathf.Min( toSpill, maxSpawn - spawned, CountRemainingCoinInventory() );
+				for ( int i = 0; i < toSpill; i++ )
+				{
+					if ( !TrySpawnColumnSpillCoin( lx, lz, idx, out _ ) )
+						break;
+
+					spawned++;
+				}
+			}
+		}
+
+		return spawned;
+	}
+
+	bool TrySpawnColumnSpillCoin( float localX, float localZ, int cellIndex, out TreasureDefinition definition )
+	{
+		definition = null;
+		if ( _remaining == null || _columnCoinReserve == null || _pileRoot == null || _heightfield == null )
+			return false;
+		if ( cellIndex < 0 || cellIndex >= _columnCoinReserve.Length )
+			return false;
+		if ( _columnCoinReserve[ cellIndex ] < 0.5f )
+			return false;
+
+		int serial = ++_digPhysicalSerial;
+		if ( !TryPickAuthoredMixCoinDef( serial, out definition ) || definition == null )
+			return false;
+		if ( !_remaining.TryGetValue( definition, out int left ) || left <= 0 )
+			return false;
+
+		_remaining[ definition ] = left - 1;
+		_columnCoinReserve[ cellIndex ] = Mathf.Max( 0f, _columnCoinReserve[ cellIndex ] - 1f );
+		MarkNearestUntakenCoinSlotTaken( localX, localZ );
+
+		float angle = GoldPileTreasurePlacement.Hash01( _pileLootSeed, serial * 5 ) * Mathf.PI * 2f;
+		float dist = GoldPileTreasurePlacement.HashRange( _pileLootSeed, serial * 5 + 1, 0.02f, 0.12f );
+		Vector3 local = new Vector3(
+			localX + Mathf.Cos( angle ) * dist,
+			_heightfield.LootGroundLevel,
+			localZ + Mathf.Sin( angle ) * dist );
+		if ( _heightfield.ExistsAtLocal( local.x, local.z ) )
+		{
+			float surface = _heightfield.SampleSurfaceHeight( local.x, local.z );
+			local.y = Mathf.Max( _heightfield.LootGroundLevel, surface ) + definition.worldScale.x * 0.05f;
+		}
+
+		Vector3 spawnPos = _pileRoot.TransformPoint( local );
+		Quaternion spawnRot = _pileRoot.rotation * GoldPileTreasurePlacement.HashRotation( _pileLootSeed, serial );
+		_ = SpawnPhysicalCoinAsync( definition, spawnPos, spawnRot );
+		return true;
+	}
+
+	void MarkNearestUntakenCoinSlotTaken( float localX, float localZ )
+	{
+		if ( _slots == null )
+			return;
+
+		int best = -1;
+		float bestSq = float.MaxValue;
+		for ( int i = 0; i < _slotCount; i++ )
+		{
+			Slot slot = _slots[ i ];
+			if ( slot.Taken || slot.Definition == null || slot.Definition.category != TreasureCategory.Coin )
+				continue;
+
+			float dx = slot.LocalPos.x - localX;
+			float dz = slot.LocalPos.z - localZ;
+			float sq = dx * dx + dz * dz;
+			if ( sq >= bestSq )
+				continue;
+
+			bestSq = sq;
+			best = i;
+		}
+
+		if ( best < 0 )
+			return;
+
+		Slot taken = _slots[ best ];
+		if ( taken.Drawn )
+		{
+			UnmarkDrawn( best );
+			MarkStreamDrawCacheDirty();
+		}
+
+		RemoveFromCell( best );
+		ReleaseCoinSeat( taken.LocalPos );
+		taken.Taken = true;
+		taken.Drawn = false;
+		taken.MatrixIndex = -1;
+		taken.StreamRankInChunk = -1;
+		_slots[ best ] = taken;
 	}
 
 	void FlushPendingCoinWorldReleases()
@@ -917,6 +1131,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			Vector3 local = _pileRoot.InverseTransformPoint( worldCenter );
 			local.x += Mathf.Cos( angle ) * dist;
 			local.z += Mathf.Sin( angle ) * dist;
+			ConsumeColumnReserveAtLocal( local.x, local.z, 1 );
 			if ( _heightfield != null && _heightfield.ExistsAtLocal( local.x, local.z ) )
 			{
 				float surface = _heightfield.SampleNormalized( local.x, local.z ) * _heightfield.MaxHeight;
@@ -1057,6 +1272,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		_pickPrioritySlots.Remove( slotIndex );
 		_remaining[ slot.Definition ] = left - 1;
+		ConsumeColumnReserveAtLocal( slot.LocalPos.x, slot.LocalPos.z, 1 );
 		bool wasDrawn = slot.Drawn;
 
 		slot.Taken = true;
@@ -1099,6 +1315,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			if ( !_remaining.TryGetValue( definition, out int left ) || left <= 0 )
 				return false;
 			_remaining[ definition ] = left - 1;
+			Vector3 local = _pileRoot != null ? _pileRoot.InverseTransformPoint( preferredWorldPos ) : Vector3.zero;
+			ConsumeColumnReserveAtLocal( local.x, local.z, 1 );
 			// Densify runs once after CarveForUnitsTaken → RefreshAfterCarve (possibly deferred).
 			ResolveConsumePose( preferredWorldPos, out worldPos, out worldRot );
 			return true;
@@ -1130,6 +1348,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		RememberDigWorld( preferredWorldPos );
+		Vector3 consumeLocal = _pileRoot != null ? _pileRoot.InverseTransformPoint( preferredWorldPos ) : Vector3.zero;
 
 		int taken = 0;
 		while ( taken < count )
@@ -1143,6 +1362,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					break;
 
 				_remaining[ def ] = left - 1;
+				ConsumeColumnReserveAtLocal( consumeLocal.x, consumeLocal.z, 1 );
 				if ( consumedDefs != null )
 					consumedDefs.Add( def );
 				taken++;
@@ -1310,6 +1530,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			_remaining[ definition ]++;
 		else
 			_remaining[ definition ] = 1;
+
+		if ( UsesGpuInstances( definition ) )
+			RebuildColumnCoinReserves();
 	}
 
 	public static bool UsesGpuInstances( TreasureDefinition definition )
@@ -1407,6 +1630,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			_remaining[ definition ]++;
 		else
 			_remaining[ definition ] = 1;
+
+		if ( UsesGpuInstances( definition ) )
+			RebuildColumnCoinReserves();
 
 		Vector3 localPreferred = _pileRoot.InverseTransformPoint( preferredWorldPos );
 		float spacingSq = _placementMinSpacing * _placementMinSpacing;
@@ -4380,6 +4606,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			if ( slot.Taken || !slot.CoinVisual || slot.Definition == null )
 				return;
 
+			if ( ShouldReleaseCoinSeat( slot ) )
+				return;
+
 			if ( !_heightfield.ExistsAtLocal( slot.LocalPos.x, slot.LocalPos.z ) )
 			{
 				if ( slot.Drawn )
@@ -4467,6 +4696,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		{
 			Slot slot = _slots[ slotIndex ];
 			if ( slot.Taken || !slot.CoinVisual || slot.Drawn )
+				return;
+
+			if ( ShouldReleaseCoinSeat( slot ) )
 				return;
 
 			if ( !IsEligible( slot ) )
@@ -5992,6 +6224,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		{
 			if ( slot.CoinVisual )
 			{
+				if ( ShouldReleaseCoinSeat( slot ) )
+					return false;
+
 				float currentSurface = _heightfield.SampleNormalized( slot.LocalPos.x, slot.LocalPos.z )
 					* _heightfield.MaxHeight;
 				if ( currentSurface < _heightfield.GroundLevel )

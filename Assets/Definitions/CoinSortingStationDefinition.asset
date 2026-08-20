@@ -17,18 +17,34 @@ MonoBehaviour:
   level4HopperCapacity: 1000
   baseCoinsPerSecond: 4
   level3CoinsPerSecond: 10
-  crankHoldGrace: 1
+  crankHoldGrace: 0.2
+  crankToSortMultiplier: 2
+  maxReserveSeconds: 8
+  crankChargeSpinDegreesPerSecond: 360
+  crankDischargeSpinDegreesPerSecond: 140
+  crankClickDegrees: 90
+  gaugeEmptyColor: {r: 0.92, g: 0.12, b: 0.1, a: 1}
+  gaugeMidColor: {r: 1, g: 0.55, b: 0.08, a: 1}
+  gaugeFullColor: {r: 0.18, g: 0.92, b: 0.28, a: 1}
+  gaugeEmptyWarningNormalized: 0.15
   crankLoopClips:
-  - {fileID: 8300000, guid: aee1a18694c8ca446bf97f2b59b15628, type: 3}
-  - {fileID: 8300000, guid: ed50aad8c656ef6498801d925258a525, type: 3}
-  crankVolume: 0.5
-  crankPitchMin: 0.9
-  crankPitchMax: 1.1
-  crankPlayInterval: 1
+  - {fileID: 8300000, guid: 7fb515207cd60a14d9e09fd130384510, type: 3}
+  crankVolume: 0.8
+  crankPitchMin: 0.85
+  crankPitchMax: 1.25
+  crankPlayInterval: 0.05
   crankOverlapFadeSeconds: 0.12
   crankStopFadeSeconds: 0.15
+  sortLoopClips:
+  - {fileID: 8300000, guid: aee1a18694c8ca446bf97f2b59b15628, type: 3}
+  - {fileID: 8300000, guid: ed50aad8c656ef6498801d925258a525, type: 3}
+  sortVolume: 0.5
+  sortPitchMin: 0.95
+  sortPitchMax: 1.05
+  sortPlayInterval: 1
   fullStackLateralOffset: 0.35
   sortedCoinFlightDuration: 0.28
+  sortedCoinFlightArcHeight: 0.35
   repositionEnabled: 0
   moveHoldSeconds: 0.5
   carryDistance: 3

@@ -39,6 +39,7 @@ public class GameController : MonoBehaviour
 		await LoadLevelAdditive();
 		if ( TreasureSurfaceWorld.Instance != null )
 			TreasureSurfaceWorld.Instance.RebindAuthoring();
+		TreasureSurfaceBlocker.RefreshAll();
 		ApplyEnvironmentLighting();
 		PlacePlayerAtSpawn();
 		BindTreasureCounters();
@@ -66,7 +67,8 @@ public class GameController : MonoBehaviour
 	{
 		TreasureCounterManager.EnsureExists();
 		TreasureSurfaceWorld.EnsureExists();
-		QuestSystem.EnsureExists();
+		if ( QuestSystem.Enabled )
+			QuestSystem.EnsureExists();
 		MusicAmbienceSystem.EnsureExists();
 	}
 

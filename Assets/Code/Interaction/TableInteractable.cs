@@ -153,7 +153,11 @@ public class TableInteractable : InteractableBase, ITreasureOwner, ITreasurePlac
 		if ( interaction != null )
 		{
 			query.InteractRange = interaction.PlacementAimRange;
-			if ( interaction.TryGetLastHit( out RaycastHit hit ) )
+			RaycastHit hit;
+			if ( !interaction.TryGetPlacementAimHit( out hit ) )
+				interaction.TryGetLastHit( out hit );
+
+			if ( hit.collider != null )
 			{
 				query.Hit = hit;
 				query.HasHit = true;

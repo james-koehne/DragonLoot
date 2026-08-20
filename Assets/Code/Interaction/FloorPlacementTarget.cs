@@ -38,7 +38,7 @@ public sealed class FloorPlacementTarget : ITreasurePlacementTarget
 		if ( !query.HasHit )
 			return false;
 
-		if ( !PlacementFloorSurface.IsWalkableFloorHit( in query.Hit ) )
+		if ( !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
 			return false;
 
 		if ( item.Definition != null && item.Definition.category == TreasureCategory.Artifact )
@@ -67,7 +67,7 @@ public sealed class FloorPlacementTarget : ITreasurePlacementTarget
 		Vector3 scale = item.GetWorldScale();
 
 		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
-		bool surfaceOk = carry != null && carry.Count > 0 && PlacementFloorSurface.IsWalkableFloorHit( in query.Hit );
+		bool surfaceOk = carry != null && carry.Count > 0 && PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit );
 
 		// Coins use a full item-mesh ghost on open floor (join nearby stacks via PlayerPlacement).
 		if ( GroundCoinStack.IsGroundStackableCoin( item ) )

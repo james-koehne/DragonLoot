@@ -376,6 +376,82 @@ public class TreasureSurfaceWorld : MonoBehaviour
 		}
 	}
 
+	public void ForEachCellInBounds( Bounds worldBounds, CellVisitor visitor )
+	{
+		if ( visitor == null || definition == null )
+			return;
+
+		float halfX = definition.worldSizeX * 0.5f;
+		float halfZ = definition.worldSizeZ * 0.5f;
+		float cell = definition.CellSize;
+		float minX = worldBounds.min.x;
+		float maxX = worldBounds.max.x;
+		float minZ = worldBounds.min.z;
+		float maxZ = worldBounds.max.z;
+		if ( minX > maxX || minZ > maxZ )
+			return;
+
+		float minLocalX = minX - definition.worldOrigin.x + halfX;
+		float maxLocalX = maxX - definition.worldOrigin.x + halfX;
+		float minLocalZ = minZ - definition.worldOrigin.z + halfZ;
+		float maxLocalZ = maxZ - definition.worldOrigin.z + halfZ;
+
+		int minChunkX = Mathf.Clamp( Mathf.FloorToInt( minLocalX / definition.chunkSize ), 0, definition.ChunkCountX - 1 );
+		int maxChunkX = Mathf.Clamp( Mathf.FloorToInt( maxLocalX / definition.chunkSize ), 0, definition.ChunkCountX - 1 );
+		int minChunkZ = Mathf.Clamp( Mathf.FloorToInt( minLocalZ / definition.chunkSize ), 0, definition.ChunkCountZ - 1 );
+		int maxChunkZ = Mathf.Clamp( Mathf.FloorToInt( maxLocalZ / definition.chunkSize ), 0, definition.ChunkCountZ - 1 );
+
+		for ( int cz = minChunkZ; cz <= maxChunkZ; cz++ )
+		{
+			for ( int cx = minChunkX; cx <= maxChunkX; cx++ )
+			{
+				TreasureChunkCoord coord = new TreasureChunkCoord( cx, cz );
+				TreasureChunk chunk = EnsureChunkLoaded( coord );
+				float chunkOriginX = cx * definition.chunkSize;
+				float chunkOriginZ = cz * definition.chunkSize;
+				float chunkWorldMinX = definition.worldOrigin.x - halfX + chunkOriginX;
+				float chunkWorldMinZ = definition.worldOrigin.z - halfZ + chunkOriginZ;
+				int res = chunk.Resolution;
+
+				int cellMinX = Mathf.Clamp(
+					Mathf.FloorToInt( ( minX - chunkWorldMinX ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int cellMaxX = Mathf.Clamp(
+					Mathf.CeilToInt( ( maxX - chunkWorldMinX ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int cellMinZ = Mathf.Clamp(
+					Mathf.FloorToInt( ( minZ - chunkWorldMinZ ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int cellMaxZ = Mathf.Clamp(
+					Mathf.CeilToInt( ( maxZ - chunkWorldMinZ ) / cell - 0.5f ),
+					0,
+					res - 1 );
+
+				if ( cellMinX > cellMaxX || cellMinZ > cellMaxZ )
+					continue;
+
+				for ( int z = cellMinZ; z <= cellMaxZ; z++ )
+				{
+					float wz = chunkWorldMinZ + ( z + 0.5f ) * cell;
+					if ( wz < minZ || wz > maxZ )
+						continue;
+
+					for ( int x = cellMinX; x <= cellMaxX; x++ )
+					{
+						float wx = chunkWorldMinX + ( x + 0.5f ) * cell;
+						if ( wx < minX || wx > maxX )
+							continue;
+
+						visitor( chunk, x, z, wx, wz, 0f, 0f );
+					}
+				}
+			}
+		}
+	}
+
 	public void MarkChunksDirtyInRadius( Vector3 worldCenter, float radius )
 	{
 		ForEachCellInRadius( worldCenter, radius, ( chunk, x, z, wx, wz, distSq, radiusSq ) =>
@@ -386,6 +462,19 @@ public class TreasureSurfaceWorld : MonoBehaviour
 	}
 
 	void RebuildDirtyChunks()
+	{
+		RebuildDirtyChunksInternal( budget: Mathf.Max( 1, definition.maxDirtyChunksPerFrame ) );
+	}
+
+	public void RebuildDirtyChunksImmediate()
+	{
+		if ( definition == null )
+			return;
+
+		RebuildDirtyChunksInternal( budget: int.MaxValue );
+	}
+
+	void RebuildDirtyChunksInternal( int budget )
 	{
 		_dirtyList.Clear();
 		int active = 0;
@@ -410,7 +499,6 @@ public class TreasureSurfaceWorld : MonoBehaviour
 		SleepingChunkCount = sleeping;
 		DirtyChunkCount = _dirtyList.Count;
 
-		int budget = Mathf.Max( 1, definition.maxDirtyChunksPerFrame );
 		Stopwatch sw = Stopwatch.StartNew();
 		int rebuilt = 0;
 		for ( int i = 0; i < _dirtyList.Count && rebuilt < budget; i++ )
@@ -483,7 +571,7 @@ public class TreasureSurfaceWorld : MonoBehaviour
 		for ( int i = 0; i < _loadedList.Count; i++ )
 		{
 			TreasureChunk chunk = _loadedList[ i ];
-			if ( chunk == null || !chunk.Loaded || chunk.Frozen )
+			if ( chunk == null || !chunk.Loaded || chunk.Frozen || chunk.PaintTraversable == null )
 				continue;
 
 			float chunkOriginX = chunk.Coord.X * definition.chunkSize;
@@ -494,10 +582,10 @@ public class TreasureSurfaceWorld : MonoBehaviour
 				for ( int x = 0; x < chunk.Resolution; x += 2 )
 				{
 					int idx = chunk.Index( x, z );
-					byte flags = chunk.Flags[ idx ];
-					if ( ( flags & ( byte )TreasureCellFlags.Traversable ) == 0 )
+					if ( chunk.PaintTraversable[ idx ] == 0 )
 						continue;
 
+					byte flags = chunk.Flags[ idx ];
 					if ( preferStable && ( flags & ( byte )TreasureCellFlags.Stable ) == 0 )
 						continue;
 
@@ -537,6 +625,32 @@ public class TreasureSurfaceWorld : MonoBehaviour
 		worldPos = bestPos;
 		sample = bestSample;
 		return true;
+	}
+
+	/// <summary>
+	/// Resolves a surface entry XZ to strict traversable paint, or the nearest traversable cell.
+	/// </summary>
+	public bool TryResolveTraversableEntry(
+		Vector3 desired,
+		out Vector3 resolved,
+		out TreasureSurfaceSample sample,
+		bool preferStable = true )
+	{
+		resolved = desired;
+		sample = default;
+		if ( !IsInitialized || _sampler == null )
+			return false;
+
+		if ( TryGetChunkCoord( desired, out TreasureChunkCoord coord ) )
+			EnsureChunkLoaded( coord );
+
+		if ( _sampler.TrySample( desired, out sample ) && sample.Traversable )
+			return true;
+
+		if ( TryFindNearestTraversable( desired, out resolved, out sample, preferStable ) )
+			return true;
+
+		return false;
 	}
 
 	void OnDrawGizmosSelected()

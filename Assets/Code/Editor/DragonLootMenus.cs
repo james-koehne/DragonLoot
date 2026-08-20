@@ -64,10 +64,6 @@ public static class DragonLootMenus
 	public const string ToolsMilanoteSettings = Root + "/Tools/Milanote Sync Settings";
 	public const string ToolsMilanoteTasks = Root + "/Tools/Milanote Sync Tasks";
 
-	// --- Quests ---
-	public const string QuestsInstallCatalog = Root + "/Quests/Install Catalog & Content";
-	public const string QuestsWireLevel = Root + "/Quests/Wire Level";
-
 	// --- UI ---
 	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";
 }

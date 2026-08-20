@@ -56,6 +56,26 @@ public static class PlacementFloorSurface
 	}
 
 	/// <summary>
+	/// Walkable floor on painted, traversable treasure surface.
+	/// Fails closed when the surface system is unavailable.
+	/// </summary>
+	public static bool IsValidWorldPlaceHit( in RaycastHit hit )
+	{
+		if ( !IsWalkableFloorHit( in hit ) )
+			return false;
+
+		TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+		if ( world == null || !world.IsInitialized || world.Sampler == null )
+			return false;
+
+		Vector3 point = hit.point;
+		if ( world.TryGetChunkCoord( point, out TreasureChunkCoord coord ) )
+			world.EnsureChunkLoaded( coord );
+
+		return world.Sampler.TrySample( point, out TreasureSurfaceSample sample ) && sample.Traversable;
+	}
+
+	/// <summary>
 	/// Heightfield gold piles (mound mesh + buried instanced loot), not vertical loose coin columns.
 	/// </summary>
 	public static bool IsHeightfieldPileCollider( Collider collider )

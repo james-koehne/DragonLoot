@@ -13,10 +13,14 @@ public static class QuestSceneAutoWire
 	public const string IdVolumeDoorwayGold = "volume_doorway_gold";
 	public const string IdVolumeCoinSorter = "volume_coin_sorter";
 	public const string IdCoinSorter = "coin_sorter";
+	public const string IdCoinSorterCopper = "coin_sorter_copper";
+	public const string IdCoinSorterSilver = "coin_sorter_silver";
+	public const string IdCoinSorterGold = "coin_sorter_gold";
 	public const string IdVolumeConstellation = "volume_constellation";
 	public const string IdConstellation = "constellation";
 	public const string IdMuseumTable = "museum_table";
 	public const string IdGoldBarTable = "gold_bar_table";
+	public const string IdStartingGroundTreasure = "starting_ground_treasure";
 	public const string IdVolumeHallwayEnter = "volume_hallway_enter";
 	public const string IdVolumeHallwayEnd = "volume_hallway_end";
 

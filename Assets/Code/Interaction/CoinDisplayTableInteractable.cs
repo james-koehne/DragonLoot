@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -8,10 +9,19 @@ using UnityEngine;
 /// Coins are stackable, so they pile vertically in each slot. Pickup takes from the top down.
 /// Placement ignores the aimed pile: targeting the table or any stack fills the shortest
 /// pile, searching left-to-right from the top-left (ties keep the earlier slot).
+/// Hold-F whole-stack place lands on the shortest pile, then peels excess coins from every
+/// player-placed pile on this table and flips them into shorter columns.
+/// Each display levels independently; placing on another table does not interrupt this one.
 /// Setup: collider on root, child DisplayArea, assign accepted treasure + grid settings.
 /// </summary>
 public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 {
+	struct LevelMove
+	{
+		public int FromSlot;
+		public int ToSlot;
+	}
+
 	[Header( "Start Fill" )]
 	[Tooltip( "When enabled, slots are pre-filled on play using Perlin noise amounts with optional random gaps." )]
 	[SerializeField]
@@ -36,6 +46,33 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	[SerializeField]
 	int fillSeed;
 
+	[Header( "Auto Level" )]
+	[Tooltip( "After a hold-F whole stack lands, peel excess coins off that pile into shorter columns." )]
+	[SerializeField]
+	bool autoLevelAfterWholeStackPlace = true;
+
+	[Tooltip( "Delay between starting each leveling coin flight." )]
+	[SerializeField]
+	[Min( 0f )]
+	float levelCoinStagger = 0.06f;
+
+	[Tooltip( "Pause after the incoming stack lands before redistribution begins." )]
+	[SerializeField]
+	[Min( 0f )]
+	float levelStartDelay = 0.12f;
+
+	[Tooltip( "Minimum flip arc height when a coin flies between display columns." )]
+	[SerializeField]
+	[Min( 0.05f )]
+	float levelCrossSlotArcHeight = 0.28f;
+
+	readonly List<LevelMove> _levelMoves = new List<LevelMove>( 128 );
+	readonly HashSet<int> _levelSourceSlots = new HashSet<int>();
+
+	Coroutine _levelRoutine;
+	bool _levelPending;
+	bool _levelStartDelayApplied;
+
 	public override TreasureOwnerKind OwnerKind => TreasureOwnerKind.CoinTable;
 
 	protected override TreasureCategory RequiredCategory => TreasureCategory.Coin;
@@ -47,6 +84,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	public TreasureDefinition AcceptedCoin => AcceptedTreasure;
 
 	public IReadOnlyList<TreasureItem> DisplayedCoins => DisplayedItems;
+
+	public bool IsAutoLeveling => _levelRoutine != null;
 
 	/// <summary>
 	/// Hold-F whole-stack place: every carried coin must match this table's accepted definition.
@@ -60,6 +99,25 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 			return false;
 
 		return uniform == AcceptedCoin;
+	}
+
+	/// <summary>
+	/// Append a whole carried stack into one slot, then peel excess off player-placed piles when enabled.
+	/// </summary>
+	public int TryAppendWholeStackWithAutoLevel( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
+	{
+		int added = TryAppendSlotDefinitions( slotIndex, definitions );
+		if ( added > 0 && autoLevelAfterWholeStackPlace )
+			BeginAutoLevelStacks( slotIndex );
+		return added;
+	}
+
+	protected override void OnDestroy()
+	{
+		_levelRoutine = null;
+		_levelPending = false;
+		_levelSourceSlots.Clear();
+		base.OnDestroy();
 	}
 
 	protected override void Reset()
@@ -77,6 +135,9 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		minCoinsPerSlot = Mathf.Max( 0, minCoinsPerSlot );
 		maxCoinsPerSlot = Mathf.Max( minCoinsPerSlot, maxCoinsPerSlot );
 		emptySlotChance = Mathf.Clamp01( emptySlotChance );
+		levelCoinStagger = Mathf.Max( 0f, levelCoinStagger );
+		levelStartDelay = Mathf.Max( 0f, levelStartDelay );
+		levelCrossSlotArcHeight = Mathf.Max( 0.05f, levelCrossSlotArcHeight );
 	}
 
 	void Start()
@@ -126,6 +187,240 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		if ( rng != null )
 			return (float)rng.NextDouble();
 		return UnityEngine.Random.value;
+	}
+
+	void BeginAutoLevelStacks( int placedSlot )
+	{
+		if ( !isActiveAndEnabled || Slots == null || DisplaySlotCapacity <= 0 )
+			return;
+
+		if ( placedSlot < 0 || placedSlot >= DisplaySlotCapacity )
+			return;
+
+		_levelSourceSlots.Add( placedSlot );
+
+		if ( _levelRoutine != null )
+		{
+			_levelPending = true;
+			return;
+		}
+
+		_levelStartDelayApplied = false;
+		_levelRoutine = StartCoroutine( AutoLevelStacksRoutine() );
+	}
+
+	IEnumerator AutoLevelStacksRoutine()
+	{
+		while ( true )
+		{
+			_levelPending = false;
+			BuildLevelMoves( _levelMoves, _levelSourceSlots );
+			if ( _levelMoves.Count <= 0 )
+			{
+				if ( !_levelPending )
+					break;
+				continue;
+			}
+
+			if ( !_levelStartDelayApplied && levelStartDelay > 0f )
+			{
+				yield return new WaitForSeconds( levelStartDelay );
+				_levelStartDelayApplied = true;
+			}
+
+			int moveIndex = 0;
+			while ( moveIndex < _levelMoves.Count )
+			{
+				if ( _levelPending )
+				{
+					BuildLevelMoves( _levelMoves, _levelSourceSlots );
+					moveIndex = 0;
+					_levelPending = false;
+					if ( _levelMoves.Count <= 0 )
+						break;
+					continue;
+				}
+
+				LevelMove move = _levelMoves[ moveIndex ];
+				yield return AnimateLevelMoveRoutine( move.FromSlot, move.ToSlot );
+				moveIndex++;
+
+				if ( levelCoinStagger > 0f && moveIndex < _levelMoves.Count )
+					yield return new WaitForSeconds( levelCoinStagger );
+			}
+
+			RefreshDisplayCountAndPublish();
+			TryMarkCompleteIfNeeded();
+
+			if ( !_levelPending )
+				break;
+		}
+
+		_levelSourceSlots.Clear();
+		_levelRoutine = null;
+		_levelStartDelayApplied = false;
+	}
+
+	IEnumerator AnimateLevelMoveRoutine( int fromSlot, int toSlot )
+	{
+		if ( !TryPopSlotTopItem( fromSlot, out TreasureItem coin ) || coin == null )
+			yield break;
+
+		// Cylinder-bound columns hide per-coin meshes; flight must show the moving coin.
+		coin.BeginFlight();
+		coin.SetMeshVisible( true );
+		RefreshSlotVisual( fromSlot, animate: true );
+
+		int destStackIndex = GetSlotCount( toSlot );
+		GetSlotWorldPose( toSlot, destStackIndex, coin, out Vector3 endPos, out _ );
+		float arcHeight = ResolveCrossSlotArcHeight( coin.transform.position, endPos );
+
+		yield return AnimateTreasureItemFlightToSlot(
+			coin,
+			toSlot,
+			destStackIndex,
+			requireReservedInSlot: false,
+			arcHeightOverride: arcHeight );
+
+		if ( coin == null )
+			yield break;
+
+		TryPushSlotItem( toSlot, coin );
+		GetSlotWorldPose( toSlot, destStackIndex, coin, out endPos, out Quaternion endRot );
+		coin.EnterDisplayed( this, endPos, endRot );
+		RefreshSlotVisual( toSlot, animate: true );
+		PlayTreasurePlaceFeedback( coin );
+	}
+
+	float ResolveCrossSlotArcHeight( Vector3 startPos, Vector3 endPos )
+	{
+		Vector3 flatStart = new Vector3( startPos.x, 0f, startPos.z );
+		Vector3 flatEnd = new Vector3( endPos.x, 0f, endPos.z );
+		float horizontal = Vector3.Distance( flatStart, flatEnd );
+		return Mathf.Max( levelCrossSlotArcHeight, horizontal * 0.45f );
+	}
+
+	void BuildLevelMoves( List<LevelMove> moves, HashSet<int> sourceSlots )
+	{
+		int slotCount = DisplaySlotCapacity;
+		if ( slotCount <= 0 || sourceSlots == null || sourceSlots.Count <= 0 )
+		{
+			moves.Clear();
+			return;
+		}
+
+		int[] counts = new int[ slotCount ];
+		int[] targets = new int[ slotCount ];
+		BuildLevelMovesInto( moves, slotCount, sourceSlots, counts, targets );
+	}
+
+	void BuildLevelMovesInto(
+		List<LevelMove> moves,
+		int slotCount,
+		HashSet<int> sourceSlots,
+		int[] counts,
+		int[] targets )
+	{
+		moves.Clear();
+		if ( slotCount <= 0 || sourceSlots == null || sourceSlots.Count <= 0 )
+			return;
+
+		for ( int i = 0; i < slotCount; i++ )
+			counts[ i ] = GetSlotCount( i );
+
+		int total = 0;
+		for ( int i = 0; i < slotCount; i++ )
+			total += counts[ i ];
+
+		if ( total <= 0 )
+			return;
+
+		int baseCount = total / slotCount;
+		int remainder = total % slotCount;
+		for ( int i = 0; i < slotCount; i++ )
+			targets[ i ] = baseCount + ( i < remainder ? 1 : 0 );
+
+		int maxPerSlot = MaxStackPerSlotLimit;
+		if ( maxPerSlot > 0 )
+		{
+			for ( int i = 0; i < slotCount; i++ )
+				targets[ i ] = Mathf.Min( targets[ i ], maxPerSlot );
+		}
+
+		while ( true )
+		{
+			int fromSlot = FindBestLevelSource( slotCount, sourceSlots, counts, targets );
+			if ( fromSlot < 0 )
+				break;
+
+			int toSlot = FindBestLevelDestination( slotCount, fromSlot, counts, targets, maxPerSlot );
+			if ( toSlot < 0 )
+				break;
+
+			moves.Add( new LevelMove { FromSlot = fromSlot, ToSlot = toSlot } );
+			counts[ fromSlot ]--;
+			counts[ toSlot ]++;
+		}
+	}
+
+	static int FindBestLevelSource(
+		int slotCount,
+		HashSet<int> sourceSlots,
+		int[] counts,
+		int[] targets )
+	{
+		int fromSlot = -1;
+		int bestExcess = 0;
+
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			if ( !sourceSlots.Contains( i ) )
+				continue;
+
+			int excess = counts[ i ] - targets[ i ];
+			if ( excess <= 0 )
+				continue;
+
+			if ( excess > bestExcess || ( excess == bestExcess && ( fromSlot < 0 || i < fromSlot ) ) )
+			{
+				bestExcess = excess;
+				fromSlot = i;
+			}
+		}
+
+		return fromSlot;
+	}
+
+	static int FindBestLevelDestination(
+		int slotCount,
+		int sourceSlot,
+		int[] counts,
+		int[] targets,
+		int maxPerSlot )
+	{
+		int toSlot = -1;
+		int bestDeficit = 0;
+
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			if ( i == sourceSlot )
+				continue;
+
+			if ( maxPerSlot > 0 && counts[ i ] >= maxPerSlot )
+				continue;
+
+			int delta = counts[ i ] - targets[ i ];
+			if ( delta >= 0 )
+				continue;
+
+			if ( delta < bestDeficit || ( delta == bestDeficit && ( toSlot < 0 || i < toSlot ) ) )
+			{
+				bestDeficit = delta;
+				toSlot = i;
+			}
+		}
+
+		return toSlot;
 	}
 
 	protected override Quaternion GetSlotLocalRotation()

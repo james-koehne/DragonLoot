@@ -29,9 +29,17 @@ public class QuestSystem : MonoBehaviour
 
 	static QuestSystem _instance;
 
+	public const bool Enabled = false;
+
 	const float StartingQuestDelaySeconds = 2f;
 	const float PlayerMoveInputSqrThreshold = 0.01f;
 	const float PlayerLookInputSqrThreshold = 0.04f;
+	const string StartingQuestId = "quest_starting";
+	const string ClearAndSortObjectiveId = "clear_and_sort";
+	const string CoinSortingSubquestId = "quest_coin_sorting";
+	const string ConstellationSubquestId = "quest_constellation";
+	const string MuseumSubquestId = "quest_museum";
+	const string GoldBarsSubquestId = "quest_gold_bars";
 
 	readonly QuestDialoguePlayer _dialogue = new QuestDialoguePlayer();
 	readonly HashSet<string> _enteredVolumes = new HashSet<string>();
@@ -68,10 +76,25 @@ public class QuestSystem : MonoBehaviour
 
 	public int ActiveStepIndex => _stepIndex;
 
+	enum HeldItemContext
+	{
+		None,
+		Coin,
+		Gem,
+		GoldBar,
+		Artifact
+	}
+
 	public void CollectActiveOutlineRoots( System.Action<Transform> onRoot )
 	{
 		if ( onRoot == null || _catalogComplete || _activeQuest == null )
 			return;
+
+		if ( UsesHeldItemContext() )
+		{
+			CollectContextualOutlineRoots( onRoot );
+			return;
+		}
 
 		for ( int i = 0; i < _liveObjectives.Count; i++ )
 		{
@@ -80,7 +103,7 @@ public class QuestSystem : MonoBehaviour
 				continue;
 
 			if ( !string.IsNullOrEmpty( live.Objective.markerTargetId ) )
-				TryAddOutlineRoot( live.Objective.markerTargetId, onRoot );
+				TryAddOutlineRoot( QuestCoinSorterTargets.ResolveOutlineTargetId( live.Objective.markerTargetId ), onRoot );
 
 			if ( live.Objective.conditions == null )
 				continue;
@@ -94,9 +117,252 @@ public class QuestSystem : MonoBehaviour
 					continue;
 				if ( live.ConditionMet != null && c < live.ConditionMet.Length && live.ConditionMet[ c ] )
 					continue;
-				TryAddOutlineRoot( condition.targetId, onRoot );
+				TryAddOutlineRoot( QuestCoinSorterTargets.ResolveOutlineTargetId( condition.targetId ), onRoot );
 			}
 		}
+	}
+
+	void CollectContextualOutlineRoots( System.Action<Transform> onRoot )
+	{
+		HeldItemContext context = ResolveHeldItemContext();
+		if ( context == HeldItemContext.None )
+		{
+			TryAddOutlineRoot( QuestSceneAutoWire.IdStartingDoorPile, onRoot );
+			return;
+		}
+
+		QuestDefinition subquest = ResolveContextSubquest( context );
+		if ( subquest == null || IsLinkedParentComplete( subquest ) )
+		{
+			TryAddOutlineRoot( QuestSceneAutoWire.IdStartingDoorPile, onRoot );
+			return;
+		}
+
+		CollectSubquestOutlineTargets( subquest, onRoot );
+	}
+
+	void CollectSubquestOutlineTargets( QuestDefinition subquest, System.Action<Transform> onRoot )
+	{
+		if ( subquest == null || onRoot == null )
+			return;
+
+		if ( subquest.id == CoinSortingSubquestId )
+		{
+			string sorterId = QuestCoinSorterTargets.TryResolveHeldTargetId();
+			if ( !string.IsNullOrEmpty( sorterId ) )
+			{
+				TryAddOutlineRoot( sorterId, onRoot );
+				return;
+			}
+		}
+
+		bool any = false;
+		if ( subquest.objectives != null )
+		{
+			for ( int i = 0; i < subquest.objectives.Length; i++ )
+			{
+				if ( CollectObjectiveOutlineTargets( subquest.objectives[ i ], onRoot ) )
+					any = true;
+			}
+		}
+
+		if ( subquest.events != null )
+		{
+			for ( int i = 0; i < subquest.events.Length; i++ )
+			{
+				QuestEvent questEvent = subquest.events[ i ];
+				if ( questEvent == null || questEvent.conditions == null )
+					continue;
+				for ( int c = 0; c < questEvent.conditions.Length; c++ )
+				{
+					QuestCondition condition = questEvent.conditions[ c ];
+					if ( condition == null || string.IsNullOrEmpty( condition.targetId ) )
+						continue;
+					if ( condition.type == QuestConditionType.EnterVolume )
+						continue;
+					TryAddOutlineRoot( QuestCoinSorterTargets.ResolveOutlineTargetId( condition.targetId ), onRoot );
+					any = true;
+				}
+			}
+		}
+
+		if ( any )
+			return;
+
+		string fallback = ResolveSubquestMarkerId( subquest );
+		if ( !string.IsNullOrEmpty( fallback ) )
+			TryAddOutlineRoot( QuestCoinSorterTargets.ResolveOutlineTargetId( fallback ), onRoot );
+	}
+
+	bool CollectObjectiveOutlineTargets( QuestObjective objective, System.Action<Transform> onRoot )
+	{
+		if ( objective == null )
+			return false;
+
+		bool any = false;
+		if ( !string.IsNullOrEmpty( objective.markerTargetId ) )
+		{
+			TryAddOutlineRoot( QuestCoinSorterTargets.ResolveOutlineTargetId( objective.markerTargetId ), onRoot );
+			any = true;
+		}
+
+		if ( objective.conditions != null )
+		{
+			for ( int c = 0; c < objective.conditions.Length; c++ )
+			{
+				QuestCondition condition = objective.conditions[ c ];
+				if ( condition == null || string.IsNullOrEmpty( condition.targetId ) )
+					continue;
+				if ( condition.type == QuestConditionType.EnterVolume )
+					continue;
+				TryAddOutlineRoot( QuestCoinSorterTargets.ResolveOutlineTargetId( condition.targetId ), onRoot );
+				any = true;
+			}
+		}
+
+		if ( objective.subObjectives != null )
+		{
+			for ( int i = 0; i < objective.subObjectives.Length; i++ )
+			{
+				if ( CollectObjectiveOutlineTargets( objective.subObjectives[ i ], onRoot ) )
+					any = true;
+			}
+		}
+
+		return any;
+	}
+
+	bool UsesHeldItemContext()
+	{
+		if ( _activeQuest == null || _activeQuest.id != StartingQuestId )
+			return false;
+
+		QuestObjective sequential = GetActiveSequentialObjective();
+		return sequential != null && sequential.id == ClearAndSortObjectiveId;
+	}
+
+	static HeldItemContext ResolveHeldItemContext()
+	{
+		GameMode gameMode = GameMode.Instance;
+		if ( gameMode == null )
+			return HeldItemContext.None;
+
+		PlayerController player = gameMode.Player;
+		if ( player == null )
+			return HeldItemContext.None;
+
+		PlayerCarry carry = player.Carry;
+		if ( carry == null || !carry.HasActive )
+			return HeldItemContext.None;
+
+		TreasureDefinition definition;
+		if ( !carry.TryPeekActive( out definition ) || definition == null )
+			return HeldItemContext.None;
+
+		if ( GoldBarStack.IsStackable( definition ) )
+			return HeldItemContext.GoldBar;
+		if ( definition.category == TreasureCategory.Coin )
+			return HeldItemContext.Coin;
+		if ( definition.category == TreasureCategory.Gem )
+			return HeldItemContext.Gem;
+		return HeldItemContext.Artifact;
+	}
+
+	QuestDefinition ResolveContextSubquest( HeldItemContext context )
+	{
+		switch ( context )
+		{
+			case HeldItemContext.Coin:
+				return FindSubquestById( CoinSortingSubquestId );
+			case HeldItemContext.Gem:
+				return FindSubquestById( ConstellationSubquestId );
+			case HeldItemContext.GoldBar:
+				return FindSubquestById( GoldBarsSubquestId );
+			case HeldItemContext.Artifact:
+				return FindSubquestById( MuseumSubquestId );
+			default:
+				return null;
+		}
+	}
+
+	QuestDefinition FindSubquestById( string id )
+	{
+		if ( string.IsNullOrEmpty( id ) || _activeQuest == null || _activeQuest.subquests == null )
+			return null;
+
+		for ( int i = 0; i < _activeQuest.subquests.Length; i++ )
+		{
+			QuestDefinition sub = _activeQuest.subquests[ i ];
+			if ( sub != null && sub.id == id )
+				return sub;
+		}
+
+		return null;
+	}
+
+	bool IsLinkedParentComplete( QuestDefinition subquest )
+	{
+		if ( subquest == null || string.IsNullOrEmpty( subquest.linkedParentObjectiveId ) )
+			return false;
+
+		QuestObjective sequential = GetActiveSequentialObjective();
+		if ( sequential == null || sequential.subObjectives == null )
+			return false;
+
+		for ( int i = 0; i < sequential.subObjectives.Length; i++ )
+		{
+			QuestObjective child = sequential.subObjectives[ i ];
+			if ( child == null || child.id != subquest.linkedParentObjectiveId )
+				continue;
+			LiveObjective live = FindLive( _activeQuest, child );
+			return live != null && live.Complete;
+		}
+
+		return false;
+	}
+
+	string ResolveSubquestMarkerId( QuestDefinition subquest )
+	{
+		if ( subquest == null )
+			return null;
+
+		string markerId = null;
+		if ( subquest.objectives != null )
+		{
+			for ( int i = 0; i < subquest.objectives.Length; i++ )
+			{
+				QuestObjective objective = subquest.objectives[ i ];
+				if ( objective == null || string.IsNullOrEmpty( objective.markerTargetId ) )
+					continue;
+				markerId = objective.markerTargetId;
+				break;
+			}
+		}
+
+		if ( string.IsNullOrEmpty( markerId ) && !string.IsNullOrEmpty( subquest.linkedParentObjectiveId ) )
+		{
+			QuestObjective sequential = GetActiveSequentialObjective();
+			if ( sequential != null && sequential.subObjectives != null )
+			{
+				for ( int i = 0; i < sequential.subObjectives.Length; i++ )
+				{
+					QuestObjective child = sequential.subObjectives[ i ];
+					if ( child == null || child.id != subquest.linkedParentObjectiveId )
+						continue;
+					markerId = child.markerTargetId;
+					break;
+				}
+			}
+		}
+
+		if ( subquest.id == CoinSortingSubquestId )
+		{
+			string resolved = QuestCoinSorterTargets.TryResolveHeldTargetId();
+			if ( !string.IsNullOrEmpty( resolved ) )
+				return resolved;
+		}
+
+		return QuestCoinSorterTargets.ResolveOutlineTargetId( markerId );
 	}
 
 	static void TryAddOutlineRoot( string id, System.Action<Transform> onRoot )
@@ -109,6 +375,9 @@ public class QuestSystem : MonoBehaviour
 
 	public static QuestSystem EnsureExists()
 	{
+		if ( !Enabled )
+			return _instance;
+
 		if ( _instance != null )
 			return _instance;
 
@@ -148,6 +417,9 @@ public class QuestSystem : MonoBehaviour
 
 	public void StartOrResumeCatalog()
 	{
+		if ( !Enabled )
+			return;
+
 		EnsureExists();
 		_catalog = GameInstance.GetDefinition<QuestCatalogDefinition>();
 		if ( _catalog == null || _catalog.Count <= 0 )
@@ -612,6 +884,8 @@ public class QuestSystem : MonoBehaviour
 				AddCompletedQuestId( sub.id );
 		}
 
+		PublishProgress();
+
 		QuestDialogueLine[] completeLines = _activeQuest.onCompleteDialogue;
 		int nextQuest = _questIndex + 1;
 		_advancing = true;
@@ -698,6 +972,10 @@ public class QuestSystem : MonoBehaviour
 				return AreAllCoinTablesComplete( condition );
 			case QuestConditionType.CompleteGoldBarDisplay:
 				return AreAllGoldBarTablesComplete( condition );
+			case QuestConditionType.CompleteGroundZoneGoldBars:
+				return AreGroundZoneGoldBarsComplete( condition );
+			case QuestConditionType.CompleteDoorPileCoins:
+				return AreDoorPileCoinsComplete( condition );
 			case QuestConditionType.SectionSorted:
 			{
 				TreasureCounterManager manager = TreasureCounterManager.Instance;
@@ -739,6 +1017,114 @@ public class QuestSystem : MonoBehaviour
 				return false;
 		}
 		return true;
+	}
+
+	bool AreGroundZoneGoldBarsComplete( QuestCondition condition )
+	{
+		if ( condition == null )
+			return false;
+
+		TreasureGroundCoverageZone zone = ResolveGroundCoverageZone( condition );
+		if ( zone == null )
+			return false;
+
+		int expected = zone.ExpectedGoldBarCount;
+		if ( expected <= 0 )
+			return false;
+
+		GoldBarDisplayTableInteractable table = ResolveGoldBarTable();
+		if ( table == null || table.CurrentCount < expected )
+			return false;
+
+		return zone.CountRemainingGoldBarsInZone() <= 0;
+	}
+
+	bool AreDoorPileCoinsComplete( QuestCondition condition )
+	{
+		if ( condition == null )
+			return false;
+
+		TreasurePileInteractable pile = ResolveDoorPile( condition );
+		if ( pile == null )
+			return false;
+
+		int expected = pile.ExpectedCoinCount;
+		if ( expected <= 0 )
+			return false;
+		if ( pile.CountRemainingCoinsInPile() > 0 )
+			return false;
+
+		_scratchCoinTables.Clear();
+		QuestCondition tableScope = condition;
+		if ( string.IsNullOrEmpty( tableScope.areaId ) )
+			tableScope = new QuestCondition { areaId = QuestSceneAutoWire.AreaStarting };
+		CollectCoinTables( tableScope, _scratchCoinTables );
+		if ( _scratchCoinTables.Count == 0 )
+			return false;
+
+		int onTables = 0;
+		for ( int i = 0; i < _scratchCoinTables.Count; i++ )
+		{
+			if ( _scratchCoinTables[ i ] != null )
+				onTables += _scratchCoinTables[ i ].CurrentCount;
+		}
+
+		return onTables >= expected;
+	}
+
+	static TreasurePileInteractable ResolveDoorPile( QuestCondition condition )
+	{
+		if ( condition == null || string.IsNullOrEmpty( condition.targetId ) )
+			return null;
+
+		if ( QuestTargetRegistry.TryGetTarget( condition.targetId, out QuestTarget target ) && target != null )
+		{
+			TreasurePileInteractable pile = target.GetComponentInParent<TreasurePileInteractable>();
+			if ( pile == null )
+				pile = target.GetComponentInChildren<TreasurePileInteractable>( true );
+			if ( pile != null )
+				return pile;
+		}
+
+		return null;
+	}
+
+	static TreasureGroundCoverageZone ResolveGroundCoverageZone( QuestCondition condition )
+	{
+		if ( condition == null || string.IsNullOrEmpty( condition.targetId ) )
+			return null;
+		if ( !QuestTargetRegistry.TryGetTarget( condition.targetId, out QuestTarget target ) || target == null )
+		{
+			GameObject named = GameObject.Find( "StartingAreaGroundTreasure" );
+			if ( named == null )
+				return null;
+			return named.GetComponent<TreasureGroundCoverageZone>();
+		}
+
+		TreasureGroundCoverageZone zone = target.GetComponent<TreasureGroundCoverageZone>();
+		if ( zone == null )
+			zone = target.GetComponentInParent<TreasureGroundCoverageZone>();
+		if ( zone == null )
+			zone = target.GetComponentInChildren<TreasureGroundCoverageZone>( true );
+		return zone;
+	}
+
+	GoldBarDisplayTableInteractable ResolveGoldBarTable()
+	{
+		if ( QuestTargetRegistry.TryGetTarget( QuestSceneAutoWire.IdGoldBarTable, out QuestTarget target ) && target != null )
+		{
+			GoldBarDisplayTableInteractable table = target.GetComponentInParent<GoldBarDisplayTableInteractable>();
+			if ( table == null )
+				table = target.GetComponentInChildren<GoldBarDisplayTableInteractable>( true );
+			if ( table != null )
+				return table;
+		}
+
+		_scratchGoldTables.Clear();
+		CollectGoldTables( new QuestCondition { areaId = QuestSceneAutoWire.AreaStarting }, _scratchGoldTables );
+		if ( _scratchGoldTables.Count > 0 )
+			return _scratchGoldTables[ 0 ];
+		return null;
 	}
 
 	bool AreAllArtifactTablesComplete( QuestCondition condition )
@@ -945,6 +1331,7 @@ public class QuestSystem : MonoBehaviour
 					live.NotifiedComplete = true;
 
 				TryCompleteLinkedSubquest( live );
+				TryCompleteLinkedParent( live );
 			}
 		}
 
@@ -994,6 +1381,64 @@ public class QuestSystem : MonoBehaviour
 			if ( sub.onCompleteDialogue != null && sub.onCompleteDialogue.Length > 0 )
 				_dialogue.Enqueue( sub.onCompleteDialogue );
 		}
+	}
+
+	void TryCompleteLinkedParent( LiveObjective live )
+	{
+		if ( live == null || live.Owner == null || live.Owner == _activeQuest )
+			return;
+		if ( live.Objective != null && live.Objective.optional )
+			return;
+		if ( !AreRequiredSubquestObjectivesComplete( live.Owner ) )
+			return;
+
+		string parentId = live.Owner.linkedParentObjectiveId;
+		if ( string.IsNullOrEmpty( parentId ) )
+			return;
+
+		QuestObjective sequential = GetActiveSequentialObjective();
+		if ( sequential == null || sequential.subObjectives == null )
+			return;
+
+		for ( int i = 0; i < sequential.subObjectives.Length; i++ )
+		{
+			QuestObjective child = sequential.subObjectives[ i ];
+			if ( child == null || child.id != parentId )
+				continue;
+
+			LiveObjective parentLive = FindLive( _activeQuest, child );
+			if ( parentLive == null || parentLive.Complete )
+				return;
+
+			parentLive.Complete = true;
+			parentLive.NotifiedComplete = true;
+			MarkObjectiveSavedComplete( _activeQuest.id, child.id );
+			if ( child.onCompleteDialogue != null && child.onCompleteDialogue.Length > 0 )
+				_dialogue.Enqueue( child.onCompleteDialogue );
+			TryCompleteLinkedSubquest( parentLive );
+			return;
+		}
+	}
+
+	bool AreRequiredSubquestObjectivesComplete( QuestDefinition subquest )
+	{
+		if ( subquest == null || subquest.objectives == null || subquest.objectives.Length == 0 )
+			return false;
+
+		bool anyRequired = false;
+		for ( int i = 0; i < subquest.objectives.Length; i++ )
+		{
+			QuestObjective objective = subquest.objectives[ i ];
+			if ( objective == null || objective.optional )
+				continue;
+
+			anyRequired = true;
+			LiveObjective live = FindLive( subquest, objective );
+			if ( live == null || !live.Complete )
+				return false;
+		}
+
+		return anyRequired;
 	}
 
 	void FireEvent( LiveEvent live )
@@ -1094,6 +1539,8 @@ public class QuestSystem : MonoBehaviour
 		EventBus.Subscribe<ArtifactPresentationTableCompletedEvent>( OnArtifactTableCompleted );
 		EventBus.Subscribe<CoinDisplayTableCompletedEvent>( OnCoinDisplayCompleted );
 		EventBus.Subscribe<GoldBarDisplayTableCompletedEvent>( OnGoldBarDisplayCompleted );
+		EventBus.Subscribe<GoldBarDisplayTableChangedEvent>( OnGoldBarDisplayChanged );
+		EventBus.Subscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayTableChanged );
 		EventBus.Subscribe<SectionCompletedEvent>( OnSectionCompleted );
 		EventBus.Subscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Subscribe<PouchChangedEvent>( OnPouchChanged );
@@ -1113,6 +1560,8 @@ public class QuestSystem : MonoBehaviour
 		EventBus.Unsubscribe<ArtifactPresentationTableCompletedEvent>( OnArtifactTableCompleted );
 		EventBus.Unsubscribe<CoinDisplayTableCompletedEvent>( OnCoinDisplayCompleted );
 		EventBus.Unsubscribe<GoldBarDisplayTableCompletedEvent>( OnGoldBarDisplayCompleted );
+		EventBus.Unsubscribe<GoldBarDisplayTableChangedEvent>( OnGoldBarDisplayChanged );
+		EventBus.Unsubscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayTableChanged );
 		EventBus.Unsubscribe<SectionCompletedEvent>( OnSectionCompleted );
 		EventBus.Unsubscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Unsubscribe<PouchChangedEvent>( OnPouchChanged );
@@ -1174,6 +1623,18 @@ public class QuestSystem : MonoBehaviour
 		EvaluateLiveCompletions( playCompleteDialogue: true );
 	}
 
+	void OnGoldBarDisplayChanged( GoldBarDisplayTableChangedEvent evt )
+	{
+		PollAllLive();
+		EvaluateLiveCompletions( playCompleteDialogue: true );
+	}
+
+	void OnCoinDisplayTableChanged( CoinDisplayTableChangedEvent evt )
+	{
+		PollAllLive();
+		EvaluateLiveCompletions( playCompleteDialogue: true );
+	}
+
 	void OnSectionCompleted( SectionCompletedEvent evt )
 	{
 		ApplySection( evt.SectionId );
@@ -1190,6 +1651,13 @@ public class QuestSystem : MonoBehaviour
 			return;
 
 		ApplyPickupFromCarry( evt.Carry );
+		if ( UsesHeldItemContext() )
+		{
+			SetMarker( ResolveFocusMarkerId() );
+			PublishHud();
+		}
+		PollAllLive();
+		EvaluateLiveCompletions( playCompleteDialogue: true );
 	}
 
 	void ApplyPickupFromCarry( PlayerCarry carry )
@@ -1347,7 +1815,16 @@ public class QuestSystem : MonoBehaviour
 			return false;
 
 		if ( !string.IsNullOrEmpty( condition.targetId ) )
+		{
+			if ( condition.type == QuestConditionType.UseCoinSorter &&
+			     QuestCoinSorterTargets.MatchesSorterTarget( condition, targetId ) )
+				return true;
+			if ( condition.type == QuestConditionType.UseCoinSorter &&
+			     QuestCoinSorterTargets.IsLegacyTargetId( condition.targetId ) &&
+			     MatchesCoinSorterAreaFallback( condition, source ) )
+				return true;
 			return condition.targetId == targetId;
+		}
 
 		if ( !string.IsNullOrEmpty( condition.areaId ) )
 		{
@@ -1366,12 +1843,42 @@ public class QuestSystem : MonoBehaviour
 		return true;
 	}
 
+	static bool MatchesCoinSorterAreaFallback( QuestCondition condition, Component source )
+	{
+		if ( condition == null || source == null )
+			return false;
+
+		CoinSortingStation station = source as CoinSortingStation;
+		if ( station == null )
+			station = source.GetComponent<CoinSortingStation>();
+		if ( station == null )
+			station = source.GetComponentInParent<CoinSortingStation>();
+		if ( station == null )
+			return false;
+
+		if ( !string.IsNullOrEmpty( condition.areaId ) )
+		{
+			string area = QuestTargetRegistry.ResolveAreaId( station );
+			if ( area == condition.areaId )
+				return true;
+			if ( condition.areaId == QuestSceneAutoWire.AreaStarting )
+			{
+				GameObject startingArea = GameObject.Find( "StartingArea" );
+				if ( startingArea != null && station.transform.IsChildOf( startingArea.transform ) )
+					return true;
+			}
+			return false;
+		}
+
+		return true;
+	}
+
 	static bool MatchesTreasure( QuestCondition condition, TreasureDefinition treasure )
 	{
 		if ( condition == null )
 			return true;
 		if ( treasure == null )
-			return condition.requiredTreasure == null && !condition.filterByCategory && !condition.excludeGoldBars;
+			return condition.requiredTreasure == null && !condition.filterByCategory && !condition.excludeGoldBars && !condition.requireGoldBars;
 
 		if ( condition.requiredTreasure != null && condition.requiredTreasure != treasure )
 			return false;
@@ -1379,11 +1886,16 @@ public class QuestSystem : MonoBehaviour
 			return false;
 		if ( condition.excludeGoldBars && GoldBarStack.IsStackable( treasure ) )
 			return false;
+		if ( condition.requireGoldBars && !GoldBarStack.IsStackable( treasure ) )
+			return false;
 		return true;
 	}
 
 	string ResolveFocusMarkerId()
 	{
+		if ( UsesHeldItemContext() )
+			return ResolveContextualMarkerId();
+
 		QuestObjective sequential = GetActiveSequentialObjective();
 		if ( sequential == null )
 			return null;
@@ -1404,6 +1916,23 @@ public class QuestSystem : MonoBehaviour
 		}
 
 		return sequential.markerTargetId;
+	}
+
+	string ResolveContextualMarkerId()
+	{
+		HeldItemContext context = ResolveHeldItemContext();
+		if ( context == HeldItemContext.None )
+			return QuestSceneAutoWire.IdStartingDoorPile;
+
+		QuestDefinition subquest = ResolveContextSubquest( context );
+		if ( subquest == null || IsLinkedParentComplete( subquest ) )
+			return QuestSceneAutoWire.IdStartingDoorPile;
+
+		string markerId = ResolveSubquestMarkerId( subquest );
+		if ( !string.IsNullOrEmpty( markerId ) )
+			return markerId;
+
+		return QuestSceneAutoWire.IdStartingDoorPile;
 	}
 
 	void SetMarker( string markerTargetId )
@@ -1484,11 +2013,95 @@ public class QuestSystem : MonoBehaviour
 		LiveObjective live = FindLive( owner, objective );
 		_hudRows.Add( new QuestHudRow
 		{
+			ObjectiveId = objective.id,
 			Text = objective.objectiveText,
 			Indent = indent,
 			Optional = objective.optional,
-			Complete = live != null && live.Complete
+			Complete = live != null && live.Complete,
+			ContextualFocus = IsContextualHudFocus( objective.id )
 		} );
+	}
+
+	bool IsContextualHudFocus( string objectiveId )
+	{
+		if ( string.IsNullOrEmpty( objectiveId ) )
+			return false;
+
+		string focusId = ResolveContextualHudObjectiveId();
+		return !string.IsNullOrEmpty( focusId ) && focusId == objectiveId;
+	}
+
+	string ResolveContextualHudObjectiveId()
+	{
+		if ( UsesHeldItemContext() )
+		{
+			HeldItemContext context = ResolveHeldItemContext();
+			if ( context == HeldItemContext.None )
+				return IsSequentialObjectiveIncomplete( ClearAndSortObjectiveId ) ? ClearAndSortObjectiveId : null;
+
+			QuestDefinition subquest = ResolveContextSubquest( context );
+			if ( subquest == null || IsLinkedParentComplete( subquest ) )
+				return IsSequentialObjectiveIncomplete( ClearAndSortObjectiveId ) ? ClearAndSortObjectiveId : null;
+
+			if ( !string.IsNullOrEmpty( subquest.linkedParentObjectiveId ) &&
+			     IsSequentialObjectiveIncomplete( subquest.linkedParentObjectiveId ) )
+				return subquest.linkedParentObjectiveId;
+
+			return IsSequentialObjectiveIncomplete( ClearAndSortObjectiveId ) ? ClearAndSortObjectiveId : null;
+		}
+
+		QuestObjective sequential = GetActiveSequentialObjective();
+		if ( sequential == null )
+			return null;
+
+		if ( sequential.subObjectives != null )
+		{
+			for ( int i = 0; i < sequential.subObjectives.Length; i++ )
+			{
+				QuestObjective child = sequential.subObjectives[ i ];
+				if ( child == null || child.optional )
+					continue;
+				LiveObjective live = FindLive( _activeQuest, child );
+				if ( live != null && live.Complete )
+					continue;
+				return child.id;
+			}
+		}
+
+		LiveObjective sequentialLive = FindLive( _activeQuest, sequential );
+		if ( sequentialLive != null && !sequentialLive.Complete )
+			return sequential.id;
+		return null;
+	}
+
+	bool IsSequentialObjectiveIncomplete( string objectiveId )
+	{
+		if ( string.IsNullOrEmpty( objectiveId ) || _activeQuest == null )
+			return false;
+
+		QuestObjective sequential = GetActiveSequentialObjective();
+		if ( sequential == null )
+			return false;
+
+		if ( sequential.id == objectiveId )
+		{
+			LiveObjective live = FindLive( _activeQuest, sequential );
+			return live != null && !live.Complete;
+		}
+
+		if ( sequential.subObjectives == null )
+			return false;
+
+		for ( int i = 0; i < sequential.subObjectives.Length; i++ )
+		{
+			QuestObjective child = sequential.subObjectives[ i ];
+			if ( child == null || child.id != objectiveId )
+				continue;
+			LiveObjective live = FindLive( _activeQuest, child );
+			return live != null && !live.Complete;
+		}
+
+		return false;
 	}
 
 	void AppendLinkedOptionalRows( string parentSubObjectiveId, int indent )

@@ -855,6 +855,36 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			yield break;
 
 		item.BeginFlight();
+		yield return AnimateTreasureItemFlightToSlot( item, slotIndex, stackIndex, requireReservedInSlot: true );
+
+		if ( item == null )
+			yield break;
+
+		if ( Slots[ slotIndex ].Items.Contains( item ) )
+		{
+			GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 endWorldPos, out Quaternion endWorldRot );
+			item.EnterDisplayed( this, endWorldPos, endWorldRot );
+			RefreshSlotVisual( slotIndex, animate: true );
+			PlayTreasurePlaceFeedback( item );
+		}
+
+		PlayPlaceFx();
+		TryMarkCompleteIfNeeded();
+	}
+
+	/// <summary>
+	/// Arc / flip tween for a coin already removed from its slot (leveling) or reserved in the destination slot (place).
+	/// </summary>
+	protected IEnumerator AnimateTreasureItemFlightToSlot(
+		TreasureItem item,
+		int slotIndex,
+		int stackIndex,
+		bool requireReservedInSlot,
+		float arcHeightOverride = -1f )
+	{
+		if ( item == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			yield break;
+
 		GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 endWorldPos, out Quaternion endWorldRot );
 
 		Transform t = item.transform;
@@ -865,18 +895,18 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		bool flipCoin = CoinFlipMotion.IsCoin( item );
 
 		float duration = flipCoin ? Mathf.Max( snapDuration, CoinFlipMotion.DefaultDuration ) : Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
-		float arcHeight = flipCoin ? CoinFlipMotion.DefaultArcHeight : CoinFlipMotion.DefaultItemArcHeight;
+		float arcHeight = arcHeightOverride > 0f
+			? arcHeightOverride
+			: flipCoin ? CoinFlipMotion.DefaultArcHeight : CoinFlipMotion.DefaultItemArcHeight;
 		float spins = flipCoin ? CoinFlipMotion.DefaultSpins : 0f;
 		float elapsed = 0f;
 
 		while ( elapsed < duration )
 		{
 			if ( item == null )
-			{
 				yield break;
-			}
 
-			if ( !Slots[ slotIndex ].Items.Contains( item ) )
+			if ( requireReservedInSlot && !Slots[ slotIndex ].Items.Contains( item ) )
 			{
 				item.EndFlight();
 				yield break;
@@ -907,27 +937,63 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			yield break;
 
 		item.EndFlight();
-
-		if ( Slots[ slotIndex ].Items.Contains( item ) )
-		{
-			GetSlotWorldPose( slotIndex, stackIndex, item, out endWorldPos, out endWorldRot );
-			item.EnterDisplayed( this, endWorldPos, endWorldRot );
-			RefreshSlotCylinder( slotIndex, animate: true );
-			PlayTreasurePlaceFeedback( item );
-		}
-
-		PlayPlaceFx();
-
-		if ( !_isComplete && EvaluateComplete() )
-		{
-			_isComplete = true;
-			SetCompletedVisual( true );
-			PublishCompleted();
-			PlayCompleteFx();
-		}
 	}
 
-	static void PlayTreasurePlaceFeedback( TreasureItem item )
+	protected void RefreshSlotVisual( int slotIndex, bool animate )
+	{
+		RestackSlot( slotIndex );
+		RefreshSlotCylinder( slotIndex, animate );
+	}
+
+	protected void RefreshDisplayCountAndPublish()
+	{
+		RefreshCountLabel();
+		PublishChanged();
+	}
+
+	protected void TryMarkCompleteIfNeeded()
+	{
+		if ( _isComplete || !EvaluateComplete() )
+			return;
+
+		_isComplete = true;
+		SetCompletedVisual( true );
+		PublishCompleted();
+		PlayCompleteFx();
+	}
+
+	protected bool TryPopSlotTopItem( int slotIndex, out TreasureItem item )
+	{
+		item = null;
+		if ( Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
+
+		DisplaySlot slot = Slots[ slotIndex ];
+		if ( slot.Count <= 0 )
+			return false;
+
+		int topIndex = slot.Count - 1;
+		item = slot.Items[ topIndex ];
+		slot.Items.RemoveAt( topIndex );
+		return item != null;
+	}
+
+	protected bool TryPushSlotItem( int slotIndex, TreasureItem item )
+	{
+		if ( item == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
+
+		Slots[ slotIndex ].Items.Add( item );
+		if ( !_displayedItems.Contains( item ) )
+			_displayedItems.Add( item );
+		return true;
+	}
+
+	protected int DisplaySlotCapacity => Slots != null ? Slots.Length : 0;
+
+	protected int MaxStackPerSlotLimit => maxStackPerSlot;
+
+	protected static void PlayTreasurePlaceFeedback( TreasureItem item )
 	{
 		if ( item == null )
 			return;

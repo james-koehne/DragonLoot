@@ -31,18 +31,33 @@ public class QuestTarget : MonoBehaviour
 
 	/// <summary>
 	/// Host transform for quest outlines. Scene targets are often marker children with no meshes.
+	/// Walks to the nearest ancestor with meshes, but never expands to a broad area root.
 	/// </summary>
 	public Transform ResolveOutlineRoot()
 	{
-		Transform self = transform;
-		if ( HoverOutlineTargetUtility.HasEnabledMeshRenderers( self.gameObject ) )
-			return self;
+		Transform current = transform;
+		if ( HoverOutlineTargetUtility.HasEnabledMeshRenderers( current.gameObject ) )
+			return current;
 
-		Transform parent = self.parent;
-		if ( parent != null )
-			return parent;
+		Transform parent = current.parent;
+		while ( parent != null )
+		{
+			if ( IsBroadAreaRoot( parent ) )
+				return current;
 
-		return self;
+			if ( HoverOutlineTargetUtility.HasEnabledMeshRenderers( parent.gameObject ) )
+				return parent;
+
+			current = parent;
+			parent = parent.parent;
+		}
+
+		return transform;
+	}
+
+	static bool IsBroadAreaRoot( Transform candidate )
+	{
+		return candidate != null && candidate.name == "StartingArea";
 	}
 
 	void Awake()
