@@ -4,7 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Current quest title + hierarchical objective list. Wire references on the Interface prefab.
+/// Tutorial / contextual objective list. Wire references on the Interface prefab.
+/// Driven by <see cref="TutorialHudChangedEvent"/> (idle until a tutorial publishes).
 /// </summary>
 public class QuestObjectiveUI : MonoBehaviour
 {
@@ -46,7 +47,7 @@ public class QuestObjectiveUI : MonoBehaviour
 	{
 		if ( _subscribed )
 			return;
-		EventBus.Subscribe<QuestHudChangedEvent>( OnHudChanged );
+		EventBus.Subscribe<TutorialHudChangedEvent>( OnHudChanged );
 		_subscribed = true;
 	}
 
@@ -54,20 +55,20 @@ public class QuestObjectiveUI : MonoBehaviour
 	{
 		if ( !_subscribed )
 			return;
-		EventBus.Unsubscribe<QuestHudChangedEvent>( OnHudChanged );
+		EventBus.Unsubscribe<TutorialHudChangedEvent>( OnHudChanged );
 		_subscribed = false;
 	}
 
-	void OnHudChanged( QuestHudChangedEvent evt )
+	void OnHudChanged( TutorialHudChangedEvent evt )
 	{
 		EnsureLayout();
 
-		bool show = !evt.CatalogComplete && HasRows( evt );
+		bool show = !evt.Cleared && HasRows( evt );
 		if ( group != null )
 			group.alpha = show ? 1f : 0f;
 
 		if ( title != null )
-			title.text = string.IsNullOrEmpty( evt.QuestTitle ) ? "Quest" : evt.QuestTitle;
+			title.text = string.IsNullOrEmpty( evt.Title ) ? "Tip" : evt.Title;
 		if ( objective != null )
 			objective.text = FormatRows( evt );
 
@@ -134,14 +135,14 @@ public class QuestObjectiveUI : MonoBehaviour
 		LayoutRebuilder.ForceRebuildLayoutImmediate( _panel );
 	}
 
-	static bool HasRows( QuestHudChangedEvent evt )
+	static bool HasRows( TutorialHudChangedEvent evt )
 	{
 		if ( evt.Rows != null && evt.Rows.Length > 0 )
 			return true;
 		return !string.IsNullOrEmpty( evt.ObjectiveText );
 	}
 
-	string FormatRows( QuestHudChangedEvent evt )
+	string FormatRows( TutorialHudChangedEvent evt )
 	{
 		if ( evt.Rows == null || evt.Rows.Length == 0 )
 			return evt.ObjectiveText ?? string.Empty;
@@ -150,7 +151,7 @@ public class QuestObjectiveUI : MonoBehaviour
 		StringBuilder sb = new StringBuilder();
 		for ( int i = 0; i < evt.Rows.Length; i++ )
 		{
-			QuestHudRow row = evt.Rows[ i ];
+			TutorialHudRow row = evt.Rows[ i ];
 			if ( i > 0 )
 				sb.Append( '\n' );
 			for ( int n = 0; n < row.Indent; n++ )

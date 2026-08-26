@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Top NESW compass strip with quest marker pip + distance.
+/// Top NESW compass strip with tutorial marker pip + distance.
 /// Wire references on the Interface prefab.
 /// </summary>
 public class QuestCompassUI : MonoBehaviour
@@ -76,7 +76,7 @@ public class QuestCompassUI : MonoBehaviour
 	{
 		if ( _subscribed )
 			return;
-		EventBus.Subscribe<QuestHudChangedEvent>( OnHudChanged );
+		EventBus.Subscribe<TutorialHudChangedEvent>( OnHudChanged );
 		_subscribed = true;
 	}
 
@@ -84,13 +84,13 @@ public class QuestCompassUI : MonoBehaviour
 	{
 		if ( !_subscribed )
 			return;
-		EventBus.Unsubscribe<QuestHudChangedEvent>( OnHudChanged );
+		EventBus.Unsubscribe<TutorialHudChangedEvent>( OnHudChanged );
 		_subscribed = false;
 	}
 
-	void OnHudChanged( QuestHudChangedEvent evt )
+	void OnHudChanged( TutorialHudChangedEvent evt )
 	{
-		_hasMarker = evt.HasMarker && !evt.CatalogComplete;
+		_hasMarker = evt.HasMarker && !evt.Cleared;
 		_markerWorld = evt.MarkerWorldPosition;
 		if ( group != null )
 			group.alpha = _hasMarker ? 1f : 0f;
@@ -125,7 +125,7 @@ public class QuestCompassUI : MonoBehaviour
 		Vector3 toMarker = _markerWorld - cam.position;
 		toMarker.y = 0f;
 		if ( distance != null )
-			distance.text = QuestHudDistance.Format( QuestHudDistance.HorizontalTo( _markerWorld ) );
+			distance.text = TutorialHudDistance.Format( TutorialHudDistance.HorizontalTo( _markerWorld ) );
 
 		if ( toMarker.sqrMagnitude < 0.01f )
 		{

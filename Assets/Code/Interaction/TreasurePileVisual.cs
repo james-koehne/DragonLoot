@@ -737,6 +737,15 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			_pile.OnEmptiedFromVisual();
 	}
 
+	/// <summary>
+	/// Inventory was consumed by column spill / dig-physical spawn without an extra height carve.
+	/// </summary>
+	public void NotifyInventoryChangedFromSpill()
+	{
+		if ( _pile != null )
+			_pile.OnEmptiedFromVisual();
+	}
+
 	public void OnCoinsTaken( int amount )
 	{
 		if ( amount <= 0 || _emptied || _heightfield == null || !_heightfield.IsInitialized )

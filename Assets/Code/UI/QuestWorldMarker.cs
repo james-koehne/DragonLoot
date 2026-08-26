@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Screen-space quest marker that tracks a world position.
+/// Screen-space tutorial marker that tracks a world position.
 /// Hides within <see cref="hideWithinMeters"/> and only returns after
 /// the player has stayed beyond <see cref="showBeyondMeters"/> for a dwell.
 /// Wire the marker RectTransform on the Interface prefab.
@@ -97,7 +97,7 @@ public class QuestWorldMarker : MonoBehaviour
 			return;
 		}
 
-		float dist = QuestHudDistance.HorizontalTo( _worldPos );
+		float dist = TutorialHudDistance.HorizontalTo( _worldPos );
 		if ( dist <= hideWithinMeters )
 		{
 			_proximityHidden = true;
@@ -124,14 +124,14 @@ public class QuestWorldMarker : MonoBehaviour
 		if ( distance == null )
 			return;
 
-		distance.text = QuestHudDistance.Format( QuestHudDistance.HorizontalTo( _worldPos ) );
+		distance.text = TutorialHudDistance.Format( TutorialHudDistance.HorizontalTo( _worldPos ) );
 	}
 
 	void Subscribe()
 	{
 		if ( _subscribed )
 			return;
-		EventBus.Subscribe<QuestHudChangedEvent>( OnHudChanged );
+		EventBus.Subscribe<TutorialHudChangedEvent>( OnHudChanged );
 		_subscribed = true;
 	}
 
@@ -139,13 +139,13 @@ public class QuestWorldMarker : MonoBehaviour
 	{
 		if ( !_subscribed )
 			return;
-		EventBus.Unsubscribe<QuestHudChangedEvent>( OnHudChanged );
+		EventBus.Unsubscribe<TutorialHudChangedEvent>( OnHudChanged );
 		_subscribed = false;
 	}
 
-	void OnHudChanged( QuestHudChangedEvent evt )
+	void OnHudChanged( TutorialHudChangedEvent evt )
 	{
-		_hasTarget = evt.HasMarker && !evt.CatalogComplete;
+		_hasTarget = evt.HasMarker && !evt.Cleared;
 		_worldPos = evt.MarkerWorldPosition;
 		_awayTimer = 0f;
 
@@ -155,7 +155,7 @@ public class QuestWorldMarker : MonoBehaviour
 			return;
 		}
 
-		_proximityHidden = QuestHudDistance.HorizontalTo( _worldPos ) <= hideWithinMeters;
+		_proximityHidden = TutorialHudDistance.HorizontalTo( _worldPos ) <= hideWithinMeters;
 	}
 
 	void ApplyAlpha( float alpha )

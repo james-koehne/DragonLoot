@@ -615,7 +615,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_hasLastDig = true;
 
 		LastPhysicalSpawnCount = 0;
-		int columnSpill = SpawnColumnInventorySpillNear( local, radius );
+		// Reserves must match current heights/inventory after the dig carve. Stale reserves
+		// (bind-time heights) make reserved >> capacity and dump huge column spills.
+		RebuildColumnCoinReserves();
+		int columnSpill = SpawnColumnInventorySpillNear( local, radius, carveUnits );
 		LastPhysicalSpawnCount = columnSpill;
 		if ( streamSettings != null && streamSettings.spawnPhysicalCoinsOnDig )
 		{
@@ -734,6 +737,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		GoldPileEditTiming.End();
 
 		FlushPendingCoinWorldReleases();
+
+		// Spill/dig-physical paths consume inventory without re-carving; sync pile count once.
+		if ( LastPhysicalSpawnCount > 0 && _owner != null )
+			_owner.NotifyInventoryChangedFromSpill();
 	}
 
 	/// <summary>
@@ -850,8 +857,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	/// <summary>
 	/// Spawns physical coins from pile inventory when a column cannot hold its reserved share
 	/// (volume capacity drops as height is carved, or the column reaches the loot floor).
+	/// Cap is proportional to the dig so a 1-unit take cannot dump the brush max (128).
 	/// </summary>
-	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius )
+	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius, int carveUnits = 1 )
 	{
 		if ( _heightfield == null || _pileRoot == null || _remaining == null || _columnCoinReserve == null )
 			return 0;
@@ -865,7 +873,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int spawned = 0;
-		const int maxSpawn = 128;
+		// One dig unit of volume loss should not eject more than that many column-spill coins.
+		int maxSpawn = Mathf.Min( 128, Mathf.Max( 1, carveUnits ) );
 		float radiusSq = radius * radius;
 		float half = _heightfield.WorldSize * 0.5f;
 		float cell = _heightfield.LocalCellSize;
@@ -894,11 +903,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					continue;
 
 				float h = _heightfield.GetCellNormalizedHeight( x, z );
-				bool nearGround = _heightfield.IsColumnNearLootGround( lx, lz, 0.02f );
-				float capacity = nearGround ? 0f : h / volPerCoin;
-				int toSpill = nearGround
-					? Mathf.FloorToInt( reserved )
-					: Mathf.Max( 0, Mathf.FloorToInt( reserved - capacity ) );
+				// Capacity from live height only. Forcing capacity=0 on loot-floor columns
+				// dumped each column's full reserve and cascaded with re-carve notifies.
+				float capacity = h / volPerCoin;
+				int toSpill = Mathf.Max( 0, Mathf.FloorToInt( reserved - capacity ) );
 				if ( toSpill <= 0 )
 					continue;
 
@@ -1174,8 +1182,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		else
 			item.EnterPhysics( worldPos, worldRot, velocity );
 
-		if ( _owner != null )
-			_owner.NotifyPropReleasedToWorld( worldPos, coinInventoryAlreadyConsumed: true );
+		// Inventory was already consumed by the dig/spill path. Do not re-carve —
+		// NotifyPropReleasedToWorld would densify again and cascade more spills.
 	}
 
 	public void RefreshAll()

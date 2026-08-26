@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Runtime treasure-surface fence: paints its <see cref="BoxCollider"/> XZ footprint
 /// non-traversable while blocked, and restores authored paint when unblocked.
-/// Optional quest id auto-unblocks when that quest is in the completed save list.
+/// Legacy unlockQuestId keeps previously quest-gated fences open.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent( typeof( BoxCollider ) )]
@@ -32,7 +32,6 @@ public class TreasureSurfaceBlocker : MonoBehaviour
 
 	void OnEnable()
 	{
-		EventBus.Subscribe<QuestProgressChangedEvent>( OnQuestProgress );
 		EvaluateBlockedState();
 	}
 
@@ -43,7 +42,6 @@ public class TreasureSurfaceBlocker : MonoBehaviour
 
 	void OnDisable()
 	{
-		EventBus.Unsubscribe<QuestProgressChangedEvent>( OnQuestProgress );
 		if ( _painted )
 			RestorePaint();
 		_painted = false;
@@ -77,14 +75,9 @@ public class TreasureSurfaceBlocker : MonoBehaviour
 		}
 	}
 
-	void OnQuestProgress( QuestProgressChangedEvent evt )
-	{
-		EvaluateBlockedState();
-	}
-
 	void EvaluateBlockedState()
 	{
-		bool wantBlocked = startsBlocked && !IsQuestUnlocked();
+		bool wantBlocked = startsBlocked && !IsLegacyUnlocked();
 		ApplyBlocked( wantBlocked, force: true );
 	}
 
@@ -146,19 +139,10 @@ public class TreasureSurfaceBlocker : MonoBehaviour
 		}
 	}
 
-	bool IsQuestUnlocked()
+	bool IsLegacyUnlocked()
 	{
-		if ( string.IsNullOrEmpty( unlockQuestId ) )
-			return false;
-
-		if ( !QuestSystem.Enabled )
-			return true;
-
-		ProfileSaveData save = ProfileManager.Instance != null ? ProfileManager.Instance.ProfileSaveData : null;
-		if ( save == null || save.completedQuestIds == null )
-			return false;
-
-		return save.completedQuestIds.Contains( unlockQuestId );
+		// Quest gates removed; previously quest-gated fences stay open.
+		return !string.IsNullOrEmpty( unlockQuestId );
 	}
 
 	public Bounds GetWorldBounds()

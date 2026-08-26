@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Keeps quest-objective meshes registered for a separate cyan outline while a step is active.
+/// Keeps tutorial-target meshes registered for a separate cyan outline while TutorialHud provides roots.
 /// </summary>
 public class QuestObjectiveOutline : MonoBehaviour
 {
@@ -60,8 +60,7 @@ public class QuestObjectiveOutline : MonoBehaviour
 	{
 		if ( _subscribed )
 			return;
-		EventBus.Subscribe<QuestHudChangedEvent>( OnQuestHud );
-		EventBus.Subscribe<QuestProgressChangedEvent>( OnQuestProgress );
+		EventBus.Subscribe<TutorialHudChangedEvent>( OnTutorialHud );
 		EventBus.Subscribe<PouchChangedEvent>( OnPouchChanged );
 		_subscribed = true;
 	}
@@ -70,18 +69,12 @@ public class QuestObjectiveOutline : MonoBehaviour
 	{
 		if ( !_subscribed )
 			return;
-		EventBus.Unsubscribe<QuestHudChangedEvent>( OnQuestHud );
-		EventBus.Unsubscribe<QuestProgressChangedEvent>( OnQuestProgress );
+		EventBus.Unsubscribe<TutorialHudChangedEvent>( OnTutorialHud );
 		EventBus.Unsubscribe<PouchChangedEvent>( OnPouchChanged );
 		_subscribed = false;
 	}
 
-	void OnQuestHud( QuestHudChangedEvent evt )
-	{
-		Refresh();
-	}
-
-	void OnQuestProgress( QuestProgressChangedEvent evt )
+	void OnTutorialHud( TutorialHudChangedEvent evt )
 	{
 		Refresh();
 	}
@@ -102,14 +95,13 @@ public class QuestObjectiveOutline : MonoBehaviour
 		RendererScratch.Clear();
 		SeenRoots.Clear();
 
-		QuestSystem system = QuestSystem.Instance;
-		if ( system == null || system.CatalogComplete )
+		if ( !TutorialHud.HasOutlineRoots )
 		{
 			QuestOutlineRegistrar.Clear();
 			return;
 		}
 
-		system.CollectActiveOutlineRoots( AppendRootRenderers );
+		TutorialHud.CollectOutlineRoots( AppendRootRenderers );
 
 		HoverOutlineVisualSettings settings = ResolveQuestSettings();
 		QuestOutlineRegistrar.SetTargets( RendererScratch, settings );

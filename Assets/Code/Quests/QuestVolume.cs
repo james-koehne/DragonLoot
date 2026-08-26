@@ -1,7 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Trigger volume that publishes <see cref="QuestVolumeEnteredEvent"/> when the player enters.
+/// Trigger volume that publishes <see cref="VolumeEnteredEvent"/> when the player enters.
+/// Scene volumes are authored as this component.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent( typeof( Collider ) )]
@@ -26,19 +27,19 @@ public class QuestVolume : MonoBehaviour
 
 	void OnEnable()
 	{
-		QuestTargetRegistry.Register( this );
+		EventTargetRegistry.Register( this );
 	}
 
 	void OnDisable()
 	{
-		QuestTargetRegistry.Unregister( this );
+		EventTargetRegistry.Unregister( this );
 	}
 
 	public void SetId( string value )
 	{
 		id = value;
 		if ( isActiveAndEnabled )
-			QuestTargetRegistry.Register( this );
+			EventTargetRegistry.Register( this );
 	}
 
 	public void ResetTriggered()
@@ -58,7 +59,7 @@ public class QuestVolume : MonoBehaviour
 			return;
 
 		_triggered = true;
-		EventBus.Publish( new QuestVolumeEnteredEvent
+		EventBus.Publish( new VolumeEnteredEvent
 		{
 			VolumeId = id,
 			Volume = this
@@ -73,4 +74,11 @@ public class QuestVolume : MonoBehaviour
 		PlayerController player = other.GetComponentInParent<PlayerController>();
 		return player != null;
 	}
+}
+
+/// <summary>Alias name for world-event volumes. Prefer <see cref="QuestVolume"/> in scenes.</summary>
+[DisallowMultipleComponent]
+[RequireComponent( typeof( Collider ) )]
+public class EventVolume : QuestVolume
+{
 }

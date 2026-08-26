@@ -91,7 +91,6 @@ public class DoorInteractable : InteractableBase
 
 	void OnEnable()
 	{
-		EventBus.Subscribe<QuestProgressChangedEvent>( OnQuestProgress );
 		EventBus.Subscribe<DoorUnlockedEvent>( OnDoorUnlocked );
 		RestoreFromSave();
 		EvaluateUnlockState();
@@ -100,7 +99,6 @@ public class DoorInteractable : InteractableBase
 
 	void OnDisable()
 	{
-		EventBus.Unsubscribe<QuestProgressChangedEvent>( OnQuestProgress );
 		EventBus.Unsubscribe<DoorUnlockedEvent>( OnDoorUnlocked );
 		StopActiveTransitionFeedback();
 		StopLockedFeedback();
@@ -175,11 +173,6 @@ public class DoorInteractable : InteractableBase
 				continue;
 			door.RefreshUnlockState();
 		}
-	}
-
-	void OnQuestProgress( QuestProgressChangedEvent evt )
-	{
-		EvaluateUnlockState();
 	}
 
 	void OnDoorUnlocked( DoorUnlockedEvent evt )
@@ -282,17 +275,8 @@ public class DoorInteractable : InteractableBase
 
 	bool IsQuestUnlocked()
 	{
-		if ( string.IsNullOrEmpty( unlockQuestId ) )
-			return false;
-
-		if ( !QuestSystem.Enabled )
-			return true;
-
-		ProfileSaveData save = ProfileManager.Instance != null ? ProfileManager.Instance.ProfileSaveData : null;
-		if ( save == null || save.completedQuestIds == null )
-			return false;
-
-		return save.completedQuestIds.Contains( unlockQuestId );
+		// Quest gates removed; previously quest-gated doors stay unlocked.
+		return !string.IsNullOrEmpty( unlockQuestId );
 	}
 
 	void BeginOpen()

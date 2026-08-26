@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Dragon subtitle caption driven by <see cref="QuestDialogueChangedEvent"/>.
+/// Dragon subtitle caption driven by <see cref="DragonDialogueChangedEvent"/>.
 /// Wire references on the Interface prefab.
 /// </summary>
 public class DragonDialogueUI : MonoBehaviour
@@ -38,7 +38,7 @@ public class DragonDialogueUI : MonoBehaviour
 	{
 		if ( _subscribed )
 			return;
-		EventBus.Subscribe<QuestDialogueChangedEvent>( OnDialogueChanged );
+		EventBus.Subscribe<DragonDialogueChangedEvent>( OnDialogueChanged );
 		_subscribed = true;
 	}
 
@@ -46,11 +46,11 @@ public class DragonDialogueUI : MonoBehaviour
 	{
 		if ( !_subscribed )
 			return;
-		EventBus.Unsubscribe<QuestDialogueChangedEvent>( OnDialogueChanged );
+		EventBus.Unsubscribe<DragonDialogueChangedEvent>( OnDialogueChanged );
 		_subscribed = false;
 	}
 
-	void OnDialogueChanged( QuestDialogueChangedEvent evt )
+	void OnDialogueChanged( DragonDialogueChangedEvent evt )
 	{
 		if ( !evt.Visible )
 		{

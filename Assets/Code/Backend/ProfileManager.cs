@@ -35,20 +35,8 @@ public class ProfileSaveData : IGameStats
 	/// <summary>True after the skeleton key has been claimed from its display case.</summary>
 	public bool skeletonKeyClaimed;
 
-	/// <summary>Active linear quest id (null when catalog complete or not started).</summary>
-	public string activeQuestId;
-
-	/// <summary>Sequential objective index within <see cref="activeQuestId"/>.</summary>
-	public int activeStepIndex;
-
-	/// <summary>Completed quest ids in catalog order.</summary>
-	public List<string> completedQuestIds;
-
-	/// <summary>Completed objective keys as questId/objectiveId.</summary>
-	public List<string> completedObjectiveIds;
-
-	/// <summary>Fired event keys as questId/eventId.</summary>
-	public List<string> firedEventIds;
+	/// <summary>One-shot world event ids that have already fired.</summary>
+	public List<string> firedWorldEventIds;
 
 	/// <summary>Doors unlocked via <see cref="DoorUnlockedEvent"/> (by door id).</summary>
 	public List<string> eventUnlockedDoorIds;
@@ -93,7 +81,7 @@ public class ProfileSaveData : IGameStats
 		if ( upgradeLevels == null )
 			upgradeLevels = new Dictionary<string, int>();
 
-		EnsureQuestProgress();
+		EnsureWorldEventProgress();
 		EnsureDoorProgress();
 
 		if ( float.IsNaN( masterVolume ) || float.IsInfinity( masterVolume ) )
@@ -102,16 +90,10 @@ public class ProfileSaveData : IGameStats
 			masterVolume = Mathf.Clamp01( masterVolume );
 	}
 
-	public void EnsureQuestProgress()
+	public void EnsureWorldEventProgress()
 	{
-		if ( completedQuestIds == null )
-			completedQuestIds = new List<string>();
-		if ( completedObjectiveIds == null )
-			completedObjectiveIds = new List<string>();
-		if ( firedEventIds == null )
-			firedEventIds = new List<string>();
-		if ( activeStepIndex < 0 )
-			activeStepIndex = 0;
+		if ( firedWorldEventIds == null )
+			firedWorldEventIds = new List<string>();
 
 		EnsureDoorProgress();
 	}
@@ -180,50 +162,23 @@ public class ProfileSaveData : IGameStats
 			changed = true;
 		}
 
-		if ( MergeQuestProgressFrom( other ) )
+		if ( MergeWorldEventProgressFrom( other ) )
 			changed = true;
 
 		return changed;
 	}
 
-	/// <summary>Keeps the furthest linear quest progress between two saves.</summary>
-	public bool MergeQuestProgressFrom( ProfileSaveData other )
+	/// <summary>Union fired world-event ids between two saves.</summary>
+	public bool MergeWorldEventProgressFrom( ProfileSaveData other )
 	{
 		if ( other == null )
 			return false;
 
-		EnsureQuestProgress();
-		other.EnsureQuestProgress();
+		EnsureWorldEventProgress();
+		other.EnsureWorldEventProgress();
 
-		bool changed = false;
-		if ( other.completedQuestIds != null )
-		{
-			for ( int i = 0; i < other.completedQuestIds.Count; i++ )
-			{
-				string id = other.completedQuestIds[ i ];
-				if ( string.IsNullOrEmpty( id ) )
-					continue;
-				if ( completedQuestIds.Contains( id ) )
-					continue;
-				completedQuestIds.Add( id );
-				changed = true;
-			}
-		}
-
-		changed |= MergeIdList( completedObjectiveIds, other.completedObjectiveIds );
-		changed |= MergeIdList( firedEventIds, other.firedEventIds );
-
-		int selfScore = ComputeQuestProgressScore( this );
-		int otherScore = ComputeQuestProgressScore( other );
-		if ( otherScore > selfScore )
-		{
-			activeQuestId = other.activeQuestId;
-			activeStepIndex = other.activeStepIndex;
-			changed = true;
-		}
-
+		bool changed = MergeIdList( firedWorldEventIds, other.firedWorldEventIds );
 		changed |= MergeDoorProgressFrom( other );
-
 		return changed;
 	}
 
@@ -268,15 +223,6 @@ public class ProfileSaveData : IGameStats
 		return changed;
 	}
 
-	static int ComputeQuestProgressScore( ProfileSaveData save )
-	{
-		if ( save == null )
-			return 0;
-
-		int completed = save.completedQuestIds != null ? save.completedQuestIds.Count : 0;
-		int step = Mathf.Max( 0, save.activeStepIndex );
-		return completed * 1000 + step;
-	}
 
 	static bool MergeIdList( List<string> dest, List<string> source )
 	{
