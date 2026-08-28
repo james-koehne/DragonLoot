@@ -105,6 +105,12 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 338eed198e501bc4dbf3db8bba3f4e79
+    m_Address: AreaLightingDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 33f858fcbd78876408c1b36350f373c4
     m_Address: Assets/Addressables/Treasure/Keys/GoldKeyVisual.prefab
     m_ReadOnly: 0

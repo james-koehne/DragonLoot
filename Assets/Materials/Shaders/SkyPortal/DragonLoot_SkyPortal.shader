@@ -146,9 +146,18 @@ Shader "DragonLoot/SkyPortal"
 				return sky * _SkyExposure * _SkyIntensity * _SkyTint.rgb;
 			}
 
+			// Dummy/unset _CameraDepthTexture is typically 1x1 (texel size 1). A real camera copy is ~1/width.
+			bool HasValidSceneDepthTexture()
+			{
+				return _CameraDepthTexture_TexelSize.x > 0.0 && _CameraDepthTexture_TexelSize.x < 0.5;
+			}
+
 			half ApplyDepthFade(half alpha, float3 positionWS, float4 positionCS)
 			{
 				if (_DepthFadeDistance <= 0.0001h)
+					return alpha;
+
+				if (!HasValidSceneDepthTexture())
 					return alpha;
 
 				float2 normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(positionCS);

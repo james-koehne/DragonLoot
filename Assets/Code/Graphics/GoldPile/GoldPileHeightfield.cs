@@ -352,7 +352,7 @@ public sealed class GoldPileHeightfield
 		if ( _heights == null || strength <= 0f )
 			return;
 
-		strength = Mathf.Clamp01( strength );
+		strength = Mathf.Clamp( strength, 0.001f, 2.0f );
 		falloff = Mathf.Max( 0.01f, falloff );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
 			out float half, out float cell, out float radiusSq ) )

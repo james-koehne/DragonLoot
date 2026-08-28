@@ -38,6 +38,12 @@ public class ProfileSaveData : IGameStats
 	/// <summary>One-shot world event ids that have already fired.</summary>
 	public List<string> firedWorldEventIds;
 
+	/// <summary>Contextual tutorials the player has seen at least once.</summary>
+	public List<string> discoveredTutorialIds;
+
+	/// <summary>Contextual tutorials whose popup sequence finished (auto-complete).</summary>
+	public List<string> completedTutorialIds;
+
 	/// <summary>Doors unlocked via <see cref="DoorUnlockedEvent"/> (by door id).</summary>
 	public List<string> eventUnlockedDoorIds;
 
@@ -82,6 +88,7 @@ public class ProfileSaveData : IGameStats
 			upgradeLevels = new Dictionary<string, int>();
 
 		EnsureWorldEventProgress();
+		EnsureTutorialProgress();
 		EnsureDoorProgress();
 
 		if ( float.IsNaN( masterVolume ) || float.IsInfinity( masterVolume ) )
@@ -96,6 +103,14 @@ public class ProfileSaveData : IGameStats
 			firedWorldEventIds = new List<string>();
 
 		EnsureDoorProgress();
+	}
+
+	public void EnsureTutorialProgress()
+	{
+		if ( discoveredTutorialIds == null )
+			discoveredTutorialIds = new List<string>();
+		if ( completedTutorialIds == null )
+			completedTutorialIds = new List<string>();
 	}
 
 	public void EnsureDoorProgress()
@@ -165,6 +180,9 @@ public class ProfileSaveData : IGameStats
 		if ( MergeWorldEventProgressFrom( other ) )
 			changed = true;
 
+		if ( MergeTutorialProgressFrom( other ) )
+			changed = true;
+
 		return changed;
 	}
 
@@ -179,6 +197,20 @@ public class ProfileSaveData : IGameStats
 
 		bool changed = MergeIdList( firedWorldEventIds, other.firedWorldEventIds );
 		changed |= MergeDoorProgressFrom( other );
+		return changed;
+	}
+
+	/// <summary>Union discovered / completed tutorial ids between two saves.</summary>
+	public bool MergeTutorialProgressFrom( ProfileSaveData other )
+	{
+		if ( other == null )
+			return false;
+
+		EnsureTutorialProgress();
+		other.EnsureTutorialProgress();
+
+		bool changed = MergeIdList( discoveredTutorialIds, other.discoveredTutorialIds );
+		changed |= MergeIdList( completedTutorialIds, other.completedTutorialIds );
 		return changed;
 	}
 

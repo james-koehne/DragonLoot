@@ -15,3 +15,4 @@ MonoBehaviour:
   debugLogging: 0
   debugBackend: 0
   spawnAtSceneCamera: 0
+  disableTreasureSpawning: 1

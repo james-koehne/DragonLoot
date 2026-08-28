@@ -662,14 +662,22 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 				terrainMesh.BeginDeferredColliderCook();
 		}
 
-		if ( lootInstances != null && def != null && _heightfield != null )
+		if ( DebugDefinition.TreasureSpawningDisabled )
+		{
+			Transform authored = FindAuthoredLootRoot();
+			if ( authored != null )
+				authored.gameObject.SetActive( false );
+		}
+		else if ( lootInstances != null && def != null && _heightfield != null )
+		{
 			await lootInstances.BindAsync( this, def, _heightfield, transform, lootLayoutSeed );
+		}
 
 		// Bind may destroy/recreate during Addressables await (domain reload / scene unload).
 		if ( this == null )
 			return;
 
-		if ( artifactProps != null && def != null && _heightfield != null )
+		if ( !DebugDefinition.TreasureSpawningDisabled && artifactProps != null && def != null && _heightfield != null )
 		{
 			GoldPileLootStreamSettings stream = lootInstances != null ? lootInstances.StreamSettings : null;
 			await artifactProps.BindAsync( this, def, _heightfield, transform, lootInstances, stream, lootLayoutSeed );
@@ -1672,7 +1680,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		GoldPileEditTiming.End();
 	}
 
-	bool TryGetLastInteractPoint( out Vector3 point )
+	public bool TryGetLastInteractPoint( out Vector3 point )
 	{
 		point = default;
 		if ( !_hasInteractPoint )

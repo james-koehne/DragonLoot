@@ -162,13 +162,13 @@ public class TreasurePileVisualEditor : Editor
 		bool showFalloff = NeedsFalloff( mode );
 
 		if ( showRadius )
-			_brushRadius = EditorGUILayout.Slider( "Radius (m)", _brushRadius, 0.1f, 32f );
+			_brushRadius = EditorGUILayout.Slider( "Radius (m)", _brushRadius, 0.1f, 128f );
 
 		if ( mode == GoldPileEditorBrushMode.Ridge )
 			_ridgeWidth = EditorGUILayout.Slider( "Width (m)", _ridgeWidth, 0.1f, 16f );
 
 		if ( showStrength )
-			_brushStrength = EditorGUILayout.Slider( "Strength", _brushStrength, 0.001f, 0.5f );
+			_brushStrength = EditorGUILayout.Slider( "Strength", _brushStrength, 0.001f, 2.0f );
 
 		if ( mode == GoldPileEditorBrushMode.Peak || mode == GoldPileEditorBrushMode.Ridge )
 			_peakHeight = EditorGUILayout.Slider( "Height", _peakHeight, -1f, 1f );

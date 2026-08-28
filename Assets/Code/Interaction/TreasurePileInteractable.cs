@@ -128,6 +128,9 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		if ( pileVisual == null )
 			return;
 
+		if ( DebugDefinition.TreasureSpawningDisabled )
+			InitializeCount( 0 );
+
 		pileVisual.Bind( this );
 		_bound = true;
 	}
@@ -550,6 +553,23 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		TreasureCounterManager manager = TreasureCounterManager.Instance;
 		if ( manager != null && def != null )
 			manager.NotifyCollected( def, amount );
+
+		PublishDig( def, amount );
+	}
+
+	void PublishDig( TreasureDefinition def, int amount )
+	{
+		Vector3 digPoint = transform.position;
+		if ( pileVisual != null && pileVisual.TryGetLastInteractPoint( out Vector3 hit ) )
+			digPoint = hit;
+
+		EventBus.Publish( new TreasurePileDigEvent
+		{
+			Pile = this,
+			Treasure = def,
+			Amount = amount,
+			DigPoint = digPoint
+		} );
 	}
 
 	public void SyncRemainingFromVisual()
@@ -574,6 +594,8 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		TreasureCounterManager manager = TreasureCounterManager.Instance;
 		if ( manager != null && Treasure != null )
 			manager.NotifyCollected( Treasure, 1 );
+
+		PublishDig( Treasure, 1 );
 	}
 
 	protected override void OnEmptied()

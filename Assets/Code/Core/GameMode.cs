@@ -167,6 +167,18 @@ public class GameMode : MonoBehaviour, IGameMode
 			if ( pouchSummary != null )
 				pouchSummary.Setup();
 
+			TutorialPopupUI tutorialPopup = interfacePrefab.GetComponentInChildren<TutorialPopupUI>( true );
+			if ( tutorialPopup == null )
+			{
+				GameObject popupGo = new GameObject( "TutorialPopup", typeof( RectTransform ), typeof( CanvasGroup ), typeof( TutorialPopupUI ) );
+				popupGo.transform.SetParent( interfacePrefab.transform, false );
+				tutorialPopup = popupGo.GetComponent<TutorialPopupUI>();
+			}
+			tutorialPopup.Setup();
+
+			TutorialManager tutorials = TutorialManager.EnsureExists();
+			tutorials.StartCatalog( tutorialPopup );
+
 			WorldEventSystem worldEvents = WorldEventSystem.EnsureExists();
 			worldEvents.StartCatalog();
 			QuestObjectiveOutline.EnsureExists();

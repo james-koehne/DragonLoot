@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Ensures PauseMenu and PouchSummary hierarchy exists on Assets/Addressables/Interface.prefab.
+/// Ensures PauseMenu, Tutorials, TutorialPopup, and PouchSummary hierarchy exists on Interface.prefab.
 /// </summary>
 public static class InterfaceHudInstaller
 {
@@ -18,9 +18,10 @@ public static class InterfaceHudInstaller
 		try
 		{
 			InstallPauseMenu( root.transform );
+			InstallTutorialPopup( root.transform );
 			InstallPouchSummary( root.transform );
 			PrefabUtility.SaveAsPrefabAsset( root, InterfacePrefabPath );
-			Debug.Log( "Installed PauseMenu and PouchSummary on Interface.prefab." );
+			Debug.Log( "Installed PauseMenu, TutorialPopup, and PouchSummary on Interface.prefab." );
 		}
 		finally
 		{
@@ -78,9 +79,70 @@ public static class InterfaceHudInstaller
 		panelBg.raycastTarget = true;
 
 		Font font = ResolveFont();
-		Text controls = EnsureChildText( panel.transform, "Controls", font, new Vector2( 0f, 72f ), new Vector2( 920f, 960f ), 36, TextAnchor.UpperLeft, "Controls" );
-		Button resume = EnsureChildButton( panel.transform, "ResumeButton", "Resume", font, new Vector2( -220f, -520f ) );
-		Button quit = EnsureChildButton( panel.transform, "QuitButton", "Quit", font, new Vector2( 220f, -520f ) );
+
+		Transform controlsPanelT = panel.transform.Find( "ControlsPanel" );
+		GameObject controlsPanel = controlsPanelT != null
+			? controlsPanelT.gameObject
+			: new GameObject( "ControlsPanel", typeof( RectTransform ), typeof( CanvasGroup ) );
+		if ( controlsPanelT == null )
+			controlsPanel.transform.SetParent( panel.transform, false );
+
+		RectTransform controlsRect = controlsPanel.GetComponent<RectTransform>();
+		controlsRect.anchorMin = Vector2.zero;
+		controlsRect.anchorMax = Vector2.one;
+		controlsRect.offsetMin = Vector2.zero;
+		controlsRect.offsetMax = Vector2.zero;
+
+		CanvasGroup controlsGroup = controlsPanel.GetComponent<CanvasGroup>();
+		if ( controlsGroup == null )
+			controlsGroup = controlsPanel.AddComponent<CanvasGroup>();
+
+		// Move legacy children into ControlsPanel if needed.
+		MoveIfDirectChild( panel.transform, "Controls", controlsPanel.transform );
+		MoveIfDirectChild( panel.transform, "ResumeButton", controlsPanel.transform );
+		MoveIfDirectChild( panel.transform, "QuitButton", controlsPanel.transform );
+
+		Text controls = EnsureChildText( controlsPanel.transform, "Controls", font, new Vector2( 0f, 72f ), new Vector2( 920f, 880f ), 36, TextAnchor.UpperLeft, "Controls" );
+		Button resume = EnsureChildButton( controlsPanel.transform, "ResumeButton", "Resume", font, new Vector2( -280f, -520f ) );
+		Button quit = EnsureChildButton( controlsPanel.transform, "QuitButton", "Quit", font, new Vector2( 280f, -520f ) );
+		Button tutorials = EnsureChildButton( controlsPanel.transform, "TutorialsButton", "Tutorials", font, new Vector2( 0f, -520f ) );
+
+		Transform tutorialsPanelT = panel.transform.Find( "TutorialsPanel" );
+		GameObject tutorialsPanel = tutorialsPanelT != null
+			? tutorialsPanelT.gameObject
+			: new GameObject( "TutorialsPanel", typeof( RectTransform ), typeof( CanvasGroup ) );
+		if ( tutorialsPanelT == null )
+			tutorialsPanel.transform.SetParent( panel.transform, false );
+
+		RectTransform tutorialsRect = tutorialsPanel.GetComponent<RectTransform>();
+		tutorialsRect.anchorMin = Vector2.zero;
+		tutorialsRect.anchorMax = Vector2.one;
+		tutorialsRect.offsetMin = Vector2.zero;
+		tutorialsRect.offsetMax = Vector2.zero;
+
+		CanvasGroup tutorialsGroup = tutorialsPanel.GetComponent<CanvasGroup>();
+		if ( tutorialsGroup == null )
+			tutorialsGroup = tutorialsPanel.AddComponent<CanvasGroup>();
+		tutorialsGroup.alpha = 0f;
+		tutorialsGroup.interactable = false;
+		tutorialsGroup.blocksRaycasts = false;
+		tutorialsPanel.SetActive( false );
+
+		Text tutorialsTitle = EnsureChildText( tutorialsPanel.transform, "Title", font, new Vector2( 0f, 520f ), new Vector2( 920f, 64f ), 42, TextAnchor.MiddleCenter, "Tutorials" );
+		Text emptyLabel = EnsureChildText( tutorialsPanel.transform, "EmptyLabel", font, new Vector2( 0f, 80f ), new Vector2( 860f, 200f ), 30, TextAnchor.MiddleCenter, "No tutorials discovered yet." );
+
+		Transform listT = tutorialsPanel.transform.Find( "List" );
+		GameObject listGo = listT != null ? listT.gameObject : new GameObject( "List", typeof( RectTransform ) );
+		if ( listT == null )
+			listGo.transform.SetParent( tutorialsPanel.transform, false );
+		RectTransform listRect = listGo.GetComponent<RectTransform>();
+		listRect.anchorMin = new Vector2( 0.5f, 0.5f );
+		listRect.anchorMax = new Vector2( 0.5f, 0.5f );
+		listRect.pivot = new Vector2( 0.5f, 1f );
+		listRect.anchoredPosition = new Vector2( 0f, 420f );
+		listRect.sizeDelta = new Vector2( 900f, 860f );
+
+		Button tutorialsBack = EnsureChildButton( tutorialsPanel.transform, "BackButton", "Back", font, new Vector2( 0f, -520f ) );
 
 		PauseMenuUI ui = pauseRoot.GetComponent<PauseMenuUI>();
 		if ( ui == null )
@@ -91,6 +153,68 @@ public static class InterfaceHudInstaller
 		so.FindProperty( "controlsText" ).objectReferenceValue = controls;
 		so.FindProperty( "resumeButton" ).objectReferenceValue = resume;
 		so.FindProperty( "quitButton" ).objectReferenceValue = quit;
+		so.FindProperty( "tutorialsButton" ).objectReferenceValue = tutorials;
+		so.FindProperty( "tutorialsBackButton" ).objectReferenceValue = tutorialsBack;
+		so.FindProperty( "controlsPanelGroup" ).objectReferenceValue = controlsGroup;
+		so.FindProperty( "tutorialsPanelGroup" ).objectReferenceValue = tutorialsGroup;
+		so.FindProperty( "tutorialsListRoot" ).objectReferenceValue = listGo.transform;
+		so.FindProperty( "tutorialsEmptyLabel" ).objectReferenceValue = emptyLabel;
+		so.ApplyModifiedPropertiesWithoutUndo();
+
+		_ = tutorialsTitle;
+	}
+
+	static void InstallTutorialPopup( Transform canvasRoot )
+	{
+		Transform existing = canvasRoot.Find( "TutorialPopup" );
+		GameObject root = existing != null ? existing.gameObject : new GameObject( "TutorialPopup", typeof( RectTransform ) );
+		if ( existing == null )
+			root.transform.SetParent( canvasRoot, false );
+
+		RectTransform rootRect = root.GetComponent<RectTransform>();
+		rootRect.anchorMin = new Vector2( 1f, 0f );
+		rootRect.anchorMax = new Vector2( 1f, 0f );
+		rootRect.pivot = new Vector2( 1f, 0f );
+		rootRect.anchoredPosition = new Vector2( -36f, 36f );
+		rootRect.sizeDelta = new Vector2( 520f, 280f );
+		rootRect.localScale = Vector3.one;
+
+		CanvasGroup group = root.GetComponent<CanvasGroup>();
+		if ( group == null )
+			group = root.AddComponent<CanvasGroup>();
+		group.alpha = 0f;
+		group.blocksRaycasts = false;
+		group.interactable = false;
+
+		Image bg = root.GetComponent<Image>();
+		if ( bg == null )
+			bg = root.AddComponent<Image>();
+		bg.color = new Color( 0.07f, 0.08f, 0.11f, 0.92f );
+		bg.raycastTarget = true;
+
+		Font font = ResolveFont();
+		Text title = EnsureChildText( root.transform, "Title", font, new Vector2( 0f, 96f ), new Vector2( 480f, 40f ), 30, TextAnchor.MiddleLeft, "Tutorial" );
+		Text body = EnsureChildText( root.transform, "Body", font, new Vector2( 0f, 10f ), new Vector2( 480f, 120f ), 24, TextAnchor.UpperLeft, string.Empty );
+		Text hint = EnsureChildText( root.transform, "Hint", font, new Vector2( 0f, -70f ), new Vector2( 480f, 36f ), 22, TextAnchor.MiddleLeft, string.Empty );
+		hint.color = new Color( 0.85f, 0.9f, 1f, 0.95f );
+		Text step = EnsureChildText( root.transform, "Step", font, new Vector2( 180f, 96f ), new Vector2( 120f, 36f ), 22, TextAnchor.MiddleRight, "1 / 1" );
+		step.color = new Color( 1f, 1f, 1f, 0.65f );
+
+		Button dismiss = EnsureChildButton( root.transform, "DismissButton", "OK", font, new Vector2( 170f, -110f ) );
+		RectTransform dismissRect = dismiss.GetComponent<RectTransform>();
+		dismissRect.sizeDelta = new Vector2( 140f, 48f );
+
+		TutorialPopupUI ui = root.GetComponent<TutorialPopupUI>();
+		if ( ui == null )
+			ui = root.AddComponent<TutorialPopupUI>();
+
+		SerializedObject so = new SerializedObject( ui );
+		so.FindProperty( "group" ).objectReferenceValue = group;
+		so.FindProperty( "titleText" ).objectReferenceValue = title;
+		so.FindProperty( "bodyText" ).objectReferenceValue = body;
+		so.FindProperty( "hintText" ).objectReferenceValue = hint;
+		so.FindProperty( "stepText" ).objectReferenceValue = step;
+		so.FindProperty( "dismissButton" ).objectReferenceValue = dismiss;
 		so.ApplyModifiedPropertiesWithoutUndo();
 	}
 
@@ -132,6 +256,16 @@ public static class InterfaceHudInstaller
 		so.FindProperty( "group" ).objectReferenceValue = group;
 		so.FindProperty( "label" ).objectReferenceValue = label;
 		so.ApplyModifiedPropertiesWithoutUndo();
+	}
+
+	static void MoveIfDirectChild( Transform parent, string childName, Transform newParent )
+	{
+		Transform child = parent.Find( childName );
+		if ( child == null || child.parent != parent )
+			return;
+		if ( newParent.Find( childName ) != null )
+			return;
+		child.SetParent( newParent, false );
 	}
 
 	static Font ResolveFont()
@@ -196,7 +330,7 @@ public static class InterfaceHudInstaller
 		rect.anchorMax = new Vector2( 0.5f, 0.5f );
 		rect.pivot = new Vector2( 0.5f, 0.5f );
 		rect.anchoredPosition = anchoredPos;
-		rect.sizeDelta = new Vector2( 360f, 88f );
+		rect.sizeDelta = new Vector2( 240f, 88f );
 
 		Image image = go.GetComponent<Image>();
 		if ( image == null )
@@ -224,7 +358,7 @@ public static class InterfaceHudInstaller
 		if ( text == null )
 			text = labelGo.AddComponent<Text>();
 		text.font = font;
-		text.fontSize = 40;
+		text.fontSize = 36;
 		text.fontStyle = FontStyle.Bold;
 		text.alignment = TextAnchor.MiddleCenter;
 		text.color = Color.white;

@@ -1,0 +1,61 @@
+#pragma kernel Fill
+
+struct GpuAreaVolume
+{
+    float4x4 worldToLocal;
+    float4 color;
+    float softness;
+    float falloffExtend;
+    float pad0;
+    float pad1;
+};
+
+StructuredBuffer<GpuAreaVolume> _AreaVolumes;
+RWTexture3D<float4> _AreaClipmap;
+
+int3 _AreaClipmapResolution;
+float3 _AreaClipmapOrigin;
+float3 _AreaClipmapVoxelSize;
+float _AreaBlendFill;
+int _AreaVolumeCount;
+
+float AreaVolumeFalloff(GpuAreaVolume volume, float3 positionWS)
+{
+    float3 local = mul(volume.worldToLocal, float4(positionWS, 1.0)).xyz;
+    float cheby = max(max(abs(local.x), abs(local.y)), abs(local.z)) * 2.0;
+    float edge0 = saturate(1.0 - volume.softness);
+    float fadeEnd = 1.0 + max(volume.falloffExtend, 0.0);
+    return 1.0 - smoothstep(edge0, fadeEnd, cheby);
+}
+
+[numthreads(4, 4, 4)]
+void Fill(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_AreaClipmapResolution.x
+        || id.y >= (uint)_AreaClipmapResolution.y
+        || id.z >= (uint)_AreaClipmapResolution.z)
+        return;
+
+    float3 positionWS = _AreaClipmapOrigin
+        + (float3(id) + 0.5) * _AreaClipmapVoxelSize;
+
+    float3 rgb = 0.0;
+    float weight = 0.0;
+
+    for (int i = 0; i < _AreaVolumeCount; i++)
+    {
+        GpuAreaVolume volume = _AreaVolumes[i];
+        float falloff = AreaVolumeFalloff(volume, positionWS);
+        if (falloff <= 1e-5)
+            continue;
+
+        rgb += volume.color.rgb * falloff;
+        weight += falloff;
+    }
+
+    float3 result = rgb;
+    if (weight > 1e-5)
+        result = lerp(rgb / weight, rgb, saturate(_AreaBlendFill));
+
+    _AreaClipmap[id] = float4(result, 1.0);
+}

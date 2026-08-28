@@ -561,6 +561,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			TryMergeNearby();
 			AbsorbNearbyLooseCoins();
 		}
+
+		PublishStackChanged( item.Definition );
 	}
 
 	static float Vary( float baseValue, float varianceFraction )
@@ -841,6 +843,20 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_settledLive[ slotIndex ] = item;
 		RefreshVisuals( snap: true );
 		RefreshCollider();
+		PublishStackChanged( item.Definition );
+	}
+
+	void PublishStackChanged( TreasureDefinition topCoin )
+	{
+		if ( _machineBuffer || _destroying )
+			return;
+
+		EventBus.Publish( new CoinStackChangedEvent
+		{
+			Stack = this,
+			Count = _slots.Count,
+			TopCoin = topCoin
+		} );
 	}
 
 	/// <summary>
@@ -858,6 +874,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 		PlayLandFeedback();
+		PublishStackChanged( definition );
 		return true;
 	}
 
@@ -889,6 +906,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( !_machineBuffer )
 			TryMergeNearby();
 		PlayLandFeedback();
+		if ( !_machineBuffer && added > 0 )
+			PublishStackChanged( definitions[ definitions.Count - 1 ] );
 		return added;
 	}
 

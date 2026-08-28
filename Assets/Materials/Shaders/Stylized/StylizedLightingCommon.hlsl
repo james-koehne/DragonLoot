@@ -2,6 +2,7 @@
 #define DRAGONLOOT_STYLIZED_LIGHTING_COMMON_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "AreaAmbientCommon.hlsl"
 
 // Globals from StylizedLightingDefinition.ApplyToGlobals()
 float _DragonLoot_FalloffExponent;
@@ -259,8 +260,9 @@ half3 DragonLootSaturation(half3 color, half amount)
 
 half3 DragonLootSoftContrast(half3 color, half amount)
 {
+    // Contrast around mid-grey without clamping HDR (URP Bloom needs values > threshold).
     half3 pushed = color - 0.5h;
-    return saturate(pushed * amount + 0.5h);
+    return max(pushed * amount + 0.5h, 0.0h);
 }
 
 half3 DragonLootGrade(half3 color)
@@ -326,6 +328,7 @@ half3 DragonLootShadeSurface(InputData inputData, DragonLootStylizedSurface s)
 #if defined(_SCREEN_SPACE_OCCLUSION)
     ambient *= aoFactor.indirectAmbientOcclusion;
 #endif
+    ambient += DragonLootApplyAreaAmbient(s.albedo, inputData.positionWS, s.occlusion);
 
     half3 color = ambient;
     half lightGate = 0.0h;
@@ -357,8 +360,8 @@ half3 DragonLootShadeSurface(InputData inputData, DragonLootStylizedSurface s)
 
     color += DragonLootSampleReflections(s, inputData);
     color += DragonLootEvaluateRim(s, saturate(lightGate + 0.25h));
-    color += s.emission;
     color = DragonLootGrade(color);
+    color += s.emission;
     return color;
 }
 

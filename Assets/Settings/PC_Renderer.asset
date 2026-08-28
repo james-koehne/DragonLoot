@@ -1,5 +1,20 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-88472900466861917
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9a0da393e89168449281e40b9dab3ac, type: 3}
+  m_Name: AreaLighting
+  m_EditorClassIdentifier: Assembly-CSharp::AreaLightingRendererFeature
+  m_Active: 1
+  definition: {fileID: 11400000, guid: 338eed198e501bc4dbf3db8bba3f4e79, type: 2}
+  fillCompute: {fileID: 7200000, guid: 97c2ab9cf8086b248880bd5e4bbadba4, type: 3}
 --- !u!114 &-25272900466861916
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -44,8 +59,9 @@ MonoBehaviour:
     probeVolumeBlendStatesCS: {fileID: 0}
   m_RendererFeatures:
   - {fileID: 4595524766126240979}
+  - {fileID: -88472900466861917}
   - {fileID: -25272900466861916}
-  m_RendererFeatureMap: 
+  m_RendererFeatureMap: d3f476396d95c63fa3986ca35daec5fea4983a516e36a6ff
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}

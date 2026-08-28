@@ -25,6 +25,7 @@ public static class DragonLootMenus
 	public const string GraphicsGoldPileStripRuntimeGeometry = Root + "/Graphics/Gold Pile/Strip Persisted Runtime Geometry";
 
 	public const string GraphicsStylizedLightingInstall = Root + "/Graphics/Stylized Lighting/Install Definition";
+	public const string GraphicsAreaLightingInstall = Root + "/Graphics/Area Lighting/Install Definition";
 
 	public const string GraphicsLightFlickerInstall = Root + "/Graphics/Light Flicker/Install Definition";
 	public const string GraphicsLightFlickerResetPresets = Root + "/Graphics/Light Flicker/Reset Presets To Defaults";

@@ -204,6 +204,7 @@ half4 GemLitFrag(Varyings input) : SV_Target
     half3 color = lerp(deepColor, albedo, shade);
     color *= lerp(0.72h, 1.16h, facet);
     color *= occlusion * GemInclusionDarken(input.positionWS);
+    color += DragonLootApplyAreaAmbient(albedo, input.positionWS, occlusion);
     color *= lerp(half3(1, 1, 1), blendedLightColor, steppedLight);
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));
