@@ -1,0 +1,3 @@
+{"sessionId":"57af57","hypothesisId":"H5","location":"HallwayFogBlend.OnDisable","message":"disabled","data":{"frame":0,"locked":true},"timestamp":1788146682367}
+{"sessionId":"57af57","hypothesisId":"H3","location":"HallwayFogBlend.ClearOverrides","message":"clear","data":{"frame":0,"locked":true},"timestamp":1788146682368}
+{"sessionId":"57af57","hypothesisId":"H3","location":"EnvironmentDefinition.ClearFogDensityOverride","message":"override_cleared","data":{"frame":0,"renderFogDensity":0.002},"timestamp":1788146682369}

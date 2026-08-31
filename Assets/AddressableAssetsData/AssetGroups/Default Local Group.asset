@@ -126,6 +126,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3704b071869de65498cb8732a68f9663
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_IntroWelcome.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 397cb9fd433e156418871285f189f9c4
     m_Address: Assets/Addressables/Treasure/Artifacts/AncientTomeVisual.prefab
     m_ReadOnly: 0
@@ -213,6 +219,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/CrystalCandelabrumVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 69908667866a374478d5b530c22aedd9
+    m_Address: Assets/Definitions/WorldEventCatalogDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 73d446f2a6403c24dbdcfbcc1e6adb28
     m_Address: Assets/Addressables/GameMode.prefab
@@ -311,6 +323,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: af2528812c6982c46a43e042082f1f74
+    m_Address: Assets/Definitions/MinecartDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: afd255348924afb479e4738ec99fabfc
     m_Address: Treasure/SkeletonKeyDisplayCase
     m_ReadOnly: 0
@@ -354,6 +372,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/JewelledCoronaVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c20f4ffc95761e642bfaa50a22e5ecbb
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_IntroHallway.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c3d4e5f60718293a4b5c6d7e8f012345
     m_Address: Assets/Definitions/PlayerPlacementDefinition.asset
@@ -421,6 +445,12 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d6e16621bc6cbfe4b8aed51808076553
     m_Address: TreasureSparkleDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d7135ec13e4014444981ca8164d1d695
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_IntroLedge.asset
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition

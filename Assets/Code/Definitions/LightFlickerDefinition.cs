@@ -139,15 +139,33 @@ public class LightFlickerPreset
 	[Header( "Color" )]
 	public bool affectColor = false;
 
-	[Tooltip( "How strongly color oscillates between tint A and tint B." )]
+	[Tooltip( "How far light color oscillates between tint A and B. 0 = midpoint, 1 = full A-B." )]
 	[Range( 0f, 1f )]
 	public float colorAmount = 0.2f;
 
+	[Tooltip( "Color written to the Light." )]
 	[ColorUsage( false, true )]
 	public Color tintA = new Color( 1f, 0.92f, 0.75f, 1f );
 
+	[Tooltip( "Color written to the Light." )]
 	[ColorUsage( false, true )]
 	public Color tintB = new Color( 1f, 0.78f, 0.45f, 1f );
+
+	[Header( "Emission" )]
+	[Tooltip( "When on, writes emissionTintA/B directly to _EmissionColor. When off, pulses the material's authored emission." )]
+	public bool affectEmissionColor = true;
+
+	[Tooltip( "How far emission oscillates between tint A and B. 0 = midpoint, 1 = full A-B." )]
+	[Range( 0f, 1f )]
+	public float emissionColorAmount = 0.45f;
+
+	[Tooltip( "HDR color written to the emissive shader." )]
+	[ColorUsage( false, true )]
+	public Color emissionTintA = new Color( 1.8f, 1.1f, 0.4f, 1f );
+
+	[Tooltip( "HDR color written to the emissive shader." )]
+	[ColorUsage( false, true )]
+	public Color emissionTintB = new Color( 2.2f, 0.65f, 0.12f, 1f );
 
 	[Header( "Range" )]
 	public bool affectRange = false;
@@ -175,8 +193,21 @@ public class LightFlickerPreset
 		secondarySpeed = Mathf.Max( 1f, secondarySpeed );
 		tertiarySpeed = Mathf.Max( 1f, tertiarySpeed );
 		colorAmount = Mathf.Clamp01( colorAmount );
+		emissionColorAmount = Mathf.Clamp01( emissionColorAmount );
 		rangeMin = Mathf.Clamp( rangeMin, 0.25f, 2f );
 		rangeMax = Mathf.Clamp( Mathf.Max( rangeMin, rangeMax ), 0.25f, 2f );
+	}
+
+	public Color GetLightColor( float noise )
+	{
+		float t = Mathf.Lerp( 0.5f, Mathf.Clamp01( noise ), colorAmount );
+		return Color.Lerp( tintA, tintB, t );
+	}
+
+	public Color GetEmissionColor( float noise )
+	{
+		float t = Mathf.Lerp( 0.5f, Mathf.Clamp01( noise ), emissionColorAmount );
+		return Color.Lerp( emissionTintA, emissionTintB, t );
 	}
 
 	public static LightFlickerPreset Lantern()
@@ -195,6 +226,10 @@ public class LightFlickerPreset
 			colorAmount = 0.12f,
 			tintA = new Color( 1f, 0.94f, 0.8f, 1f ),
 			tintB = new Color( 1f, 0.86f, 0.62f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.45f,
+			emissionTintA = new Color( 1.8f, 1.1f, 0.4f, 1f ),
+			emissionTintB = new Color( 2.2f, 0.65f, 0.12f, 1f ),
 			affectRange = true,
 			rangeMin = 0.95f,
 			rangeMax = 1.05f
@@ -219,6 +254,10 @@ public class LightFlickerPreset
 			colorAmount = 0.28f,
 			tintA = new Color( 1f, 0.9f, 0.55f, 1f ),
 			tintB = new Color( 1f, 0.55f, 0.2f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.55f,
+			emissionTintA = new Color( 2.2f, 1.2f, 0.25f, 1f ),
+			emissionTintB = new Color( 2.8f, 0.45f, 0.05f, 1f ),
 			affectRange = true,
 			rangeMin = 0.88f,
 			rangeMax = 1.08f
@@ -243,6 +282,10 @@ public class LightFlickerPreset
 			colorAmount = 0.22f,
 			tintA = new Color( 1f, 0.88f, 0.6f, 1f ),
 			tintB = new Color( 1f, 0.62f, 0.28f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.5f,
+			emissionTintA = new Color( 2.0f, 1.15f, 0.32f, 1f ),
+			emissionTintB = new Color( 2.5f, 0.55f, 0.08f, 1f ),
 			affectRange = true,
 			rangeMin = 0.85f,
 			rangeMax = 1.12f
@@ -265,6 +308,10 @@ public class LightFlickerPreset
 			colorAmount = 0.1f,
 			tintA = new Color( 1f, 0.95f, 0.82f, 1f ),
 			tintB = new Color( 1f, 0.88f, 0.65f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.28f,
+			emissionTintA = new Color( 1.5f, 1.15f, 0.55f, 1f ),
+			emissionTintB = new Color( 1.8f, 0.85f, 0.28f, 1f ),
 			affectRange = false
 		};
 	}
@@ -287,6 +334,10 @@ public class LightFlickerPreset
 			colorAmount = 0.35f,
 			tintA = new Color( 1f, 0.82f, 0.4f, 1f ),
 			tintB = new Color( 1f, 0.4f, 0.12f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.6f,
+			emissionTintA = new Color( 2.4f, 1.05f, 0.18f, 1f ),
+			emissionTintB = new Color( 3.0f, 0.35f, 0.04f, 1f ),
 			affectRange = true,
 			rangeMin = 0.8f,
 			rangeMax = 1.18f
@@ -309,6 +360,10 @@ public class LightFlickerPreset
 			colorAmount = 0.55f,
 			tintA = new Color( 0.55f, 0.85f, 1.4f, 1f ),
 			tintB = new Color( 1.1f, 0.45f, 1.35f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.7f,
+			emissionTintA = new Color( 0.35f, 1.4f, 2.4f, 1f ),
+			emissionTintB = new Color( 2.2f, 0.35f, 2.1f, 1f ),
 			affectRange = true,
 			rangeMin = 0.92f,
 			rangeMax = 1.08f
@@ -333,6 +388,10 @@ public class LightFlickerPreset
 			colorAmount = 0.4f,
 			tintA = new Color( 1f, 0.45f, 0.12f, 1f ),
 			tintB = new Color( 0.55f, 0.12f, 0.02f, 1f ),
+			affectEmissionColor = true,
+			emissionColorAmount = 0.65f,
+			emissionTintA = new Color( 2.6f, 0.55f, 0.08f, 1f ),
+			emissionTintB = new Color( 1.2f, 0.12f, 0.02f, 1f ),
 			affectRange = true,
 			rangeMin = 0.7f,
 			rangeMax = 1.05f

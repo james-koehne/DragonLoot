@@ -13,9 +13,10 @@ MonoBehaviour:
   m_Name: AreaLightingDefinition
   m_EditorClassIdentifier: Assembly-CSharp::AreaLightingDefinition
   enableAreaLighting: 1
-  globalIntensity: 0.35
+  globalIntensity: 0.3
   ambientMix: 0.4
-  albedoInfluence: 0.35
+  albedoInfluence: 0.8
+  fogInfluence: 0.3
   worldVolumeResolution: {x: 64, y: 24, z: 64}
   maxVolumes: 4
   blendFill: 0

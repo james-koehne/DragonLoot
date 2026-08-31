@@ -1,14 +1,19 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 /// <summary>
 /// Drives a <see cref="Light"/> with organic intensity / color / range flicker from
-/// <see cref="LightFlickerDefinition"/> presets.
+/// <see cref="LightFlickerDefinition"/> presets, and mirrors that onto EnvironmentLit
+/// emissive materials (typically the second material on each mesh).
 /// </summary>
 [ExecuteAlways]
 [DisallowMultipleComponent]
-[RequireComponent( typeof( Light ) )]
 public class LightFlicker : MonoBehaviour
 {
+	static readonly int EmissionColorId = Shader.PropertyToID( "_EmissionColor" );
+	static readonly int EmissionIntensityId = Shader.PropertyToID( "_EmissionIntensity" );
+
 	[SerializeField]
 	LightFlickerDefinition _definition;
 
@@ -37,6 +42,14 @@ public class LightFlicker : MonoBehaviour
 	[Tooltip( "Optional override. When null, uses the Light on this GameObject." )]
 	Light _light;
 
+	[SerializeField]
+	[Tooltip( "Optional emissive mesh renderers. When empty, uses LODGroup / child MeshRenderers." )]
+	MeshRenderer[] _emissiveRenderers;
+
+	[SerializeField]
+	[Tooltip( "Material index with the emissive DragonLoot/EnvironmentLit material." )]
+	int _emissiveMaterialIndex = 1;
+
 	LightFlickerDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
 	Light _cachedLight;
@@ -49,6 +62,11 @@ public class LightFlicker : MonoBehaviour
 	string _activePresetId;
 	LightFlickerPreset _activePreset;
 	bool _hadDefinition;
+	MaterialPropertyBlock _propertyBlock;
+	List<MeshRenderer> _resolvedEmissiveRenderers;
+	Color[] _baseEmissionColors;
+	float[] _baseEmissionIntensities;
+	bool[] _emissiveValid;
 
 	public LightFlickerPresetKind Preset
 	{
@@ -75,7 +93,9 @@ public class LightFlicker : MonoBehaviour
 
 	void OnEnable()
 	{
+		EnsureCaches();
 		EnsureLight();
+		ResolveEmissiveRenderers();
 		CaptureBase();
 		_noiseSeed = HashSeed( GetInstanceID() );
 		_smoothedNoise = 0.5f;
@@ -92,9 +112,11 @@ public class LightFlicker : MonoBehaviour
 	{
 		_intensityScale = Mathf.Clamp( _intensityScale, 0f, 3f );
 		_speedScale = Mathf.Max( 0f, _speedScale );
+		_emissiveMaterialIndex = Mathf.Max( 0, _emissiveMaterialIndex );
 		if ( string.IsNullOrWhiteSpace( _customPresetName ) )
 			_customPresetName = nameof( LightFlickerPresetKind.Lantern );
 
+		EnsureCaches();
 		EnsureLight();
 		if ( !Application.isPlaying && !_playInEditMode )
 		{
@@ -104,8 +126,11 @@ public class LightFlicker : MonoBehaviour
 
 		if ( isActiveAndEnabled )
 		{
+			ResolveEmissiveRenderers();
 			if ( !_hasBase )
 				CaptureBase();
+			else
+				CaptureEmissionBase();
 			ResolveActivePreset( force: true );
 		}
 	}
@@ -119,6 +144,14 @@ public class LightFlicker : MonoBehaviour
 
 		if ( !EnsureLight() )
 			return;
+
+		EnsureCaches();
+		if ( _resolvedEmissiveRenderers.Count == 0 )
+		{
+			ResolveEmissiveRenderers();
+			if ( _hasBase )
+				CaptureEmissionBase();
+		}
 
 		if ( !_hasBase )
 			CaptureBase();
@@ -150,8 +183,8 @@ public class LightFlicker : MonoBehaviour
 	[ContextMenu( "Recapture Light Base" )]
 	public void RecaptureLightBase()
 	{
-		RestoreBase();
 		_hasBase = false;
+		ResolveEmissiveRenderers();
 		CaptureBase();
 		ResolveActivePreset( force: true );
 		ApplyFlicker( GetFlickerTime(), immediate: true );
@@ -179,17 +212,23 @@ public class LightFlicker : MonoBehaviour
 		_baseIntensity = _cachedLight.intensity;
 		_baseColor = _cachedLight.color;
 		_baseRange = _cachedLight.range;
+		CaptureEmissionBase();
 		_hasBase = true;
 	}
 
 	void RestoreBase()
 	{
-		if ( !_hasBase || !EnsureLight() )
+		if ( !_hasBase )
 			return;
 
-		_cachedLight.intensity = _baseIntensity;
-		_cachedLight.color = _baseColor;
-		_cachedLight.range = _baseRange;
+		if ( EnsureLight() )
+		{
+			_cachedLight.intensity = _baseIntensity;
+			_cachedLight.color = _baseColor;
+			_cachedLight.range = _baseRange;
+		}
+
+		RestoreEmissionBase();
 	}
 
 	void ResolveActivePreset( bool force )
@@ -266,15 +305,10 @@ public class LightFlicker : MonoBehaviour
 
 		_cachedLight.intensity = Mathf.Max( 0f, _baseIntensity * intensityMul );
 
-		if ( _activePreset.affectColor && _activePreset.colorAmount > 0f )
-		{
-			Color tint = Color.Lerp( _activePreset.tintA, _activePreset.tintB, _smoothedNoise );
-			_cachedLight.color = Color.Lerp( _baseColor, _baseColor * tint, _activePreset.colorAmount );
-		}
+		if ( _activePreset.affectColor )
+			_cachedLight.color = _activePreset.GetLightColor( _smoothedNoise );
 		else
-		{
 			_cachedLight.color = _baseColor;
-		}
 
 		if ( _activePreset.affectRange )
 		{
@@ -285,6 +319,187 @@ public class LightFlicker : MonoBehaviour
 		{
 			_cachedLight.range = _baseRange;
 		}
+
+		ApplyEmission( intensityMul );
+	}
+
+	void EnsureCaches()
+	{
+		if ( _propertyBlock == null )
+			_propertyBlock = new MaterialPropertyBlock();
+		if ( _resolvedEmissiveRenderers == null )
+			_resolvedEmissiveRenderers = new List<MeshRenderer>( 4 );
+	}
+
+	void ResolveEmissiveRenderers()
+	{
+		EnsureCaches();
+		_resolvedEmissiveRenderers.Clear();
+
+		if ( _emissiveRenderers != null )
+		{
+			for ( int i = 0; i < _emissiveRenderers.Length; i++ )
+			{
+				MeshRenderer renderer = _emissiveRenderers[ i ];
+				if ( renderer != null )
+					_resolvedEmissiveRenderers.Add( renderer );
+			}
+
+			if ( _resolvedEmissiveRenderers.Count > 0 )
+				return;
+		}
+
+		LODGroup lodGroup = GetComponent<LODGroup>();
+		if ( lodGroup == null )
+			lodGroup = GetComponentInParent<LODGroup>();
+
+		if ( lodGroup != null )
+		{
+			LOD[] lods = lodGroup.GetLODs();
+			for ( int i = 0; i < lods.Length; i++ )
+			{
+				Renderer[] renderers = lods[ i ].renderers;
+				if ( renderers == null )
+					continue;
+
+				for ( int j = 0; j < renderers.Length; j++ )
+				{
+					if ( renderers[ j ] is MeshRenderer meshRenderer && !_resolvedEmissiveRenderers.Contains( meshRenderer ) )
+						_resolvedEmissiveRenderers.Add( meshRenderer );
+				}
+			}
+		}
+
+		if ( _resolvedEmissiveRenderers.Count > 0 )
+			return;
+
+		Transform root = transform.parent != null ? transform.parent : transform;
+		MeshRenderer[] found = root.GetComponentsInChildren<MeshRenderer>( true );
+		for ( int i = 0; i < found.Length; i++ )
+			_resolvedEmissiveRenderers.Add( found[ i ] );
+	}
+
+	void CaptureEmissionBase()
+	{
+		if ( _resolvedEmissiveRenderers == null )
+			return;
+
+		int count = _resolvedEmissiveRenderers.Count;
+		if ( _baseEmissionColors == null || _baseEmissionColors.Length != count )
+			_baseEmissionColors = new Color[ count ];
+		if ( _baseEmissionIntensities == null || _baseEmissionIntensities.Length != count )
+			_baseEmissionIntensities = new float[ count ];
+		if ( _emissiveValid == null || _emissiveValid.Length != count )
+			_emissiveValid = new bool[ count ];
+
+		for ( int i = 0; i < count; i++ )
+		{
+			_baseEmissionColors[ i ] = Color.black;
+			_baseEmissionIntensities[ i ] = 0f;
+			_emissiveValid[ i ] = false;
+			MeshRenderer renderer = _resolvedEmissiveRenderers[ i ];
+			if ( renderer == null )
+				continue;
+
+			Material[] materials = renderer.sharedMaterials;
+			if ( _emissiveMaterialIndex < 0 || _emissiveMaterialIndex >= materials.Length )
+				continue;
+
+			Material material = materials[ _emissiveMaterialIndex ];
+			if ( material == null || !material.HasProperty( EmissionColorId ) )
+				continue;
+
+			_baseEmissionColors[ i ] = material.GetColor( EmissionColorId );
+			_baseEmissionIntensities[ i ] = material.HasProperty( EmissionIntensityId ) ? material.GetFloat( EmissionIntensityId ) : 0f;
+			_emissiveValid[ i ] = true;
+		}
+	}
+
+	void RestoreEmissionBase()
+	{
+		if ( _resolvedEmissiveRenderers == null || _baseEmissionColors == null || _baseEmissionIntensities == null || _emissiveValid == null )
+			return;
+
+		int count = Mathf.Min( _resolvedEmissiveRenderers.Count, _baseEmissionColors.Length );
+		count = Mathf.Min( count, _baseEmissionIntensities.Length );
+		count = Mathf.Min( count, _emissiveValid.Length );
+		for ( int i = 0; i < count; i++ )
+		{
+			if ( _emissiveValid[ i ] )
+				SetEmission( _resolvedEmissiveRenderers[ i ], _baseEmissionColors[ i ], _baseEmissionIntensities[ i ] );
+		}
+	}
+
+	public bool TryGetEmissionColor( out Color color )
+	{
+		ResolveActivePreset( force: true );
+		if ( _activePreset == null || !_activePreset.affectEmissionColor )
+		{
+			color = Color.black;
+			return false;
+		}
+
+		color = _activePreset.GetEmissionColor( 0.5f );
+		return true;
+	}
+
+	public bool TryGetLightColor( out Color color )
+	{
+		ResolveActivePreset( force: true );
+		if ( _activePreset != null && _activePreset.affectColor )
+		{
+			color = _activePreset.GetLightColor( 0.5f );
+			return true;
+		}
+
+		if ( EnsureLight() )
+		{
+			color = _cachedLight.color;
+			return true;
+		}
+
+		color = Color.white;
+		return false;
+	}
+
+	void ApplyEmission( float intensityMul )
+	{
+		if ( _resolvedEmissiveRenderers == null || _baseEmissionColors == null || _baseEmissionIntensities == null || _emissiveValid == null )
+			return;
+
+		bool usePresetColor = _activePreset != null && _activePreset.affectEmissionColor;
+		Color presetColor = usePresetColor ? _activePreset.GetEmissionColor( _smoothedNoise ) : Color.black;
+
+		int count = Mathf.Min( _resolvedEmissiveRenderers.Count, _baseEmissionColors.Length );
+		count = Mathf.Min( count, _baseEmissionIntensities.Length );
+		count = Mathf.Min( count, _emissiveValid.Length );
+		for ( int i = 0; i < count; i++ )
+		{
+			if ( !_emissiveValid[ i ] )
+				continue;
+
+			Color emission = usePresetColor ? presetColor : _baseEmissionColors[ i ];
+			emission.r *= intensityMul;
+			emission.g *= intensityMul;
+			emission.b *= intensityMul;
+			float emissionIntensity = usePresetColor ? 1f : _baseEmissionIntensities[ i ];
+			SetEmission( _resolvedEmissiveRenderers[ i ], emission, emissionIntensity );
+		}
+	}
+
+	void SetEmission( MeshRenderer renderer, Color emission, float emissionIntensity )
+	{
+		if ( renderer == null )
+			return;
+
+		EnsureCaches();
+		renderer.GetPropertyBlock( _propertyBlock, _emissiveMaterialIndex );
+		_propertyBlock.SetColor( EmissionColorId, emission );
+		if ( renderer.sharedMaterials.Length > _emissiveMaterialIndex
+			&& renderer.sharedMaterials[ _emissiveMaterialIndex ] != null
+			&& renderer.sharedMaterials[ _emissiveMaterialIndex ].HasProperty( EmissionIntensityId ) )
+			_propertyBlock.SetFloat( EmissionIntensityId, emissionIntensity );
+		renderer.SetPropertyBlock( _propertyBlock, _emissiveMaterialIndex );
 	}
 
 	static float SampleLayeredNoise( float time, float speed, float seed, LightFlickerPreset preset )

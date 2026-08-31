@@ -6,14 +6,19 @@ public enum WorldEventConditionType
 {
 	GameStarted = 0,
 	EnterVolume = 1,
-	PickupTreasure = 2
+	PickupTreasure = 2,
+	PlayerGameplayInput = 3,
+	ElapsedUnscaledSeconds = 4
 }
 
 public enum WorldEventActionType
 {
 	Dialogue = 0,
 	SpawnAddressable = 1,
-	SetTutorialHud = 2
+	SetTutorialHud = 2,
+	PlayAudio = 3,
+	LanternRevealSweep = 4,
+	CinematicPresentation = 5
 }
 
 [Serializable]
@@ -56,6 +61,10 @@ public class WorldEventCondition
 
 	[Tooltip( "When true, PickupTreasure only matches interleaved gold bars." )]
 	public bool requireGoldBars;
+
+	[Tooltip( "Seconds since catalog start for ElapsedUnscaledSeconds. Ignored by other types." )]
+	[Min( 0f )]
+	public float delaySeconds = 2f;
 }
 
 [Serializable]
@@ -85,6 +94,89 @@ public class WorldEventAction
 
 	[Tooltip( "Marker / outline target id for SetTutorialHud. Empty = no marker." )]
 	public string markerTargetId;
+
+	[Tooltip( "Clip when type is PlayAudio." )]
+	public AudioClip audioClip;
+
+	[Range( 0f, 1f )]
+	public float audioVolumeMin = 1f;
+
+	[Range( 0f, 1f )]
+	public float audioVolumeMax = 1f;
+
+	[Range( -3f, 3f )]
+	public float audioPitchMin = 1f;
+
+	[Range( -3f, 3f )]
+	public float audioPitchMax = 1f;
+
+	[Range( 0f, 1f )]
+	[Tooltip( "0 = 2D, 1 = full 3D at the play position." )]
+	public float audioSpatialBlend;
+
+	[Min( 0.01f )]
+	public float audioMinDistance = 1f;
+
+	[Min( 0.01f )]
+	public float audioMaxDistance = 20f;
+
+	[Tooltip( "When true, PlayAudio uses the player position. Otherwise uses spawn point / world position." )]
+	public bool audioAtPlayer;
+
+	[Tooltip( "When true, PlayAudio uses spawnWorldPosition instead of spawnPointId." )]
+	public bool audioUseWorldPosition;
+
+	[Tooltip( "Reveal id for LanternRevealSweep. Matches LanternRevealSweepController / reveal lanterns." )]
+	public string lanternRevealId;
+
+	[Tooltip( "Skylight fade duration override. 0 = use controller default." )]
+	[Min( 0f )]
+	public float lanternSkylightFadeDuration;
+
+	[Tooltip( "Seconds for the sweep front to travel start Z to end Z. 0 = use controller default." )]
+	[Min( 0f )]
+	public float lanternSweepDuration;
+
+	[Tooltip( "Per-lantern fade duration when the sweep reaches it. 0 = use controller default." )]
+	[Min( 0f )]
+	public float lanternFadeDuration;
+
+	[Tooltip( "Seconds before the lantern sweep starts. 0 = use controller default." )]
+	[Min( 0f )]
+	public float lanternStartDelay;
+
+	[Tooltip( "Presentation id for CinematicPresentation. Matches CinematicPresentationController." )]
+	public string cinematicPresentationId;
+
+	[Tooltip( "Target FOV peak for CinematicPresentation. 0 = use controller default." )]
+	[Min( 0f )]
+	public float cinematicFovPeak;
+
+	[Tooltip( "Letterbox bar height (0-1 screen fraction) for CinematicPresentation. 0 = use controller default." )]
+	[Min( 0f )]
+	public float cinematicLetterboxPeak;
+
+	[Tooltip( "When true, cinematicEnableMicroPush overrides the scene controller toggle." )]
+	public bool cinematicOverrideMicroPush;
+
+	[Tooltip( "Micro push on/off when cinematicOverrideMicroPush is true." )]
+	public bool cinematicEnableMicroPush;
+
+	[Tooltip( "Micro push local Z distance for CinematicPresentation. 0 = use controller default." )]
+	[Min( 0f )]
+	public float cinematicMicroPushDistance;
+
+	[Tooltip( "Rise duration override for CinematicPresentation. 0 = use controller default." )]
+	[Min( 0f )]
+	public float cinematicRise;
+
+	[Tooltip( "Hold duration override for CinematicPresentation. 0 = use controller default." )]
+	[Min( 0f )]
+	public float cinematicHold;
+
+	[Tooltip( "Fall duration override for CinematicPresentation. 0 = use controller default." )]
+	[Min( 0f )]
+	public float cinematicFall;
 }
 
 /// <summary>

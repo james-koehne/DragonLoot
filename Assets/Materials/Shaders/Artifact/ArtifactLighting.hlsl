@@ -185,7 +185,7 @@ half4 ArtifactLitFrag(Varyings input) : SV_Target
     half3 shineTerm = _ShineColor.rgb * _ShineBoost * Luminance(fresnelTerm) * cleanGate;
     color.rgb += shineTerm;
 
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    color.rgb = DragonLootMixFog(color.rgb, inputData.fogCoord, inputData.positionWS);
     return color;
 }
 

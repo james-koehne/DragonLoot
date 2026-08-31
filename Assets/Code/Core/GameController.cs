@@ -42,6 +42,12 @@ public class GameController : MonoBehaviour
 		TreasureSurfaceBlocker.RefreshAll();
 		ApplyEnvironmentLighting();
 		PlacePlayerAtSpawn();
+		HallwayFogBlend hallwayFog = HallwayFogBlend.Active;
+		if ( hallwayFog != null )
+		{
+			hallwayFog.NotifyPlayerPlaced();
+			hallwayFog.ForceApply();
+		}
 		BindTreasureCounters();
 		StartGame();
 	}

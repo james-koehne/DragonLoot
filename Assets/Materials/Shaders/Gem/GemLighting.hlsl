@@ -222,7 +222,7 @@ half4 GemLitFrag(Varyings input) : SV_Target
     half rim = GemSchlickFresnel(ndotv, _RimPower) * _RimIntensity;
     color += _FresnelColor.rgb * (shine + graphicShine + rim);
 
-    color = MixFog(color, inputData.fogCoord);
+    color = DragonLootMixFog(color, inputData.fogCoord, input.positionWS);
     return half4(color, 1.0h);
 }
 

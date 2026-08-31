@@ -23,16 +23,17 @@ public class WorldEventSystem : MonoBehaviour
 
 	WorldEventCatalogDefinition _catalog;
 	bool _subscribed;
-	bool _gameStarted;
-	bool _pendingGameStarted;
-	bool _playerHasMadeInput;
-	float _gameStartedReadyAt;
+	bool _playerHasMadeGameplayInput;
+	float _catalogStartUnscaledTime;
 
 	public static WorldEventSystem Instance => _instance;
 
 	public WorldEventCatalogDefinition Catalog => _catalog;
 
-	public bool GameStarted => _gameStarted;
+	public bool PlayerHasMadeGameplayInput => _playerHasMadeGameplayInput;
+
+	public bool GameStarted => _playerHasMadeGameplayInput &&
+	                           Time.unscaledTime >= _catalogStartUnscaledTime + GameStartedDelaySeconds;
 
 	public static WorldEventSystem EnsureExists()
 	{
@@ -77,7 +78,7 @@ public class WorldEventSystem : MonoBehaviour
 	{
 		_dialogue.Tick();
 		TrySkipDialogueInput();
-		TickGameStartedDelay();
+		TickConditionTimers();
 	}
 
 	public void StartCatalog()
@@ -86,8 +87,8 @@ public class WorldEventSystem : MonoBehaviour
 		EventSceneAutoWire.EnsureWired();
 		_enteredVolumes.Clear();
 		_firedThisSession.Clear();
-		_gameStarted = false;
-		BeginGameStartedAfterInputAndDelay();
+		_playerHasMadeGameplayInput = false;
+		_catalogStartUnscaledTime = Time.unscaledTime;
 		EvaluateAll();
 	}
 
@@ -101,26 +102,11 @@ public class WorldEventSystem : MonoBehaviour
 			Debug.LogWarning( "WorldEventSystem: no WorldEventCatalogDefinition found." );
 	}
 
-	void BeginGameStartedAfterInputAndDelay()
+	void TickConditionTimers()
 	{
-		_pendingGameStarted = true;
-		_playerHasMadeInput = false;
-		_gameStartedReadyAt = Time.unscaledTime + GameStartedDelaySeconds;
-	}
+		if ( !_playerHasMadeGameplayInput && HasPlayerMadeGameplayInput() )
+			_playerHasMadeGameplayInput = true;
 
-	void TickGameStartedDelay()
-	{
-		if ( !_pendingGameStarted )
-			return;
-
-		if ( !_playerHasMadeInput && HasPlayerMadeGameplayInput() )
-			_playerHasMadeInput = true;
-
-		if ( !_playerHasMadeInput || Time.unscaledTime < _gameStartedReadyAt )
-			return;
-
-		_pendingGameStarted = false;
-		_gameStarted = true;
 		EvaluateAll();
 	}
 
@@ -199,11 +185,15 @@ public class WorldEventSystem : MonoBehaviour
 		switch ( condition.type )
 		{
 			case WorldEventConditionType.GameStarted:
-				return _gameStarted;
+				return GameStarted;
 			case WorldEventConditionType.EnterVolume:
 				return !string.IsNullOrEmpty( condition.targetId ) && _enteredVolumes.Contains( condition.targetId );
 			case WorldEventConditionType.PickupTreasure:
 				return MatchesPickup( condition, pickupContext );
+			case WorldEventConditionType.PlayerGameplayInput:
+				return _playerHasMadeGameplayInput;
+			case WorldEventConditionType.ElapsedUnscaledSeconds:
+				return Time.unscaledTime >= _catalogStartUnscaledTime + Mathf.Max( 0f, condition.delaySeconds );
 			default:
 				return false;
 		}
@@ -266,8 +256,79 @@ public class WorldEventSystem : MonoBehaviour
 				case WorldEventActionType.SetTutorialHud:
 					ApplyTutorialHud( action );
 					break;
+				case WorldEventActionType.PlayAudio:
+					PlayAudio( action );
+					break;
+				case WorldEventActionType.LanternRevealSweep:
+					StartLanternRevealSweep( action );
+					break;
+				case WorldEventActionType.CinematicPresentation:
+					StartCinematicPresentation( action );
+					break;
 			}
 		}
+	}
+
+	static void PlayAudio( WorldEventAction action )
+	{
+		if ( action == null || action.audioClip == null )
+			return;
+
+		WorldEventAudioPlayer.Play( action, ResolveAudioPosition( action ) );
+	}
+
+	static void StartLanternRevealSweep( WorldEventAction action )
+	{
+		if ( action == null || string.IsNullOrEmpty( action.lanternRevealId ) )
+			return;
+
+		LanternRevealSweepOverrides overrides = new LanternRevealSweepOverrides
+		{
+			SkylightFadeDuration = action.lanternSkylightFadeDuration,
+			SweepDuration = action.lanternSweepDuration,
+			LanternFadeDuration = action.lanternFadeDuration,
+			LanternStartDelay = action.lanternStartDelay
+		};
+		LanternRevealSweepController.TryStartReveal( action.lanternRevealId, overrides );
+	}
+
+	static void StartCinematicPresentation( WorldEventAction action )
+	{
+		if ( action == null || string.IsNullOrEmpty( action.cinematicPresentationId ) )
+			return;
+
+		CinematicPresentationOverrides overrides = new CinematicPresentationOverrides
+		{
+			FovPeak = action.cinematicFovPeak,
+			LetterboxPeak = action.cinematicLetterboxPeak,
+			OverrideMicroPush = action.cinematicOverrideMicroPush,
+			EnableMicroPush = action.cinematicEnableMicroPush,
+			MicroPushDistance = action.cinematicMicroPushDistance,
+			Rise = action.cinematicRise,
+			Hold = action.cinematicHold,
+			Fall = action.cinematicFall
+		};
+		CinematicPresentationController.TryPlay( action.cinematicPresentationId, overrides );
+	}
+
+	static Vector3 ResolveAudioPosition( WorldEventAction action )
+	{
+		if ( action.audioAtPlayer )
+		{
+			if ( GameMode.Instance != null && GameMode.Instance.Player != null )
+				return GameMode.Instance.Player.transform.position;
+		}
+
+		if ( action.audioUseWorldPosition )
+			return action.spawnWorldPosition;
+
+		if ( !string.IsNullOrEmpty( action.spawnPointId ) &&
+		     EventTargetRegistry.TryGetSpawnPoint( action.spawnPointId, out EventSpawnPoint spawnPoint ) &&
+		     spawnPoint != null &&
+		     spawnPoint.SpawnTransform != null )
+			return spawnPoint.SpawnTransform.position;
+
+		return Vector3.zero;
 	}
 
 	static void ApplyTutorialHud( WorldEventAction action )
@@ -349,9 +410,11 @@ public class WorldEventSystem : MonoBehaviour
 	{
 		_firedThisSession.Clear();
 		_enteredVolumes.Clear();
-		_gameStarted = false;
+		_playerHasMadeGameplayInput = false;
+		_catalogStartUnscaledTime = Time.unscaledTime;
 		_dialogue.Stop();
 		TutorialHud.Clear();
+		LanternRevealSweepController.DebugResetAll();
 
 		ProfileSaveData save = GetSave();
 		if ( save != null )
@@ -362,7 +425,6 @@ public class WorldEventSystem : MonoBehaviour
 				ProfileManager.Instance.SaveCurrentStatsToProfile();
 		}
 
-		BeginGameStartedAfterInputAndDelay();
 		EvaluateAll();
 	}
 

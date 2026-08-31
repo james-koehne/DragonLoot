@@ -248,7 +248,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 0, y: 60}
+  m_AnchoredPosition: {x: 0, y: 160}
   m_SizeDelta: {x: 0, y: 144}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!222 &7101000000000000103
@@ -580,6 +580,9 @@ MonoBehaviour:
   group: {fileID: 7101000000000000205}
   title: {fileID: 7101000000000000214}
   objective: {fileID: 7101000000000000224}
+  padding: {x: 22, y: 22}
+  textSpacing: 8
+  contextualSizePercent: 118
 --- !u!1 &7101000000000000211
 GameObject:
   m_ObjectHideFlags: 0
@@ -1562,6 +1565,7 @@ MonoBehaviour:
   idleColor: {r: 1, g: 1, b: 1, a: 1}
   focusedColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   size: 8
+  _canvasGroup: {fileID: 0}
 --- !u!1 &7101000000000000511
 GameObject:
   m_ObjectHideFlags: 0
@@ -1873,6 +1877,12 @@ MonoBehaviour:
   controlsText: {fileID: 7101000000000000724}
   resumeButton: {fileID: 7101000000000000735}
   quitButton: {fileID: 7101000000000000755}
+  tutorialsButton: {fileID: 0}
+  tutorialsBackButton: {fileID: 0}
+  controlsPanelGroup: {fileID: 0}
+  tutorialsPanelGroup: {fileID: 0}
+  tutorialsListRoot: {fileID: 0}
+  tutorialsEmptyLabel: {fileID: 0}
 --- !u!1 &7101000000000000711
 GameObject:
   m_ObjectHideFlags: 0

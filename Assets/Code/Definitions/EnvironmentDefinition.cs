@@ -4,6 +4,11 @@ using UnityEngine.Rendering;
 [CreateAssetMenu( fileName = "EnvironmentDefinition", menuName = "Definitions/EnvironmentDefinition" )]
 public class EnvironmentDefinition : ScriptableObject
 {
+	static bool _hasFogDensityOverride;
+	static float _fogDensityOverride;
+
+	public static bool HasFogDensityOverride => _hasFogDensityOverride;
+
 	[Header( "Fog" )]
 	public bool fogEnabled = true;
 	public FogMode fogMode = FogMode.ExponentialSquared;
@@ -36,12 +41,31 @@ public class EnvironmentDefinition : ScriptableObject
 	public float sunIntensity = 1f;
 	public Vector3 sunEulerAngles = new Vector3( 50f, -30f, 0f );
 
+	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.SubsystemRegistration )]
+	static void ResetStatics()
+	{
+		_hasFogDensityOverride = false;
+		_fogDensityOverride = 0f;
+	}
+
+	public static void SetFogDensityOverride( float density )
+	{
+		_hasFogDensityOverride = true;
+		_fogDensityOverride = Mathf.Max( 0f, density );
+		RenderSettings.fogDensity = _fogDensityOverride;
+	}
+
+	public static void ClearFogDensityOverride()
+	{
+		_hasFogDensityOverride = false;
+	}
+
 	public void Apply( Light sunLight )
 	{
 		RenderSettings.fog = fogEnabled;
 		RenderSettings.fogMode = fogMode;
 		RenderSettings.fogColor = fogColor;
-		RenderSettings.fogDensity = fogDensity;
+		RenderSettings.fogDensity = _hasFogDensityOverride ? _fogDensityOverride : fogDensity;
 		RenderSettings.fogStartDistance = fogStartDistance;
 		RenderSettings.fogEndDistance = fogEndDistance;
 

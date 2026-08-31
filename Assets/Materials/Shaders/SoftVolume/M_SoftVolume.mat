@@ -31,7 +31,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _NoiseTexA:
-        m_Texture: {fileID: 2800000, guid: 10f0f05cdfbe64f44b9e3b2655c32308, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _NoiseTexB:
@@ -40,15 +40,15 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _Alpha: 0.55
+    - _Alpha: 0.5
     - _AlphaPow: 1.1
     - _CameraFadeEnd: 1.25
     - _CameraFadeStart: 0.35
     - _CenterBoost: 0.35
     - _Cull: 0
-    - _Density: 0.1
+    - _Density: 0.2
     - _DstBlend: 10
-    - _Exposure: 1.2
+    - _Exposure: 2
     - _FogInfluence: 0.65
     - _FresnelPower: 1.5
     - _GeometrySoftenDistance: 0.5
@@ -58,7 +58,7 @@ Material:
     - _HeightEnabled: 1
     - _HeightMax: 136.3
     - _HeightMin: 0
-    - _HeightSoftness: 0.35
+    - _HeightSoftness: 0.7
     - _HeightSpace: 0
     - _NoiseBEnabled: 0
     - _NoiseBlend: 1
@@ -89,7 +89,7 @@ Material:
     - _Saturation: 1
     - _SrcBlend: 5
     - _ThicknessInvert: 1
-    - _ThicknessPower: 2
+    - _ThicknessPower: 0.25
     - _TimeScale: 1
     - _VertexJitter: 0
     - _ZTest: 4

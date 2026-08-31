@@ -208,6 +208,7 @@ public class GameMode : MonoBehaviour, IGameMode
 			cameraController.transform.SetParent( Player.CameraMount, false );
 			cameraController.transform.localPosition = Vector3.zero;
 			cameraController.transform.localRotation = Quaternion.identity;
+			cameraController.CaptureBaseLocalPosition();
 		}
 
 		if ( Player != null && cameraController != null )

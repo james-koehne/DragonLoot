@@ -6,8 +6,8 @@ struct GpuAreaVolume
     float4 color;
     float softness;
     float falloffExtend;
+    float fogInfluence;
     float pad0;
-    float pad1;
 };
 
 StructuredBuffer<GpuAreaVolume> _AreaVolumes;
@@ -41,6 +41,7 @@ void Fill(uint3 id : SV_DispatchThreadID)
 
     float3 rgb = 0.0;
     float weight = 0.0;
+    float fogWeight = 0.0;
 
     for (int i = 0; i < _AreaVolumeCount; i++)
     {
@@ -51,11 +52,16 @@ void Fill(uint3 id : SV_DispatchThreadID)
 
         rgb += volume.color.rgb * falloff;
         weight += falloff;
+        fogWeight += saturate(volume.fogInfluence) * falloff;
     }
 
     float3 result = rgb;
+    float fogInfluence = 0.0;
     if (weight > 1e-5)
+    {
         result = lerp(rgb / weight, rgb, saturate(_AreaBlendFill));
+        fogInfluence = fogWeight / weight;
+    }
 
-    _AreaClipmap[id] = float4(result, 1.0);
+    _AreaClipmap[id] = float4(result, fogInfluence);
 }

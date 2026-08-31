@@ -29,11 +29,17 @@ public sealed class AreaLightVolume : MonoBehaviour
 	[Tooltip( "How far past the box faces the tint continues, as a fraction of the box half-extent." )]
 	float _falloffDistance = 0.65f;
 
+	[SerializeField]
+	[Range( 0f, 1f )]
+	[Tooltip( "How much this volume tints fog. 0 = no fog effect, 1 = full area colour in fog." )]
+	float _fogInfluence = 1f;
+
 	Vector3 _lastPosition;
 	Quaternion _lastRotation;
 	Vector3 _lastSize;
 	float _lastEdgeSoftness;
 	float _lastFalloffDistance;
+	float _lastFogInfluence;
 	float _lastIntensity;
 	Color _lastColor;
 
@@ -46,6 +52,8 @@ public sealed class AreaLightVolume : MonoBehaviour
 	public float EdgeSoftness => _edgeSoftness;
 
 	public float FalloffDistance => _falloffDistance;
+
+	public float FogInfluence => _fogInfluence;
 
 	void OnEnable()
 	{
@@ -68,6 +76,7 @@ public sealed class AreaLightVolume : MonoBehaviour
 			|| _size != _lastSize
 			|| !Mathf.Approximately( _edgeSoftness, _lastEdgeSoftness )
 			|| !Mathf.Approximately( _falloffDistance, _lastFalloffDistance )
+			|| !Mathf.Approximately( _fogInfluence, _lastFogInfluence )
 			|| !Mathf.Approximately( _intensity, _lastIntensity )
 			|| _color != _lastColor )
 		{
@@ -83,6 +92,7 @@ public sealed class AreaLightVolume : MonoBehaviour
 		_lastSize = _size;
 		_lastEdgeSoftness = _edgeSoftness;
 		_lastFalloffDistance = _falloffDistance;
+		_lastFogInfluence = _fogInfluence;
 		_lastIntensity = _intensity;
 		_lastColor = _color;
 	}
@@ -130,7 +140,8 @@ public sealed class AreaLightVolume : MonoBehaviour
 			worldToLocal = localToWorld.inverse,
 			color = hdrColor,
 			softness = Mathf.Clamp01( _edgeSoftness ),
-			falloffExtend = Mathf.Max( 0f, _falloffDistance )
+			falloffExtend = Mathf.Max( 0f, _falloffDistance ),
+			fogInfluence = Mathf.Clamp01( _fogInfluence )
 		};
 	}
 

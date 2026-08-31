@@ -13,10 +13,12 @@ public class FirstPersonCameraController : MonoBehaviour
 	float MaxPitch => RuntimeDefinition.Get( Definition, d => d.maxPitch, 85f );
 
 	float _lookSensitivity = -1f;
+	float _lookSensitivityMultiplier = 1f;
 	bool _invertYInitialized;
 	bool _invertY;
 	float _pitch;
 	bool _inputEnabled = true;
+	float _baseFieldOfView;
 
 	public float Pitch => _pitch;
 
@@ -49,6 +51,7 @@ public class FirstPersonCameraController : MonoBehaviour
 	void Awake()
 	{
 		Camera = GetComponent<Camera>();
+		_baseFieldOfView = Camera.fieldOfView;
 	}
 
 	void Update()
@@ -82,6 +85,27 @@ public class FirstPersonCameraController : MonoBehaviour
 	{
 		_pitch = Mathf.Clamp( NormalizePitch( pitch ), MinPitch, MaxPitch );
 		transform.localRotation = Quaternion.Euler( _pitch, 0f, 0f );
+	}
+
+	public void SetFieldOfView( float fov )
+	{
+		if ( Camera != null )
+			Camera.fieldOfView = fov;
+	}
+
+	public void ResetFieldOfView()
+	{
+		SetFieldOfView( _baseFieldOfView );
+	}
+
+	public void SetLookSensitivityMultiplier( float multiplier )
+	{
+		_lookSensitivityMultiplier = Mathf.Max( 0f, multiplier );
+	}
+
+	public void ResetLookSensitivityMultiplier()
+	{
+		_lookSensitivityMultiplier = 1f;
 	}
 
 	public float AdjustLookSensitivity( float delta )
@@ -127,7 +151,7 @@ public class FirstPersonCameraController : MonoBehaviour
 		if ( Mathf.Approximately( delta.x, 0f ) && Mathf.Approximately( delta.y, 0f ) )
 			return;
 
-		float sensitivity = CurrentLookSensitivity;
+		float sensitivity = CurrentLookSensitivity * _lookSensitivityMultiplier;
 		_body.Rotate( 0f, delta.x * sensitivity, 0f, Space.World );
 
 		float pitchDelta = delta.y * sensitivity;

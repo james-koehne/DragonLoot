@@ -161,7 +161,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
             pixelLightFar.direction,
             camDist);
 
-        colorFar.rgb = MixFog(colorFar.rgb, inputFar.fogCoord);
+        colorFar.rgb = DragonLootMixFog(colorFar.rgb, inputFar.fogCoord, positionWS);
         return colorFar;
     }
 
@@ -202,7 +202,7 @@ half4 GoldPileProcLitFrag(Varyings input) : SV_Target
         mainLight.direction,
         camDist);
 
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    color.rgb = DragonLootMixFog(color.rgb, inputData.fogCoord, inputData.positionWS);
     return color;
 }
 

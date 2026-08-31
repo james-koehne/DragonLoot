@@ -46,8 +46,8 @@ Material:
     - _NoiseScale: 1.75
     - _NoiseStrength: 0.3
     - _SkyDirectionView: 1
-    - _SkyExposure: 2
-    - _SkyIntensity: 1
+    - _SkyExposure: 3
+    - _SkyIntensity: 2.39
     - _SkyRotation: 0
     m_Colors:
     - _SkyTint: {r: 1, g: 1, b: 1, a: 1}

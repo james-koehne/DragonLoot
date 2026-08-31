@@ -90,7 +90,7 @@ Material:
     - _DistantCoinFadeStart: 8
     - _DistantCoinGrowFar: 80
     - _DistantCoinGrowNear: 28
-    - _DistantCoinIntensity: 2
+    - _DistantCoinIntensity: 1
     - _DistantCoinMaxPixels: 4
     - _DistantCoinMetalFocus: 0.75
     - _DistantCoinMetalFocusEnabled: 1
@@ -113,7 +113,7 @@ Material:
     - _PomEnabled: 0
     - _PomHeight: 0.08
     - _PomSteps: 12
-    - _ReflectionFloor: 0.25
+    - _ReflectionFloor: 0
     - _RimAoStrength: 0.175
     - _RimBevelStrength: 0.55
     - _RimBevelWidth: 0.14

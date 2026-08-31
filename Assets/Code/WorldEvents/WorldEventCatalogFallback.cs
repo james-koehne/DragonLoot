@@ -31,7 +31,8 @@ public static class WorldEventCatalogFallback
 		evt.tags = new[] { "intro" };
 		evt.conditions = new[]
 		{
-			new WorldEventCondition { type = WorldEventConditionType.GameStarted }
+			new WorldEventCondition { type = WorldEventConditionType.PlayerGameplayInput },
+			new WorldEventCondition { type = WorldEventConditionType.ElapsedUnscaledSeconds, delaySeconds = 2f }
 		};
 		evt.actions = new[]
 		{
@@ -73,9 +74,53 @@ public static class WorldEventCatalogFallback
 		};
 		evt.actions = new[]
 		{
-			DialogueAction( Line( "I believe we have rather a lot of work to do." ) )
+			DialogueAction( Line( "I believe we have rather a lot of work to do." ) ),
+			AudioAction( ResolveEpicRiserClip() ),
+			LanternRevealSweepAction( LanternActivator.IntroLedgeRevealId ),
+			CinematicPresentationAction( CinematicPresentationController.IntroLedgePresentationId )
 		};
 		return evt;
+	}
+
+	static AudioClip ResolveEpicRiserClip()
+	{
+#if UNITY_EDITOR
+		return UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>( "Assets/Audio/SFX/Stingers/EpicRiser_TEMP_DELETE.wav" );
+#else
+		return null;
+#endif
+	}
+
+	static WorldEventAction LanternRevealSweepAction( string revealId )
+	{
+		return new WorldEventAction
+		{
+			type = WorldEventActionType.LanternRevealSweep,
+			lanternRevealId = revealId
+		};
+	}
+
+	static WorldEventAction CinematicPresentationAction( string presentationId )
+	{
+		return new WorldEventAction
+		{
+			type = WorldEventActionType.CinematicPresentation,
+			cinematicPresentationId = presentationId
+		};
+	}
+
+	static WorldEventAction AudioAction( AudioClip clip )
+	{
+		return new WorldEventAction
+		{
+			type = WorldEventActionType.PlayAudio,
+			audioClip = clip,
+			audioVolumeMin = 1f,
+			audioVolumeMax = 1f,
+			audioPitchMin = 1f,
+			audioPitchMax = 1f,
+			audioSpatialBlend = 0f
+		};
 	}
 
 	static WorldEventDefinition Create( string id )

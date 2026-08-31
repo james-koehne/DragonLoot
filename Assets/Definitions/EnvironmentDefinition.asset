@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: EnvironmentDefinition
   m_EditorClassIdentifier: Assembly-CSharp::EnvironmentDefinition
   fogEnabled: 1
-  fogMode: 1
+  fogMode: 2
   fogColor: {r: 0.08235294, g: 0.12941177, b: 0.16862746, a: 1}
   fogDensity: 0.002
   fogStartDistance: 0

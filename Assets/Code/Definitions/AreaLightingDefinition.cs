@@ -18,7 +18,12 @@ public class AreaLightingDefinition : ScriptableObject
 	public static readonly int GlobalIntensityId = Shader.PropertyToID( "_DragonLoot_AreaAmbientIntensity" );
 	public static readonly int AmbientMixId = Shader.PropertyToID( "_DragonLoot_AreaAmbientMix" );
 	public static readonly int AlbedoInfluenceId = Shader.PropertyToID( "_DragonLoot_AreaAmbientAlbedoInfluence" );
+	public static readonly int FogInfluenceId = Shader.PropertyToID( "_DragonLoot_AreaAmbientFogInfluence" );
 	public static readonly int EnabledId = Shader.PropertyToID( "_DragonLoot_AreaAmbientEnabled" );
+
+	static float _runtimeFogInfluenceScale = 1f;
+
+	public static float RuntimeFogInfluenceScale => _runtimeFogInfluenceScale;
 
 	[Header( "Feature" )]
 	public bool enableAreaLighting = true;
@@ -36,6 +41,10 @@ public class AreaLightingDefinition : ScriptableObject
 	[Tooltip( "0 = flat colour cast; 1 = multiply tint through albedo (stronger on bright surfaces)." )]
 	public float albedoInfluence = 0.35f;
 
+	[Range( 0f, 1f )]
+	[Tooltip( "How much area lights tint fog colour. 0 = no effect, 1 = full area colour in fog." )]
+	public float fogInfluence = 0.5f;
+
 	[Header( "World Volume" )]
 	[Tooltip( "Voxel resolution of the level-fixed 3D irradiance volume (X, Y, Z)." )]
 	public Vector3Int worldVolumeResolution = new Vector3Int( 64, 24, 64 );
@@ -52,6 +61,22 @@ public class AreaLightingDefinition : ScriptableObject
 
 	public int SettingsVersion => _settingsVersion;
 
+	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.SubsystemRegistration )]
+	static void ResetStatics()
+	{
+		_runtimeFogInfluenceScale = 1f;
+	}
+
+	public static void SetRuntimeFogInfluenceScale( float scale )
+	{
+		_runtimeFogInfluenceScale = Mathf.Clamp01( scale );
+	}
+
+	public static void ClearRuntimeFogInfluenceScale()
+	{
+		_runtimeFogInfluenceScale = 1f;
+	}
+
 	[StructLayout( LayoutKind.Sequential )]
 	public struct GpuAreaVolume
 	{
@@ -59,8 +84,8 @@ public class AreaLightingDefinition : ScriptableObject
 		public Vector4 color;
 		public float softness;
 		public float falloffExtend;
+		public float fogInfluence;
 		public float pad0;
-		public float pad1;
 	}
 
 	public void Validate()
@@ -72,6 +97,7 @@ public class AreaLightingDefinition : ScriptableObject
 		globalIntensity = Mathf.Max( 0f, globalIntensity );
 		ambientMix = Mathf.Clamp01( ambientMix );
 		albedoInfluence = Mathf.Clamp01( albedoInfluence );
+		fogInfluence = Mathf.Clamp01( fogInfluence );
 	}
 
 	public void NotifyChanged()
@@ -89,6 +115,7 @@ public class AreaLightingDefinition : ScriptableObject
 		Shader.SetGlobalFloat( GlobalIntensityId, 0f );
 		Shader.SetGlobalFloat( AmbientMixId, 0f );
 		Shader.SetGlobalFloat( AlbedoInfluenceId, 0f );
+		Shader.SetGlobalFloat( FogInfluenceId, 0f );
 		Shader.SetGlobalFloat( EnabledId, 0f );
 	}
 
@@ -103,6 +130,8 @@ public class AreaLightingDefinition : ScriptableObject
 		Shader.SetGlobalFloat( GlobalIntensityId, intensity );
 		Shader.SetGlobalFloat( AmbientMixId, enableAreaLighting ? ambientMix : 0f );
 		Shader.SetGlobalFloat( AlbedoInfluenceId, enableAreaLighting ? albedoInfluence : 0f );
+		float fogInfluenceValue = enableAreaLighting ? fogInfluence * _runtimeFogInfluenceScale : 0f;
+		Shader.SetGlobalFloat( FogInfluenceId, fogInfluenceValue );
 		Shader.SetGlobalFloat( EnabledId, intensity > 1e-4f ? 1f : 0f );
 	}
 

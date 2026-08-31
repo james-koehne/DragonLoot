@@ -17,19 +17,19 @@ MonoBehaviour:
   diffuseWrap: 0.5
   directLightScale: 1
   enableSpecular: 1
-  specularIntensity: 5
+  specularIntensity: 10
   specularSize: 50
   specularColor: {r: 1, g: 1, b: 1, a: 1}
   rimColor: {r: 1, g: 0.33686084, b: 0, a: 1}
-  rimIntensity: 0.025
+  rimIntensity: 0
   rimPower: 8
   shadowColor: {r: 0.15, g: 0.18, b: 0.28, a: 1}
   shadowStrength: 0.8
   receiveShadows: 1
-  ambientIntensity: 0.1
+  ambientIntensity: 6
   ambientTint: {r: 0.028301895, g: 0.023095414, b: 0.015085444, a: 1}
-  ambientFloor: 0.01
-  saturation: 1
+  ambientFloor: 0.15
+  saturation: 1.1
   contrast: 1
   environmentReflections: 0
   reflectionIntensity: 0.35

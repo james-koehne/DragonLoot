@@ -168,7 +168,7 @@ half4 CoinPileLitFrag(Varyings input) : SV_Target
     half litGate = saturate(Luminance(color.rgb) * 2.0h + _ReflectionFloor);
     color.rgb += _FresnelColor.rgb * fresnel * _FresnelIntensity * metallic * litGate;
 
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    color.rgb = DragonLootMixFog(color.rgb, inputData.fogCoord, inputData.positionWS);
     return color;
 }
 

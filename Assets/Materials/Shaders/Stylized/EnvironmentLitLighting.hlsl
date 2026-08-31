@@ -147,7 +147,7 @@ half4 EnvironmentLitFrag(Varyings input) : SV_Target
     surface.reflections = _ReflectionsLocal;
 
     half3 lit = DragonLootShadeSurface(inputData, surface);
-    lit = MixFog(lit, inputData.fogCoord);
+    lit = DragonLootMixFog(lit, inputData.fogCoord, inputData.positionWS);
     return half4(lit, 1.0h);
 }
 

@@ -214,7 +214,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half fresnelAmt = _FresnelIntensity * shineMul;
     color.rgb += fresnelRgb * fresnel * fresnelAmt * metallic * litGate;
 
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    color.rgb = DragonLootMixFog(color.rgb, inputData.fogCoord, inputData.positionWS);
     return color;
 }
 

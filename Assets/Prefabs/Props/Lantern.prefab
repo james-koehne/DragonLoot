@@ -91,6 +91,68 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &358277000037693607
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1853963972561687058}
+  - component: {fileID: 5191499030516663354}
+  m_Layer: 0
+  m_Name: OnExtinguishFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1853963972561687058
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 358277000037693607}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8224251673882157458}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5191499030516663354
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 358277000037693607}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 9170125570492334175
+  references:
+    version: 2
+    RefIds:
+    - rid: 9170125570492334175
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 0}
+        VolumeMin: 0.7
+        VolumeMax: 0.9
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 1
+        MinDistance: 1
+        MaxDistance: 12
+        AudioSource: {fileID: 0}
 --- !u!1 &437709429270676097
 GameObject:
   m_ObjectHideFlags: 0
@@ -102,7 +164,6 @@ GameObject:
   - component: {fileID: 1886368995739998884}
   - component: {fileID: 7789743901271174470}
   - component: {fileID: 1803194045781062480}
-  - component: {fileID: 8544521088994729377}
   m_Layer: 0
   m_Name: Point Light
   m_TagString: Untagged
@@ -135,15 +196,15 @@ Light:
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 2
-  m_Color: {r: 1, g: 0.75180775, b: 0.43296495, a: 1}
-  m_Intensity: 0.40847677
-  m_Range: 19.85134
+  m_Color: {r: 1, g: 0.5015105, b: 0.15381084, a: 1}
+  m_Intensity: 2
+  m_Range: 20
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
     m_Type: 2
-    m_Resolution: -1
+    m_Resolution: 128
     m_CustomResolution: -1
     m_Strength: 1
     m_Bias: 0.05
@@ -203,7 +264,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
-  m_AdditionalLightsShadowResolutionTier: 0
+  m_AdditionalLightsShadowResolutionTier: -1
   m_CustomShadowLayers: 0
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
@@ -219,25 +280,6 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
---- !u!114 &8544521088994729377
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 437709429270676097}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a0378b512cdeb9f4dbe0f44b83b2d234, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::LightFlicker
-  _definition: {fileID: 11400000, guid: 0c047e98e88153842a63b59ea3ba5043, type: 2}
-  _preset: 0
-  _customPresetName: Lantern
-  _intensityScale: 1
-  _speedScale: 1
-  _playInEditMode: 1
-  _light: {fileID: 0}
 --- !u!1 &1900234678166983125
 GameObject:
   m_ObjectHideFlags: 0
@@ -420,6 +462,68 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &7927492109733999849
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7486302633268240793}
+  - component: {fileID: 9163733595345036119}
+  m_Layer: 0
+  m_Name: OnIgniteFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7486302633268240793
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7927492109733999849}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8224251673882157458}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &9163733595345036119
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7927492109733999849}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 9170125570492334174
+  references:
+    version: 2
+    RefIds:
+    - rid: 9170125570492334174
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: d654059b387b9684c80b102ceb7cb53b, type: 3}
+        VolumeMin: 0.3
+        VolumeMax: 0.4
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 1
+        MinDistance: 1
+        MaxDistance: 240
+        AudioSource: {fileID: 0}
 --- !u!1 &8748728253186325288
 GameObject:
   m_ObjectHideFlags: 0
@@ -430,6 +534,8 @@ GameObject:
   m_Component:
   - component: {fileID: 8224251673882157458}
   - component: {fileID: 3780902710118110947}
+  - component: {fileID: 85351720769281722}
+  - component: {fileID: 2112285429867489560}
   m_Layer: 0
   m_Name: Lantern
   m_TagString: Untagged
@@ -445,7 +551,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8748728253186325288}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0.36748534, z: -0, w: 0.93002933}
+  m_LocalRotation: {x: -0, y: 0, z: -0, w: 1}
   m_LocalPosition: {x: -24.89433, y: 4.852232, z: -44.364605}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -454,6 +560,8 @@ Transform:
   - {fileID: 4250130914744115755}
   - {fileID: 8418584615721439558}
   - {fileID: 1886368995739998884}
+  - {fileID: 7486302633268240793}
+  - {fileID: 1853963972561687058}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: -43.121, z: 0}
 --- !u!205 &3780902710118110947
@@ -478,8 +586,54 @@ LODGroup:
     fadeTransitionWidth: 0
     renderers:
     - renderer: {fileID: 3516955382037004440}
-  - screenRelativeHeight: 0.01
+  - screenRelativeHeight: 0.00052696315
     fadeTransitionWidth: 0
     renderers:
     - renderer: {fileID: 8621391600049842120}
   m_Enabled: 1
+--- !u!114 &85351720769281722
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8748728253186325288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0378b512cdeb9f4dbe0f44b83b2d234, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LightFlicker
+  _definition: {fileID: 11400000, guid: 0c047e98e88153842a63b59ea3ba5043, type: 2}
+  _preset: 0
+  _customPresetName: Lantern
+  _intensityScale: 1
+  _speedScale: 1
+  _playInEditMode: 0
+  _light: {fileID: 7789743901271174470}
+  _emissiveRenderers: []
+  _emissiveMaterialIndex: 1
+--- !u!114 &2112285429867489560
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8748728253186325288}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 43b2a64e6592afd49a730a5892bd2132, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LanternActivator
+  _activationMode: 0
+  _groupId: 
+  _revealId: 
+  _activateDistance: 20
+  _deactivateDistance: 999
+  _fadeDuration: 0.5
+  _allowDeactivate: 0
+  _startLit: 0
+  _emissiveMaterialIndex: 1
+  _light: {fileID: 7789743901271174470}
+  _lightFlicker: {fileID: 85351720769281722}
+  _onIgnite: {fileID: 9163733595345036119}
+  _onExtinguish: {fileID: 5191499030516663354}

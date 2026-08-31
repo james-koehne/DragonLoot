@@ -10,11 +10,25 @@ public class StylizedLightingGlobals : MonoBehaviour
 	static StylizedLightingGlobals _instance;
 	StylizedLightingDefinition _definition;
 	int _lastAppliedFrame = -1;
+	static float _specularIntensityMultiplier = 1f;
+
+	public static void SetSpecularIntensityMultiplier( float multiplier )
+	{
+		_specularIntensityMultiplier = Mathf.Max( 0f, multiplier );
+		if ( _instance != null )
+			_instance.PushGlobals( force: true );
+	}
+
+	public static void ResetSpecularIntensityMultiplier()
+	{
+		SetSpecularIntensityMultiplier( 1f );
+	}
 
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.SubsystemRegistration )]
 	static void ResetStatics()
 	{
 		_instance = null;
+		_specularIntensityMultiplier = 1f;
 	}
 
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.BeforeSceneLoad )]
@@ -57,7 +71,18 @@ public class StylizedLightingGlobals : MonoBehaviour
 		else
 			StylizedLightingDefinition.ApplyDefaultGlobals();
 
+		ApplySpecularMultiplier();
+
 		_lastAppliedFrame = Time.frameCount;
+	}
+
+	void ApplySpecularMultiplier()
+	{
+		if ( Mathf.Approximately( _specularIntensityMultiplier, 1f ) )
+			return;
+
+		float current = Shader.GetGlobalFloat( StylizedLightingDefinition.SpecularIntensityId );
+		Shader.SetGlobalFloat( StylizedLightingDefinition.SpecularIntensityId, current * _specularIntensityMultiplier );
 	}
 
 	StylizedLightingDefinition ResolveDefinition()

@@ -3,6 +3,8 @@ using UnityEngine.UI;
 
 public class CrosshairUI : MonoBehaviour
 {
+	static CrosshairUI _instance;
+
 	[Header( "Colours" )]
 	public Color idleColor = Color.white;
 	public Color focusedColor = new Color( 1f, 0.85f, 0.2f, 1f );
@@ -10,13 +12,34 @@ public class CrosshairUI : MonoBehaviour
 	[Header( "Layout" )]
 	public float size = 8f;
 
+	[SerializeField] CanvasGroup _canvasGroup;
+
 	Image _image;
 	bool _visible;
 
+	public static CrosshairUI Instance => _instance;
+
+	void Awake()
+	{
+		_instance = this;
+		EnsureCanvasGroup();
+	}
+
+	void OnDestroy()
+	{
+		if ( _instance == this )
+			_instance = null;
+	}
+
 	public void Setup()
 	{
+		if ( _instance == null )
+			_instance = this;
+
 		EnsureImage();
+		EnsureCanvasGroup();
 		SetVisible( true );
+		SetAlpha( 1f );
 		ApplyColor( false );
 	}
 
@@ -26,6 +49,17 @@ public class CrosshairUI : MonoBehaviour
 		EnsureImage();
 		if ( _image != null )
 			_image.enabled = visible;
+	}
+
+	public void SetAlpha( float alpha )
+	{
+		EnsureCanvasGroup();
+		if ( _canvasGroup != null )
+		{
+			_canvasGroup.alpha = Mathf.Clamp01( alpha );
+			_canvasGroup.blocksRaycasts = false;
+			_canvasGroup.interactable = false;
+		}
 	}
 
 	void Update()
@@ -74,6 +108,20 @@ public class CrosshairUI : MonoBehaviour
 		if ( _image == null )
 			return;
 
-		_image.color = focused ? focusedColor : idleColor;
+		Color color = focused ? focusedColor : idleColor;
+		_image.color = color;
+	}
+
+	void EnsureCanvasGroup()
+	{
+		if ( _canvasGroup != null )
+			return;
+
+		_canvasGroup = GetComponent<CanvasGroup>();
+		if ( _canvasGroup == null )
+			_canvasGroup = gameObject.AddComponent<CanvasGroup>();
+
+		_canvasGroup.blocksRaycasts = false;
+		_canvasGroup.interactable = false;
 	}
 }
