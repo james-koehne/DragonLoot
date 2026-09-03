@@ -358,13 +358,8 @@ public class TreasureSurfaceAuthoringEditor : Editor
 	{
 		Ray ray = HandleUtility.GUIPointToWorldRay( guiPoint );
 
-		// Prefer physics hit so height paint can sample scene geometry Y.
-		if ( Physics.Raycast(
-			ray,
-			out RaycastHit hit,
-			5000f,
-			authoring.HeightBakeMask,
-			authoring.HeightBakeTriggerInteraction ) )
+		// Prefer walkable physics hit so height paint samples floors, ramps, and stairs — not walls.
+		if ( authoring.TryRaycastWalkableSurface( ray, 5000f, out RaycastHit hit ) )
 		{
 			Vector3 p = hit.point;
 			if ( authoring.TryWorldToCell( p, out int cx, out int cz ) )

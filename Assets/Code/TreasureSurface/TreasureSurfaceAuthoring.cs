@@ -50,7 +50,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	[Header( "Height Bake" )]
 	[SerializeField]
-	[Tooltip( "Layers included when baking per-cell authored heights (and height-paint cursor hits)." )]
+	[Tooltip( "Layers included when baking per-cell authored heights (and height-paint cursor hits). Steep faces are skipped; only normals within Max Slope of world up count." )]
 	LayerMask heightBakeMask = ~0;
 
 	[SerializeField]
@@ -87,6 +87,11 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	[Tooltip( "Whether bake rays hit triggers." )]
 	QueryTriggerInteraction heightBakeTriggerInteraction = QueryTriggerInteraction.Ignore;
 
+	[SerializeField]
+	[Range( 0f, 89f )]
+	[Tooltip( "Hits steeper than this from world up are skipped so rays continue to floors, ramps, and stairs." )]
+	float heightBakeMaxSlopeDegrees = 45f;
+
 	[Header( "Height Overlay" )]
 	[SerializeField]
 	[Min( 1 )]
@@ -117,6 +122,9 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	int _paintNotifyBatchDepth;
 
+	const int HeightBakeHitBufferSize = 32;
+	RaycastHit[] _heightBakeHits;
+
 	public static TreasureSurfaceAuthoring Instance => _instance;
 
 	public TreasureSurfaceDefinition Definition => definition;
@@ -137,6 +145,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	public bool HeightBakeTraversableOnly => heightBakeTraversableOnly;
 	public HeightBakeMissBehavior HeightBakeMissMode => heightBakeMissBehavior;
 	public QueryTriggerInteraction HeightBakeTriggerInteraction => heightBakeTriggerInteraction;
+	public float HeightBakeMaxSlopeDegrees => heightBakeMaxSlopeDegrees;
 	public int OverlayChunksPerFrame => overlayChunksPerFrame;
 	public float CellSize => Mathf.Max( 0.01f, chunkSize / Mathf.Max( 1, cellsPerChunk ) );
 	public int ChunkCountX => Mathf.Max( 1, Mathf.CeilToInt( worldSizeX / Mathf.Max( 1f, chunkSize ) ) );
@@ -175,6 +184,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		worldSizeZ = Mathf.Max( 8f, worldSizeZ );
 		chunkSize = Mathf.Max( 1f, chunkSize );
 		cellsPerChunk = Mathf.Max( 8, cellsPerChunk );
+		heightBakeMaxSlopeDegrees = Mathf.Clamp( heightBakeMaxSlopeDegrees, 0f, 89f );
 		EnsurePaintBuffers();
 	}
 
@@ -469,6 +479,52 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 	}
 
 	/// <summary>
+	/// Computes the XZ AABB of traversable painted cells (cell centers). Returns false when none.
+	/// </summary>
+	public bool TryComputeTraversableBoundsXZ( out float minX, out float maxX, out float minZ, out float maxZ )
+	{
+		minX = 0f;
+		maxX = 0f;
+		minZ = 0f;
+		maxZ = 0f;
+		if ( !TryGetPaintArrays( out byte[] trav, out _, out _, out int cellsX, out int cellsZ ) )
+			return false;
+
+		bool any = false;
+		minX = float.MaxValue;
+		maxX = float.MinValue;
+		minZ = float.MaxValue;
+		maxZ = float.MinValue;
+		float halfX = worldSizeX * 0.5f;
+		float halfZ = worldSizeZ * 0.5f;
+		float cell = CellSize;
+
+		for ( int z = 0; z < cellsZ; z++ )
+		{
+			int row = z * cellsX;
+			float wz = worldOrigin.z - halfZ + ( z + 0.5f ) * cell;
+			for ( int x = 0; x < cellsX; x++ )
+			{
+				if ( trav[ row + x ] == 0 )
+					continue;
+
+				float wx = worldOrigin.x - halfX + ( x + 0.5f ) * cell;
+				if ( wx < minX )
+					minX = wx;
+				if ( wx > maxX )
+					maxX = wx;
+				if ( wz < minZ )
+					minZ = wz;
+				if ( wz > maxZ )
+					maxZ = wz;
+				any = true;
+			}
+		}
+
+		return any;
+	}
+
+	/// <summary>
 	/// True when world XZ sits on authored traversable Treasure surface paint,
 	/// including a Chebyshev neighborhood (1 = 3x3). Missing authoring does not block
 	/// so isolated pile tools still work.
@@ -760,6 +816,7 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 
 	/// <summary>
 	/// Raycasts downward per cell using Height Bake settings and writes hit Y into height paint.
+	/// Only hits whose normal is within <see cref="heightBakeMaxSlopeDegrees"/> of world up are kept.
 	/// </summary>
 	public int BakeHeightsFromRaycasts()
 	{
@@ -791,6 +848,46 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		}
 
 		distance = Mathf.Max( 0.1f, heightBakeRayDistance );
+	}
+
+	public bool TryRaycastWalkableSurface( Ray ray, float distance, out RaycastHit hit )
+	{
+		return TryRaycastWalkableSurface( ray.origin, ray.direction, distance, heightBakeMask, heightBakeTriggerInteraction, out hit );
+	}
+
+	public bool TryRaycastWalkableSurface(
+		Vector3 origin,
+		Vector3 direction,
+		float distance,
+		LayerMask layerMask,
+		QueryTriggerInteraction triggerInteraction,
+		out RaycastHit hit )
+	{
+		hit = default;
+		if ( _heightBakeHits == null || _heightBakeHits.Length != HeightBakeHitBufferSize )
+			_heightBakeHits = new RaycastHit[ HeightBakeHitBufferSize ];
+
+		int count = Physics.RaycastNonAlloc( origin, direction, _heightBakeHits, Mathf.Max( 0.1f, distance ), layerMask, triggerInteraction );
+		int best = -1;
+		float bestDistance = float.MaxValue;
+		float maxSlope = Mathf.Clamp( heightBakeMaxSlopeDegrees, 0f, 89f );
+		for ( int i = 0; i < count; i++ )
+		{
+			RaycastHit candidate = _heightBakeHits[ i ];
+			if ( Vector3.Angle( candidate.normal, Vector3.up ) > maxSlope )
+				continue;
+			if ( candidate.distance >= bestDistance )
+				continue;
+
+			bestDistance = candidate.distance;
+			best = i;
+		}
+
+		if ( best < 0 )
+			return false;
+
+		hit = _heightBakeHits[ best ];
+		return true;
 	}
 
 	public int BakeHeightsFromRaycasts( LayerMask layerMask, float rayStartY, float rayDistance )
@@ -835,14 +932,14 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 				float wx = worldOrigin.x - halfX + ( x + 0.5f ) * cell;
 				float wz = worldOrigin.z - halfZ + ( z + 0.5f ) * cell;
 				Vector3 origin = new Vector3( wx, rayStartY, wz );
-				if ( Physics.Raycast( origin, down, out RaycastHit hit, dist, layerMask, triggerInteraction ) )
+				if ( TryRaycastWalkableSurface( origin, down, dist, layerMask, triggerInteraction, out RaycastHit hit ) )
 				{
 					heights[ i ] = hit.point.y + hitOffset;
 					written++;
 				}
 				else
 				{
-					// No geometry under this cell — block travel.
+					// No walkable floor, ramp, or stair under this cell — block travel.
 					trav[ i ] = 0;
 					if ( missBehavior == HeightBakeMissBehavior.SetBaseHeight )
 						heights[ i ] = baseHeight;

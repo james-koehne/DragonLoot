@@ -18,7 +18,8 @@ public enum WorldEventActionType
 	SetTutorialHud = 2,
 	PlayAudio = 3,
 	LanternRevealSweep = 4,
-	CinematicPresentation = 5
+	CinematicPresentation = 5,
+	BrakePlayerMovement = 6
 }
 
 [Serializable]
@@ -71,6 +72,13 @@ public class WorldEventCondition
 public class WorldEventAction
 {
 	public WorldEventActionType type;
+
+	[Tooltip( "Seconds to wait before this action starts. Later actions wait as well because they run in list order." )]
+	[Min( 0f )]
+	public float delayBefore;
+
+	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; brake waits brake duration." )]
+	public bool waitUntilFinished;
 
 	[Tooltip( "Dialogue lines when type is Dialogue." )]
 	public DragonDialogueLine[] dialogue;
@@ -177,6 +185,14 @@ public class WorldEventAction
 	[Tooltip( "Fall duration override for CinematicPresentation. 0 = use controller default." )]
 	[Min( 0f )]
 	public float cinematicFall;
+
+	[Tooltip( "Seconds to lock planar movement when CinematicPresentation starts. 0 = no lock." )]
+	[Min( 0f )]
+	public float cinematicPlayerMovementLockDuration = 10f;
+
+	[Tooltip( "Seconds to interpolate planar velocity to zero when type is BrakePlayerMovement. 0 = instant stop." )]
+	[Min( 0f )]
+	public float playerBrakeDuration = 1f;
 }
 
 /// <summary>

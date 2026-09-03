@@ -55,19 +55,19 @@ Material:
     - _Cutoff: 0.5
     - _FresnelIntensity: 0.35
     - _FresnelPower: 4
-    - _GrooveDarkness: 0.35
+    - _GrooveDarkness: 0.5
     - _GrooveMetallicScale: 0.92
     - _GrooveNormalBias: 1
     - _GrooveNormalStrength: 0.65
     - _GrooveSmoothnessScale: 0.82
-    - _GrooveWidth: 0.08
+    - _GrooveWidth: 0.03
     - _MeshBoundsMinY: -0.05
     - _MeshBoundsSizeY: 0.1
     - _Metallic: 0.92
-    - _ReflectionFloor: 0.25
+    - _ReflectionFloor: 0.02
     - _RidgeAlbedoBoost: 0.02
     - _RidgeSmoothnessScale: 1
-    - _RidgeSoftness: 0.02
+    - _RidgeSoftness: 0.015
     - _SeamClipGrooveOnly: 0
     - _SeamClipWidth: 0.01
     - _SeamNormalStrength: 0

@@ -104,29 +104,68 @@ Varyings GemLitVert(Attributes input)
     return output;
 }
 
-half GemSteppedLightAmount(half3 normalWS, Light light, half steps)
+half GemRawLightAmount(half3 normalWS, Light light)
 {
-    half ndotl = saturate(dot(normalWS, light.direction));
-    half directLight = ndotl * light.shadowAttenuation * light.distanceAttenuation;
-    half stepCount = max(steps, 2.0h);
-    return floor(directLight * stepCount) / max(stepCount - 1.0h, 1.0h);
+    half ndotl = DragonLootWrappedNdotL(normalWS, light.direction, _LightWrap);
+    return ndotl * light.shadowAttenuation * light.distanceAttenuation;
+}
+
+half GemStylizedLightAmount(half rawAmount)
+{
+    half scaled = saturate(rawAmount * _DirectLightScale * half(DragonLootGlobalDirectLightScale()));
+    half stepCount = max(_LightSteps, 2.0h);
+    half stepped = floor(scaled * stepCount) / max(stepCount - 1.0h, 1.0h);
+    return lerp(scaled, saturate(stepped), saturate(_LightStepBlend));
+}
+
+half3 GemLightSpecular(
+    half3 normalWS,
+    half3 viewDirWS,
+    Light light,
+    half facet,
+    half sparkleScale,
+    float3 positionWS,
+    float2 uv)
+{
+    half atten = light.shadowAttenuation * light.distanceAttenuation;
+    half wrapNdotL = DragonLootWrappedNdotL(normalWS, light.direction, _LightWrap);
+    half3 radiance = light.color * atten * wrapNdotL * half(DragonLootGlobalDirectLightScale());
+
+    half3 halfDir = SafeNormalize(light.direction + viewDirWS);
+    half ndoth = saturate(dot(normalWS, halfDir));
+
+    half shineEdge = min(_ShineThreshold + 0.08h, 0.999h);
+    half shine = smoothstep(_ShineThreshold, shineEdge, ndoth);
+    shine *= pow(ndoth, max(_ShineSize * 0.25h, 1.0h)) * _ShineIntensity;
+
+    half catchSpec = pow(ndoth, max(_CatchLightSize, 1.0h)) * _CatchLightIntensity;
+    catchSpec *= lerp(0.75h, 1.25h, facet);
+
+    half sparkle = GemSparkle(positionWS, normalWS, viewDirWS, light.direction, uv, sparkleScale);
+    return _FresnelColor.rgb * radiance * (shine + catchSpec + sparkle);
 }
 
 void GemAccumulateLight(
     half3 normalWS,
+    half3 viewDirWS,
     Light light,
     uint meshRenderingLayers,
-    half steps,
-    inout half steppedLight,
-    inout half3 lightColorAccum)
+    half facet,
+    half sparkleScale,
+    float3 positionWS,
+    float2 uv,
+    inout half bodyLight,
+    inout half3 lightColorAccum,
+    inout half3 specAccum)
 {
 #ifdef _LIGHT_LAYERS
     if (!IsMatchingLightLayer(light.layerMask, meshRenderingLayers))
         return;
 #endif
-    half amount = GemSteppedLightAmount(normalWS, light, steps);
-    steppedLight = max(steppedLight, amount);
+    half amount = GemStylizedLightAmount(GemRawLightAmount(normalWS, light));
+    bodyLight += amount;
     lightColorAccum += light.color * amount;
+    specAccum += GemLightSpecular(normalWS, viewDirWS, light, facet, sparkleScale, positionWS, uv);
 }
 
 half4 GemLitFrag(Varyings input) : SV_Target
@@ -162,15 +201,20 @@ half4 GemLitFrag(Varyings input) : SV_Target
     InputData inputData;
     GemInitializeInputData(input, normalWS, inputData);
 
+    float3 positionOS = TransformWorldToObject(input.positionWS);
+    half3 normalOS = normalize(TransformWorldToObjectDir(inputData.normalWS));
+    half facet = GemFacetPattern(positionOS, normalOS);
+    half facetContrast = (facet * 2.0h - 1.0h) * _FacetStrength;
+
     half4 shadowMask = CalculateShadowMask(inputData);
     AmbientOcclusionFactor aoFactor = CreateAmbientOcclusionFactor(inputData.normalizedScreenSpaceUV, occlusion);
     uint meshRenderingLayers = GetMeshRenderingLayer();
-    half steps = max(_LightSteps, 2.0h);
 
     Light mainLight = GetMainLight(inputData, shadowMask, aoFactor);
-    half steppedLight = 0.0h;
+    half bodyLight = 0.0h;
     half3 lightColorAccum = half3(0, 0, 0);
-    GemAccumulateLight(inputData.normalWS, mainLight, meshRenderingLayers, steps, steppedLight, lightColorAccum);
+    half3 specAccum = half3(0, 0, 0);
+    GemAccumulateLight(inputData.normalWS, inputData.viewDirectionWS, mainLight, meshRenderingLayers, facet, variation.sparkleScale, input.positionWS, input.uv, bodyLight, lightColorAccum, specAccum);
 
 #if defined(_ADDITIONAL_LIGHTS)
     uint lightsCount = GetAdditionalLightsCount();
@@ -179,48 +223,42 @@ half4 GemLitFrag(Varyings input) : SV_Target
     {
         CLUSTER_LIGHT_LOOP_SUBTRACTIVE_LIGHT_CHECK
         Light dirLight = DragonLootGetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
-        GemAccumulateLight(inputData.normalWS, dirLight, meshRenderingLayers, steps, steppedLight, lightColorAccum);
+        GemAccumulateLight(inputData.normalWS, inputData.viewDirectionWS, dirLight, meshRenderingLayers, facet, variation.sparkleScale, input.positionWS, input.uv, bodyLight, lightColorAccum, specAccum);
     }
 #endif
     LIGHT_LOOP_BEGIN(lightsCount)
         Light light = DragonLootGetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
-        GemAccumulateLight(inputData.normalWS, light, meshRenderingLayers, steps, steppedLight, lightColorAccum);
+        GemAccumulateLight(inputData.normalWS, inputData.viewDirectionWS, light, meshRenderingLayers, facet, variation.sparkleScale, input.positionWS, input.uv, bodyLight, lightColorAccum, specAccum);
     LIGHT_LOOP_END
 #endif
 
-    half ambientLight = saturate(GemLuminance(inputData.bakedGI));
-    half lightAmount = saturate(steppedLight + ambientLight * 0.35h);
-    half3 blendedLightColor = steppedLight > 1e-4h
-        ? saturate(lightColorAccum / max(steppedLight, 1e-4h))
+    half ambientLight = saturate(GemLuminance(inputData.bakedGI)) * _AmbientFill;
+    half lightAmount = saturate(bodyLight + ambientLight);
+    half3 blendedLightColor = bodyLight > 1e-4h
+        ? saturate(lightColorAccum / max(bodyLight, 1e-4h))
         : mainLight.color;
-
-    float3 positionOS = TransformWorldToObject(input.positionWS);
-    half3 normalOS = normalize(TransformWorldToObjectDir(inputData.normalWS));
-    half facet = GemFacetPattern(positionOS, normalOS);
-    half facetContrast = (facet * 2.0h - 1.0h) * _FacetStrength;
 
     half shade = saturate((1.0h - _ShadowStrength) + lightAmount * _ShadowStrength + facetContrast * 0.3h);
     half3 deepColor = _InternalColor.rgb * variation.brightnessScale;
     half3 color = lerp(deepColor, albedo, shade);
     color *= lerp(0.72h, 1.16h, facet);
     color *= occlusion * GemInclusionDarken(input.positionWS);
+
+    // Unlit body uses albedo * Reflection Floor so InternalColor / shade don't self-illuminate.
+    half3 ambientFloor = albedo * _ReflectionFloor;
+    color = lerp(ambientFloor, color, lightAmount);
+    color = max(color, ambientFloor);
+
     color += DragonLootApplyAreaAmbient(albedo, input.positionWS, occlusion);
-    color *= lerp(half3(1, 1, 1), blendedLightColor, steppedLight);
+    color *= lerp(half3(1, 1, 1), blendedLightColor, saturate(bodyLight));
+    color += specAccum;
 
     half ndotv = saturate(dot(inputData.normalWS, inputData.viewDirectionWS));
-    half3 halfDir = SafeNormalize(mainLight.direction + inputData.viewDirectionWS);
-    half ndoth = saturate(dot(inputData.normalWS, halfDir));
-    half shineEdge = min(_ShineThreshold + 0.08h, 0.999h);
-    half shine = smoothstep(_ShineThreshold, shineEdge, ndoth);
-    shine *= pow(ndoth, max(_ShineSize * 0.25h, 1.0h)) * _ShineIntensity;
-    shine *= max(steppedLight, 0.25h);
-
     half3 normalVS = mul((half3x3)UNITY_MATRIX_V, inputData.normalWS);
     half graphicFacing = saturate(dot(normalVS, normalize(half3(-0.65h, 0.7h, 0.3h))));
-    half graphicShine = smoothstep(0.82h, 0.9h, graphicFacing) * _ShineIntensity * 0.55h;
-
-    half rim = GemSchlickFresnel(ndotv, _RimPower) * _RimIntensity;
-    color += _FresnelColor.rgb * (shine + graphicShine + rim);
+    half graphicShine = smoothstep(0.82h, 0.9h, graphicFacing) * _GraphicShine * lightAmount;
+    half rim = GemSchlickFresnel(ndotv, _RimPower) * _RimIntensity * saturate(lightAmount + _ReflectionFloor);
+    color += _FresnelColor.rgb * (graphicShine + rim);
 
     color = DragonLootMixFog(color, inputData.fogCoord, input.positionWS);
     return half4(color, 1.0h);

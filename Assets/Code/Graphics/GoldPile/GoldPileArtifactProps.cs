@@ -728,6 +728,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		public bool AvoidCoinSeats;
 		public float BudgetMs;
 		public int MaxAttemptsPerFrame;
+		public bool NearSurface;
 	}
 
 	LatentBindSettings ResolveLatentBindSettings()
@@ -741,11 +742,19 @@ public class GoldPileArtifactProps : MonoBehaviour
 			UseSpatialHash = true,
 			AvoidCoinSeats = false,
 			BudgetMs = 12f,
-			MaxAttemptsPerFrame = 64
+			MaxAttemptsPerFrame = 64,
+			NearSurface = false
 		};
 
 		if ( _definition == null )
 			return s;
+
+		if ( _owner != null )
+		{
+			TreasurePileLatentBakeSettings bakeSettings = _owner.LatentBakeSettings;
+			if ( bakeSettings != null )
+				s.NearSurface = bakeSettings.spawnTreasureNearSurface;
+		}
 
 		s.PreferBake = _definition.preferBakedLatents;
 		s.VolumeMaxAttempts = Mathf.Max( 1, _definition.latentVolumeMaxAttempts );
@@ -766,17 +775,44 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _heightfield == null || _definition == null )
 			return false;
 
-		int heightFp = _heightfield.ComputeLayoutFingerprint();
-		int contentsFp = _definition.HashLargePropContents();
-		int authoredFp = _owner != null ? _owner.ComputeAuthoredFingerprint() : 0;
+		int heightFp;
+		int contentsFp;
+		int volumeAttempts;
+		bool spatialHash;
+		bool avoidCoins;
+		int authoredFp;
+		bool nearSurface;
+		int layoutSeed;
+		if ( _owner == null
+			|| !_owner.TryGetLatentBakeFingerprint(
+				out layoutSeed,
+				out heightFp,
+				out contentsFp,
+				out volumeAttempts,
+				out spatialHash,
+				out avoidCoins,
+				out authoredFp,
+				out nearSurface ) )
+		{
+			layoutSeed = _owner != null ? _owner.LootLayoutSeed : 0;
+			heightFp = _heightfield.ComputeLayoutFingerprint();
+			contentsFp = _definition.HashLargePropContents();
+			volumeAttempts = settings.VolumeMaxAttempts;
+			spatialHash = settings.UseSpatialHash;
+			avoidCoins = settings.AvoidCoinSeats;
+			authoredFp = 0;
+			nearSurface = settings.NearSurface;
+		}
+
 		if ( !bake.MatchesFingerprint(
-			_pileLootSeed,
+			layoutSeed,
 			heightFp,
 			contentsFp,
-			settings.VolumeMaxAttempts,
-			settings.UseSpatialHash,
-			settings.AvoidCoinSeats,
-			authoredFp ) )
+			volumeAttempts,
+			spatialHash,
+			avoidCoins,
+			authoredFp,
+			nearSurface ) )
 		{
 			return false;
 		}
@@ -842,13 +878,37 @@ public class GoldPileArtifactProps : MonoBehaviour
 		LatentBindSettings settings = ResolveLatentBindSettings();
 		bake.authoredLayoutSeed = authoredLayoutSeed;
 		bake.effectivePileSeed = _pileLootSeed;
-		bake.heightFingerprint = _heightfield.ComputeLayoutFingerprint();
-		bake.contentsFingerprint = _definition.HashLargePropContents();
-		bake.authoredFingerprint = _owner != null ? _owner.ComputeAuthoredFingerprint() : 0;
 		bake.sourceDefinitionName = _definition.name;
-		bake.volumeMaxAttempts = settings.VolumeMaxAttempts;
-		bake.usedSpatialHash = settings.UseSpatialHash;
-		bake.avoidedCoinSeats = settings.AvoidCoinSeats;
+		if ( _owner != null
+			&& _owner.TryGetLatentBakeFingerprint(
+				out int layoutSeed,
+				out int heightFp,
+				out int contentsFp,
+				out int volumeAttempts,
+				out bool spatialHash,
+				out bool avoidCoins,
+				out int authoredFp,
+				out bool nearSurface ) )
+		{
+			bake.authoredLayoutSeed = layoutSeed;
+			bake.heightFingerprint = heightFp;
+			bake.contentsFingerprint = contentsFp;
+			bake.volumeMaxAttempts = volumeAttempts;
+			bake.usedSpatialHash = spatialHash;
+			bake.avoidedCoinSeats = avoidCoins;
+			bake.authoredFingerprint = authoredFp;
+			bake.bakedNearSurface = nearSurface;
+		}
+		else
+		{
+			bake.heightFingerprint = _heightfield.ComputeLayoutFingerprint();
+			bake.contentsFingerprint = _definition.HashLargePropContents();
+			bake.authoredFingerprint = 0;
+			bake.volumeMaxAttempts = settings.VolumeMaxAttempts;
+			bake.usedSpatialHash = settings.UseSpatialHash;
+			bake.avoidedCoinSeats = settings.AvoidCoinSeats;
+			bake.bakedNearSurface = settings.NearSurface;
+		}
 
 		// Bake stores remainder only — authored curated props stay on scene objects.
 		int remainderCount = 0;
@@ -1136,6 +1196,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			occupiedBounds,
 			occupancyGrid,
 			settings.VolumeMaxAttempts,
+			settings.NearSurface,
 			out pose,
 			out localBounds );
 
@@ -1153,6 +1214,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 					null,
 					null,
 					settings.VolumeMaxAttempts,
+					settings.NearSurface,
 					out pose,
 					out localBounds );
 			}
@@ -1172,6 +1234,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 					null,
 					null,
 					settings.VolumeMaxAttempts,
+					settings.NearSurface,
 					out pose,
 					out localBounds );
 			}
@@ -1211,6 +1274,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		List<Bounds> occupiedBounds,
 		VolumeOccupancyGrid occupancyGrid,
 		int maxAttempts,
+		bool nearSurface,
 		out GoldPileTreasurePlacement.VolumePose pose,
 		out Bounds localBounds )
 	{
@@ -1233,7 +1297,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 			occupancyGrid,
 			_pileRoot,
 			_treasureXZSpread,
-			_latentSurfaceNeighborhoodCells );
+			_latentSurfaceNeighborhoodCells,
+			nearSurface );
 	}
 
 	async Task RefreshRevealAsync(
@@ -1731,7 +1796,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 			occupancyGrid,
 			_pileRoot,
 			_treasureXZSpread,
-			_latentSurfaceNeighborhoodCells ) )
+			_latentSurfaceNeighborhoodCells,
+			settings.NearSurface ) )
 		{
 			return false;
 		}
@@ -1857,7 +1923,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return -1;
 
 		Vector3 local = _pileRoot.InverseTransformPoint( preferredWorld );
-		float half = _heightfield.WorldSize * 0.5f * _placementRadiusFraction;
+		float half = _heightfield.WorldSize * 0.5f;
 		local.x = Mathf.Clamp( local.x, -half, half );
 		local.z = Mathf.Clamp( local.z, -half, half );
 		float surface = _heightfield.SampleNormalized( local.x, local.z ) * _heightfield.MaxHeight;
@@ -1940,7 +2006,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 				occupancyGrid,
 				_pileRoot,
 				_treasureXZSpread,
-				_latentSurfaceNeighborhoodCells ) )
+				_latentSurfaceNeighborhoodCells,
+				settings.NearSurface ) )
 			{
 				return -1;
 			}
@@ -1996,7 +2063,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 					occupancyGrid,
 					_pileRoot,
 					_treasureXZSpread,
-					_latentSurfaceNeighborhoodCells ) )
+					_latentSurfaceNeighborhoodCells,
+					settings.NearSurface ) )
 				{
 					return -1;
 				}

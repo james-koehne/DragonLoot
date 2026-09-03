@@ -11,7 +11,7 @@ public class TreasurePileVisualEditor : Editor
 	const int SettleItersStrokeEnd = 12;
 	const int ErodeItersStrokeEnd = 24;
 
-	GoldPileEditorBrushMode _brushMode = GoldPileEditorBrushMode.Raise;
+	GoldPileEditorBrushMode _brushMode = GoldPileEditorBrushMode.None;
 	float _brushRadius = 1.5f;
 	float _brushStrength = 0.08f;
 	float _brushFalloff = 1f;
@@ -79,21 +79,41 @@ public class TreasurePileVisualEditor : Editor
 			+ "(or parent it under _AuthoredLoot). Assign Treasure Definition on TreasurePileAuthoredItem. "
 			+ "Move with gizmos — the mesh stays visible. Then Bake Latents For This Pile. "
 			+ "Bake fills definition gems/artifacts around your piece, only where Treasure surface paint is below. "
+			+ "Assign TreasurePileLatentBakeSettings to change placement (e.g. near-surface), then rebake. "
 			+ "Coins/gems are not curated.",
 			MessageType.Info );
 
 		int authoredCount = visual.CountAuthoredItems();
 		EditorGUILayout.LabelField( "Curated authored props", authoredCount.ToString() );
 
-		if ( !Application.isPlaying && visual.IsLatentBakeStale() )
+		int sharedBakeUsers = CountOtherScenePilesUsingBake( visual.LatentBake, visual );
+		if ( !Application.isPlaying && sharedBakeUsers > 0 )
 		{
 			EditorGUILayout.HelpBox(
-				"Authored items or mound changed — rebake to update fill.",
+				$"This bake asset is shared with {sharedBakeUsers} other pile{( sharedBakeUsers == 1 ? "" : "s" )}. "
+				+ "Each pile needs its own bake — Bake Latents will create a unique asset for this pile.",
+				MessageType.Warning );
+		}
+
+		string staleReason = visual.GetLatentBakeStaleReason();
+		if ( !Application.isPlaying && staleReason != null )
+		{
+			EditorGUILayout.HelpBox(
+				$"Bake is stale ({staleReason}) — rebake to update fill.",
 				MessageType.Warning );
 		}
 
 		if ( GUILayout.Button( "Bake Latents For This Pile" ) )
+		{
 			BakeLatentsForVisual( visual );
+			serializedObject.Update();
+		}
+
+		if ( GUILayout.Button( "Bake Latents For All Piles In Scene" ) )
+		{
+			BakeLatentsForAllPilesInScene();
+			serializedObject.Update();
+		}
 
 		EditorGUILayout.Space( 8f );
 		EditorGUILayout.LabelField( "Pile Sculpt (Edit Mode)", EditorStyles.boldLabel );
@@ -315,46 +335,217 @@ public class TreasurePileVisualEditor : Editor
 
 	static void BakeLatentsForVisual( TreasurePileVisual visual )
 	{
-		if ( visual == null )
-			return;
-
-		visual.EnsureEditorPreview();
-		TreasurePileDefinition definition = visual.ResolveDefinitionForEditor();
-		if ( definition == null )
+		LatentSceneBakeResult result = TryBakeLatentsForVisual( visual, saveAssets: true );
+		if ( !result.Ran )
 		{
+			EditorUtility.DisplayDialog( "Bake Latents", result.Error, "OK" );
+			return;
+		}
+
+		if ( !result.Complete )
+		{
+			string perType = string.IsNullOrEmpty( result.PerType ) ? "" : "\n" + result.PerType;
 			EditorUtility.DisplayDialog(
 				"Bake Latents",
-				"No TreasurePileDefinition on this visual / interactable.",
+				$"Wrote {result.PoseCount} of {result.Expected} remainder poses to {result.BakeName} for pile '{result.PileName}' "
+				+ $"(+ {result.Authored} curated authored).\n"
+				+ $"Missing {Mathf.Max( 0, result.Expected - result.Placed )} — all treasure needs to spawn.{perType}\n"
+				+ "Check Treasure surface paint under the sculpted footprint, neighborhood radius, and loot ground height.",
 				"OK" );
 			return;
 		}
 
-		if ( visual.Heightfield == null || !visual.Heightfield.IsInitialized )
+		EditorUtility.DisplayDialog(
+			"Bake Latents",
+			$"Wrote {result.PoseCount} remainder poses to {result.BakeName} for pile '{result.PileName}' "
+			+ $"(+ {result.Authored} curated authored).",
+			"OK" );
+	}
+
+	static void BakeLatentsForAllPilesInScene()
+	{
+		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
+			FindObjectsInactive.Include,
+			FindObjectsSortMode.None );
+
+		int sceneCount = 0;
+		for ( int i = 0; i < piles.Length; i++ )
 		{
-			EditorUtility.DisplayDialog( "Bake Latents", "Heightfield is not initialized.", "OK" );
+			if ( IsScenePile( piles[ i ] ) )
+				sceneCount++;
+		}
+
+		if ( sceneCount <= 0 )
+		{
+			EditorUtility.DisplayDialog( "Bake Latents", "No treasure piles in the open scene(s).", "OK" );
 			return;
 		}
 
+		if ( !EditorUtility.DisplayDialog(
+			"Bake Latents",
+			$"Bake latents for {sceneCount} pile{( sceneCount == 1 ? "" : "s" )} in the open scene(s)?",
+			"Bake All",
+			"Cancel" ) )
+			return;
+
+		int baked = 0;
+		int incomplete = 0;
+		int failed = 0;
+		System.Text.StringBuilder missing = new System.Text.StringBuilder();
+		try
+		{
+			int done = 0;
+			for ( int i = 0; i < piles.Length; i++ )
+			{
+				TreasurePileVisual visual = piles[ i ];
+				if ( !IsScenePile( visual ) )
+					continue;
+
+				done++;
+				EditorUtility.DisplayProgressBar(
+					"Bake Latents",
+					visual.name,
+					done / ( float )sceneCount );
+
+				LatentSceneBakeResult result = TryBakeLatentsForVisual( visual, saveAssets: false );
+				if ( !result.Ran )
+				{
+					failed++;
+					if ( missing.Length > 0 )
+						missing.Append( '\n' );
+					missing.Append( visual.name ).Append( ": " ).Append( result.Error );
+					continue;
+				}
+
+				baked++;
+				if ( !result.Complete )
+				{
+					incomplete++;
+					if ( missing.Length > 0 )
+						missing.Append( '\n' );
+					missing.Append( visual.name )
+						.Append( ": " )
+						.Append( result.Placed )
+						.Append( '/' )
+						.Append( result.Expected )
+						.Append( " remainder" );
+				}
+			}
+		}
+		finally
+		{
+			EditorUtility.ClearProgressBar();
+			AssetDatabase.SaveAssets();
+		}
+
+		string extra = missing.Length > 0 ? "\n\n" + missing : "";
+		EditorUtility.DisplayDialog(
+			"Bake Latents",
+			$"Baked {baked}/{sceneCount} piles ({incomplete} incomplete, {failed} failed).{extra}",
+			"OK" );
+	}
+
+	static bool IsScenePile( TreasurePileVisual visual )
+	{
+		if ( visual == null )
+			return false;
+		if ( PrefabUtility.IsPartOfPrefabAsset( visual ) )
+			return false;
+		return visual.gameObject.scene.IsValid();
+	}
+
+	static int CountOtherScenePilesUsingBake( TreasurePileLatentBake bake, TreasurePileVisual except )
+	{
+		if ( bake == null )
+			return 0;
+
+		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
+			FindObjectsInactive.Include,
+			FindObjectsSortMode.None );
+		int count = 0;
+		for ( int i = 0; i < piles.Length; i++ )
+		{
+			TreasurePileVisual visual = piles[ i ];
+			if ( visual == except || !IsScenePile( visual ) )
+				continue;
+			if ( visual.LatentBake == bake )
+				count++;
+		}
+
+		return count;
+	}
+
+	static TreasurePileLatentBake EnsureUniqueLatentBakeForVisual( TreasurePileVisual visual )
+	{
+		if ( visual == null )
+			return null;
+
 		TreasurePileLatentBake bake = visual.LatentBake;
+		if ( bake != null && CountOtherScenePilesUsingBake( bake, visual ) == 0 )
+			return bake;
+
+		string scenePath = visual.gameObject.scene.path;
+		string folder = "Assets";
+		if ( !string.IsNullOrEmpty( scenePath ) )
+		{
+			string sceneDir = System.IO.Path.GetDirectoryName( scenePath );
+			if ( !string.IsNullOrEmpty( sceneDir ) )
+				folder = sceneDir.Replace( '\\', '/' );
+		}
+
+		string safeName = visual.name.Replace( '/', '_' ).Replace( '\\', '_' );
+		string path = AssetDatabase.GenerateUniqueAssetPath( $"{folder}/{safeName}_LatentBake.asset" );
+		bake = ScriptableObject.CreateInstance<TreasurePileLatentBake>();
+		AssetDatabase.CreateAsset( bake, path );
+		Undo.RecordObject( visual, "Assign Treasure Pile Latent Bake" );
+		visual.SetLatentBake( bake );
+		EditorUtility.SetDirty( visual );
+		return bake;
+	}
+
+	struct LatentSceneBakeResult
+	{
+		public bool Ran;
+		public bool Complete;
+		public string Error;
+		public string PileName;
+		public string BakeName;
+		public int PoseCount;
+		public int Expected;
+		public int Placed;
+		public int Authored;
+		public string PerType;
+	}
+
+	static LatentSceneBakeResult TryBakeLatentsForVisual( TreasurePileVisual visual, bool saveAssets )
+	{
+		LatentSceneBakeResult result = default;
+		if ( visual == null )
+		{
+			result.Error = "No treasure pile.";
+			return result;
+		}
+
+		result.PileName = visual.name;
+		visual.EnsureEditorPreview();
+		TreasurePileDefinition definition = visual.ResolveDefinitionForEditor();
+		if ( definition == null )
+		{
+			result.Error = "No TreasurePileDefinition on this visual / interactable.";
+			return result;
+		}
+
+		if ( visual.Heightfield == null || !visual.Heightfield.IsInitialized )
+		{
+			result.Error = "Heightfield is not initialized.";
+			return result;
+		}
+
+		TreasurePileLatentBake bake = EnsureUniqueLatentBakeForVisual( visual );
 		if ( bake == null )
 		{
-			string scenePath = visual.gameObject.scene.path;
-			string folder = "Assets";
-			if ( !string.IsNullOrEmpty( scenePath ) )
-			{
-				string sceneDir = System.IO.Path.GetDirectoryName( scenePath );
-				if ( !string.IsNullOrEmpty( sceneDir ) )
-					folder = sceneDir.Replace( '\\', '/' );
-			}
-
-			string safeName = visual.name.Replace( '/', '_' ).Replace( '\\', '_' );
-			string path = AssetDatabase.GenerateUniqueAssetPath(
-				$"{folder}/{safeName}_LatentBake.asset" );
-			bake = ScriptableObject.CreateInstance<TreasurePileLatentBake>();
-			AssetDatabase.CreateAsset( bake, path );
-			Undo.RecordObject( visual, "Assign Treasure Pile Latent Bake" );
-			visual.SetLatentBake( bake );
-			EditorUtility.SetDirty( visual );
+			result.Error = "Could not create a unique latent bake asset.";
+			return result;
 		}
 
 		GoldPileArtifactProps props = visual.ArtifactProps;
@@ -375,27 +566,20 @@ public class TreasurePileVisualEditor : Editor
 			visual.LootLayoutSeed,
 			bake );
 		EditorUtility.SetDirty( bake );
-		AssetDatabase.SaveAssets();
+		EditorUtility.SetDirty( visual );
+		if ( saveAssets )
+			AssetDatabase.SaveAssets();
 		RefreshLatentBakePreview( visual );
-		int authored = visual.CountAuthoredItems();
-		if ( !report.Complete )
-		{
-			string perType = string.IsNullOrEmpty( report.PerType ) ? "" : "\n" + report.PerType;
-			EditorUtility.DisplayDialog(
-				"Bake Latents",
-				$"Wrote {bake.PoseCount} of {report.Expected} remainder poses to {bake.name} for pile '{visual.name}' "
-				+ $"(+ {authored} curated authored).\n"
-				+ $"Missing {Mathf.Max( 0, report.Expected - report.Placed )} — all treasure needs to spawn.{perType}\n"
-				+ "Check Treasure surface paint, neighborhood radius, and Placement Radius Fraction.",
-				"OK" );
-			return;
-		}
 
-		EditorUtility.DisplayDialog(
-			"Bake Latents",
-			$"Wrote {bake.PoseCount} remainder poses to {bake.name} for pile '{visual.name}' "
-			+ $"(+ {authored} curated authored).",
-			"OK" );
+		result.Ran = true;
+		result.Complete = report.Complete;
+		result.BakeName = bake.name;
+		result.PoseCount = bake.PoseCount;
+		result.Expected = report.Expected;
+		result.Placed = report.Placed;
+		result.Authored = visual.CountAuthoredItems();
+		result.PerType = report.PerType;
+		return result;
 	}
 
 	static void RefreshLatentBakePreview( TreasurePileVisual visual )

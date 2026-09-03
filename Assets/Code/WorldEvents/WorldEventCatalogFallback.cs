@@ -74,10 +74,11 @@ public static class WorldEventCatalogFallback
 		};
 		evt.actions = new[]
 		{
+			BrakePlayerMovementAction( 1f ),
 			DialogueAction( Line( "I believe we have rather a lot of work to do." ) ),
 			AudioAction( ResolveEpicRiserClip() ),
 			LanternRevealSweepAction( LanternActivator.IntroLedgeRevealId ),
-			CinematicPresentationAction( CinematicPresentationController.IntroLedgePresentationId )
+			CinematicPresentationAction( CinematicPresentationController.IntroLedgePresentationId, 10f )
 		};
 		return evt;
 	}
@@ -100,12 +101,22 @@ public static class WorldEventCatalogFallback
 		};
 	}
 
-	static WorldEventAction CinematicPresentationAction( string presentationId )
+	static WorldEventAction BrakePlayerMovementAction( float duration )
+	{
+		return new WorldEventAction
+		{
+			type = WorldEventActionType.BrakePlayerMovement,
+			playerBrakeDuration = duration
+		};
+	}
+
+	static WorldEventAction CinematicPresentationAction( string presentationId, float playerMovementLockDuration = 0f )
 	{
 		return new WorldEventAction
 		{
 			type = WorldEventActionType.CinematicPresentation,
-			cinematicPresentationId = presentationId
+			cinematicPresentationId = presentationId,
+			cinematicPlayerMovementLockDuration = playerMovementLockDuration
 		};
 	}
 

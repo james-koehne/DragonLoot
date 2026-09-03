@@ -49,8 +49,8 @@ MonoBehaviour:
   placementScaleJitter: 0.1
   coinSurfaceHeightFraction: 0.01
   coinPullToCarveCount: 2
-  treasureRadialPower: 1.1
-  treasureHeightBias: 0.4
+  treasureRadialPower: 1
+  treasureHeightBias: 0
   treasureXZSpread: 1
   treasurePickupOutsideFraction: 0.3
   treasureReleaseOutsideFraction: 0.9

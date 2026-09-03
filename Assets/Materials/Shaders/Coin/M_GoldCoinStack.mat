@@ -56,12 +56,12 @@ Material:
     - _MeshBoundsMinY: -0.05
     - _MeshBoundsSizeY: 0.1
     - _Metallic: 0.92
-    - _ReflectionFloor: 0.25
+    - _ReflectionFloor: 0.02
     - _RidgeAlbedoBoost: 0.02
     - _RidgeSmoothnessScale: 1
     - _RidgeSoftness: 0.02
     - _SeamClipGrooveOnly: 0
-    - _SeamClipWidth: 0.01
+    - _SeamClipWidth: 0.065
     - _SeamNormalStrength: 0.55
     - _SeamSideClip: 1
     - _SeamSoftAO: 0.4

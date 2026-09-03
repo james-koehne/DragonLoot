@@ -63,6 +63,12 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1dc7ec8901c9444429f37e40101d64c5
+    m_Address: MapDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 242fa6f2fe9bb294ca07a3afaa348d48
     m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_02Visual.prefab
     m_ReadOnly: 0
@@ -469,6 +475,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/Statue_01Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e0379ff676476cf4ea220d7c70a741ac
+    m_Address: TutorialCatalogDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e1bfaf5b80ff3454e9baa76a828cfa95
     m_Address: Assets/Addressables/Treasure/Artifacts/Bone_01Visual.prefab

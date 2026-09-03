@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_GemConstellations
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_gem_constellations
+  title: Gem Constellations
+  tags:
+  - gems
+  - constellations
+  trigger: 6
+  volumeId: 
+  fallbackVolumeId: 
+  prerequisiteTutorialIds: []
+  steps:
+  - body: Place gems on constellation sockets that match their shape and type.
+    keybindHint: '[{SecondaryInteract}] Place gem'
+  - body: Connections light when both ends have gems. Fill the pattern to complete
+      it.
+    keybindHint: 

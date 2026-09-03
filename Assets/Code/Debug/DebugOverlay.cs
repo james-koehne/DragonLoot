@@ -83,6 +83,7 @@ public class DebugOverlay : MonoBehaviour
 		_sections.Add( new DebugInteractionSection() );
 		_sections.Add( new DebugGoldPileSection() );
 		_sections.Add( new DebugTreasureSurfaceSection() );
+		_sections.Add( new DebugMapSection() );
 		_sections.Add( new DebugLoggingSection() );
 
 		for ( int i = 0; i < _sections.Count; i++ )
@@ -224,7 +225,7 @@ public class DebugOverlay : MonoBehaviour
 				Cursor.visible = true;
 			}
 		}
-		else if ( !PauseMenuUI.IsOpen )
+		else if ( !PauseMenuUI.IsOpen && !MapUI.IsOpen )
 		{
 			if ( player != null )
 				player.SetGameplayInputEnabled( true );

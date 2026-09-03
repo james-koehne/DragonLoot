@@ -7,7 +7,7 @@ using UnityEngine;
 /// World extent comes from <see cref="AreaLightingWorldBounds"/> in the level.
 /// Asset name must be <c>AreaLightingDefinition</c> for <see cref="GameInstance.GetDefinition{T}"/>.
 /// </summary>
-[CreateAssetMenu( fileName = "AreaLightingDefinition", menuName = "Definitions/AreaLightingDefinition" )]
+[CreateAssetMenu( fileName = "AreaLightingDefinition", menuName = "Definitions/Level/AreaLightingDefinition" )]
 public class AreaLightingDefinition : ScriptableObject
 {
 	public const int DefaultMaxVolumes = 16;

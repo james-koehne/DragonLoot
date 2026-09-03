@@ -9,6 +9,10 @@ using UnityEngine;
 [CreateAssetMenu( fileName = "LightFlickerDefinition", menuName = "Definitions/LightFlickerDefinition" )]
 public class LightFlickerDefinition : ScriptableObject
 {
+	public const string DefaultAssetPath = "Assets/Definitions/Level/LightFlickerDefinition.asset";
+
+	public static event Action PresetsChanged;
+
 	[Tooltip( "Named flicker styles. Component selects one by id (case-insensitive)." )]
 	public LightFlickerPreset[] presets = CreateDefaultPresets();
 
@@ -63,6 +67,8 @@ public class LightFlickerDefinition : ScriptableObject
 			else
 				presets[i].Validate();
 		}
+
+		PresetsChanged?.Invoke();
 	}
 
 	public static LightFlickerPreset[] CreateDefaultPresets()

@@ -25,7 +25,157 @@ MonoBehaviour:
     requireGoldBars: 0
     delaySeconds: 2
   actions:
+  - type: 6
+    delayBefore: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternSkylightFadeDuration: 0
+    lanternSweepDuration: 0
+    lanternFadeDuration: 0
+    lanternStartDelay: 0
+    cinematicPresentationId: 
+    cinematicFovPeak: 0
+    cinematicLetterboxPeak: 0
+    cinematicOverrideMicroPush: 0
+    cinematicEnableMicroPush: 0
+    cinematicMicroPushDistance: 0
+    cinematicRise: 0
+    cinematicHold: 0
+    cinematicFall: 0
+    cinematicPlayerMovementLockDuration: 10
+    playerBrakeDuration: 1
+  - type: 3
+    delayBefore: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 8300000, guid: d3e697627ddd77d459697c5b28638c72, type: 3}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 1
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternSkylightFadeDuration: 0
+    lanternSweepDuration: 0
+    lanternFadeDuration: 0
+    lanternStartDelay: 0
+    cinematicPresentationId: 
+    cinematicFovPeak: 0
+    cinematicLetterboxPeak: 0
+    cinematicOverrideMicroPush: 0
+    cinematicEnableMicroPush: 0
+    cinematicMicroPushDistance: 0
+    cinematicRise: 0
+    cinematicHold: 0
+    cinematicFall: 0
+    cinematicPlayerMovementLockDuration: 10
+    playerBrakeDuration: 1
+  - type: 4
+    delayBefore: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: intro_ledge_lanterns
+    lanternSkylightFadeDuration: 0.35
+    lanternSweepDuration: 0
+    lanternFadeDuration: 0
+    lanternStartDelay: 0
+    cinematicPresentationId: 
+    cinematicFovPeak: 0
+    cinematicLetterboxPeak: 0
+    cinematicOverrideMicroPush: 0
+    cinematicEnableMicroPush: 0
+    cinematicMicroPushDistance: 0
+    cinematicRise: 0
+    cinematicHold: 0
+    cinematicFall: 0
+    cinematicPlayerMovementLockDuration: 10
+    playerBrakeDuration: 1
+  - type: 5
+    delayBefore: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternSkylightFadeDuration: 0
+    lanternSweepDuration: 0
+    lanternFadeDuration: 0
+    lanternStartDelay: 0
+    cinematicPresentationId: intro_ledge_cinematic
+    cinematicFovPeak: 0
+    cinematicLetterboxPeak: 0
+    cinematicOverrideMicroPush: 0
+    cinematicEnableMicroPush: 0
+    cinematicMicroPushDistance: 0
+    cinematicRise: 0
+    cinematicHold: 0
+    cinematicFall: 0
+    cinematicPlayerMovementLockDuration: 10
+    playerBrakeDuration: 1
   - type: 0
+    delayBefore: 12
+    waitUntilFinished: 0
     dialogue:
     - speaker: Dragon
       text: I believe we have rather a lot of work to do.
@@ -49,68 +199,12 @@ MonoBehaviour:
     audioMaxDistance: 20
     audioAtPlayer: 0
     audioUseWorldPosition: 0
-  - type: 3
-    dialogue: []
-    addressableKey: 
-    spawnPointId: 
-    spawnWorldPosition: {x: 0, y: 0, z: 0}
-    useWorldPosition: 0
-    tutorialTitle: 
-    tutorialObjectiveText: 
-    markerTargetId: 
-    audioClip: {fileID: 8300000, guid: d3e697627ddd77d459697c5b28638c72, type: 3}
-    audioVolumeMin: 1
-    audioVolumeMax: 1
-    audioPitchMin: 1
-    audioPitchMax: 1
-    audioSpatialBlend: 0
-    audioMinDistance: 1
-    audioMaxDistance: 20
-    audioAtPlayer: 1
-    audioUseWorldPosition: 0
-  - type: 4
-    dialogue: []
-    addressableKey: 
-    spawnPointId: 
-    spawnWorldPosition: {x: 0, y: 0, z: 0}
-    useWorldPosition: 0
-    tutorialTitle: 
-    tutorialObjectiveText: 
-    markerTargetId: 
-    audioClip: {fileID: 0}
-    audioVolumeMin: 1
-    audioVolumeMax: 1
-    audioPitchMin: 1
-    audioPitchMax: 1
-    audioSpatialBlend: 0
-    audioMinDistance: 1
-    audioMaxDistance: 20
-    audioAtPlayer: 0
-    audioUseWorldPosition: 0
-    lanternRevealId: intro_ledge_lanterns
-    lanternSkylightFadeDuration: 0.35
+    lanternRevealId: 
+    lanternSkylightFadeDuration: 0
     lanternSweepDuration: 0
     lanternFadeDuration: 0
-  - type: 5
-    dialogue: []
-    addressableKey: 
-    spawnPointId: 
-    spawnWorldPosition: {x: 0, y: 0, z: 0}
-    useWorldPosition: 0
-    tutorialTitle: 
-    tutorialObjectiveText: 
-    markerTargetId: 
-    audioClip: {fileID: 0}
-    audioVolumeMin: 1
-    audioVolumeMax: 1
-    audioPitchMin: 1
-    audioPitchMax: 1
-    audioSpatialBlend: 0
-    audioMinDistance: 1
-    audioMaxDistance: 20
-    audioAtPlayer: 0
-    audioUseWorldPosition: 0
-    cinematicPresentationId: intro_ledge_cinematic
+    lanternStartDelay: 0
+    cinematicPresentationId: 
     cinematicFovPeak: 0
     cinematicLetterboxPeak: 0
     cinematicOverrideMicroPush: 0
@@ -119,3 +213,5 @@ MonoBehaviour:
     cinematicRise: 0
     cinematicHold: 0
     cinematicFall: 0
+    cinematicPlayerMovementLockDuration: 10
+    playerBrakeDuration: 1

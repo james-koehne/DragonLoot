@@ -17,7 +17,19 @@ Shader "DragonLoot/Gem"
         _FacetScale("Facet Scale", Range(1, 24)) = 7
         _FacetStrength("Facet Contrast", Range(0, 1)) = 0.65
         _LightSteps("Lighting Steps", Range(2, 6)) = 3
+        _LightStepBlend("Step Blend", Range(0, 1)) = 0.35
         _ShadowStrength("Shadow Depth", Range(0, 1)) = 0.72
+
+        [Header(Light Catch)]
+        _LightWrap("Light Wrap", Range(0, 1)) = 0.35
+        _DirectLightScale("Direct Light Scale", Range(0, 4)) = 1.85
+        _AmbientFill("Ambient Fill", Range(0, 1)) = 0.2
+        _CatchLightIntensity("Catch Light Intensity", Range(0, 4)) = 1.7
+        _CatchLightSize("Catch Light Size", Range(1, 64)) = 8
+        _GraphicShine("Camera Shine", Range(0, 2)) = 0.25
+
+        [Header(Reflection)]
+        _ReflectionFloor("Reflection Floor", Range(0, 0.5)) = 0.08
 
         [Header(Fake Shine)]
         _ShineIntensity("Shine Intensity", Range(0, 4)) = 1.7

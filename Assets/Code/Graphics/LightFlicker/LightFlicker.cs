@@ -4,8 +4,9 @@ using UnityEngine;
 
 /// <summary>
 /// Drives a <see cref="Light"/> with organic intensity / color / range flicker from
-/// <see cref="LightFlickerDefinition"/> presets, and mirrors that onto EnvironmentLit
-/// emissive materials (typically the second material on each mesh).
+/// <see cref="LightFlickerDefinition"/> presets, mirrors that onto EnvironmentLit
+/// emissive materials (typically the second material on each mesh), and tints an
+/// optional SoftVolume volumetric mesh from the flickering light color.
 /// </summary>
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -13,6 +14,8 @@ public class LightFlicker : MonoBehaviour
 {
 	static readonly int EmissionColorId = Shader.PropertyToID( "_EmissionColor" );
 	static readonly int EmissionIntensityId = Shader.PropertyToID( "_EmissionIntensity" );
+	static readonly int SoftVolumeColorId = Shader.PropertyToID( "_Color" );
+	const string DefaultVolumetricChildName = "VolumetricLight";
 
 	[SerializeField]
 	LightFlickerDefinition _definition;
@@ -50,7 +53,9 @@ public class LightFlicker : MonoBehaviour
 	[Tooltip( "Material index with the emissive DragonLoot/EnvironmentLit material." )]
 	int _emissiveMaterialIndex = 1;
 
-	LightFlickerDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
+	[SerializeField]
+	[Tooltip( "Optional SoftVolume mesh renderer. When empty, looks for a child named VolumetricLight." )]
+	MeshRenderer _volumetricRenderer;
 
 	Light _cachedLight;
 	float _baseIntensity = 1f;
@@ -67,6 +72,23 @@ public class LightFlicker : MonoBehaviour
 	Color[] _baseEmissionColors;
 	float[] _baseEmissionIntensities;
 	bool[] _emissiveValid;
+	Color _baseVolumetricColor = Color.white;
+	bool _hasVolumetricBase;
+	int _lastPresetFingerprint = int.MinValue;
+
+	public bool PlayInEditMode
+	{
+		get => _playInEditMode;
+		set => _playInEditMode = value;
+	}
+
+	public float AuthoredIntensity => _baseIntensity;
+
+	public float AuthoredRange => _baseRange;
+
+	public bool HasAuthoredBase => _hasBase;
+
+	public LightFlickerPreset ActivePreset => _activePreset;
 
 	public LightFlickerPresetKind Preset
 	{
@@ -95,6 +117,7 @@ public class LightFlicker : MonoBehaviour
 	{
 		EnsureCaches();
 		EnsureLight();
+		EnsureVolumetricRenderer();
 		ResolveEmissiveRenderers();
 		CaptureBase();
 		_noiseSeed = HashSeed( GetInstanceID() );
@@ -184,10 +207,79 @@ public class LightFlicker : MonoBehaviour
 	public void RecaptureLightBase()
 	{
 		_hasBase = false;
+		EnsureVolumetricRenderer();
 		ResolveEmissiveRenderers();
 		CaptureBase();
 		ResolveActivePreset( force: true );
 		ApplyFlicker( GetFlickerTime(), immediate: true );
+	}
+
+	public void RestoreAuthoredState()
+	{
+		RestoreBase();
+	}
+
+	public int GetPresetFingerprint()
+	{
+		return ComputePresetFingerprint();
+	}
+
+	public void RefreshEditorPreview()
+	{
+#if UNITY_EDITOR
+		if ( Application.isPlaying )
+			return;
+
+		if ( !_hasBase )
+			CaptureBase();
+
+		int fingerprint = ComputePresetFingerprint();
+		if ( fingerprint != _lastPresetFingerprint )
+		{
+			_lastPresetFingerprint = fingerprint;
+			_smoothedNoise = 0.5f;
+		}
+
+		ResolveActivePreset( force: true );
+		ApplyFlicker( GetFlickerTime(), immediate: true );
+		UnityEditor.SceneView.RepaintAll();
+#endif
+	}
+
+	LightFlickerDefinition ResolveDefinition()
+	{
+		if ( _definition != null )
+			return _definition;
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying )
+			return UnityEditor.AssetDatabase.LoadAssetAtPath<LightFlickerDefinition>( LightFlickerDefinition.DefaultAssetPath );
+#endif
+
+		return RuntimeDefinition.Resolve( ref _definition );
+	}
+
+	int ComputePresetFingerprint()
+	{
+		ResolveActivePreset( force: true );
+		if ( _activePreset == null )
+			return 0;
+
+		unchecked
+		{
+			int hash = 17;
+			hash = hash * 31 + ( _activePresetId != null ? _activePresetId.GetHashCode() : 0 );
+			hash = hash * 31 + _activePreset.intensityMin.GetHashCode();
+			hash = hash * 31 + _activePreset.intensityMax.GetHashCode();
+			hash = hash * 31 + _activePreset.speed.GetHashCode();
+			hash = hash * 31 + _activePreset.smoothness.GetHashCode();
+			hash = hash * 31 + _activePreset.affectColor.GetHashCode();
+			hash = hash * 31 + _activePreset.affectEmissionColor.GetHashCode();
+			hash = hash * 31 + _activePreset.affectRange.GetHashCode();
+			hash = hash * 31 + _intensityScale.GetHashCode();
+			hash = hash * 31 + _speedScale.GetHashCode();
+			return hash;
+		}
 	}
 
 	bool EnsureLight()
@@ -213,6 +305,7 @@ public class LightFlicker : MonoBehaviour
 		_baseColor = _cachedLight.color;
 		_baseRange = _cachedLight.range;
 		CaptureEmissionBase();
+		CaptureVolumetricBase();
 		_hasBase = true;
 	}
 
@@ -229,12 +322,27 @@ public class LightFlicker : MonoBehaviour
 		}
 
 		RestoreEmissionBase();
+		RestoreVolumetricBase();
 	}
 
 	void ResolveActivePreset( bool force )
 	{
+#if UNITY_EDITOR
+		if ( !Application.isPlaying )
+		{
+			string editorDesiredId = ResolvePresetId();
+			LightFlickerDefinition editorDefinition = ResolveDefinition();
+			_hadDefinition = editorDefinition != null;
+			_activePresetId = editorDesiredId;
+			_activePreset = editorDefinition != null
+				? editorDefinition.GetPresetOrDefault( editorDesiredId )
+				: FallbackPreset( editorDesiredId );
+			return;
+		}
+#endif
+
 		string desiredId = ResolvePresetId();
-		LightFlickerDefinition definition = Definition;
+		LightFlickerDefinition definition = ResolveDefinition();
 		bool hasDefinition = definition != null;
 		if ( !force
 			&& hasDefinition == _hadDefinition
@@ -321,6 +429,12 @@ public class LightFlicker : MonoBehaviour
 		}
 
 		ApplyEmission( intensityMul );
+		ApplyVolumetricColor();
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying && _cachedLight != null )
+			UnityEditor.EditorUtility.ClearDirty( _cachedLight );
+#endif
 	}
 
 	void EnsureCaches()
@@ -331,9 +445,20 @@ public class LightFlicker : MonoBehaviour
 			_resolvedEmissiveRenderers = new List<MeshRenderer>( 4 );
 	}
 
+	void EnsureVolumetricRenderer()
+	{
+		if ( _volumetricRenderer != null )
+			return;
+
+		Transform child = transform.Find( DefaultVolumetricChildName );
+		if ( child != null )
+			_volumetricRenderer = child.GetComponent<MeshRenderer>();
+	}
+
 	void ResolveEmissiveRenderers()
 	{
 		EnsureCaches();
+		EnsureVolumetricRenderer();
 		_resolvedEmissiveRenderers.Clear();
 
 		if ( _emissiveRenderers != null )
@@ -364,7 +489,9 @@ public class LightFlicker : MonoBehaviour
 
 				for ( int j = 0; j < renderers.Length; j++ )
 				{
-					if ( renderers[ j ] is MeshRenderer meshRenderer && !_resolvedEmissiveRenderers.Contains( meshRenderer ) )
+					if ( renderers[ j ] is MeshRenderer meshRenderer
+						&& meshRenderer != _volumetricRenderer
+						&& !_resolvedEmissiveRenderers.Contains( meshRenderer ) )
 						_resolvedEmissiveRenderers.Add( meshRenderer );
 				}
 			}
@@ -376,7 +503,62 @@ public class LightFlicker : MonoBehaviour
 		Transform root = transform.parent != null ? transform.parent : transform;
 		MeshRenderer[] found = root.GetComponentsInChildren<MeshRenderer>( true );
 		for ( int i = 0; i < found.Length; i++ )
-			_resolvedEmissiveRenderers.Add( found[ i ] );
+		{
+			if ( found[ i ] != _volumetricRenderer )
+				_resolvedEmissiveRenderers.Add( found[ i ] );
+		}
+	}
+
+	void CaptureVolumetricBase()
+	{
+		EnsureVolumetricRenderer();
+		_hasVolumetricBase = false;
+		if ( _volumetricRenderer == null )
+			return;
+
+		Material material = _volumetricRenderer.sharedMaterial;
+		if ( material == null || !material.HasProperty( SoftVolumeColorId ) )
+			return;
+
+		_baseVolumetricColor = material.GetColor( SoftVolumeColorId );
+		_hasVolumetricBase = true;
+	}
+
+	void RestoreVolumetricBase()
+	{
+		if ( !_hasVolumetricBase || _volumetricRenderer == null )
+			return;
+
+		SetVolumetricColor( _baseVolumetricColor );
+	}
+
+	void ApplyVolumetricColor()
+	{
+		if ( _volumetricRenderer == null )
+		{
+			EnsureVolumetricRenderer();
+			if ( _volumetricRenderer == null )
+				return;
+		}
+
+		Color color = _cachedLight.color;
+		float intensity = Mathf.Max( 0f, _cachedLight.intensity );
+		color.r *= intensity;
+		color.g *= intensity;
+		color.b *= intensity;
+		color.a = 1f;
+		SetVolumetricColor( color );
+	}
+
+	void SetVolumetricColor( Color color )
+	{
+		if ( _volumetricRenderer == null )
+			return;
+
+		EnsureCaches();
+		_volumetricRenderer.GetPropertyBlock( _propertyBlock );
+		_propertyBlock.SetColor( SoftVolumeColorId, color );
+		_volumetricRenderer.SetPropertyBlock( _propertyBlock );
 	}
 
 	void CaptureEmissionBase()

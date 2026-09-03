@@ -191,13 +191,10 @@ public class LanternActivator : MonoBehaviour
 			if ( renderer == null )
 				continue;
 
-			Material[] materials = renderer.sharedMaterials;
-			if ( materials.Length == 0 )
+			if ( !TryResolveEmissiveMaterialIndex( renderer, out int materialIndex, out Material material ) )
 				continue;
 
-			int index = Mathf.Clamp( _emissiveMaterialIndex, 0, materials.Length - 1 );
-			Material material = materials[ index ];
-			if ( material != null && material.HasProperty( BaseColorId ) )
+			if ( material.HasProperty( BaseColorId ) )
 			{
 				_targetBaseColor = material.GetColor( BaseColorId );
 				return;
@@ -334,12 +331,34 @@ public class LanternActivator : MonoBehaviour
 			if ( renderer == null )
 				continue;
 
-			renderer.GetPropertyBlock( _propertyBlock, _emissiveMaterialIndex );
-			_propertyBlock.SetColor( BaseColorId, baseColor );
-			_propertyBlock.SetColor( EmissionColorId, emission );
-			_propertyBlock.SetFloat( EmissionIntensityId, emissionIntensity );
-			renderer.SetPropertyBlock( _propertyBlock, _emissiveMaterialIndex );
+			if ( !TryResolveEmissiveMaterialIndex( renderer, out int materialIndex, out Material material ) )
+				continue;
+
+			renderer.GetPropertyBlock( _propertyBlock, materialIndex );
+			if ( material.HasProperty( BaseColorId ) )
+				_propertyBlock.SetColor( BaseColorId, baseColor );
+			if ( material.HasProperty( EmissionColorId ) )
+				_propertyBlock.SetColor( EmissionColorId, emission );
+			if ( material.HasProperty( EmissionIntensityId ) )
+				_propertyBlock.SetFloat( EmissionIntensityId, emissionIntensity );
+			renderer.SetPropertyBlock( _propertyBlock, materialIndex );
 		}
+	}
+
+	bool TryResolveEmissiveMaterialIndex( MeshRenderer renderer, out int materialIndex, out Material material )
+	{
+		materialIndex = 0;
+		material = null;
+		if ( renderer == null )
+			return false;
+
+		Material[] materials = renderer.sharedMaterials;
+		if ( materials == null || materials.Length == 0 )
+			return false;
+
+		materialIndex = Mathf.Clamp( _emissiveMaterialIndex, 0, materials.Length - 1 );
+		material = materials[ materialIndex ];
+		return material != null;
 	}
 
 	IEnumerator FadeRoutine( float targetT, float duration )

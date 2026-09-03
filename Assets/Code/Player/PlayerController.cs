@@ -60,6 +60,12 @@ public class PlayerController : MonoBehaviour
 	float _coyoteTimer;
 	Vector3 _lastSlideTravelDirection;
 
+	bool _planarBrakeActive;
+	float _planarBrakeElapsed;
+	float _planarBrakeDuration;
+	Vector3 _planarBrakeStartVelocity;
+	float _planarMovementLockRemaining;
+
 	// Cached for optional movement gizmos (updated each move tick).
 	Vector3 _debugFlatMoveIntent;
 	Vector3 _debugGroundMoveIntent;
@@ -192,6 +198,53 @@ public class PlayerController : MonoBehaviour
 	public bool IsGliding => _isGliding;
 	public float GroundAngle => _groundAngle;
 	public bool GameplayInputEnabled => gameplayInputEnabled;
+	public bool IsPlanarBraking => _planarBrakeActive;
+	public bool IsPlanarMovementLocked => _planarMovementLockRemaining > 0f;
+	bool IsPlanarMovementRestricted => _planarBrakeActive || IsPlanarMovementLocked;
+
+	/// <summary>
+	/// Smoothly interpolates planar velocity to zero over <paramref name="duration"/> seconds.
+	/// Clears slide/climb state without killing momentum first.
+	/// </summary>
+	public void BrakePlanarVelocityToZero( float duration )
+	{
+		_planarBrakeStartVelocity = _planarVelocity;
+		_planarBrakeStartVelocity.y = 0f;
+
+		_isSliding = false;
+		_slideEnterCharge = 0f;
+		ClearSlideExitBoost();
+		ClearClimb();
+
+		if ( duration <= 0f )
+		{
+			_planarVelocity = Vector3.zero;
+			_planarBrakeActive = false;
+			UpdateMovementState();
+			return;
+		}
+
+		_planarBrakeElapsed = 0f;
+		_planarBrakeDuration = duration;
+		_planarBrakeActive = true;
+	}
+
+	/// <summary>
+	/// Holds planar velocity at zero and blocks move/jump input for <paramref name="duration"/> seconds.
+	/// Extends an existing lock if the new duration is longer.
+	/// </summary>
+	public void LockPlanarMovement( float duration )
+	{
+		if ( duration <= 0f )
+			return;
+
+		_planarMovementLockRemaining = Mathf.Max( _planarMovementLockRemaining, duration );
+		_isSliding = false;
+		_slideEnterCharge = 0f;
+		ClearSlideExitBoost();
+		ClearClimb();
+		_planarVelocity = Vector3.zero;
+	}
 
 	/// <summary>
 	/// Ends an active slide and kills residual slide/coast planar velocity.
@@ -602,12 +655,14 @@ public class PlayerController : MonoBehaviour
 
 	void ApplyGravityAndMove()
 	{
+		TickPlanarMovementLock( Time.deltaTime );
+
 		Vector2 moveInput = Vector2.zero;
 		_wantsSprint = false;
 		bool jumpHeld = false;
 		bool jumpPressed = false;
 
-		if ( gameplayInputEnabled )
+		if ( gameplayInputEnabled && !IsPlanarMovementLocked )
 		{
 			GameInput input = GetGameInput();
 			if ( input != null )
@@ -656,7 +711,7 @@ public class PlayerController : MonoBehaviour
 		else if ( grounded )
 			_coyoteTimer = 0f;
 
-		if ( gameplayInputEnabled )
+		if ( gameplayInputEnabled && !IsPlanarMovementLocked )
 		{
 			GameInput input = GetGameInput();
 			if ( input != null )
@@ -729,19 +784,53 @@ public class PlayerController : MonoBehaviour
 		if ( IsGrounded && !_isClimbing && _verticalVelocity < 0f )
 			_verticalVelocity = GroundStickVelocity;
 
-		if ( IsGrounded )
+		if ( IsGrounded && !IsPlanarMovementRestricted )
 		{
 			UpdateSlideState( flatMoveIntent, moveInput.y );
 			UpdateClimbState( flatMoveIntent );
 		}
-		else
+		else if ( !IsGrounded )
 		{
 			_slideEnterCharge = 0f;
 			ClearClimb();
 		}
 
 		Vector3 velocity;
-		if ( _isSliding && IsGrounded )
+		if ( _planarBrakeActive )
+		{
+			ApplyPlanarBrake( Time.deltaTime );
+			if ( _isGliding )
+			{
+				_verticalVelocity += GlideGravity * Time.deltaTime;
+				if ( _verticalVelocity < GlideMaxFallSpeed )
+					_verticalVelocity = GlideMaxFallSpeed;
+			}
+			else
+				_verticalVelocity += Gravity * Time.deltaTime;
+
+			if ( IsGrounded && _hasGroundHit )
+				velocity = ComposeGroundedMoveVelocity( _planarVelocity );
+			else
+				velocity = new Vector3( _planarVelocity.x, _verticalVelocity, _planarVelocity.z );
+		}
+		else if ( IsPlanarMovementLocked )
+		{
+			_planarVelocity = Vector3.zero;
+			if ( _isGliding )
+			{
+				_verticalVelocity += GlideGravity * Time.deltaTime;
+				if ( _verticalVelocity < GlideMaxFallSpeed )
+					_verticalVelocity = GlideMaxFallSpeed;
+			}
+			else
+				_verticalVelocity += Gravity * Time.deltaTime;
+
+			if ( IsGrounded && _hasGroundHit )
+				velocity = ComposeGroundedMoveVelocity( _planarVelocity );
+			else
+				velocity = new Vector3( _planarVelocity.x, _verticalVelocity, _planarVelocity.z );
+		}
+		else if ( _isSliding && IsGrounded )
 		{
 			ApplySlideMovement( flatMoveIntent, flatRight, Time.deltaTime );
 			velocity = _planarVelocity;
@@ -801,6 +890,28 @@ public class PlayerController : MonoBehaviour
 
 		// Past apex — allow stick/snap/landing again.
 		_ignoreGrounding = false;
+	}
+
+	void TickPlanarMovementLock( float dt )
+	{
+		if ( _planarMovementLockRemaining <= 0f )
+			return;
+
+		_planarMovementLockRemaining -= dt;
+		if ( _planarMovementLockRemaining < 0f )
+			_planarMovementLockRemaining = 0f;
+	}
+
+	void ApplyPlanarBrake( float dt )
+	{
+		_planarBrakeElapsed += dt;
+		float t = Mathf.Clamp01( _planarBrakeElapsed / _planarBrakeDuration );
+		_planarVelocity = Vector3.Lerp( _planarBrakeStartVelocity, Vector3.zero, t );
+		if ( t >= 1f )
+		{
+			_planarVelocity = Vector3.zero;
+			_planarBrakeActive = false;
+		}
 	}
 
 	void ApplyStandardPlanarMovement( Vector3 moveIntent, float dt )
@@ -1416,6 +1527,11 @@ public class PlayerController : MonoBehaviour
 		_wasGrounded = IsGrounded;
 		_planarVelocity = Vector3.zero;
 		_localPlanarVelocity = Vector3.zero;
+		_planarBrakeActive = false;
+		_planarBrakeElapsed = 0f;
+		_planarBrakeDuration = 0f;
+		_planarBrakeStartVelocity = Vector3.zero;
+		_planarMovementLockRemaining = 0f;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;
@@ -1449,6 +1565,11 @@ public class PlayerController : MonoBehaviour
 		IsGrounded = false;
 		_planarVelocity = Vector3.zero;
 		_localPlanarVelocity = Vector3.zero;
+		_planarBrakeActive = false;
+		_planarBrakeElapsed = 0f;
+		_planarBrakeDuration = 0f;
+		_planarBrakeStartVelocity = Vector3.zero;
+		_planarMovementLockRemaining = 0f;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;

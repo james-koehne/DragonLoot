@@ -98,9 +98,6 @@ public class TutorialManager : MonoBehaviour
 	{
 		_catalog = GameInstance.GetDefinition<TutorialCatalogDefinition>();
 		if ( _catalog == null || _catalog.Count <= 0 )
-			_catalog = TutorialCatalogFallback.GetOrCreate();
-
-		if ( _catalog == null || _catalog.Count <= 0 )
 			Debug.LogWarning( "TutorialManager: no TutorialCatalogDefinition found." );
 	}
 
@@ -224,6 +221,8 @@ public class TutorialManager : MonoBehaviour
 
 		if ( !isReplay )
 		{
+			if ( DebugDefinition.TutorialsDisabled )
+				return false;
 			if ( IsCompleted( def.id ) )
 				return false;
 			if ( _startedThisSession.Contains( def.id ) )

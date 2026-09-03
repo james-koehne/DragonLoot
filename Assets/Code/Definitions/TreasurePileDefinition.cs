@@ -88,7 +88,7 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0f, 0.49f )]
 	public float placementJitter = 0.3f;
 
-	[Tooltip( "How much of the pile square gems/artifacts may use. 1 = seats can reach the heightfield bounds; lower values inset loot from the rim. Coins always use the full footprint." )]
+	[Tooltip( "Legacy inset bias for some coin surface helpers. Gem/artifact latents sample the full heightfield wherever pile height exists above the loot floor; use Treasure XZ Spread to bias center vs rim." )]
 	[Range( 0.4f, 1f )]
 	public float placementRadiusFraction = 1f;
 

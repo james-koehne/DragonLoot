@@ -16,10 +16,28 @@ public class WorldEventSystem : MonoBehaviour
 
 	static WorldEventSystem _instance;
 
+	enum ActionSequencePhase
+	{
+		Ready = 0,
+		WaitingDelay = 1,
+		WaitingCallback = 2,
+		WaitingDuration = 3
+	}
+
+	sealed class RunningActionSequence
+	{
+		public string EventId;
+		public WorldEventAction[] Actions;
+		public int Index;
+		public ActionSequencePhase Phase;
+		public float BlockUntilUnscaled;
+	}
+
 	readonly DragonDialoguePlayer _dialogue = new DragonDialoguePlayer();
 	readonly HashSet<string> _enteredVolumes = new HashSet<string>();
 	readonly HashSet<string> _firedThisSession = new HashSet<string>();
 	readonly List<WorldEventDefinition> _pendingFire = new List<WorldEventDefinition>();
+	readonly List<RunningActionSequence> _runningSequences = new List<RunningActionSequence>();
 
 	WorldEventCatalogDefinition _catalog;
 	bool _subscribed;
@@ -71,6 +89,7 @@ public class WorldEventSystem : MonoBehaviour
 	{
 		if ( _instance == this )
 			_instance = null;
+		StopActionSequences();
 		Unsubscribe();
 	}
 
@@ -78,11 +97,13 @@ public class WorldEventSystem : MonoBehaviour
 	{
 		_dialogue.Tick();
 		TrySkipDialogueInput();
+		TickActionSequences();
 		TickConditionTimers();
 	}
 
 	public void StartCatalog()
 	{
+		StopActionSequences();
 		LoadCatalog();
 		EventSceneAutoWire.EnsureWired();
 		_enteredVolumes.Clear();
@@ -236,37 +257,236 @@ public class WorldEventSystem : MonoBehaviour
 	void RunActions( WorldEventDefinition definition )
 	{
 		WorldEventAction[] actions = definition.actions;
-		if ( actions == null )
+		if ( actions == null || actions.Length == 0 )
 			return;
 
-		for ( int i = 0; i < actions.Length; i++ )
-		{
-			WorldEventAction action = actions[ i ];
-			if ( action == null )
-				continue;
+		StopSequencesFor( definition.id );
 
-			switch ( action.type )
-			{
-				case WorldEventActionType.Dialogue:
-					_dialogue.Enqueue( action.dialogue );
-					break;
-				case WorldEventActionType.SpawnAddressable:
-					SpawnAddressable( action );
-					break;
-				case WorldEventActionType.SetTutorialHud:
-					ApplyTutorialHud( action );
-					break;
-				case WorldEventActionType.PlayAudio:
-					PlayAudio( action );
-					break;
-				case WorldEventActionType.LanternRevealSweep:
-					StartLanternRevealSweep( action );
-					break;
-				case WorldEventActionType.CinematicPresentation:
-					StartCinematicPresentation( action );
-					break;
-			}
+		RunningActionSequence sequence = new RunningActionSequence
+		{
+			EventId = definition.id,
+			Actions = actions,
+			Index = 0,
+			Phase = ActionSequencePhase.Ready
+		};
+		_runningSequences.Add( sequence );
+		TickSequence( sequence );
+	}
+
+	void StopActionSequences()
+	{
+		_runningSequences.Clear();
+	}
+
+	void StopSequencesFor( string eventId )
+	{
+		if ( string.IsNullOrEmpty( eventId ) )
+			return;
+
+		for ( int i = _runningSequences.Count - 1; i >= 0; i-- )
+		{
+			RunningActionSequence sequence = _runningSequences[ i ];
+			if ( sequence != null && sequence.EventId == eventId )
+				_runningSequences.RemoveAt( i );
 		}
+	}
+
+	void TickActionSequences()
+	{
+		for ( int i = _runningSequences.Count - 1; i >= 0; i-- )
+		{
+			RunningActionSequence sequence = _runningSequences[ i ];
+			if ( sequence == null )
+			{
+				_runningSequences.RemoveAt( i );
+				continue;
+			}
+
+			TickSequence( sequence );
+		}
+	}
+
+	void TickSequence( RunningActionSequence sequence )
+	{
+		if ( sequence == null || sequence.Actions == null )
+		{
+			_runningSequences.Remove( sequence );
+			return;
+		}
+
+		const int maxSteps = 32;
+		int steps = 0;
+		while ( steps < maxSteps )
+		{
+			steps++;
+			if ( !_runningSequences.Contains( sequence ) )
+				return;
+
+			if ( sequence.Index >= sequence.Actions.Length )
+			{
+				_runningSequences.Remove( sequence );
+				return;
+			}
+
+			WorldEventAction action = sequence.Actions[ sequence.Index ];
+			if ( action == null )
+			{
+				sequence.Index++;
+				sequence.Phase = ActionSequencePhase.Ready;
+				continue;
+			}
+
+			if ( sequence.Phase == ActionSequencePhase.Ready )
+			{
+				float delay = Mathf.Max( 0f, action.delayBefore );
+				sequence.Phase = ActionSequencePhase.WaitingDelay;
+				sequence.BlockUntilUnscaled = Time.unscaledTime + delay;
+			}
+
+			if ( sequence.Phase == ActionSequencePhase.WaitingDelay )
+			{
+				if ( Time.unscaledTime < sequence.BlockUntilUnscaled )
+					return;
+
+				ExecuteAction( action, sequence );
+				if ( sequence.Phase == ActionSequencePhase.WaitingCallback ||
+				     sequence.Phase == ActionSequencePhase.WaitingDuration )
+					return;
+
+				sequence.Index++;
+				sequence.Phase = ActionSequencePhase.Ready;
+				continue;
+			}
+
+			if ( sequence.Phase == ActionSequencePhase.WaitingCallback )
+				return;
+
+			if ( sequence.Phase == ActionSequencePhase.WaitingDuration )
+			{
+				if ( Time.unscaledTime < sequence.BlockUntilUnscaled )
+					return;
+
+				sequence.Index++;
+				sequence.Phase = ActionSequencePhase.Ready;
+				continue;
+			}
+
+			return;
+		}
+	}
+
+	void CompleteCallbackWait( RunningActionSequence sequence )
+	{
+		if ( sequence == null || sequence.Phase != ActionSequencePhase.WaitingCallback )
+			return;
+		if ( !_runningSequences.Contains( sequence ) )
+			return;
+
+		sequence.Index++;
+		sequence.Phase = ActionSequencePhase.Ready;
+		TickSequence( sequence );
+	}
+
+	void ExecuteAction( WorldEventAction action, RunningActionSequence sequence )
+	{
+		switch ( action.type )
+		{
+			case WorldEventActionType.Dialogue:
+				StartDialogueAction( action, sequence );
+				break;
+			case WorldEventActionType.SpawnAddressable:
+				SpawnAddressable( action );
+				break;
+			case WorldEventActionType.SetTutorialHud:
+				ApplyTutorialHud( action );
+				break;
+			case WorldEventActionType.PlayAudio:
+				PlayAudio( action );
+				BeginDurationWait( sequence, action, ResolveAudioWaitDuration( action ) );
+				break;
+			case WorldEventActionType.LanternRevealSweep:
+				StartLanternRevealSweep( action );
+				BeginDurationWait( sequence, action, ResolveLanternWaitDuration( action ) );
+				break;
+			case WorldEventActionType.CinematicPresentation:
+				StartCinematicPresentation( action );
+				BeginDurationWait( sequence, action, ResolveCinematicWaitDuration( action ) );
+				break;
+			case WorldEventActionType.BrakePlayerMovement:
+				BrakePlayerMovement( action );
+				BeginDurationWait( sequence, action, Mathf.Max( 0f, action.playerBrakeDuration ) );
+				break;
+		}
+	}
+
+	void StartDialogueAction( WorldEventAction action, RunningActionSequence sequence )
+	{
+		if ( !action.waitUntilFinished )
+		{
+			_dialogue.Enqueue( action.dialogue );
+			return;
+		}
+
+		bool completedSync = false;
+		_dialogue.Enqueue( action.dialogue, () =>
+		{
+			completedSync = true;
+			CompleteCallbackWait( sequence );
+		} );
+
+		if ( !completedSync )
+			sequence.Phase = ActionSequencePhase.WaitingCallback;
+	}
+
+	static void BeginDurationWait( RunningActionSequence sequence, WorldEventAction action, float duration )
+	{
+		if ( sequence == null || action == null || !action.waitUntilFinished )
+			return;
+		if ( duration <= 0f )
+			return;
+
+		sequence.Phase = ActionSequencePhase.WaitingDuration;
+		sequence.BlockUntilUnscaled = Time.unscaledTime + duration;
+	}
+
+	static float ResolveAudioWaitDuration( WorldEventAction action )
+	{
+		if ( action == null || action.audioClip == null )
+			return 0f;
+
+		float pitch = Mathf.Min( Mathf.Abs( action.audioPitchMin ), Mathf.Abs( action.audioPitchMax ) );
+		if ( pitch < 0.01f )
+			pitch = 0.01f;
+		return action.audioClip.length / pitch;
+	}
+
+	static float ResolveLanternWaitDuration( WorldEventAction action )
+	{
+		if ( action == null )
+			return 0f;
+		return Mathf.Max( 0f, action.lanternStartDelay ) +
+		       Mathf.Max( 0f, action.lanternSweepDuration ) +
+		       Mathf.Max( 0f, action.lanternFadeDuration );
+	}
+
+	static float ResolveCinematicWaitDuration( WorldEventAction action )
+	{
+		if ( action == null )
+			return 0f;
+		return Mathf.Max( 0f, action.cinematicRise ) +
+		       Mathf.Max( 0f, action.cinematicHold ) +
+		       Mathf.Max( 0f, action.cinematicFall );
+	}
+
+	static void BrakePlayerMovement( WorldEventAction action )
+	{
+		if ( action == null )
+			return;
+
+		if ( GameMode.Instance == null || GameMode.Instance.Player == null )
+			return;
+
+		GameMode.Instance.Player.BrakePlanarVelocityToZero( action.playerBrakeDuration );
 	}
 
 	static void PlayAudio( WorldEventAction action )
@@ -309,6 +529,11 @@ public class WorldEventSystem : MonoBehaviour
 			Fall = action.cinematicFall
 		};
 		CinematicPresentationController.TryPlay( action.cinematicPresentationId, overrides );
+
+		if ( action.cinematicPlayerMovementLockDuration > 0f
+		     && GameMode.Instance != null
+		     && GameMode.Instance.Player != null )
+			GameMode.Instance.Player.LockPlanarMovement( action.cinematicPlayerMovementLockDuration );
 	}
 
 	static Vector3 ResolveAudioPosition( WorldEventAction action )
@@ -408,6 +633,7 @@ public class WorldEventSystem : MonoBehaviour
 
 	public void DebugResetFiredEvents()
 	{
+		StopActionSequences();
 		_firedThisSession.Clear();
 		_enteredVolumes.Clear();
 		_playerHasMadeGameplayInput = false;

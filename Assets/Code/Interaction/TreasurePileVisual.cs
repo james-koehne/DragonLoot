@@ -32,9 +32,15 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	public int LootLayoutSeed => lootLayoutSeed;
 
 	[Header( "Artifact Latent Bake" )]
-	[Tooltip( "Per-pile baked latent poses for this heightmap + layout seed. Pure data — not shared across piles." )]
+	[Tooltip( "Authorable bake policy (near-surface seating, etc.). Shared across piles. Rebake after changing." )]
+	[SerializeField]
+	TreasurePileLatentBakeSettings latentBakeSettings;
+
+	[Tooltip( "Per-pile baked latent poses for this heightmap + layout seed. Pure data — never share this asset across piles." )]
 	[SerializeField]
 	TreasurePileLatentBake latentBake;
+
+	public TreasurePileLatentBakeSettings LatentBakeSettings => latentBakeSettings;
 
 	public TreasurePileLatentBake LatentBake => latentBake;
 
@@ -166,30 +172,109 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	public bool IsLatentBakeStale()
 	{
+		return GetLatentBakeStaleReason() != null;
+	}
+
+	/// <summary>Null when the bake matches. Otherwise a short reason for the inspector warning.</summary>
+	public string GetLatentBakeStaleReason()
+	{
 		if ( latentBake == null )
-			return CountAuthoredItems() > 0;
+			return CountAuthoredItems() > 0 ? "no bake asset" : null;
 
-		// Inspector-safe: do not rebuild heightfield here. OnEnable / Bake already ensure preview.
-		if ( _heightfield == null || !_heightfield.IsInitialized )
-			return false;
+		if ( !TryGetLatentBakeFingerprint(
+			out int layoutSeed,
+			out int heightFp,
+			out int contentsFp,
+			out int volumeAttempts,
+			out bool spatialHash,
+			out bool avoidCoins,
+			out int authoredFp,
+			out bool nearSurface ) )
+		{
+			return null;
+		}
 
-		TreasurePileDefinition def = ResolveDefinitionForEditor();
-		if ( def == null )
-			return true;
-
-		int heightFp = _heightfield.ComputeLayoutFingerprint();
-		int contentsFp = def.HashLargePropContents();
-		int authoredFp = ComputeAuthoredFingerprint();
-		int effectiveSeed = WorldLootSeed.GetPileEffectiveSeed( transform, lootLayoutSeed );
-		int volumeAttempts = Mathf.Max( 1, def.latentVolumeMaxAttempts );
-		return !latentBake.MatchesFingerprint(
-			effectiveSeed,
+		return latentBake.DescribeFingerprintMismatch(
+			layoutSeed,
 			heightFp,
 			contentsFp,
 			volumeAttempts,
-			def.latentUseSpatialHash,
-			def.latentAvoidCoinSeats,
-			authoredFp );
+			spatialHash,
+			avoidCoins,
+			authoredFp,
+			nearSurface );
+	}
+
+	public bool TryGetLatentBakeFingerprint(
+		out int layoutSeed,
+		out int heightFp,
+		out int contentsFp,
+		out int volumeAttempts,
+		out bool spatialHash,
+		out bool avoidCoins,
+		out int authoredFp,
+		out bool nearSurface )
+	{
+		layoutSeed = 0;
+		heightFp = 0;
+		contentsFp = 0;
+		volumeAttempts = 0;
+		spatialHash = false;
+		avoidCoins = false;
+		authoredFp = 0;
+		nearSurface = false;
+
+		TreasurePileDefinition def = ResolveDefinitionForEditor();
+		if ( def == null )
+			return false;
+
+		layoutSeed = lootLayoutSeed;
+		heightFp = ComputeAuthoredHeightFingerprint( def );
+		contentsFp = def.HashLargePropContents();
+		volumeAttempts = Mathf.Max( 1, def.latentVolumeMaxAttempts );
+		spatialHash = def.latentUseSpatialHash;
+		avoidCoins = def.latentAvoidCoinSeats;
+		authoredFp = ComputeAuthoredFingerprint();
+		if ( latentBakeSettings != null )
+			nearSurface = latentBakeSettings.spawnTreasureNearSurface;
+		return true;
+	}
+
+	/// <summary>
+	/// Stable mound fingerprint from serialized authored U16 heights (not live float samples).
+	/// </summary>
+	int ComputeAuthoredHeightFingerprint( TreasurePileDefinition def )
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			h = ( h ^ ( uint )authoredRes ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( authoredWorldSize ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( authoredMaxHeight ) ) * 16777619u;
+			if ( def != null )
+			{
+				h = ( h ^ ( uint )AuthoredFloatToBits( def.groundLevelHeight ) ) * 16777619u;
+				h = ( h ^ ( uint )AuthoredFloatToBits( def.lootGroundLevelHeight ) ) * 16777619u;
+			}
+
+			if ( !HasAuthoredHeight )
+			{
+				if ( _heightfield != null && _heightfield.IsInitialized )
+					return _heightfield.ComputeLayoutFingerprint();
+				return ( int )h;
+			}
+
+			h = ( h ^ ( uint )authoredHeights.Length ) * 16777619u;
+			int step = Mathf.Max( 1, authoredHeights.Length / 4096 );
+			for ( int i = 0; i < authoredHeights.Length; i += step )
+				h = ( h ^ authoredHeights[ i ] ) * 16777619u;
+			return ( int )h;
+		}
+	}
+
+	static int AuthoredFloatToBits( float value )
+	{
+		return System.BitConverter.SingleToInt32Bits( value );
 	}
 
 	static uint MixAuthoredString( uint h, string value )
@@ -1404,6 +1489,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		{
 			_heightfield.FillMound( 1f );
 			WriteAuthoredFromHeightfield();
+			_heightfield.CopyFromNormalizedU16( authoredHeights );
 		}
 
 		_heightfield.UploadIfDirty();

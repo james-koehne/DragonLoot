@@ -70,7 +70,7 @@ Material:
     - _MatCapPower: 2.5
     - _Metallic: 0
     - _OcclusionStrength: 1
-    - _ReflectionFloor: 0.08
+    - _ReflectionFloor: 0.02
     - _ShineBoost: 0.4
     - _Smoothness: 0.25
     - _Surface: 0

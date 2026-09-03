@@ -259,6 +259,9 @@ public class PauseMenuUI : MonoBehaviour
 		if ( DebugOverlay.IsOpen )
 			return;
 
+		if ( MapUI.IsOpen )
+			return;
+
 		if ( _open && _tutorialsPage )
 		{
 			ShowControlsPage();

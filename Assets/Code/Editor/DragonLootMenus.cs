@@ -29,6 +29,10 @@ public static class DragonLootMenus
 
 	public const string GraphicsLightFlickerInstall = Root + "/Graphics/Light Flicker/Install Definition";
 	public const string GraphicsLightFlickerResetPresets = Root + "/Graphics/Light Flicker/Reset Presets To Defaults";
+	public const string GraphicsLightFlickerAddToSelection = Root + "/Graphics/Light Flicker/Add To Selection";
+	public const string GraphicsLightFlickerApplyPreset = Root + "/Graphics/Light Flicker/Apply Preset";
+	public const string GraphicsLightFlickerRecaptureSelection = Root + "/Graphics/Light Flicker/Recapture Bases In Selection";
+	public const string GraphicsLightFlickerRefreshPreviews = Root + "/Graphics/Light Flicker/Refresh Edit Previews In Open Scenes";
 
 	// --- Audio ---
 	public const string AudioInstallDefinition = Root + "/Audio/Install Definition";
@@ -41,6 +45,7 @@ public static class DragonLootMenus
 	public const string TreasureBuildDisplayTables = Root + "/Treasure/Build Display Table Prefabs";
 	public const string TreasureInstallGoldBarStackSettings = Root + "/Treasure/Install Gold Bar Stack Settings";
 	public const string TreasurePurgeSlotOrphans = Root + "/Treasure/Purge Artifact Slot Indicator Orphans";
+	public const string TreasurePileContents = Root + "/Treasure/Pile Contents";
 
 	// --- Stations ---
 	public const string StationsCleaningCreate = Root + "/Stations/Cleaning/Create Setup";
@@ -67,5 +72,12 @@ public static class DragonLootMenus
 
 	// --- UI ---
 	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";
+	public const string UiInstallMap = Root + "/UI/Install Map On Interface";
+
+	public const string GameObjectMapRegion = "GameObject/DragonLoot/Map Region Volume";
+	public const string GameObjectMapLabel = "GameObject/DragonLoot/Map Label Marker";
+
+	// --- Tutorials ---
+	public const string TutorialsInstallCatalog = Root + "/Tutorials/Install Catalog";
 }
 #endif

@@ -61,7 +61,7 @@ Material:
     - _HueVariation: 0
     - _Metallic: 0.92
     - _OcclusionStrength: 0
-    - _ReflectionFloor: 0.25
+    - _ReflectionFloor: 0.02
     - _RoughnessUvAmount: 0
     - _RoughnessUvScale: 32
     - _Smoothness: 0.75

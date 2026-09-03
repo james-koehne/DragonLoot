@@ -16,3 +16,4 @@ MonoBehaviour:
   debugBackend: 0
   spawnAtSceneCamera: 0
   disableTreasureSpawning: 0
+  disableTutorials: 1

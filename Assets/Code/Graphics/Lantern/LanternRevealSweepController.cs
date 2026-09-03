@@ -5,33 +5,37 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Serialization;
 
 public struct LanternRevealSweepOverrides
 {
 	public float SkylightFadeDuration;
 	public float SweepDuration;
+	public float SweepDurationZ;
+	public float SweepDurationY;
 	public float LanternFadeDuration;
 	public float LanternStartDelay;
 }
 
 /// <summary>
-/// Z-sweep lantern reveal with optional skylight fade running in parallel.
-/// Scene setup: add to level, set <see cref="_revealId"/>, assign <see cref="_skylight"/>,
-/// align <see cref="_sweepReference"/> +Z toward the hallway sweep direction, and set reveal
-/// lanterns to <see cref="LanternActivationMode.RevealOnly"/> with matching <see cref="LanternActivator.RevealId"/>.
+/// Z (and optional Y) sweep lantern reveal with optional skylight fade running in parallel.
+/// Scene setup: add to level, set <see cref="_revealId"/>, assign <see cref="_skylights"/>,
+/// align <see cref="_sweepReference"/> +Z toward the hallway sweep direction (and +Y for diagonal sweeps),
+/// and set reveal lanterns to <see cref="LanternActivationMode.RevealOnly"/> with matching <see cref="LanternActivator.RevealId"/>.
 /// On Roof/Area Light add <see cref="SkylightReveal"/> (two lights, SkyPortal renderer, LightRays renderer).
 /// </summary>
 public class LanternRevealSweepController : MonoBehaviour
 {
-	const float SameZEpsilon = 0.05f;
+	const float SameAxisEpsilon = 0.05f;
 
 	static readonly Dictionary<string, LanternRevealSweepController> Controllers = new Dictionary<string, LanternRevealSweepController>();
 
 	[SerializeField]
 	string _revealId = LanternActivator.IntroLedgeRevealId;
 
+	[FormerlySerializedAs( "_skylight" )]
 	[SerializeField]
-	SkylightReveal _skylight;
+	SkylightReveal[] _skylights;
 
 	[SerializeField]
 	float _skylightFadeDuration = 2f;
@@ -48,13 +52,27 @@ public class LanternRevealSweepController : MonoBehaviour
 	float _sweepEndZ;
 
 	[SerializeField]
-	[Tooltip( "When true, start/end Z are computed from reveal lantern positions each run." )]
+	[Tooltip( "Local Y on sweep reference where the reveal begins. Set end Y to a different value for a diagonal sweep." )]
+	float _sweepStartY;
+
+	[SerializeField]
+	[Tooltip( "Local Y on sweep reference where the reveal ends. Matches start Y for a horizontal-only sweep." )]
+	float _sweepEndY;
+
+	[SerializeField]
+	[Tooltip( "When true, start/end Z and Y are computed from reveal lantern positions each run." )]
 	bool _autoComputeBounds = true;
 
+	[FormerlySerializedAs( "_sweepDuration" )]
 	[SerializeField]
 	[Min( 0f )]
 	[Tooltip( "Seconds for the sweep front to travel from start Z to end Z." )]
-	float _sweepDuration = 4f;
+	float _sweepDurationZ = 4f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Seconds for the sweep front to travel from start Y to end Y. Diagonal sweeps use both axis durations independently." )]
+	float _sweepDurationY = 4f;
 
 	[SerializeField]
 	[Min( 0f )]
@@ -185,11 +203,11 @@ public class LanternRevealSweepController : MonoBehaviour
 			_revealRoutine = null;
 		}
 
-		if ( _skylight != null )
+		ApplyToSkylights( skylight =>
 		{
-			_skylight.SetReveal( 0f );
-			_skylight.SetOvershootScale( 1f );
-		}
+			skylight.SetReveal( 0f );
+			skylight.SetOvershootScale( 1f );
+		} );
 
 		ResetPunchEffects();
 
@@ -209,7 +227,8 @@ public class LanternRevealSweepController : MonoBehaviour
 	IEnumerator RevealRoutine( LanternRevealSweepOverrides overrides )
 	{
 		float skylightDuration = ResolveOverride( overrides.SkylightFadeDuration, _skylightFadeDuration );
-		float sweepDuration = ResolveOverride( overrides.SweepDuration, _sweepDuration );
+		float sweepDurationZ = ResolvePerAxisSweepDuration( overrides.SweepDurationZ, overrides.SweepDuration, _sweepDurationZ );
+		float sweepDurationY = ResolvePerAxisSweepDuration( overrides.SweepDurationY, overrides.SweepDuration, _sweepDurationY );
 		float lanternFadeDuration = ResolveOverride( overrides.LanternFadeDuration, _lanternFadeDuration );
 		float lanternStartDelay = ResolveOverride( overrides.LanternStartDelay, _lanternStartDelay );
 
@@ -224,10 +243,12 @@ public class LanternRevealSweepController : MonoBehaviour
 		Transform reference = _sweepReference != null ? _sweepReference : transform;
 		float sweepStartZ = _sweepStartZ;
 		float sweepEndZ = _sweepEndZ;
+		float sweepStartY = _sweepStartY;
+		float sweepEndY = _sweepEndY;
 		if ( _autoComputeBounds )
-			ComputeBounds( lanterns, reference, out sweepStartZ, out sweepEndZ );
+			ComputeBounds( lanterns, reference, out sweepStartZ, out sweepEndZ, out sweepStartY, out sweepEndY );
 
-		List<LanternSweepEntry> entries = BuildSweepEntries( lanterns, reference, sweepStartZ, sweepEndZ, sweepDuration );
+		List<LanternSweepEntry> entries = BuildSweepEntries( lanterns, reference, sweepStartZ, sweepEndZ, sweepStartY, sweepEndY, sweepDurationZ, sweepDurationY );
 		HashSet<LanternActivator> triggered = new HashSet<LanternActivator>();
 		float maxTriggerTime = 0f;
 		for ( int i = 0; i < entries.Count; i++ )
@@ -236,16 +257,19 @@ public class LanternRevealSweepController : MonoBehaviour
 				maxTriggerTime = entries[ i ].TriggerTime;
 		}
 
-		bool animateSkylight = _skylight != null && skylightDuration > 0f;
+		bool animateSkylight = HasSkylights() && skylightDuration > 0f;
 		float punchDuration = GetMaxPunchDuration();
-		float lanternRevealDuration = lanternStartDelay + Mathf.Max( sweepDuration, maxTriggerTime );
+		float lanternRevealDuration = lanternStartDelay + maxTriggerTime;
 		float revealDuration = Mathf.Max( animateSkylight ? skylightDuration : 0f, lanternRevealDuration, punchDuration );
 		float elapsed = 0f;
 
 		if ( animateSkylight )
 		{
-			_skylight.SetReveal( 0f );
-			_skylight.SetOvershootScale( 1f );
+			ApplyToSkylights( skylight =>
+			{
+				skylight.SetReveal( 0f );
+				skylight.SetOvershootScale( 1f );
+			} );
 		}
 
 		ResetPunchEffects();
@@ -257,7 +281,7 @@ public class LanternRevealSweepController : MonoBehaviour
 			if ( animateSkylight )
 			{
 				float skylightT = skylightDuration > 0f ? Mathf.Clamp01( elapsed / skylightDuration ) : 1f;
-				_skylight.SetReveal( skylightT );
+				ApplyToSkylights( skylight => skylight.SetReveal( skylightT ) );
 			}
 
 			ApplyPunchEffects( elapsed );
@@ -270,7 +294,7 @@ public class LanternRevealSweepController : MonoBehaviour
 		}
 
 		if ( animateSkylight )
-			_skylight.SetReveal( 1f );
+			ApplyToSkylights( skylight => skylight.SetReveal( 1f ) );
 
 		ApplyPunchEffects( revealDuration );
 		ResetPunchEffects();
@@ -295,11 +319,16 @@ public class LanternRevealSweepController : MonoBehaviour
 		Transform reference,
 		float sweepStartZ,
 		float sweepEndZ,
-		float sweepDuration )
+		float sweepStartY,
+		float sweepEndY,
+		float sweepDurationZ,
+		float sweepDurationY )
 	{
 		List<LanternSweepEntry> entries = new List<LanternSweepEntry>( lanterns.Count );
-		float span = sweepEndZ - sweepStartZ;
-		bool hasSpan = Mathf.Abs( span ) > SameZEpsilon;
+		float zSpan = sweepEndZ - sweepStartZ;
+		float ySpan = sweepEndY - sweepStartY;
+		bool hasZSpan = Mathf.Abs( zSpan ) > SameAxisEpsilon;
+		bool hasYSpan = Mathf.Abs( ySpan ) > SameAxisEpsilon;
 
 		for ( int i = 0; i < lanterns.Count; i++ )
 		{
@@ -307,17 +336,24 @@ public class LanternRevealSweepController : MonoBehaviour
 			if ( lantern == null )
 				continue;
 
-			float triggerNormalized = 0f;
-			if ( hasSpan )
+			Vector2 localPos = GetLocalSweepPosition( lantern, reference );
+			float triggerTime = 0f;
+			if ( hasZSpan )
 			{
-				float z = GetLocalZ( lantern, reference );
-				triggerNormalized = Mathf.Clamp01( ( z - sweepStartZ ) / span );
+				float zNormalized = Mathf.Clamp01( ( localPos.x - sweepStartZ ) / zSpan );
+				triggerTime = Mathf.Max( triggerTime, zNormalized * sweepDurationZ );
+			}
+
+			if ( hasYSpan )
+			{
+				float yNormalized = Mathf.Clamp01( ( localPos.y - sweepStartY ) / ySpan );
+				triggerTime = Mathf.Max( triggerTime, yNormalized * sweepDurationY );
 			}
 
 			entries.Add( new LanternSweepEntry
 			{
 				Lantern = lantern,
-				TriggerTime = triggerNormalized * sweepDuration
+				TriggerTime = triggerTime
 			} );
 		}
 
@@ -335,7 +371,7 @@ public class LanternRevealSweepController : MonoBehaviour
 			LanternActivator lantern = entries[ i ].Lantern;
 			if ( lantern == null || triggered.Contains( lantern ) )
 				continue;
-			if ( elapsed + SameZEpsilon < entries[ i ].TriggerTime )
+			if ( elapsed + SameAxisEpsilon < entries[ i ].TriggerTime )
 				continue;
 
 			lantern.FadeToLit( true, lanternFadeDuration );
@@ -361,37 +397,63 @@ public class LanternRevealSweepController : MonoBehaviour
 		return results;
 	}
 
-	static void ComputeBounds( List<LanternActivator> lanterns, Transform reference, out float startZ, out float endZ )
+	static void ComputeBounds(
+		List<LanternActivator> lanterns,
+		Transform reference,
+		out float startZ,
+		out float endZ,
+		out float startY,
+		out float endY )
 	{
 		startZ = float.PositiveInfinity;
 		endZ = float.NegativeInfinity;
+		startY = float.PositiveInfinity;
+		endY = float.NegativeInfinity;
 		for ( int i = 0; i < lanterns.Count; i++ )
 		{
-			float z = GetLocalZ( lanterns[ i ], reference );
-			if ( z < startZ )
-				startZ = z;
-			if ( z > endZ )
-				endZ = z;
+			Vector2 localPos = GetLocalSweepPosition( lanterns[ i ], reference );
+			if ( localPos.x < startZ )
+				startZ = localPos.x;
+			if ( localPos.x > endZ )
+				endZ = localPos.x;
+			if ( localPos.y < startY )
+				startY = localPos.y;
+			if ( localPos.y > endY )
+				endY = localPos.y;
 		}
 
 		if ( float.IsPositiveInfinity( startZ ) )
 		{
 			startZ = 0f;
 			endZ = 0f;
+			startY = 0f;
+			endY = 0f;
 		}
 	}
 
-	static float GetLocalZ( LanternActivator activator, Transform reference )
+	static Vector2 GetLocalSweepPosition( LanternActivator activator, Transform reference )
 	{
 		if ( activator == null || reference == null )
-			return 0f;
+			return Vector2.zero;
 
-		return reference.InverseTransformPoint( activator.transform.position ).z;
+		Vector3 localPos = reference.InverseTransformPoint( activator.transform.position );
+		return new Vector2( localPos.z, localPos.y );
 	}
 
 	static float ResolveOverride( float overrideValue, float defaultValue )
 	{
 		return overrideValue > 0f ? overrideValue : defaultValue;
+	}
+
+	static float ResolvePerAxisSweepDuration( float axisOverride, float legacyOverride, float defaultValue )
+	{
+		if ( axisOverride > 0f )
+			return axisOverride;
+
+		if ( legacyOverride > 0f )
+			return legacyOverride;
+
+		return defaultValue;
 	}
 
 	float GetMaxPunchDuration()
@@ -410,10 +472,10 @@ public class LanternRevealSweepController : MonoBehaviour
 	{
 		ApplyBloomPunch( elapsed );
 
-		if ( _skylight != null && _skylightPunch.IsScaleActive )
-			_skylight.SetOvershootScale( _skylightPunch.EvaluateScale( elapsed, 1f ) );
-		else if ( _skylight != null )
-			_skylight.SetOvershootScale( 1f );
+		if ( HasSkylights() && _skylightPunch.IsScaleActive )
+			ApplyToSkylights( skylight => skylight.SetOvershootScale( _skylightPunch.EvaluateScale( elapsed, 1f ) ) );
+		else if ( HasSkylights() )
+			ApplyToSkylights( skylight => skylight.SetOvershootScale( 1f ) );
 
 		if ( _specularPunch.IsScaleActive )
 			StylizedLightingGlobals.SetSpecularIntensityMultiplier( _specularPunch.EvaluateScale( elapsed, 1f ) );
@@ -460,9 +522,35 @@ public class LanternRevealSweepController : MonoBehaviour
 		if ( _bloomVolume != null )
 			_bloomVolume.weight = 0f;
 
-		if ( _skylight != null )
-			_skylight.SetOvershootScale( 1f );
+		ApplyToSkylights( skylight => skylight.SetOvershootScale( 1f ) );
 
 		StylizedLightingGlobals.ResetSpecularIntensityMultiplier();
+	}
+
+	bool HasSkylights()
+	{
+		if ( _skylights == null )
+			return false;
+
+		for ( int i = 0; i < _skylights.Length; i++ )
+		{
+			if ( _skylights[ i ] != null )
+				return true;
+		}
+
+		return false;
+	}
+
+	void ApplyToSkylights( Action<SkylightReveal> action )
+	{
+		if ( _skylights == null || action == null )
+			return;
+
+		for ( int i = 0; i < _skylights.Length; i++ )
+		{
+			SkylightReveal skylight = _skylights[ i ];
+			if ( skylight != null )
+				action( skylight );
+		}
 	}
 }

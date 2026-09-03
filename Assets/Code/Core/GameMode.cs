@@ -163,18 +163,24 @@ public class GameMode : MonoBehaviour, IGameMode
 			if ( pauseMenu != null )
 				pauseMenu.Setup();
 
+			MapUI mapUi = interfacePrefab.GetComponentInChildren<MapUI>( true );
+			if ( mapUi == null )
+			{
+				GameObject mapGo = new GameObject( "Map", typeof( RectTransform ), typeof( CanvasGroup ), typeof( MapUI ) );
+				mapGo.transform.SetParent( interfacePrefab.transform, false );
+				mapUi = mapGo.GetComponent<MapUI>();
+			}
+			mapUi.Setup();
+
 			PouchSummaryUI pouchSummary = interfacePrefab.GetComponentInChildren<PouchSummaryUI>( true );
 			if ( pouchSummary != null )
 				pouchSummary.Setup();
 
 			TutorialPopupUI tutorialPopup = interfacePrefab.GetComponentInChildren<TutorialPopupUI>( true );
-			if ( tutorialPopup == null )
-			{
-				GameObject popupGo = new GameObject( "TutorialPopup", typeof( RectTransform ), typeof( CanvasGroup ), typeof( TutorialPopupUI ) );
-				popupGo.transform.SetParent( interfacePrefab.transform, false );
-				tutorialPopup = popupGo.GetComponent<TutorialPopupUI>();
-			}
-			tutorialPopup.Setup();
+			if ( tutorialPopup != null )
+				tutorialPopup.Setup();
+			else
+				Debug.LogWarning( "GameMode: TutorialPopupUI missing on Interface prefab." );
 
 			TutorialManager tutorials = TutorialManager.EnsureExists();
 			tutorials.StartCatalog( tutorialPopup );

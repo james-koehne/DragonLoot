@@ -14,7 +14,15 @@ CBUFFER_START(UnityPerMaterial)
     half _FacetScale;
     half _FacetStrength;
     half _LightSteps;
+    half _LightStepBlend;
     half _ShadowStrength;
+    half _LightWrap;
+    half _DirectLightScale;
+    half _AmbientFill;
+    half _CatchLightIntensity;
+    half _CatchLightSize;
+    half _GraphicShine;
+    half _ReflectionFloor;
     half _ShineIntensity;
     half _ShineSize;
     half _ShineThreshold;

@@ -105,6 +105,8 @@ MonoBehaviour:
     count: 3
   - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
     count: 2
+  - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
+    count: 1
   maxVisibleTotal: 32768
   coinVisibleBufferFraction: 0.2
   heightResolution: 512
@@ -125,8 +127,8 @@ MonoBehaviour:
   placementScaleJitter: 0.1
   coinSurfaceHeightFraction: 0.05
   coinPullToCarveCount: 4
-  treasureRadialPower: 1.1
-  treasureHeightBias: 0.4
+  treasureRadialPower: 1
+  treasureHeightBias: 0
   treasureXZSpread: 1
   treasurePickupOutsideFraction: 0.3
   treasureReleaseOutsideFraction: 0.9

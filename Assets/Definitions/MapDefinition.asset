@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9bddb9637afd184497793f649fadb8c, type: 3}
+  m_Name: MapDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::MapDefinition
+  resolution: 512
+  boundsPadding: 6
+  bakeBudgetMs: 1.5
+  busyFrameDeltaSeconds: 0.033
+  goldColor: {r: 0.85, g: 0.68, b: 0.22, a: 1}
+  walkableColor: {r: 0.45, g: 0.45, b: 0.48, a: 1}
+  emptyColor: {r: 0.04, g: 0.04, b: 0.045, a: 1}
+  discoveryRadius: 64
+  discoverySoftness: 0
+  openDuration: 0.22
+  openStartScale: 0.92
+  playerDotSize: 14
+  aimConeHalfAngle: 14
+  aimConeLength: 48
+  aimConeBaseWidth: 36
+  playerDotColor: {r: 0.95, g: 0.95, b: 1, a: 1}
+  aimConeColor: {r: 0.95, g: 0.95, b: 1, a: 0.45}
+  labelFontSize: 22
+  labelColor: {r: 0.92, g: 0.9, b: 0.82, a: 0.95}

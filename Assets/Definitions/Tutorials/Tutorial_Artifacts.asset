@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_Artifacts
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_artifacts
+  title: Artifacts
+  tags:
+  - artifacts
+  trigger: 7
+  volumeId: 
+  fallbackVolumeId: 
+  prerequisiteTutorialIds: []
+  steps:
+  - body: Artifact presentation stands hold cleaned artifacts for display.
+    keybindHint: '[{SecondaryInteract}] Place artifact'
+  - body: Dirty artifacts may need polishing before they will sit properly on a stand.
+    keybindHint: '[{Clean}] Clean / Polish'

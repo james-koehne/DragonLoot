@@ -43,9 +43,9 @@ MonoBehaviour:
   lod1Density: 0.6
   lod2Density: 0.25
   gemNeverCull: 0
-  gemMaxStreamDistance: 48
+  gemMaxStreamDistance: 64
   artifactNeverCull: 0
-  artifactMaxStreamDistance: 32
+  artifactMaxStreamDistance: 64
   propStreamHysteresisMeters: 2
   drawChunkGizmos: 1
   drawOverlayStats: 1

@@ -73,6 +73,7 @@ public class GameController : MonoBehaviour
 	{
 		TreasureCounterManager.EnsureExists();
 		TreasureSurfaceWorld.EnsureExists();
+		MapSystem.EnsureExists();
 		WorldEventSystem.EnsureExists();
 		MusicAmbienceSystem.EnsureExists();
 	}

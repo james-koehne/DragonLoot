@@ -7,7 +7,7 @@ using UnityEditor;
 
 public sealed class AreaLightingRendererFeature : ScriptableRendererFeature
 {
-	const string EditorDefinitionPath = "Assets/Definitions/AreaLightingDefinition.asset";
+	const string EditorDefinitionPath = "Assets/Definitions/Level/AreaLightingDefinition.asset";
 
 	[SerializeField]
 	AreaLightingDefinition definition;

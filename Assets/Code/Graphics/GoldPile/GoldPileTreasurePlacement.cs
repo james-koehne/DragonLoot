@@ -149,6 +149,40 @@ public static class GoldPileTreasurePlacement
 	}
 
 	/// <summary>
+	/// Column Y in [yMin, yMax]. Near-surface debug seats the top ~12% of the legal band.
+	/// </summary>
+	public static float SampleColumnY(
+		int pileSeed,
+		int salt,
+		float yMin,
+		float yMax,
+		float radialPower,
+		float heightBias,
+		bool nearSurface )
+	{
+		if ( nearSurface )
+		{
+			float yT = HashRange( pileSeed, salt * 4 + 3, 0.88f, 1f );
+			return Mathf.Lerp( yMin, yMax, yT );
+		}
+
+		float heightU = Hash01( pileSeed, salt * 4 );
+		float columnU = Hash01( pileSeed, salt * 4 + 3 );
+		float heightT = ApplyRadialPower( heightU, radialPower );
+		if ( heightBias > 0f )
+		{
+			float tipT = 1f - Mathf.Pow( 1f - heightT, 1f + heightBias );
+			heightT = Mathf.Lerp( heightT, tipT, Mathf.Clamp01( heightBias * 0.35f ) );
+		}
+
+		float yTVolume = columnU;
+		if ( heightBias > 0f )
+			yTVolume = 1f - Mathf.Pow( 1f - yTVolume, 1f + heightBias );
+		yTVolume = Mathf.Lerp( yTVolume, Mathf.Max( yTVolume, heightT ), 0.35f );
+		return Mathf.Lerp( yMin, yMax, Mathf.Clamp01( yTVolume ) );
+	}
+
+	/// <summary>
 	/// Sample a deterministic pose inside the solid mound volume for gems/artifacts.
 	/// Only places where the pile exists above ground; clamps above the floor; optionally
 	/// rejects poses that collide with <paramref name="occupiedLocal"/>.
@@ -222,11 +256,44 @@ public static class GoldPileTreasurePlacement
 		float xzSpread,
 		out VolumePose pose )
 	{
+		return TrySampleVolumePose(
+			heightfield,
+			pileSeed,
+			unitIndex,
+			placementRadiusFraction,
+			scale,
+			probeRadius,
+			treasureRadialPower,
+			treasureHeightBias,
+			occupiedLocal,
+			minSpacing,
+			xzSpread,
+			nearSurface: false,
+			out pose );
+	}
+
+	public static bool TrySampleVolumePose(
+		GoldPileHeightfield heightfield,
+		int pileSeed,
+		int unitIndex,
+		float placementRadiusFraction,
+		float scale,
+		float probeRadius,
+		float treasureRadialPower,
+		float treasureHeightBias,
+		List<Vector3> occupiedLocal,
+		float minSpacing,
+		float xzSpread,
+		bool nearSurface,
+		out VolumePose pose )
+	{
 		pose = default;
 		if ( heightfield == null || scale < 0.01f )
 			return false;
 
-		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		// Full heightfield footprint — empty / below-loot-floor columns rejected per sample.
+		// Do not inset-sample first: a successful early hit would never reach the outer surface.
+		float half = heightfield.WorldSize * 0.5f;
 		float lootGround = heightfield.LootGroundLevel;
 		float maxH = heightfield.MaxHeight;
 		float radialPower = Mathf.Clamp( treasureRadialPower, 0.25f, 3f );
@@ -239,16 +306,6 @@ public static class GoldPileTreasurePlacement
 		for ( int attempt = 0; attempt < VolumeAttempts; attempt++ )
 		{
 			int salt = unitIndex * 64 + attempt;
-			float heightU = Hash01( pileSeed, salt * 4 );
-			float columnU = Hash01( pileSeed, salt * 4 + 3 );
-
-			float heightT = ApplyRadialPower( heightU, radialPower );
-			if ( heightBias > 0f )
-			{
-				float tipT = 1f - Mathf.Pow( 1f - heightT, 1f + heightBias );
-				heightT = Mathf.Lerp( heightT, tipT, Mathf.Clamp01( heightBias * 0.35f ) );
-			}
-
 			SampleFootprintXZ( pileSeed, salt, half, xzSpread, out float lx, out float lz );
 
 			float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
@@ -262,12 +319,7 @@ public static class GoldPileTreasurePlacement
 			if ( yMax <= yMin )
 				continue;
 
-			float yT = columnU;
-			if ( heightBias > 0f )
-				yT = 1f - Mathf.Pow( 1f - yT, 1f + heightBias );
-			// Soft mix with height band so tip-biased units also sit higher in their column.
-			yT = Mathf.Lerp( yT, Mathf.Max( yT, heightT ), 0.35f );
-			float ly = Mathf.Lerp( yMin, yMax, Mathf.Clamp01( yT ) );
+			float ly = SampleColumnY( pileSeed, salt, yMin, yMax, radialPower, heightBias, nearSurface );
 			ly = Mathf.Max( ly, floorY );
 
 			Vector3 localPos = new Vector3( lx, ly, lz );
@@ -555,7 +607,8 @@ public static class GoldPileTreasurePlacement
 		VolumeOccupancyGrid occupancyGrid,
 		Transform pileRoot = null,
 		float xzSpread = 1f,
-		int surfaceNeighborhood = 1 )
+		int surfaceNeighborhood = 1,
+		bool nearSurface = false )
 	{
 		pose = default;
 		localBounds = default;
@@ -590,6 +643,7 @@ public static class GoldPileTreasurePlacement
 				occupiedLocal: null,
 				minSpacing: 0f,
 				xzSpread,
+				nearSurface,
 				out VolumePose candidatePose ) )
 			{
 				continue;
@@ -632,6 +686,8 @@ public static class GoldPileTreasurePlacement
 			}
 
 			ClampMaxProtrusion( heightfield, ref candidatePose.LocalPos, ref candidateBounds );
+			if ( nearSurface )
+				LiftUntilTouchesOutside( heightfield, ref candidatePose.LocalPos, ref candidateBounds );
 
 			float overlap = occupancyGrid != null
 				? occupancyGrid.OverlapScore( candidateBounds )
@@ -693,6 +749,7 @@ public static class GoldPileTreasurePlacement
 			maxEmbed,
 			pileRoot,
 			surfaceNeighborhood,
+			nearSurface,
 			out pose,
 			out localBounds ) )
 		{
@@ -720,6 +777,7 @@ public static class GoldPileTreasurePlacement
 		float maxGroundEmbedFraction,
 		Transform pileRoot,
 		int surfaceNeighborhood,
+		bool nearSurface,
 		out VolumePose pose,
 		out Bounds localBounds )
 	{
@@ -728,11 +786,11 @@ public static class GoldPileTreasurePlacement
 		if ( heightfield == null )
 			return false;
 
-		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float fullHalf = heightfield.WorldSize * 0.5f;
 		float lootGround = heightfield.LootGroundLevel;
 		float maxH = heightfield.MaxHeight;
 		int res = Mathf.Max( 4, heightfield.Resolution );
-		float step = ( 2f * half ) / ( res - 1 );
+		float step = ( 2f * fullHalf ) / ( res - 1 );
 
 		float bestScore = float.MaxValue;
 		bool found = false;
@@ -741,8 +799,8 @@ public static class GoldPileTreasurePlacement
 		{
 			for ( int x = 0; x < res; x++ )
 			{
-				float lx = -half + x * step;
-				float lz = -half + z * step;
+				float lx = -fullHalf + x * step;
+				float lz = -fullHalf + z * step;
 				if ( !heightfield.ExistsAtLocal( lx, lz ) )
 					continue;
 				if ( !HasTreasureSurfaceBelow( pileRoot, new Vector3( lx, 0f, lz ), surfaceNeighborhood ) )
@@ -753,10 +811,9 @@ public static class GoldPileTreasurePlacement
 					continue;
 
 				int salt = unitIndex * 131 + x * 17 + z * 43;
-				float columnU = Hash01( pileSeed, salt );
 				float floorY = FloorClearanceY( lootGround, probeRadius );
 				float yMax = Mathf.Max( floorY + 0.01f, surface - probeRadius * 0.35f );
-				float ly = Mathf.Lerp( floorY, yMax, columnU );
+				float ly = SampleColumnY( pileSeed, salt, floorY, yMax, 1f, 0f, nearSurface );
 
 				VolumePose candidate = new VolumePose
 				{
@@ -784,6 +841,8 @@ public static class GoldPileTreasurePlacement
 					probeRadius,
 					maxGroundEmbedFraction );
 				ClampMaxProtrusion( heightfield, ref candidate.LocalPos, ref bounds );
+				if ( nearSurface )
+					LiftUntilTouchesOutside( heightfield, ref candidate.LocalPos, ref bounds );
 
 				float score = Hash01( pileSeed, salt + 7 ) + surface / Mathf.Max( 0.01f, maxH );
 				if ( score >= bestScore )
@@ -1085,6 +1144,32 @@ public static class GoldPileTreasurePlacement
 			localPos.y = floorY;
 			localBounds.center += new Vector3( 0f, fix, 0f );
 		}
+	}
+
+	/// <summary>
+	/// Nudge a buried pose up until the AABB top sits just above the mound (so reveal can spawn it).
+	/// No-op when already touching outside.
+	/// </summary>
+	public static void LiftUntilTouchesOutside(
+		GoldPileHeightfield heightfield,
+		ref Vector3 localPos,
+		ref Bounds localBounds )
+	{
+		if ( heightfield == null )
+			return;
+		if ( TouchesOutsideAabb( heightfield, localBounds ) )
+			return;
+
+		float surface = heightfield.SampleNormalized( localPos.x, localPos.z ) * heightfield.MaxHeight;
+		if ( surface < heightfield.GroundLevel )
+			surface = heightfield.GroundLevel;
+
+		float dy = ( surface + 0.02f ) - localBounds.max.y;
+		if ( dy <= 1e-5f )
+			return;
+
+		localPos.y += dy;
+		localBounds.center += new Vector3( 0f, dy, 0f );
 	}
 
 	public static bool IsTooClose( Vector3 localPos, List<Vector3> occupiedLocal, float spacingSq )
