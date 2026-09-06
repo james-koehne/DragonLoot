@@ -1,5 +1,11 @@
 using UnityEngine;
 
+public enum SlideInputMode
+{
+	Charge,
+	SprintHold
+}
+
 [CreateAssetMenu( fileName = "PlayerControllerDefinition", menuName = "Definitions/PlayerControllerDefinition" )]
 public class PlayerControllerDefinition : ScriptableObject
 {
@@ -119,6 +125,9 @@ public class PlayerControllerDefinition : ScriptableObject
 	public float climbReleaseHoldTime = 0.25f;
 
 	[Header( "Slide" )]
+	[Tooltip( "Charge: hold W + look down to commit. SprintHold: Shift + look down + move downhill to start; slide continues until the slope ends (Shift release does not cancel)." )]
+	public SlideInputMode slideInputMode = SlideInputMode.SprintHold;
+
 	[Tooltip( "Slope angle (degrees) at which downhill sliding can begin." )]
 	[Range( 0f, 89f )]
 	public float slideAngle = 45f;
@@ -126,6 +135,10 @@ public class PlayerControllerDefinition : ScriptableObject
 	[Tooltip( "Scales gravity-driven acceleration along the slope while sliding." )]
 	[Min( 0f )]
 	public float slideGravityScale = 1f;
+
+	[Tooltip( "Hard cap on planar speed while sliding." )]
+	[Min( 0f )]
+	public float slideMaxSpeed = 32f;
 
 	[Tooltip( "Lateral steer acceleration while sliding." )]
 	[Min( 0f )]
@@ -142,6 +155,10 @@ public class PlayerControllerDefinition : ScriptableObject
 	[Tooltip( "Degrees below slideAngle before slide exits due to flattening." )]
 	[Min( 0f )]
 	public float slideExitHysteresis = 5f;
+
+	[Tooltip( "Exit slide when planar velocity along downhill falls below this (contour / stall)." )]
+	[Min( 0f )]
+	public float slideMinDownhillSpeed = 1.5f;
 
 	[Tooltip( "Seconds W + look-down + downhill alignment must be held before sliding starts." )]
 	[Min( 0f )]
@@ -221,10 +238,12 @@ public class PlayerControllerDefinition : ScriptableObject
 		climbReleaseHoldTime = Mathf.Max( 0f, climbReleaseHoldTime );
 		slideAngle = Mathf.Clamp( slideAngle, 0f, 89f );
 		slideGravityScale = Mathf.Max( 0f, slideGravityScale );
+		slideMaxSpeed = Mathf.Max( 0f, slideMaxSpeed );
 		slideSteer = Mathf.Max( 0f, slideSteer );
 		slideBrake = Mathf.Max( 0f, slideBrake );
 		slideExitDot = Mathf.Clamp01( slideExitDot );
 		slideExitHysteresis = Mathf.Max( 0f, slideExitHysteresis );
+		slideMinDownhillSpeed = Mathf.Max( 0f, slideMinDownhillSpeed );
 		slideEnterHoldTime = Mathf.Max( 0f, slideEnterHoldTime );
 		slideEnterMinPitch = Mathf.Clamp( slideEnterMinPitch, 0f, 89f );
 		slideEnterDownhillDot = Mathf.Clamp01( slideEnterDownhillDot );

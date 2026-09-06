@@ -2,6 +2,8 @@ using UnityEngine;
 
 /// <summary>
 /// World-space map label (e.g. "Dragon's Chamber") shown once its texel is discovered.
+/// Tutorial-highlighted labels bypass fog-of-war discovery and pulse on the full-screen map.
+/// Optional icon sprite appears above the text on the full-screen map.
 /// </summary>
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -10,14 +12,20 @@ public sealed class MapLabelMarker : MonoBehaviour
 	[SerializeField]
 	string _label = "Area";
 
+	[SerializeField]
+	Sprite _icon;
+
 	string _lastLabel;
+	Sprite _lastIcon;
 
 	public string Label => _label;
+	public Sprite Icon => _icon;
 	public Vector3 WorldPosition => transform.position;
 
 	void OnEnable()
 	{
 		_lastLabel = _label;
+		_lastIcon = _icon;
 		MapOverlayRegistrar.RegisterLabel( this );
 	}
 
@@ -31,9 +39,10 @@ public sealed class MapLabelMarker : MonoBehaviour
 		if ( !isActiveAndEnabled )
 			return;
 
-		if ( _label != _lastLabel )
+		if ( _label != _lastLabel || _icon != _lastIcon )
 		{
 			_lastLabel = _label;
+			_lastIcon = _icon;
 			MapOverlayRegistrar.NotifyChanged();
 		}
 	}
@@ -42,6 +51,7 @@ public sealed class MapLabelMarker : MonoBehaviour
 	void OnValidate()
 	{
 		_lastLabel = _label;
+		_lastIcon = _icon;
 		MapOverlayRegistrar.NotifyChanged();
 		UnityEditor.SceneView.RepaintAll();
 	}

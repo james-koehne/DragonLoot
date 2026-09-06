@@ -17,13 +17,16 @@ MonoBehaviour:
   tags:
   - gems
   - constellations
-  trigger: 6
+  trigger: 9
+  holdingCategory: 1
   volumeId: 
   fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
   prerequisiteTutorialIds: []
-  steps:
-  - body: Place gems on constellation sockets that match their shape and type.
-    keybindHint: '[{SecondaryInteract}] Place gem'
-  - body: Connections light when both ends have gems. Fill the pattern to complete
-      it.
-    keybindHint: 
+  body: Gems can go in constellation sockets that match their shape, or in stacks
+    in the Coin Hall. Fill a constellation pattern to complete it.
+  keybindHint: '[{SecondaryInteract}] Place gem'
+  tasks:
+  - id: place_gem_constellation
+    label: Put a gem in a constellation
+    completeTrigger: 9

@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Trigger volume that publishes <see cref="VolumeEnteredEvent"/> when the player enters.
+/// Trigger volume that publishes <see cref="VolumeEnteredEvent"/> / <see cref="VolumeExitedEvent"/> when the player enters or leaves.
 /// Scene volumes are authored as this component.
 /// </summary>
 [DisallowMultipleComponent]
@@ -60,6 +60,21 @@ public class QuestVolume : MonoBehaviour
 
 		_triggered = true;
 		EventBus.Publish( new VolumeEnteredEvent
+		{
+			VolumeId = id,
+			Volume = this
+		} );
+	}
+
+	void OnTriggerExit( Collider other )
+	{
+		if ( string.IsNullOrEmpty( id ) )
+			return;
+
+		if ( !IsPlayer( other ) )
+			return;
+
+		EventBus.Publish( new VolumeExitedEvent
 		{
 			VolumeId = id,
 			Volume = this

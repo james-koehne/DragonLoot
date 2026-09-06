@@ -9,6 +9,7 @@ public static class MapOverlayRegistrar
 {
 	static readonly List<MapRegionVolume> ActiveVolumes = new List<MapRegionVolume>( 32 );
 	static readonly List<MapLabelMarker> ActiveLabels = new List<MapLabelMarker>( 32 );
+	static readonly HashSet<string> HighlightedLabels = new HashSet<string>();
 	static int _revision;
 
 	public static int Revision => _revision;
@@ -16,6 +17,29 @@ public static class MapOverlayRegistrar
 	public static void NotifyChanged()
 	{
 		_revision++;
+	}
+
+	public static void SetLabelHighlighted( string label, bool highlighted )
+	{
+		if ( string.IsNullOrEmpty( label ) )
+			return;
+
+		bool changed = highlighted ? HighlightedLabels.Add( label ) : HighlightedLabels.Remove( label );
+		if ( changed )
+			_revision++;
+	}
+
+	public static void ClearHighlightedLabels()
+	{
+		if ( HighlightedLabels.Count == 0 )
+			return;
+		HighlightedLabels.Clear();
+		_revision++;
+	}
+
+	public static bool IsLabelHighlighted( string label )
+	{
+		return !string.IsNullOrEmpty( label ) && HighlightedLabels.Contains( label );
 	}
 
 	public static void RegisterVolume( MapRegionVolume volume )

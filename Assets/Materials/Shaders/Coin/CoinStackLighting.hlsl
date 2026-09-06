@@ -27,6 +27,7 @@ struct Attributes
     float3 normalOS   : NORMAL;
     float4 tangentOS  : TANGENT;
     float2 texcoord   : TEXCOORD0;
+    float2 texcoord1  : TEXCOORD1;
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -43,6 +44,7 @@ struct Varyings
     half3  vertexLighting : TEXCOORD7;
     float3 normalOS   : TEXCOORD8;
     float  stackY01   : TEXCOORD9;
+    nointerpolation float bakedCoinIndex : TEXCOORD10;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
 };
@@ -71,6 +73,7 @@ Varyings CoinStackLitVert(Attributes input)
     output.instanceSeed = instanceSeed;
 
     output.stackY01 = CoinStackComputeStackY01(input.positionOS.y);
+    output.bakedCoinIndex = input.texcoord1.x;
 
     OUTPUT_SH(output.normalWS, output.vertexSH);
 
@@ -94,13 +97,14 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
 
     float coinCount = max((float)_CoinCount, 1.0);
     bool isCap = CoinStackIsCap(input.normalOS);
+    bool useBakedIndex = (float)_UseBakedCoinIndex > 0.5;
 
     float2 sampleUv = input.uv;
     half bandShade = 1.0h;
     CoinStackBandData bands = (CoinStackBandData)0;
     CoinStackSeamView seam = (CoinStackSeamView)0;
 
-    if (!isCap)
+    if (!useBakedIndex && !isCap)
     {
         bands = CoinStackEvaluateBands(input.stackY01, coinCount);
         bandShade = bands.bandShade;
@@ -114,7 +118,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
             bands.ridgeMask);
         CoinStackClipSeamSide(seam);
     }
-    else
+    else if (isCap)
     {
         float2 radial = input.uv * 2.0 - 1.0;
         float rim = saturate(length(radial));
@@ -122,7 +126,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     }
 
 #if defined(_COIN_STACK_MULTI)
-    int typeId = CoinStackResolveTypeId(input.stackY01, coinCount, isCap, input.normalOS);
+    int typeId = CoinStackResolveTypeId(input.stackY01, coinCount, isCap, input.normalOS, input.bakedCoinIndex);
     half4 albedoSample = CoinStackSampleAlbedoMulti(sampleUv, typeId);
     half4 maskSample = CoinStackSampleMaskMulti(sampleUv, typeId);
     half3 fresnelRgb = CoinStackTypeFresnelRgb(typeId);
@@ -132,7 +136,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half3 fresnelRgb = _FresnelColor.rgb;
 #endif
 
-    half seamAO = CoinStackSeamSoftAO(seam);
+    half seamAO = useBakedIndex ? 1.0h : CoinStackSeamSoftAO(seam);
     half3 albedo = albedoSample.rgb * tint * value * bandShade * seamAO;
     half warm = ((half)CoinStackHash11(seed + 31.71) * 2.0h - 1.0h) * 0.03h;
     albedo += half3(warm, warm * 0.35h, -warm);
@@ -142,7 +146,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     // Push toward polished metal without forcing a hard 1.0 clamp look.
     smoothness = saturate(lerp(smoothness, 1.0h, saturate(_ShineBoost) * 0.55h));
 
-    if (!isCap)
+    if (!useBakedIndex && !isCap)
     {
         half grooveSmooth = lerp((half)_GrooveSmoothnessScale, (half)_RidgeSmoothnessScale, (half)bands.ridgeMask);
         smoothness *= grooveSmooth;
@@ -160,7 +164,11 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half3x3 tangentToWorld = half3x3(input.tangentWS.xyz, bitangent, input.normalWS.xyz);
 
     half3 normalWS;
-    if (isCap)
+    if (useBakedIndex)
+    {
+        normalWS = NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, tangentToWorld));
+    }
+    else if (isCap)
     {
         normalWS = NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, tangentToWorld));
     }

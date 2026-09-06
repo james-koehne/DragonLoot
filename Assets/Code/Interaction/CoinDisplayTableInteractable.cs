@@ -42,7 +42,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	[Range( 0f, 1f )]
 	float emptySlotChance = 0.25f;
 
-	[Tooltip( "0 = non-deterministic. Non-zero seeds Perlin layout and empty-slot pass for this table." )]
+	[Tooltip( "0 = pick a random seed at start. Non-zero seeds Perlin layout and empty-slot pass for this table." )]
 	[SerializeField]
 	int fillSeed;
 
@@ -152,8 +152,9 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 		int min = Mathf.Max( 0, minCoinsPerSlot );
 		int max = Mathf.Max( min, maxCoinsPerSlot );
-		System.Random rng = fillSeed != 0 ? new System.Random( fillSeed ) : null;
-		float noiseOrigin = fillSeed != 0 ? fillSeed * 0.0137f : UnityEngine.Random.Range( 0f, 1000f );
+		int seed = fillSeed != 0 ? fillSeed : UnityEngine.Random.Range( 1, int.MaxValue );
+		System.Random rng = new System.Random( seed );
+		float noiseOrigin = seed * 0.0137f;
 		float clearChance = Mathf.Clamp01( emptySlotChance );
 		int slotCount = Slots.Length;
 		int[] amounts = new int[ slotCount ];
@@ -170,7 +171,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		{
 			if ( amounts[ i ] <= 0 || clearChance <= 0f )
 				continue;
-			if ( NextFillFloat( rng ) < clearChance )
+			if ( (float)rng.NextDouble() < clearChance )
 				amounts[ i ] = 0;
 		}
 
@@ -180,13 +181,6 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 		if ( totalAdded > 0 )
 			FinishStartFill();
-	}
-
-	static float NextFillFloat( System.Random rng )
-	{
-		if ( rng != null )
-			return (float)rng.NextDouble();
-		return UnityEngine.Random.value;
 	}
 
 	void BeginAutoLevelStacks( int placedSlot )

@@ -16,13 +16,19 @@ MonoBehaviour:
   title: Digging
   tags:
   - digging
-  trigger: 2
-  volumeId: 
+  trigger: 1
+  holdingCategory: 0
+  volumeId: volume_main_cave
   fallbackVolumeId: 
-  prerequisiteTutorialIds: []
-  steps:
-  - body: Aim at the gold pile and dig to pull treasure into your hands.
-    keybindHint: '[{Interact}] Dig'
-  - body: Dug coins go into your coin pouch. Open it from the category slots when
-      you need them again.
-    keybindHint: 
+  alsoShowWhenAimingTreasurePile: 1
+  alsoShowWhenAimingCoinStack: 0
+  prerequisiteTutorialIds:
+  - tut_movement
+  highlightMapLabel: 
+  body: Aim at a gold pile and dig to pull treasure into your hands. Dug coins go
+    into your coin pouch.
+  keybindHint: '[{Interact}] Dig'
+  tasks:
+  - id: dig
+    label: Dig
+    completeTrigger: 1

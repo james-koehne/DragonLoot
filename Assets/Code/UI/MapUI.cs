@@ -30,11 +30,19 @@ public sealed class MapUI : MonoBehaviour
 	bool _animatingClose;
 
 	readonly List<MapLabelMarker> _labelSources = new List<MapLabelMarker>( 32 );
-	readonly List<Text> _labelTexts = new List<Text>( 32 );
+	readonly List<MapLabelWidget> _labelWidgets = new List<MapLabelWidget>( 32 );
 	Font _font;
 	Texture2D _coneTexture;
 	Texture2D _dotTexture;
 	Sprite _dotSprite;
+
+	struct MapLabelWidget
+	{
+		public RectTransform Root;
+		public Image Glow;
+		public Image Icon;
+		public Text Text;
+	}
 
 	MapDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
@@ -167,6 +175,7 @@ public sealed class MapUI : MonoBehaviour
 		ApplyPause( true );
 		BindMapTexture();
 		RefreshOverlays();
+		EventBus.Publish( new MapOpenedEvent() );
 	}
 
 	void BeginClose()
@@ -362,36 +371,91 @@ public sealed class MapUI : MonoBehaviour
 			return;
 
 		map.CollectLabels( _labelSources );
-		EnsureLabelTextCount( _labelSources.Count, def );
+		EnsureLabelWidgetCount( _labelSources.Count, def );
 
-		for ( int i = 0; i < _labelTexts.Count; i++ )
+		float iconSize = def != null ? def.labelIconSize : 28f;
+		float gap = def != null ? def.labelIconTextGap : 4f;
+
+		for ( int i = 0; i < _labelWidgets.Count; i++ )
 		{
-			Text text = _labelTexts[ i ];
-			if ( text == null )
+			MapLabelWidget widget = _labelWidgets[ i ];
+			if ( widget.Root == null )
 				continue;
 
 			if ( i >= _labelSources.Count )
 			{
-				text.gameObject.SetActive( false );
+				widget.Root.gameObject.SetActive( false );
 				continue;
 			}
 
 			MapLabelMarker marker = _labelSources[ i ];
-			if ( marker == null
-				|| !map.TryWorldToUv( marker.WorldPosition, out Vector2 uv )
-				|| !map.IsDiscoveredAtWorld( marker.WorldPosition ) )
+			if ( marker == null || !map.TryWorldToUv( marker.WorldPosition, out Vector2 uv ) )
 			{
-				text.gameObject.SetActive( false );
+				widget.Root.gameObject.SetActive( false );
 				continue;
 			}
 
-			text.gameObject.SetActive( true );
-			text.text = marker.Label;
-			text.rectTransform.anchoredPosition = UvToPanelLocal( uv );
-			if ( def != null )
+			bool highlighted = MapOverlayRegistrar.IsLabelHighlighted( marker.Label );
+			if ( !highlighted && !map.IsDiscoveredAtWorld( marker.WorldPosition ) )
 			{
-				text.fontSize = def.labelFontSize;
-				text.color = def.labelColor;
+				widget.Root.gameObject.SetActive( false );
+				continue;
+			}
+
+			widget.Root.gameObject.SetActive( true );
+			widget.Root.anchoredPosition = UvToPanelLocal( uv );
+
+			float pulse = highlighted
+				? 0.5f + 0.5f * Mathf.Sin( Time.unscaledTime * 5.5f )
+				: 0f;
+			widget.Root.localScale = highlighted
+				? Vector3.one * ( 1f + 0.1f * pulse )
+				: Vector3.one;
+
+			bool hasIcon = marker.Icon != null && widget.Icon != null;
+			if ( widget.Glow != null )
+			{
+				widget.Glow.gameObject.SetActive( highlighted );
+				if ( highlighted )
+				{
+					if ( widget.Glow.sprite == null )
+						widget.Glow.sprite = EnsureDotSprite();
+					float glowSize = ( hasIcon ? iconSize : 36f ) * ( 1.6f + 0.45f * pulse );
+					widget.Glow.rectTransform.sizeDelta = new Vector2( glowSize, glowSize );
+					float glowY = hasIcon ? gap * 0.5f + iconSize * 0.5f : 0f;
+					widget.Glow.rectTransform.anchoredPosition = new Vector2( 0f, glowY );
+					widget.Glow.color = new Color( 1f, 0.85f, 0.25f, 0.25f + 0.45f * pulse );
+				}
+			}
+
+			if ( widget.Icon != null )
+			{
+				widget.Icon.gameObject.SetActive( hasIcon );
+				if ( hasIcon )
+				{
+					widget.Icon.sprite = marker.Icon;
+					widget.Icon.rectTransform.sizeDelta = new Vector2( iconSize, iconSize );
+					widget.Icon.rectTransform.anchoredPosition = new Vector2( 0f, gap * 0.5f + iconSize * 0.5f );
+					widget.Icon.color = highlighted
+						? Color.Lerp( Color.white, new Color( 1f, 0.92f, 0.4f, 1f ), pulse )
+						: Color.white;
+				}
+			}
+
+			if ( widget.Text != null )
+			{
+				widget.Text.text = highlighted ? "★ " + marker.Label : marker.Label;
+				float textY = hasIcon ? -( gap * 0.5f + widget.Text.preferredHeight * 0.25f ) : 0f;
+				widget.Text.rectTransform.anchoredPosition = new Vector2( 0f, textY );
+				if ( def != null )
+				{
+					widget.Text.fontSize = highlighted ? def.labelFontSize + 4 : def.labelFontSize;
+					Color baseHi = new Color( 1f, 0.92f, 0.35f, 1f );
+					Color brightHi = new Color( 1f, 1f, 0.75f, 1f );
+					widget.Text.color = highlighted
+						? Color.Lerp( baseHi, brightHi, pulse )
+						: def.labelColor;
+				}
 			}
 		}
 	}
@@ -402,19 +466,53 @@ public sealed class MapUI : MonoBehaviour
 		return new Vector2( ( uv.x - 0.5f ) * rect.width, ( uv.y - 0.5f ) * rect.height );
 	}
 
-	void EnsureLabelTextCount( int count, MapDefinition def )
+	void EnsureLabelWidgetCount( int count, MapDefinition def )
 	{
-		while ( _labelTexts.Count < count )
+		while ( _labelWidgets.Count < count )
 		{
-			GameObject go = new GameObject( "MapLabel", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
+			GameObject go = new GameObject( "MapLabel", typeof( RectTransform ) );
 			go.transform.SetParent( labelsRoot, false );
-			RectTransform rect = go.GetComponent<RectTransform>();
-			rect.anchorMin = new Vector2( 0.5f, 0.5f );
-			rect.anchorMax = new Vector2( 0.5f, 0.5f );
-			rect.pivot = new Vector2( 0.5f, 0.5f );
-			rect.sizeDelta = new Vector2( 280f, 40f );
+			RectTransform root = go.GetComponent<RectTransform>();
+			root.anchorMin = new Vector2( 0.5f, 0.5f );
+			root.anchorMax = new Vector2( 0.5f, 0.5f );
+			root.pivot = new Vector2( 0.5f, 0.5f );
+			root.sizeDelta = new Vector2( 280f, 80f );
 
-			Text text = go.GetComponent<Text>();
+			GameObject glowGo = new GameObject( "Glow", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+			glowGo.transform.SetParent( go.transform, false );
+			RectTransform glowRect = glowGo.GetComponent<RectTransform>();
+			glowRect.anchorMin = new Vector2( 0.5f, 0.5f );
+			glowRect.anchorMax = new Vector2( 0.5f, 0.5f );
+			glowRect.pivot = new Vector2( 0.5f, 0.5f );
+			glowRect.sizeDelta = new Vector2( 48f, 48f );
+			Image glow = glowGo.GetComponent<Image>();
+			glow.sprite = EnsureDotSprite();
+			glow.raycastTarget = false;
+			glow.color = new Color( 1f, 0.85f, 0.25f, 0.4f );
+			glowGo.SetActive( false );
+
+			GameObject iconGo = new GameObject( "Icon", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+			iconGo.transform.SetParent( go.transform, false );
+			RectTransform iconRect = iconGo.GetComponent<RectTransform>();
+			iconRect.anchorMin = new Vector2( 0.5f, 0.5f );
+			iconRect.anchorMax = new Vector2( 0.5f, 0.5f );
+			iconRect.pivot = new Vector2( 0.5f, 0.5f );
+			float iconSize = def != null ? def.labelIconSize : 28f;
+			iconRect.sizeDelta = new Vector2( iconSize, iconSize );
+			Image icon = iconGo.GetComponent<Image>();
+			icon.raycastTarget = false;
+			icon.preserveAspect = true;
+			iconGo.SetActive( false );
+
+			GameObject textGo = new GameObject( "Text", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
+			textGo.transform.SetParent( go.transform, false );
+			RectTransform textRect = textGo.GetComponent<RectTransform>();
+			textRect.anchorMin = new Vector2( 0.5f, 0.5f );
+			textRect.anchorMax = new Vector2( 0.5f, 0.5f );
+			textRect.pivot = new Vector2( 0.5f, 0.5f );
+			textRect.sizeDelta = new Vector2( 280f, 40f );
+
+			Text text = textGo.GetComponent<Text>();
 			text.font = ResolveFont();
 			text.fontSize = def != null ? def.labelFontSize : 22;
 			text.fontStyle = FontStyle.Bold;
@@ -423,7 +521,14 @@ public sealed class MapUI : MonoBehaviour
 			text.raycastTarget = false;
 			text.horizontalOverflow = HorizontalWrapMode.Overflow;
 			text.verticalOverflow = VerticalWrapMode.Overflow;
-			_labelTexts.Add( text );
+
+			_labelWidgets.Add( new MapLabelWidget
+			{
+				Root = root,
+				Glow = glow,
+				Icon = icon,
+				Text = text
+			} );
 		}
 	}
 

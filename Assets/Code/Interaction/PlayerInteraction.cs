@@ -25,6 +25,7 @@ public class PlayerInteraction : MonoBehaviour
 	bool _hasPlacementAimHit;
 	RaycastHit _surfaceHit;
 	bool _hasSurfaceHit;
+	bool _wasAimingTreasurePile;
 
 	PlayerInteractionDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
@@ -520,7 +521,10 @@ public class PlayerInteraction : MonoBehaviour
 			QueryTriggerInteraction.Ignore );
 
 		if ( hitCount <= 0 )
+		{
+			PublishTreasurePileAimChanged();
 			return;
+		}
 
 		// Prefer pickable TreasureItemInteractable along the ray so pile MeshColliders
 		// don't steal focus from surface coins sitting slightly inside/against the mesh.
@@ -673,6 +677,23 @@ public class PlayerInteraction : MonoBehaviour
 			_lastHit = nearestHit;
 			_hasLastHit = true;
 		}
+
+		PublishTreasurePileAimChanged();
+	}
+
+	void PublishTreasurePileAimChanged()
+	{
+		TreasurePileInteractable pile = _current as TreasurePileInteractable;
+		bool aiming = pile != null;
+		if ( aiming == _wasAimingTreasurePile )
+			return;
+
+		_wasAimingTreasurePile = aiming;
+		EventBus.Publish( new TreasurePileAimChangedEvent
+		{
+			IsAiming = aiming,
+			Pile = pile
+		} );
 	}
 
 	static bool IsBuriedOrOccludedTreasure(

@@ -1239,6 +1239,15 @@ public class CoinSortingStation : MonoBehaviour
 				CoinStackInteractSfx.PlayStackPlace( endPos );
 			} );
 
+		if ( taken >= 2 )
+		{
+			EventBus.Publish( new CoinSorterStackLoadedEvent
+			{
+				Station = this,
+				CoinCount = taken
+			} );
+		}
+
 		return true;
 	}
 
@@ -1296,6 +1305,14 @@ public class CoinSortingStation : MonoBehaviour
 
 		int accepted = TryEnqueueRange( ConsumeScratch );
 		ConsumeScratch.Clear();
+		if ( accepted >= 2 )
+		{
+			EventBus.Publish( new CoinSorterStackLoadedEvent
+			{
+				Station = this,
+				CoinCount = accepted
+			} );
+		}
 		return accepted > 0;
 	}
 

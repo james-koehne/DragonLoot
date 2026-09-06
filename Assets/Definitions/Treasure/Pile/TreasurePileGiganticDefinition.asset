@@ -94,7 +94,7 @@ MonoBehaviour:
   - treasure: {fileID: 11400000, guid: 1dbba633fa68b474094ac5fbb6134f87, type: 2}
     count: 6
   - treasure: {fileID: 11400000, guid: 23642d676ec0a1e4d91eb72e042eefcd, type: 2}
-    count: 128
+    count: 32
   - treasure: {fileID: 11400000, guid: 2c15bfa856325ef41afef1fea6904e64, type: 2}
     count: 64
   - treasure: {fileID: 11400000, guid: b8ff7f56e1131614fa3ac882993c160d, type: 2}
@@ -106,7 +106,7 @@ MonoBehaviour:
   - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
     count: 2
   - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
-    count: 1
+    count: 128
   maxVisibleTotal: 32768
   coinVisibleBufferFraction: 0.2
   heightResolution: 512

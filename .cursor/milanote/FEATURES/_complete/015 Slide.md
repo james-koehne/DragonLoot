@@ -36,42 +36,34 @@ Sort Index:
 
 ## Cursor Implementation
 
-- Post-slide exit is an **input-gated boost**, not passive momentum: on slide exit, planar speed is capped to `slideExitBoostMaxSpeed` (24) and stored as a boost target.
-- Boost is maintained only while move intent stays aligned with travel direction (`slideExitCoastCancelDot` threshold). Budget drains at `slideExitBoostDuration` (1.5s) while maintaining; mild steering via `slideExitBoostSteer`.
-- Releasing input, strafing, or exhausting the budget applies `slideExitBoostDecay` (70) toward walk speed — no unassisted free-coast hold.
-- Reverse-brake cancel unchanged (`slideExitCoastCancelDeceleration`).
-- `PlayerController.CancelSlideVelocity()` ends an active slide and zeroes planar velocity. Called after successful primary interact and successful secondary place/throw so interaction plants the player (throw still inherits slide speed first).
-- Debug overlay shows exit boost speed and remaining budget while active.
+- Dual slide input modes via `slideInputMode` on `PlayerControllerDefinition` (default **SprintHold**):
+  - **Charge** — look down + hold W downhill for `slideEnterHoldTime`; continues until flatten / uphill / reverse brake / jump / interact. Shift is sprint only.
+  - **SprintHold** — enter when Shift + look down + move downhill. **Release Shift does not end the slide.** Slide ends when ground flattens (`slideExitHysteresis`), downhill velocity drops below `slideMinDownhillSpeed`, uphill commit, reverse brake, jump, or interact.
+- Shared feel pass: `slideMaxSpeed` terminal velocity (asset 32); exit boost only when exit speed is above walk+0.5 (slow exits keep residual velocity, no ice coast); asset `slideExitHysteresis` raised to 10.
+- `PlayerController.CancelSlideVelocity()` still plants after successful primary interact / secondary place/throw.
+- Debug overlay: `Slide: Sprint Hold (off = Charge)`; charge % only in Charge mode while charging.
 
 ## Files Modified
 
 - Assets/Code/Player/PlayerController.cs
 - Assets/Code/Definitions/PlayerControllerDefinition.cs
-- Assets/Definitions/PlayerControllerDefinition.asset
-- Assets/Code/Interaction/PlayerInteraction.cs
+- Assets/Definitions/Player/PlayerControllerDefinition.asset
 - Assets/Code/Debug/Sections/DebugPlayerSection.cs
+- Assets/Code/Interaction/PlayerInteraction.cs
 
 ## Testing Instructions
 
-1. Charge a slide on a steep slope (look down + hold W). Exit onto flatter ground, then **release all input** immediately.
-   - Expected: speed drops to walk within ~0.3s — no free glide.
-2. Same setup, **hold W** along travel direction for ~1.5s.
-   - Expected: capped boost speed (~24 u/s) held for the budget duration, then decays.
-3. During boost, **strafe or release W**.
-   - Expected: immediate decay via `slideExitBoostDecay`, not continued coast.
-4. During boost, **hold move against travel direction**.
-   - Expected: residual speed cancels quickly (reverse brake).
-5. While actively sliding, look at a pickable treasure and primary-interact.
-   - Expected: pickup occurs; planar slide speed drops to zero immediately; slide state ends.
-6. While sliding or coasting with something held, secondary-place or throw successfully.
-   - Expected: place/throw succeeds; player planar slide speed clears afterward.
-7. Walk normally and interact with nothing focused.
-   - Expected: no change to movement (cancel only runs on successful interact/place).
+1. SprintHold: on a steep pile, look down, move downhill, hold Shift — slide starts immediately.
+2. Release Shift mid-pile — slide continues until flatten / stall / cancel.
+3. Ride onto flatter ground — slide ends; fast exit gets boost, slow exit does not ice-coast.
+4. Contour or stall until downhill speed &lt; `slideMinDownhillSpeed` — slide ends without Shift.
+5. Long steep run — planar speed caps near `slideMaxSpeed` (32).
+6. Charge mode: W + look downhill charges; Shift does not start/stop. Reverse brake / interact still plant.
 
 ## Cursor Notes
 
-- Tune on `PlayerControllerDefinition`: `slideExitBoostMaxSpeed`, `slideExitBoostDuration`, `slideExitBoostDecay`, `slideExitBoostSteer`. Asset defaults: 24 / 1.5 / 70 / 25.
-- Forward maintain and reverse cancel share `slideExitCoastCancelDot`.
+- Tune: `slideMaxSpeed` (32), `slideMinDownhillSpeed` (1.5), `slideExitHysteresis` (10), `slideGravityScale`, exit boost (`slideExitBoostMaxSpeed` / `Decay` / `Steer`).
+- SprintHold enter still needs Shift + look down + downhill move; Shift is only for entry, not hold-to-slide.
 - Cancel does not run on failed/invalid place aims.
 
 ## Developer Verification

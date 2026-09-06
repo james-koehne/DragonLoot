@@ -16,6 +16,8 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	const string TypeCountProp = "_TypeCount";
 	const string TypeFresnelProp = "_TypeFresnelColor";
 	const string VariationSeedProp = "_VariationSeed";
+	const string UseBakedCoinIndexProp = "_UseBakedCoinIndex";
+	const string ChunkBaseIndexProp = "_ChunkBaseIndex";
 
 	static readonly Vector4[] TypeFresnelScratch = new Vector4[CoinStackVisualDefinition.MaxTypeSlots];
 
@@ -48,11 +50,13 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	float _variationSeed = 1f;
 	Texture2D _typeMap;
 	Color[] _typeMapPixels;
+	int _typeMapBaseIndex;
 
 	public int DisplayedCount => _targetCount;
 
 	public MeshRenderer MeshRenderer => meshRenderer;
 	public float VariationSeed => _variationSeed;
+	public Texture2D TypeMap => _typeMap;
 
 	public void SetVariationSeed( float seed )
 	{
@@ -182,12 +186,30 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		float diameter = -1f,
 		float totalStackHeight = -1f )
 	{
+		SetStackMulti( slots, snap, diameter, totalStackHeight, typeMapSlots: null, typeMapBaseIndex: 0 );
+	}
+
+	/// <param name="typeMapSlots">
+	/// Full stack type sequence for the LUT. When null, <paramref name="slots"/> is used.
+	/// </param>
+	/// <param name="typeMapBaseIndex">
+	/// Global slot index of the first coin in this cylinder (for upper runs above imperfect chunks).
+	/// </param>
+	public void SetStackMulti(
+		IList<TreasureDefinition> slots,
+		bool snap,
+		float diameter,
+		float totalStackHeight,
+		IList<TreasureDefinition> typeMapSlots,
+		int typeMapBaseIndex )
+	{
 		EnsureVisual();
 		ApplyDefinitionSettings();
 
 		int count = slots != null ? slots.Count : 0;
 		_treasure = count > 0 ? slots[ 0 ] : null;
 		_targetCount = Mathf.Max( 0, count );
+		_typeMapBaseIndex = Mathf.Max( 0, typeMapBaseIndex );
 
 		float height = 0f;
 		float maxDiameter = 0f;
@@ -210,8 +232,9 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		bool usingMulti = multiMat != null && meshRenderer != null && meshRenderer.sharedMaterial == multiMat;
 		if ( usingMulti )
 		{
-			UploadTypeMap( slots, def );
-			ApplyMpbMulti( _targetCount, def );
+			IList<TreasureDefinition> mapSource = typeMapSlots != null ? typeMapSlots : slots;
+			UploadTypeMap( mapSource, def );
+			ApplyMpbMulti( _targetCount, def, useBakedCoinIndex: false, chunkBaseIndex: _typeMapBaseIndex );
 		}
 		else
 		{
@@ -248,6 +271,48 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	public void SnapToCountMulti( IList<TreasureDefinition> slots, float diameter = -1f, float totalStackHeight = -1f )
 	{
 		SetStackMulti( slots, snap: true, diameter, totalStackHeight );
+	}
+
+	public void SnapToCountMulti(
+		IList<TreasureDefinition> slots,
+		float diameter,
+		float totalStackHeight,
+		IList<TreasureDefinition> typeMapSlots,
+		int typeMapBaseIndex )
+	{
+		SetStackMulti( slots, snap: true, diameter, totalStackHeight, typeMapSlots, typeMapBaseIndex );
+	}
+
+	/// <summary>
+	/// Uploads the shared multi-type LUT without changing cylinder height/mesh (used when
+	/// imperfect chunks cover the whole stack).
+	/// </summary>
+	public void EnsureSharedTypeMap( IList<TreasureDefinition> slots )
+	{
+		EnsureVisual();
+		ApplyDefinitionSettings();
+		ApplyMultiMaterial();
+		CoinStackVisualDefinition def = Definition;
+		UploadTypeMap( slots, def );
+	}
+
+	/// <summary>
+	/// Applies the shared multi-type MPB to an imperfect chunk renderer.
+	/// </summary>
+	public void ApplyImperfectChunkMpb(
+		MeshRenderer target,
+		int chunkCoinCount,
+		int chunkBaseIndex,
+		CoinStackVisualDefinition def )
+	{
+		if ( target == null )
+			return;
+
+		if ( _mpb == null )
+			_mpb = new MaterialPropertyBlock();
+
+		FillMultiMpb( _mpb, Mathf.Max( 1, chunkCoinCount ), def, useBakedCoinIndex: true, chunkBaseIndex );
+		target.SetPropertyBlock( _mpb );
 	}
 
 	void ApplyDefinitionSettings()
@@ -407,10 +472,12 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
 		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
 		_mpb.SetFloat( VariationSeedProp, _variationSeed );
+		_mpb.SetFloat( UseBakedCoinIndexProp, 0f );
+		_mpb.SetFloat( ChunkBaseIndexProp, 0f );
 		meshRenderer.SetPropertyBlock( _mpb );
 	}
 
-	void ApplyMpbMulti( int count, CoinStackVisualDefinition def )
+	void ApplyMpbMulti( int count, CoinStackVisualDefinition def, bool useBakedCoinIndex, int chunkBaseIndex )
 	{
 		if ( meshRenderer == null )
 			return;
@@ -418,26 +485,37 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		if ( _mpb == null )
 			_mpb = new MaterialPropertyBlock();
 
-		meshRenderer.GetPropertyBlock( _mpb );
-		_mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
-		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
-		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
-		_mpb.SetFloat( VariationSeedProp, _variationSeed );
+		FillMultiMpb( _mpb, count, def, useBakedCoinIndex, chunkBaseIndex );
+		meshRenderer.SetPropertyBlock( _mpb );
+	}
+
+	void FillMultiMpb(
+		MaterialPropertyBlock mpb,
+		int count,
+		CoinStackVisualDefinition def,
+		bool useBakedCoinIndex,
+		int chunkBaseIndex )
+	{
+		mpb.Clear();
+		mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
+		mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
+		mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
+		mpb.SetFloat( VariationSeedProp, _variationSeed );
+		mpb.SetFloat( UseBakedCoinIndexProp, useBakedCoinIndex ? 1f : 0f );
+		mpb.SetFloat( ChunkBaseIndexProp, Mathf.Max( 0, chunkBaseIndex ) );
 
 		if ( _typeMap != null )
-			_mpb.SetTexture( CoinTypeMapProp, _typeMap );
+			mpb.SetTexture( CoinTypeMapProp, _typeMap );
 
 		int typeCount = 3;
 		if ( def != null )
 			typeCount = def.typeCount > 0
 				? Mathf.Clamp( def.typeCount, 1, CoinStackVisualDefinition.MaxTypeSlots )
 				: 3;
-		_mpb.SetFloat( TypeCountProp, typeCount );
+		mpb.SetFloat( TypeCountProp, typeCount );
 
 		FillTypeFresnelArray( def, typeCount );
-		_mpb.SetVectorArray( TypeFresnelProp, TypeFresnelScratch );
-
-		meshRenderer.SetPropertyBlock( _mpb );
+		mpb.SetVectorArray( TypeFresnelProp, TypeFresnelScratch );
 	}
 
 	static void FillTypeFresnelArray( CoinStackVisualDefinition def, int typeCount )

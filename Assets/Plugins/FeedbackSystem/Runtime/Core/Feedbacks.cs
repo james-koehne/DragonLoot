@@ -11,6 +11,9 @@ namespace FeedbackSystem
 		[SerializeReference]
 		List<Feedback> _feedbacks = new List<Feedback>();
 
+		[SerializeField]
+		bool _useUnscaledTime;
+
 		[System.NonSerialized]
 		FeedbackPlayer _player;
 
@@ -33,6 +36,12 @@ namespace FeedbackSystem
 		public bool IsPlaying
 		{
 			get { return _player != null && _player.IsPlaying; }
+		}
+
+		public bool UseUnscaledTime
+		{
+			get { return _useUnscaledTime; }
+			set { _useUnscaledTime = value; }
 		}
 
 		void Awake()
@@ -130,7 +139,7 @@ namespace FeedbackSystem
 			if ( !playerActive && !tickerActive )
 				return;
 
-			float deltaTime = Time.deltaTime;
+			float deltaTime = _useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
 			if ( tickerActive )
 				_ticker.Tick( deltaTime );
 

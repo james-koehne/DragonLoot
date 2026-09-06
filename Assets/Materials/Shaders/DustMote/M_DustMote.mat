@@ -11,14 +11,14 @@ Material:
   m_Shader: {fileID: 0}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
+  m_ValidKeywords: []
+  m_InvalidKeywords:
   - _BLENDMODE_ADDITIVE
   - _DUSTMOTE_GEOMETRY_SOFTEN
   - _DUSTMOTE_SOFT_PARTICLES
   - _DUSTMOTE_TURBULENCE
   - _DUSTMOTE_TWINKLE
   - _NOISEOCTAVES_OCTAVES3
-  m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
@@ -36,8 +36,8 @@ Material:
     m_Ints: []
     m_Floats:
     - _AspectRatio: 1
-    - _BloomContribution: 1.5
     - _BlendMode: 0
+    - _BloomContribution: 1.5
     - _CameraFadeFar: 18
     - _CameraFadeNear: 0.15
     - _ColorVariation: 0.25
@@ -74,7 +74,7 @@ Material:
     m_Colors:
     - _Color: {r: 1.2, g: 0.95, b: 0.65, a: 0.35}
     - _CoreColor: {r: 1.8, g: 1.5, b: 1, a: 1}
-    - _TwinkleColor: {r: 2.2, g: 1.8, b: 1.2, a: 1}
     - _TurbulenceSpeed: {r: 0.08, g: 0.04, b: 0.06, a: 0}
+    - _TwinkleColor: {r: 2.2, g: 1.8, b: 1.2, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

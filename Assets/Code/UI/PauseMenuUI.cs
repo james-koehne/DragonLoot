@@ -574,22 +574,20 @@ public class PauseMenuUI : MonoBehaviour
 
 		AppendControl( gameInput.Move, "Move" );
 		AppendControl( gameInput.Jump, "Jump" );
+		AppendGlideControl( gameInput.Jump );
 		AppendControl( gameInput.Sprint, "Sprint / Slide" );
-		AppendControl( gameInput.CameraDelta, "Look" );
 		AppendControl( gameInput.Interact, "Interact" );
 		AppendControl( gameInput.SecondaryInteract, "Place / Throw" );
 		AppendControl( gameInput.Clean, "Clean / Polish" );
 		AppendControl( gameInput.WholeStackPickup, "Pick up stack (hold)" );
 		AppendControl( gameInput.WholeStackPlace, "Place stack (hold)" );
-		AppendControl( gameInput.RotateLeft, "Rotate left" );
-		AppendControl( gameInput.RotateRight, "Rotate right" );
 		AppendControl( gameInput.ScrollWheel, "Cycle held item" );
 
 		if ( gameInput.CategorySlots != null )
 		{
-			AppendControl( SlotOrNull( gameInput.CategorySlots, 0 ), "Coin pouch" );
-			AppendControl( SlotOrNull( gameInput.CategorySlots, 1 ), "Gem pouch" );
-			AppendControl( SlotOrNull( gameInput.CategorySlots, 2 ), "Artifact pouch" );
+			AppendControl( SlotOrNull( gameInput.CategorySlots, 0 ), "Coins" );
+			AppendControl( SlotOrNull( gameInput.CategorySlots, 1 ), "Gems" );
+			AppendControl( SlotOrNull( gameInput.CategorySlots, 2 ), "Artifacts" );
 		}
 
 		if ( gameInput.AbilitySlots != null )
@@ -610,6 +608,15 @@ public class PauseMenuUI : MonoBehaviour
 			return;
 
 		_builder.Append( '[' ).Append( binding ).Append( "]  " ).AppendLine( label );
+	}
+
+	void AppendGlideControl( InputAction jumpAction )
+	{
+		string binding = FormatBindingDisplay( jumpAction );
+		if ( string.IsNullOrEmpty( binding ) )
+			return;
+
+		_builder.Append( '[' ).Append( binding ).Append( " x2]  Glide" ).AppendLine();
 	}
 
 	static InputAction SlotOrNull( InputAction[] slots, int index )

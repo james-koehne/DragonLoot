@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 /// <summary>
@@ -63,6 +65,38 @@ public class CoinStackVisualDefinition : ScriptableObject
 	[Tooltip( "Ground coin stacks with at least this many coins physically block the player. 0 = never." )]
 	[Min( 0 )]
 	public int minCoinsForPlayerCollision = 20;
+
+	[Header( "Imperfect LOD (ground)" )]
+	[Tooltip( "When enabled, ground stacks use imperfect XZ offsets for coins below imperfectMaxCoins." )]
+	public bool imperfectEnabled = true;
+
+	[Tooltip( "Max coins rendered imperfect (chunks + individuals) before the rest uses the cylinder." )]
+	[Min( 1 )]
+	public int imperfectMaxCoins = 300;
+
+	[Tooltip( "Beyond this player distance (meters), the whole stack uses a plain cylinder. 0 = never distance-swap." )]
+	[Min( 0f )]
+	public float imperfectCylinderDistance = 14f;
+
+	[Tooltip( "Hysteresis added when leaving imperfect range to avoid LOD flicker." )]
+	[Min( 0f )]
+	public float imperfectCylinderDistanceHysteresis = 1.5f;
+
+	[Tooltip( "Seed variants baked per chunk size (8 / 16 / 32)." )]
+	[Min( 1 )]
+	public int imperfectVariantCount = 8;
+
+	[Header( "Imperfect Bake XZ Range" )]
+	[Tooltip( "Minimum lateral offset as a fraction of mesh reference diameter (baker + procedural individuals)." )]
+	[Range( 0f, 0.5f )]
+	public float imperfectXzRadiusMinFraction = 0.02f;
+
+	[Tooltip( "Maximum lateral offset as a fraction of mesh reference diameter (baker + procedural individuals)." )]
+	[Range( 0f, 0.5f )]
+	public float imperfectXzRadiusMaxFraction = 0.12f;
+
+	[Tooltip( "Editor-baked imperfect chunks (mesh + XZ offsets). Rebuild via DragonLoot/Coin Stack menu." )]
+	public List<CoinStackImperfectChunkEntry> imperfectChunks = new List<CoinStackImperfectChunkEntry>();
 
 	public Material ResolveMaterial( TreasureDefinition treasure )
 	{

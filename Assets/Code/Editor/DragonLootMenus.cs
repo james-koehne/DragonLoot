@@ -46,6 +46,7 @@ public static class DragonLootMenus
 	public const string TreasureInstallGoldBarStackSettings = Root + "/Treasure/Install Gold Bar Stack Settings";
 	public const string TreasurePurgeSlotOrphans = Root + "/Treasure/Purge Artifact Slot Indicator Orphans";
 	public const string TreasurePileContents = Root + "/Treasure/Pile Contents";
+	public const string TreasureSceneInventory = Root + "/Treasure/Scene Inventory";
 
 	// --- Stations ---
 	public const string StationsCleaningCreate = Root + "/Stations/Cleaning/Create Setup";

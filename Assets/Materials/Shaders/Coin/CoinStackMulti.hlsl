@@ -32,20 +32,24 @@ int CoinStackLoadTypeId(int coinIndex)
     return CoinStackClampTypeId((int)round(raw));
 }
 
-int CoinStackResolveTypeId(float stackY01, float coinCount, bool isCap, float3 normalOS)
+int CoinStackResolveTypeId(float stackY01, float coinCount, bool isCap, float3 normalOS, float bakedCoinIndex)
 {
+    int baseIndex = (int)round((float)_ChunkBaseIndex);
+    if ((float)_UseBakedCoinIndex > 0.5)
+        return CoinStackLoadTypeId((int)round(bakedCoinIndex) + baseIndex);
+
     float count = max(coinCount, 1.0);
     if (isCap)
     {
         // Bottom cap (normal.y < 0) uses type 0; top cap uses top coin.
         if (normalOS.y < 0.0)
-            return CoinStackLoadTypeId(0);
-        return CoinStackLoadTypeId((int)count - 1);
+            return CoinStackLoadTypeId(baseIndex);
+        return CoinStackLoadTypeId(baseIndex + (int)count - 1);
     }
 
     float coinIndex = floor(saturate(stackY01) * count);
     coinIndex = min(coinIndex, count - 1.0);
-    return CoinStackLoadTypeId((int)coinIndex);
+    return CoinStackLoadTypeId(baseIndex + (int)coinIndex);
 }
 
 half4 CoinStackSampleAlbedoMulti(float2 uv, int typeId)

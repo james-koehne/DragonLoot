@@ -17,12 +17,20 @@ MonoBehaviour:
   tags:
   - coins
   - displays
-  trigger: 5
-  volumeId: 
+  trigger: 1
+  holdingCategory: 0
+  volumeId: volume_coin_hall
   fallbackVolumeId: 
-  prerequisiteTutorialIds: []
-  steps:
-  - body: Coin display tables only accept their matching coin type.
-    keybindHint: '[{SecondaryInteract}] Place on display'
-  - body: Fill every slot to complete the display and progress that category.
-    keybindHint: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  prerequisiteTutorialIds:
+  - tut_find_coin_hall
+  highlightMapLabel: 
+  body: Welcome to the Coin Hall. Each platform displays a different coin type —
+    match coins to their display to sort your hoard.
+  keybindHint: '[{SecondaryInteract}] Place on display'
+  tasks:
+  - id: place_coin_display
+    label: Put a coin in a coin display
+    completeTrigger: 7
+    completeVolumeId:

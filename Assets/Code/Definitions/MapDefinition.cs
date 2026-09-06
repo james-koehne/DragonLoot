@@ -69,6 +69,12 @@ public class MapDefinition : ScriptableObject
 
 	public Color labelColor = new Color( 0.92f, 0.9f, 0.82f, 0.95f );
 
+	[Min( 8f )]
+	public float labelIconSize = 28f;
+
+	[Min( 0f )]
+	public float labelIconTextGap = 4f;
+
 	public void EnsureDefaults()
 	{
 		resolution = Mathf.Clamp( resolution, 64, 1024 );
@@ -84,5 +90,7 @@ public class MapDefinition : ScriptableObject
 		aimConeLength = Mathf.Max( 8f, aimConeLength );
 		aimConeBaseWidth = Mathf.Max( 8f, aimConeBaseWidth );
 		labelFontSize = Mathf.Max( 12, labelFontSize );
+		labelIconSize = Mathf.Max( 8f, labelIconSize );
+		labelIconTextGap = Mathf.Max( 0f, labelIconTextGap );
 	}
 }

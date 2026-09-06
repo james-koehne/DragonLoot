@@ -41,8 +41,11 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Contextual tutorials the player has seen at least once.</summary>
 	public List<string> discoveredTutorialIds;
 
-	/// <summary>Contextual tutorials whose popup sequence finished (auto-complete).</summary>
+	/// <summary>Contextual tutorials whose tasks were all completed.</summary>
 	public List<string> completedTutorialIds;
+
+	/// <summary>Completed tutorial task keys as "tutorialId/taskId".</summary>
+	public List<string> completedTutorialTaskIds;
 
 	/// <summary>Doors unlocked via <see cref="DoorUnlockedEvent"/> (by door id).</summary>
 	public List<string> eventUnlockedDoorIds;
@@ -111,6 +114,8 @@ public class ProfileSaveData : IGameStats
 			discoveredTutorialIds = new List<string>();
 		if ( completedTutorialIds == null )
 			completedTutorialIds = new List<string>();
+		if ( completedTutorialTaskIds == null )
+			completedTutorialTaskIds = new List<string>();
 	}
 
 	public void EnsureDoorProgress()
@@ -211,6 +216,7 @@ public class ProfileSaveData : IGameStats
 
 		bool changed = MergeIdList( discoveredTutorialIds, other.discoveredTutorialIds );
 		changed |= MergeIdList( completedTutorialIds, other.completedTutorialIds );
+		changed |= MergeIdList( completedTutorialTaskIds, other.completedTutorialTaskIds );
 		return changed;
 	}
 

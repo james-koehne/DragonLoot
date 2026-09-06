@@ -46,6 +46,8 @@ Shader "DragonLoot/Coin Stack Multi"
         [Header(Stack Bands)]
         _CoinCount("Coin Count", Float) = 1
         _CoinTypeMap("Coin Type Map", 2D) = "black" {}
+        [HideInInspector] _UseBakedCoinIndex("Use Baked Coin Index", Float) = 0
+        [HideInInspector] _ChunkBaseIndex("Chunk Base Index", Float) = 0
         _BandContrast("Band Contrast", Range(0, 2)) = 1.1
         _GrooveDarkness("Groove Darkness", Range(0, 1)) = 0.35
         _GrooveWidth("Groove Width", Range(0.01, 0.25)) = 0.08
@@ -205,6 +207,8 @@ Shader "DragonLoot/Coin Stack Multi"
             half4 CoinStackShadowFrag(ShadowVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+                if ((float)_UseBakedCoinIndex > 0.5)
+                    return 0;
                 float coinCount = max((float)_CoinCount, 1.0);
                 if (!CoinStackIsCap(input.normalOS))
                 {
@@ -278,6 +282,8 @@ Shader "DragonLoot/Coin Stack Multi"
 			half4 CoinStackDepthFrag(DepthVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
+                if ((float)_UseBakedCoinIndex > 0.5)
+                    return 0;
                 float coinCount = max((float)_CoinCount, 1.0);
                 if (!CoinStackIsCap(input.normalOS))
                 {
@@ -352,19 +358,22 @@ Shader "DragonLoot/Coin Stack Multi"
             half4 CoinStackDepthNormalsFrag(DepthNormalsVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                float coinCount = max((float)_CoinCount, 1.0);
-                if (!CoinStackIsCap(input.normalOS))
+                if ((float)_UseBakedCoinIndex <= 0.5)
                 {
-                    CoinStackBandData bands = CoinStackEvaluateBands(input.stackY01, coinCount);
-                    CoinStackSeamView seam = CoinStackEvaluateSeamView(
-                        input.positionWS,
-                        input.normalOS,
-                        input.stackY01,
-                        coinCount,
-                        input.instanceSeed,
-                        bands.grooveMask,
-                        bands.ridgeMask);
-                    CoinStackClipSeamSide(seam);
+                    float coinCount = max((float)_CoinCount, 1.0);
+                    if (!CoinStackIsCap(input.normalOS))
+                    {
+                        CoinStackBandData bands = CoinStackEvaluateBands(input.stackY01, coinCount);
+                        CoinStackSeamView seam = CoinStackEvaluateSeamView(
+                            input.positionWS,
+                            input.normalOS,
+                            input.stackY01,
+                            coinCount,
+                            input.instanceSeed,
+                            bands.grooveMask,
+                            bands.ridgeMask);
+                        CoinStackClipSeamSide(seam);
+                    }
                 }
                 return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
             }

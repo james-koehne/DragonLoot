@@ -977,6 +977,15 @@ public class PlayerPlacement : MonoBehaviour
 			CoinFlipSpeed,
 			paths ) );
 
+		if ( !useSoftVelocity )
+		{
+			EventBus.Publish( new TreasureThrownEvent
+			{
+				Item = item,
+				Definition = item.Definition
+			} );
+		}
+
 		EventBus.Publish( new PlacementCompletedEvent
 		{
 			Target = useSoftVelocity ? ( ITreasurePlacementTarget )_floorTarget : null,
@@ -1108,6 +1117,15 @@ public class PlayerPlacement : MonoBehaviour
 		stack.AbsorbNearbyLooseCoins();
 		if ( !stack.HasInFlight )
 			stack.TryMergeNearby();
+
+		EventBus.Publish( new PlacementCompletedEvent
+		{
+			Target = stack,
+			Item = item,
+			Definition = item.Definition
+		} );
+		TreasureInteractSfx.PlayPlace( item.Definition, preview.Position );
+		PlayPlaceLandFeedback();
 		return true;
 	}
 

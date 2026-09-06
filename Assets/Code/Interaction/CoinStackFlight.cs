@@ -103,7 +103,8 @@ public static class CoinStackFlight
 			BindScratch,
 			snap: true,
 			covered,
-			useHeldScale: useHeldScale );
+			useHeldScale: useHeldScale,
+			variationSeed: variationSeed );
 		if ( visual != null )
 			visual.SetVariationSeed( variationSeed );
 

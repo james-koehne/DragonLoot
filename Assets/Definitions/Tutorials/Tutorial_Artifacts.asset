@@ -16,12 +16,16 @@ MonoBehaviour:
   title: Artifacts
   tags:
   - artifacts
-  trigger: 7
+  trigger: 9
+  holdingCategory: 5
   volumeId: 
   fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
   prerequisiteTutorialIds: []
-  steps:
-  - body: Artifact presentation stands hold cleaned artifacts for display.
-    keybindHint: '[{SecondaryInteract}] Place artifact'
-  - body: Dirty artifacts may need polishing before they will sit properly on a stand.
-    keybindHint: '[{Clean}] Clean / Polish'
+  body: Take artifacts to the Artifact Storage museum and place them on a presentation
+    stand. Dirty artifacts may need polishing first.
+  keybindHint: '[{SecondaryInteract}] Place  [{Clean}] Clean / Polish'
+  tasks:
+  - id: place_artifact
+    label: Put an artifact in its place
+    completeTrigger: 8

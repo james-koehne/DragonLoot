@@ -4,32 +4,49 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Reactive contextual tutorials: EventBus triggers → ordered corner popups.
+/// Contextual tutorials: once shown, stay visible until all tasks complete.
+/// Multi-task checkboxes completed by gameplay; permanently complete when all tasks done.
 /// Does not drive TutorialHud.
 /// </summary>
 public class TutorialManager : MonoBehaviour
 {
-	const float CooldownSeconds = 0.35f;
+	const float TaskCompleteHoldPadding = 0.15f;
+	const float TutorialCompleteDwellSeconds = 1.1f;
+	const float PostHideGapSeconds = 0.55f;
+
+	enum CeremonyPhase
+	{
+		None = 0,
+		TaskLock = 1,
+		TutorialComplete = 2,
+		Hiding = 3,
+		Cooldown = 4
+	}
 
 	static TutorialManager _instance;
 
-	readonly Queue<PendingTutorial> _pending = new Queue<PendingTutorial>();
-	readonly HashSet<string> _startedThisSession = new HashSet<string>();
+	readonly HashSet<string> _insideVolumes = new HashSet<string>();
+	readonly HashSet<string> _sessionCompletedTaskKeys = new HashSet<string>();
+	readonly HashSet<string> _completedThisSession = new HashSet<string>();
+	readonly List<TutorialDefinition> _matchingScratch = new List<TutorialDefinition>( 8 );
 
 	TutorialCatalogDefinition _catalog;
 	TutorialPopupUI _popup;
 	TutorialDefinition _active;
-	int _activeStepIndex;
+	TutorialDefinition _pendingShow;
 	bool _activeIsReplay;
 	bool _subscribed;
-	float _cooldownUntil;
+	bool _aimingTreasurePile;
+	bool _aimingCoinStack;
+	int _sorterCoinsSortedWhileActive;
+	bool _sorterStackLoadedWhileActive;
+	TreasureCategory _heldCategory;
+	bool _isHolding;
 	string _lastShownId;
-
-	struct PendingTutorial
-	{
-		public TutorialDefinition Definition;
-		public bool IsReplay;
-	}
+	string _lastActivatedId;
+	CeremonyPhase _phase;
+	float _phaseUntil;
+	bool _finishMarkedComplete;
 
 	public static TutorialManager Instance => _instance;
 
@@ -37,7 +54,7 @@ public class TutorialManager : MonoBehaviour
 
 	public string LastShownTutorialId => _lastShownId;
 
-	public bool IsSequencePlaying => _active != null;
+	public bool IsSequencePlaying => _active != null || _phase != CeremonyPhase.None;
 
 	public static TutorialManager EnsureExists()
 	{
@@ -82,11 +99,37 @@ public class TutorialManager : MonoBehaviour
 	{
 		_popup = popup;
 		LoadCatalog();
-		_pending.Clear();
 		_active = null;
-		_activeStepIndex = 0;
+		_pendingShow = null;
 		_activeIsReplay = false;
-		_startedThisSession.Clear();
+		_phase = CeremonyPhase.None;
+		_phaseUntil = 0f;
+		_finishMarkedComplete = false;
+		_insideVolumes.Clear();
+		_aimingTreasurePile = false;
+		_aimingCoinStack = false;
+		_sorterCoinsSortedWhileActive = 0;
+		_sorterStackLoadedWhileActive = false;
+		_isHolding = false;
+		HydrateCompletedFromSave();
+		RefreshFromPlayerState();
+		EvaluateContext( force: true );
+	}
+
+	void HydrateCompletedFromSave()
+	{
+		ProfileSaveData save = GetSave();
+		if ( save == null )
+			return;
+		save.EnsureTutorialProgress();
+		if ( save.completedTutorialIds == null )
+			return;
+		for ( int i = 0; i < save.completedTutorialIds.Count; i++ )
+		{
+			string id = save.completedTutorialIds[ i ];
+			if ( !string.IsNullOrEmpty( id ) )
+				_completedThisSession.Add( id );
+		}
 	}
 
 	public void BindPopup( TutorialPopupUI popup )
@@ -106,13 +149,22 @@ public class TutorialManager : MonoBehaviour
 		if ( _subscribed )
 			return;
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Subscribe<VolumeExitedEvent>( OnVolumeExited );
+		EventBus.Subscribe<PlayerHeldCategoryChangedEvent>( OnHeldChanged );
+		EventBus.Subscribe<TreasurePileAimChangedEvent>( OnPileAimChanged );
 		EventBus.Subscribe<TreasurePileDigEvent>( OnDig );
 		EventBus.Subscribe<PlacementCompletedEvent>( OnPlacementCompleted );
+		EventBus.Subscribe<TreasureThrownEvent>( OnThrown );
 		EventBus.Subscribe<CoinStackChangedEvent>( OnCoinStackChanged );
 		EventBus.Subscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
 		EventBus.Subscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Subscribe<ArtifactPresentationTableChangedEvent>( OnArtifactChanged );
+		EventBus.Subscribe<WholeStackPickupCompletedEvent>( OnWholeStackPickup );
+		EventBus.Subscribe<WholeStackPlaceCompletedEvent>( OnWholeStackPlace );
 		EventBus.Subscribe<TreasureCollectedEvent>( OnTreasureCollected );
+		EventBus.Subscribe<MapOpenedEvent>( OnMapOpened );
+		EventBus.Subscribe<CoinSorterUsedEvent>( OnCoinSorterUsed );
+		EventBus.Subscribe<CoinSorterStackLoadedEvent>( OnCoinSorterStackLoaded );
 		_subscribed = true;
 	}
 
@@ -121,133 +173,571 @@ public class TutorialManager : MonoBehaviour
 		if ( !_subscribed )
 			return;
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Unsubscribe<VolumeExitedEvent>( OnVolumeExited );
+		EventBus.Unsubscribe<PlayerHeldCategoryChangedEvent>( OnHeldChanged );
+		EventBus.Unsubscribe<TreasurePileAimChangedEvent>( OnPileAimChanged );
 		EventBus.Unsubscribe<TreasurePileDigEvent>( OnDig );
 		EventBus.Unsubscribe<PlacementCompletedEvent>( OnPlacementCompleted );
+		EventBus.Unsubscribe<TreasureThrownEvent>( OnThrown );
 		EventBus.Unsubscribe<CoinStackChangedEvent>( OnCoinStackChanged );
 		EventBus.Unsubscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
 		EventBus.Unsubscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Unsubscribe<ArtifactPresentationTableChangedEvent>( OnArtifactChanged );
+		EventBus.Unsubscribe<WholeStackPickupCompletedEvent>( OnWholeStackPickup );
+		EventBus.Unsubscribe<WholeStackPlaceCompletedEvent>( OnWholeStackPlace );
 		EventBus.Unsubscribe<TreasureCollectedEvent>( OnTreasureCollected );
+		EventBus.Unsubscribe<MapOpenedEvent>( OnMapOpened );
+		EventBus.Unsubscribe<CoinSorterUsedEvent>( OnCoinSorterUsed );
+		EventBus.Unsubscribe<CoinSorterStackLoadedEvent>( OnCoinSorterStackLoaded );
 		_subscribed = false;
+	}
+
+	void Update()
+	{
+		if ( _catalog == null || _popup == null )
+			return;
+
+		TickCeremony();
+
+		if ( _activeIsReplay )
+			return;
+		if ( _phase != CeremonyPhase.None )
+			return;
+
+		RefreshFromPlayerState();
+		PollMoveLookTasks();
+		EvaluateContext( force: false );
+	}
+
+	void TickCeremony()
+	{
+		if ( _phase == CeremonyPhase.None )
+			return;
+		if ( Time.unscaledTime < _phaseUntil )
+			return;
+
+		switch ( _phase )
+		{
+			case CeremonyPhase.TaskLock:
+				_phase = CeremonyPhase.None;
+				EvaluateContext( force: true );
+				break;
+
+			case CeremonyPhase.TutorialComplete:
+				BeginHideAfterComplete();
+				break;
+
+			case CeremonyPhase.Hiding:
+				FinishHideTransition();
+				break;
+
+			case CeremonyPhase.Cooldown:
+				_phase = CeremonyPhase.None;
+				if ( _pendingShow != null && IsCompleted( _pendingShow.id ) )
+					_pendingShow = null;
+				if ( _pendingShow != null )
+				{
+					TutorialDefinition next = _pendingShow;
+					_pendingShow = null;
+					if ( !IsCompleted( next.id ) )
+						ShowTutorialNow( next, isReplay: false );
+					else
+						EvaluateContext( force: true );
+				}
+				else
+				{
+					EvaluateContext( force: true );
+				}
+				break;
+		}
+	}
+
+	bool IsCeremonyBlocking =>
+		_phase == CeremonyPhase.TutorialComplete
+		|| _phase == CeremonyPhase.Hiding
+		|| _phase == CeremonyPhase.Cooldown;
+
+	void RefreshFromPlayerState()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry != null )
+		{
+			_heldCategory = PlayerCarry.MapBucketToCategory( carry.SelectedBucket );
+			_isHolding = carry.Count > 0;
+		}
+		else
+		{
+			_isHolding = false;
+		}
+
+		PlayerInteraction interaction = player != null ? player.Interaction : null;
+		if ( interaction != null )
+		{
+			_aimingTreasurePile = interaction.Current is TreasurePileInteractable;
+			bool aimingStack = IsAimingCoinStack( interaction.Current );
+			if ( aimingStack && !_aimingCoinStack )
+				NoteActivationForAimCoinStack();
+			_aimingCoinStack = aimingStack;
+		}
+		else
+		{
+			_aimingTreasurePile = false;
+			_aimingCoinStack = false;
+		}
+	}
+
+	static bool IsAimingCoinStack( IInteractable current )
+	{
+		if ( current is GroundCoinStack groundStack )
+			return groundStack.Count >= 2;
+		if ( current is CoinStackInteractable )
+			return true;
+		return false;
+	}
+
+	void PollMoveLookTasks()
+	{
+		if ( _active == null || _active.tasks == null )
+			return;
+		if ( IsCeremonyBlocking )
+			return;
+
+		GameInput input = InputController.Instance != null ? InputController.Instance.GameInput : null;
+		if ( input == null )
+			return;
+
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		if ( player != null && !player.GameplayInputEnabled )
+			return;
+
+		bool needMove = false;
+		bool needLook = false;
+		for ( int i = 0; i < _active.tasks.Length; i++ )
+		{
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( IsTaskCompleted( _active.id, task.id ) )
+				continue;
+			if ( task.completeTrigger == TutorialTaskCompleteType.Move )
+				needMove = true;
+			else if ( task.completeTrigger == TutorialTaskCompleteType.Look )
+				needLook = true;
+		}
+
+		if ( needMove && input.Move != null )
+		{
+			Vector2 move = input.Move.ReadValue<Vector2>();
+			if ( move.sqrMagnitude > 0.04f )
+				TryCompleteTask( TutorialTaskCompleteType.Move );
+		}
+
+		if ( needLook && input.CameraDelta != null )
+		{
+			Vector2 look = input.CameraDelta.ReadValue<Vector2>();
+			if ( look.sqrMagnitude > 0.25f )
+				TryCompleteTask( TutorialTaskCompleteType.Look );
+		}
 	}
 
 	void OnVolumeEntered( VolumeEnteredEvent evt )
 	{
 		if ( string.IsNullOrEmpty( evt.VolumeId ) )
 			return;
+		_insideVolumes.Add( evt.VolumeId );
+		NoteActivationForVolume( evt.VolumeId );
+		TryCompleteEnterVolumeTasks( evt.VolumeId );
+		EvaluateContext( force: true );
+	}
 
-		TryQueueByTrigger( TutorialTriggerType.EnterVolume, evt.VolumeId );
-		TryQueueFallbackVolume( evt.VolumeId );
+	void OnVolumeExited( VolumeExitedEvent evt )
+	{
+		if ( string.IsNullOrEmpty( evt.VolumeId ) )
+			return;
+		_insideVolumes.Remove( evt.VolumeId );
+		EvaluateContext( force: true );
+	}
+
+	void OnHeldChanged( PlayerHeldCategoryChangedEvent evt )
+	{
+		_heldCategory = evt.Category;
+		_isHolding = evt.IsHolding;
+		if ( evt.IsHolding )
+			NoteActivationForHolding( evt.Category );
+		EvaluateContext( force: true );
+	}
+
+	void OnPileAimChanged( TreasurePileAimChangedEvent evt )
+	{
+		_aimingTreasurePile = evt.IsAiming;
+		if ( evt.IsAiming )
+			NoteActivationForAimPile();
+		EvaluateContext( force: true );
 	}
 
 	void OnDig( TreasurePileDigEvent evt )
 	{
-		TryQueueByTrigger( TutorialTriggerType.TreasurePileDig, null );
+		TryCompleteTask( TutorialTaskCompleteType.Dig );
 	}
 
 	void OnPlacementCompleted( PlacementCompletedEvent evt )
 	{
-		if ( evt.Target is FloorPlacementTarget )
-			TryQueueByTrigger( TutorialTriggerType.PlacementCompletedFloor, null );
+		if ( evt.Definition != null && evt.Definition.category != TreasureCategory.Coin )
+			return;
+
+		// Coins on the ground always go through GroundCoinStack / ground stack targets, not FloorPlacementTarget.
+		if ( evt.Target is FloorPlacementTarget
+		     || evt.Target is GroundCoinStack
+		     || evt.Target is GroundTreasureStackTarget )
+		{
+			TryCompleteTask( TutorialTaskCompleteType.PlaceCoinFloor );
+		}
+	}
+
+	void OnThrown( TreasureThrownEvent evt )
+	{
+		TreasureCategory cat = evt.Definition != null ? evt.Definition.category : TreasureCategory.Coin;
+		if ( cat == TreasureCategory.Coin )
+			TryCompleteTask( TutorialTaskCompleteType.ThrowCoin );
 	}
 
 	void OnCoinStackChanged( CoinStackChangedEvent evt )
 	{
 		if ( evt.Stack == null || evt.Count < 2 )
 			return;
-		TryQueueByTrigger( TutorialTriggerType.CoinStackChanged, null );
+		TryCompleteTask( TutorialTaskCompleteType.StackCoins );
 	}
 
 	void OnCoinDisplayChanged( CoinDisplayTableChangedEvent evt )
 	{
-		TryQueueByTrigger( TutorialTriggerType.CoinDisplayTableChanged, null );
+		TryCompleteTask( TutorialTaskCompleteType.PlaceCoinDisplay );
 	}
 
 	void OnConstellationChanged( GemConstellationChangedEvent evt )
 	{
-		TryQueueByTrigger( TutorialTriggerType.GemConstellationChanged, null );
+		TryCompleteTask( TutorialTaskCompleteType.PlaceGemConstellation );
 	}
 
 	void OnArtifactChanged( ArtifactPresentationTableChangedEvent evt )
 	{
-		TryQueueByTrigger( TutorialTriggerType.ArtifactPresentationTableChanged, null );
+		TryCompleteTask( TutorialTaskCompleteType.PlaceArtifactStand );
+	}
+
+	void OnWholeStackPickup( WholeStackPickupCompletedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.WholeStackPickup );
+	}
+
+	void OnWholeStackPlace( WholeStackPlaceCompletedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.WholeStackPlace );
 	}
 
 	void OnTreasureCollected( TreasureCollectedEvent evt )
 	{
-		TryQueueByTrigger( TutorialTriggerType.TreasureCollected, null );
+		if ( evt.Treasure == null )
+			return;
+		if ( evt.Treasure.category == TreasureCategory.Artifact )
+			NoteActivationForHolding( TreasureCategory.Artifact );
+		EvaluateContext( force: true );
 	}
 
-	void TryQueueFallbackVolume( string volumeId )
+	void OnMapOpened( MapOpenedEvent evt )
 	{
-		if ( _catalog == null || _catalog.tutorials == null )
+		TryCompleteTask( TutorialTaskCompleteType.OpenMap );
+	}
+
+	void OnCoinSorterUsed( CoinSorterUsedEvent evt )
+	{
+		if ( _active == null )
+			return;
+		_sorterCoinsSortedWhileActive++;
+		int need = _active.sorterCoinsToComplete > 0 ? _active.sorterCoinsToComplete : 30;
+		if ( _sorterStackLoadedWhileActive || _sorterCoinsSortedWhileActive >= need )
+			TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
+	}
+
+	void OnCoinSorterStackLoaded( CoinSorterStackLoadedEvent evt )
+	{
+		if ( evt.CoinCount < 2 )
+			return;
+		_sorterStackLoadedWhileActive = true;
+		// Completes on the next sorted coin (or immediately if already sorting).
+		if ( _sorterCoinsSortedWhileActive > 0 )
+			TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
+	}
+
+	void TryCompleteEnterVolumeTasks( string volumeId )
+	{
+		if ( _active == null || _active.tasks == null || string.IsNullOrEmpty( volumeId ) )
+			return;
+		if ( IsCeremonyBlocking )
 			return;
 
-		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		bool matched = false;
+		for ( int i = 0; i < _active.tasks.Length; i++ )
 		{
-			TutorialDefinition def = _catalog.tutorials[ i ];
-			if ( def == null || string.IsNullOrEmpty( def.fallbackVolumeId ) )
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || task.completeTrigger != TutorialTaskCompleteType.EnterVolume )
 				continue;
-			if ( def.fallbackVolumeId != volumeId )
+			if ( string.IsNullOrEmpty( task.completeVolumeId ) || task.completeVolumeId != volumeId )
 				continue;
-			TryQueue( def, isReplay: false );
+			matched = true;
+			break;
+		}
+
+		if ( matched )
+		{
+			// Reaching the destination completes the guidance tutorial even if map wasn't opened.
+			ForceCompleteAllRemainingTasks();
+			return;
 		}
 	}
 
-	void TryQueueByTrigger( TutorialTriggerType trigger, string volumeId )
+	void NoteActivationForVolume( string volumeId )
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
 			return;
-
 		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
 			TutorialDefinition def = _catalog.tutorials[ i ];
-			if ( def == null || def.trigger != trigger )
+			if ( def == null || !IsEligible( def ) )
 				continue;
-			if ( trigger == TutorialTriggerType.EnterVolume
-			     && !string.IsNullOrEmpty( def.volumeId )
-			     && def.volumeId != volumeId )
-				continue;
-			TryQueue( def, isReplay: false );
+			if ( IsVolumeContext( def, volumeId ) )
+				MarkRecentlyActivated( def.id );
 		}
 	}
 
-	bool TryQueue( TutorialDefinition def, bool isReplay )
+	void NoteActivationForHolding( TreasureCategory category )
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger == TutorialTriggerType.HoldingCategory && def.holdingCategory == category )
+				MarkRecentlyActivated( def.id );
+		}
+	}
+
+	void NoteActivationForAimPile()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger == TutorialTriggerType.AimTreasurePile || def.alsoShowWhenAimingTreasurePile )
+				MarkRecentlyActivated( def.id );
+		}
+	}
+
+	void NoteActivationForAimCoinStack()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger == TutorialTriggerType.AimCoinStack || def.alsoShowWhenAimingCoinStack )
+				MarkRecentlyActivated( def.id );
+		}
+	}
+
+	void MarkRecentlyActivated( string id )
+	{
+		if ( string.IsNullOrEmpty( id ) )
+			return;
+		_lastActivatedId = id;
+	}
+
+	void EvaluateContext( bool force )
+	{
+		if ( _activeIsReplay )
+			return;
+		if ( _phase != CeremonyPhase.None )
+			return;
+		if ( _catalog == null || _popup == null )
+			return;
+		if ( DebugDefinition.TutorialsDisabled )
+		{
+			if ( _active != null )
+				RequestHide( complete: false );
+			return;
+		}
+
+		// Once shown, stay until all tasks are complete (do not hide or switch on context loss).
+		if ( _active != null && IsEligible( _active ) )
+		{
+			if ( force )
+				RefreshActivePopup();
+			return;
+		}
+
+		_matchingScratch.Clear();
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( !IsContextActive( def ) )
+				continue;
+			_matchingScratch.Add( def );
+		}
+
+		TutorialDefinition best = PickBestMatch( _matchingScratch );
+		if ( best == null )
+			return;
+
+		if ( _active != null && _active.id == best.id )
+		{
+			if ( force )
+				RefreshActivePopup();
+			return;
+		}
+
+		RequestShow( best );
+	}
+
+	TutorialDefinition PickBestMatch( List<TutorialDefinition> matches )
+	{
+		if ( matches == null || matches.Count == 0 )
+			return null;
+		if ( matches.Count == 1 )
+			return matches[ 0 ];
+
+		TutorialDefinition preferred = null;
+		for ( int i = 0; i < matches.Count; i++ )
+		{
+			TutorialDefinition def = matches[ i ];
+			if ( def != null && def.id == _lastActivatedId )
+				return def;
+			if ( _active != null && def != null && def.id == _active.id )
+				preferred = def;
+		}
+
+		if ( preferred != null )
+			return preferred;
+		return matches[ matches.Count - 1 ];
+	}
+
+	bool IsEligible( TutorialDefinition def )
 	{
 		if ( def == null || string.IsNullOrEmpty( def.id ) )
 			return false;
-		if ( def.steps == null || def.steps.Length == 0 )
+		if ( def.tasks == null || def.tasks.Length == 0 )
 			return false;
-
-		if ( !isReplay )
-		{
-			if ( DebugDefinition.TutorialsDisabled )
-				return false;
-			if ( IsCompleted( def.id ) )
-				return false;
-			if ( _startedThisSession.Contains( def.id ) )
-				return false;
-			if ( !ArePrerequisitesMet( def ) )
-				return false;
-			if ( Time.unscaledTime < _cooldownUntil )
-				return false;
-		}
-
-		if ( _active != null && _active.id == def.id )
+		if ( IsCompleted( def.id ) )
 			return false;
-
-		foreach ( PendingTutorial queued in _pending )
-		{
-			if ( queued.Definition != null && queued.Definition.id == def.id )
-				return false;
-		}
-
-		if ( !isReplay )
-			_startedThisSession.Add( def.id );
-
-		_pending.Enqueue( new PendingTutorial { Definition = def, IsReplay = isReplay } );
-		TryStartNext();
+		if ( !ArePrerequisitesMet( def ) )
+			return false;
 		return true;
+	}
+
+	bool IsContextActive( TutorialDefinition def )
+	{
+		if ( def == null )
+			return false;
+
+		bool primary = false;
+		switch ( def.trigger )
+		{
+			case TutorialTriggerType.EnterVolume:
+				primary = !string.IsNullOrEmpty( def.volumeId ) && _insideVolumes.Contains( def.volumeId );
+				break;
+			case TutorialTriggerType.HoldingCategory:
+				primary = _isHolding && CategoriesMatchForHold( def.holdingCategory, _heldCategory );
+				break;
+			case TutorialTriggerType.AimTreasurePile:
+				primary = _aimingTreasurePile;
+				break;
+			case TutorialTriggerType.AimCoinStack:
+				primary = _aimingCoinStack;
+				break;
+			case TutorialTriggerType.GameStart:
+				primary = true;
+				break;
+			case TutorialTriggerType.ManyCoins:
+				primary = IsManyCoinsContext( def );
+				break;
+			default:
+				primary = false;
+				break;
+		}
+
+		if ( !string.IsNullOrEmpty( def.fallbackVolumeId ) && _insideVolumes.Contains( def.fallbackVolumeId ) )
+			primary = true;
+
+		if ( def.alsoShowWhenAimingTreasurePile && _aimingTreasurePile )
+			primary = true;
+
+		if ( def.alsoShowWhenAimingCoinStack && _aimingCoinStack )
+			primary = true;
+
+		return primary;
+	}
+
+	bool IsManyCoinsContext( TutorialDefinition def )
+	{
+		int minWorld = def != null && def.minWorldCoinsToShow > 0 ? def.minWorldCoinsToShow : 100;
+		int minCarry = def != null && def.minCarriedCoinsToShow > 0 ? def.minCarriedCoinsToShow : 50;
+
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry != null && carry.GetBucketCount( CarryBucketKind.Coin ) >= minCarry )
+			return true;
+
+		return CountWorldGroundCoins() >= minWorld;
+	}
+
+	static int CountWorldGroundCoins()
+	{
+		IReadOnlyList<GroundCoinStack> stacks = GroundCoinStack.ActiveStacks;
+		if ( stacks == null || stacks.Count == 0 )
+			return 0;
+
+		int total = 0;
+		for ( int i = 0; i < stacks.Count; i++ )
+		{
+			GroundCoinStack stack = stacks[ i ];
+			if ( stack == null || stack.IsMachineBuffer )
+				continue;
+			total += stack.Count;
+		}
+		return total;
+	}
+
+	static bool CategoriesMatchForHold( TreasureCategory required, TreasureCategory held )
+	{
+		if ( required == held )
+			return true;
+		if ( required == TreasureCategory.Artifact )
+		{
+			return held == TreasureCategory.Artifact
+				|| held == TreasureCategory.Crown
+				|| held == TreasureCategory.Goblet
+				|| held == TreasureCategory.Helmet
+				|| held == TreasureCategory.Key;
+		}
+		return false;
+	}
+
+	bool IsVolumeContext( TutorialDefinition def, string volumeId )
+	{
+		if ( def == null || string.IsNullOrEmpty( volumeId ) )
+			return false;
+		if ( def.trigger == TutorialTriggerType.EnterVolume && def.volumeId == volumeId )
+			return true;
+		if ( def.fallbackVolumeId == volumeId )
+			return true;
+		return false;
 	}
 
 	bool ArePrerequisitesMet( TutorialDefinition def )
@@ -267,80 +757,347 @@ public class TutorialManager : MonoBehaviour
 		return true;
 	}
 
-	void TryStartNext()
+	void ShowTutorial( TutorialDefinition def, bool isReplay )
 	{
-		if ( _active != null )
-			return;
-		if ( _pending.Count == 0 )
-			return;
-		if ( _popup == null )
+		if ( def == null || _popup == null )
 			return;
 
-		PendingTutorial next = _pending.Dequeue();
-		_active = next.Definition;
-		_activeIsReplay = next.IsReplay;
-		_activeStepIndex = 0;
-
-		if ( _active == null )
+		if ( isReplay )
 		{
-			TryStartNext();
+			_pendingShow = null;
+			_phase = CeremonyPhase.None;
+			ShowTutorialNow( def, isReplay: true );
 			return;
 		}
 
-		MarkDiscovered( _active.id );
-		_lastShownId = _active.id;
-		ShowActiveStep();
+		RequestShow( def );
 	}
 
-	void ShowActiveStep()
+	void RequestShow( TutorialDefinition def )
+	{
+		if ( def == null || IsCompleted( def.id ) )
+			return;
+
+		if ( _active != null && _active.id == def.id && _phase == CeremonyPhase.None )
+			return;
+
+		if ( _active == null && _phase == CeremonyPhase.None )
+		{
+			ShowTutorialNow( def, isReplay: false );
+			return;
+		}
+
+		_pendingShow = def;
+		if ( _phase == CeremonyPhase.None || _phase == CeremonyPhase.TaskLock )
+			RequestHide( complete: false );
+	}
+
+	void ShowTutorialNow( TutorialDefinition def, bool isReplay )
+	{
+		if ( def == null || _popup == null )
+			return;
+		if ( !isReplay && IsCompleted( def.id ) )
+			return;
+
+		_active = def;
+		_activeIsReplay = isReplay;
+		_lastShownId = def.id;
+		_finishMarkedComplete = false;
+		_phase = CeremonyPhase.None;
+		_sorterCoinsSortedWhileActive = 0;
+		_sorterStackLoadedWhileActive = false;
+
+		if ( isReplay )
+			ClearSessionTasksFor( def );
+		else
+			MarkDiscovered( def.id );
+
+		ApplyMapHighlight( def );
+
+		_popup.Show(
+			def.title,
+			def.body,
+			TutorialKeybindFormatter.Format( def.keybindHint ),
+			TutorialPopupUI.FormatTasks( def.tasks, IsTaskCompleteInActive ) );
+
+		TryCompleteVolumeTasksIfAlreadyInside();
+	}
+
+	void TryCompleteVolumeTasksIfAlreadyInside()
+	{
+		if ( _active == null || _active.tasks == null )
+			return;
+
+		for ( int i = 0; i < _active.tasks.Length; i++ )
+		{
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || task.completeTrigger != TutorialTaskCompleteType.EnterVolume )
+				continue;
+			if ( string.IsNullOrEmpty( task.completeVolumeId ) )
+				continue;
+			if ( !_insideVolumes.Contains( task.completeVolumeId ) )
+				continue;
+			ForceCompleteAllRemainingTasks();
+			return;
+		}
+	}
+
+	void ApplyMapHighlight( TutorialDefinition def )
+	{
+		MapOverlayRegistrar.ClearHighlightedLabels();
+		if ( def != null && !string.IsNullOrEmpty( def.highlightMapLabel ) )
+			MapOverlayRegistrar.SetLabelHighlighted( def.highlightMapLabel, true );
+	}
+
+	void RequestHide( bool complete )
+	{
+		if ( _phase == CeremonyPhase.TutorialComplete || _phase == CeremonyPhase.Hiding )
+			return;
+
+		if ( complete && _active != null && !_activeIsReplay && !_finishMarkedComplete )
+		{
+			MarkCompleted( _active.id );
+			_finishMarkedComplete = true;
+		}
+
+		if ( _popup != null && _popup.IsVisible )
+		{
+			_phase = CeremonyPhase.Hiding;
+			_phaseUntil = Time.unscaledTime + _popup.HideFeedbackDuration + PostHideGapSeconds;
+			_popup.Hide();
+			return;
+		}
+
+		FinishHideTransition();
+	}
+
+	void BeginHideAfterComplete()
+	{
+		if ( _popup != null && _popup.IsVisible )
+		{
+			_phase = CeremonyPhase.Hiding;
+			_phaseUntil = Time.unscaledTime + _popup.HideFeedbackDuration + PostHideGapSeconds;
+			_popup.Hide();
+			return;
+		}
+
+		FinishHideTransition();
+	}
+
+	void FinishHideTransition()
+	{
+		_active = null;
+		_activeIsReplay = false;
+		_finishMarkedComplete = false;
+		MapOverlayRegistrar.ClearHighlightedLabels();
+		if ( _popup != null && _popup.IsVisible )
+			_popup.HideImmediate();
+
+		_phase = CeremonyPhase.Cooldown;
+		_phaseUntil = Time.unscaledTime + 0.05f;
+	}
+
+	void ClearSessionTasksFor( TutorialDefinition def )
+	{
+		if ( def == null || def.tasks == null )
+			return;
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			_sessionCompletedTaskKeys.Remove( TaskKey( def.id, task.id ) );
+		}
+	}
+
+	void RefreshActivePopup()
 	{
 		if ( _active == null || _popup == null )
 			return;
 
-		TutorialPopupStep[] steps = _active.steps;
-		if ( steps == null || _activeStepIndex < 0 || _activeStepIndex >= steps.Length )
+		string tasks = TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive );
+		if ( _popup.IsVisible )
 		{
-			FinishActive();
+			_popup.SetTasks( tasks );
 			return;
 		}
 
-		TutorialPopupStep step = steps[ _activeStepIndex ];
-		string body = step != null ? step.body : string.Empty;
-		string hint = step != null ? TutorialKeybindFormatter.Format( step.keybindHint ) : string.Empty;
-		_popup.Show( _active.title, body, hint, _activeStepIndex + 1, steps.Length, OnPopupAdvanced );
+		_popup.Show(
+			_active.title,
+			_active.body,
+			TutorialKeybindFormatter.Format( _active.keybindHint ),
+			tasks );
 	}
 
-	void OnPopupAdvanced()
+	bool IsTaskCompleteInActive( string taskId )
+	{
+		if ( _active == null )
+			return false;
+		return IsTaskCompleted( _active.id, taskId );
+	}
+
+	void TryCompleteTask( TutorialTaskCompleteType completeType )
+	{
+		if ( completeType == TutorialTaskCompleteType.None )
+			return;
+		if ( _active == null || _active.tasks == null )
+			return;
+		if ( IsCeremonyBlocking )
+			return;
+
+		bool any = false;
+		for ( int i = 0; i < _active.tasks.Length; i++ )
+		{
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || task.completeTrigger != completeType )
+				continue;
+			if ( string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( IsTaskCompleted( _active.id, task.id ) )
+				continue;
+
+			MarkTaskCompleted( _active.id, task.id );
+			any = true;
+		}
+
+		if ( !any )
+			return;
+
+		if ( _popup != null )
+		{
+			_popup.SetTasks( TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive ) );
+			_popup.PlayTaskComplete();
+		}
+
+		if ( AreAllTasksComplete( _active ) )
+		{
+			BeginTutorialCompleteCeremony();
+			return;
+		}
+
+		_phase = CeremonyPhase.TaskLock;
+		float lockSeconds = 0.35f;
+		if ( _popup != null )
+			lockSeconds = _popup.TaskCompleteFeedbackDuration + TaskCompleteHoldPadding;
+		_phaseUntil = Time.unscaledTime + lockSeconds;
+	}
+
+	void ForceCompleteAllRemainingTasks()
+	{
+		if ( _active == null || _active.tasks == null )
+			return;
+		if ( IsCeremonyBlocking )
+			return;
+
+		bool any = false;
+		for ( int i = 0; i < _active.tasks.Length; i++ )
+		{
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( IsTaskCompleted( _active.id, task.id ) )
+				continue;
+			MarkTaskCompleted( _active.id, task.id );
+			any = true;
+		}
+
+		if ( !any && AreAllTasksComplete( _active ) )
+		{
+			BeginTutorialCompleteCeremony();
+			return;
+		}
+
+		if ( !any )
+			return;
+
+		if ( _popup != null )
+		{
+			_popup.SetTasks( TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive ) );
+			_popup.PlayTaskComplete();
+		}
+
+		BeginTutorialCompleteCeremony();
+	}
+
+	void BeginTutorialCompleteCeremony()
 	{
 		if ( _active == null )
 			return;
 
-		_activeStepIndex++;
-		if ( _active.steps == null || _activeStepIndex >= _active.steps.Length )
+		if ( !_activeIsReplay && !_finishMarkedComplete )
 		{
-			FinishActive();
-			return;
+			MarkCompleted( _active.id );
+			_finishMarkedComplete = true;
 		}
 
-		ShowActiveStep();
+		_pendingShow = null;
+		if ( _popup != null )
+			_popup.PlayTutorialComplete();
+
+		float hold = TutorialCompleteDwellSeconds;
+		if ( _popup != null )
+			hold = _popup.TutorialCompleteFeedbackDuration + TutorialCompleteDwellSeconds;
+
+		_phase = CeremonyPhase.TutorialComplete;
+		_phaseUntil = Time.unscaledTime + hold;
 	}
 
-	void FinishActive()
+	bool AreAllTasksComplete( TutorialDefinition def )
 	{
-		TutorialDefinition finished = _active;
-		bool wasReplay = _activeIsReplay;
-		_active = null;
-		_activeStepIndex = 0;
-		_activeIsReplay = false;
-		_cooldownUntil = Time.unscaledTime + CooldownSeconds;
+		if ( def == null || def.tasks == null || def.tasks.Length == 0 )
+			return false;
 
-		if ( finished != null && !wasReplay )
-			MarkCompleted( finished.id );
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( !IsTaskCompleted( def.id, task.id ) )
+				return false;
+		}
 
-		if ( _popup != null )
-			_popup.Hide();
+		return true;
+	}
 
-		TryStartNext();
+	static string TaskKey( string tutorialId, string taskId )
+	{
+		return tutorialId + "/" + taskId;
+	}
+
+	bool IsTaskCompleted( string tutorialId, string taskId )
+	{
+		string key = TaskKey( tutorialId, taskId );
+		if ( _sessionCompletedTaskKeys.Contains( key ) )
+			return true;
+
+		if ( _activeIsReplay )
+			return false;
+
+		ProfileSaveData save = GetSave();
+		if ( save == null )
+			return false;
+		save.EnsureTutorialProgress();
+		return save.completedTutorialTaskIds != null && save.completedTutorialTaskIds.Contains( key );
+	}
+
+	void MarkTaskCompleted( string tutorialId, string taskId )
+	{
+		string key = TaskKey( tutorialId, taskId );
+		_sessionCompletedTaskKeys.Add( key );
+
+		if ( _activeIsReplay )
+			return;
+
+		ProfileSaveData save = GetSave();
+		if ( save == null || string.IsNullOrEmpty( tutorialId ) || string.IsNullOrEmpty( taskId ) )
+			return;
+
+		save.EnsureTutorialProgress();
+		if ( !save.completedTutorialTaskIds.Contains( key ) )
+			save.completedTutorialTaskIds.Add( key );
+
+		if ( ProfileManager.Instance != null )
+			ProfileManager.Instance.SaveCurrentStatsToProfile();
 	}
 
 	public bool Replay( string tutorialId )
@@ -348,16 +1105,8 @@ public class TutorialManager : MonoBehaviour
 		if ( _catalog == null || !_catalog.TryGetById( tutorialId, out TutorialDefinition def ) || def == null )
 			return false;
 
-		if ( _active != null )
-		{
-			_pending.Clear();
-			_active = null;
-			_activeStepIndex = 0;
-			if ( _popup != null )
-				_popup.Hide();
-		}
-
-		return TryQueue( def, isReplay: true );
+		ShowTutorial( def, isReplay: true );
+		return true;
 	}
 
 	public bool ReplayLast()
@@ -389,6 +1138,8 @@ public class TutorialManager : MonoBehaviour
 	{
 		if ( string.IsNullOrEmpty( tutorialId ) )
 			return false;
+		if ( _completedThisSession.Contains( tutorialId ) )
+			return true;
 		ProfileSaveData save = GetSave();
 		if ( save == null )
 			return false;
@@ -412,8 +1163,13 @@ public class TutorialManager : MonoBehaviour
 
 	void MarkCompleted( string tutorialId )
 	{
+		if ( string.IsNullOrEmpty( tutorialId ) )
+			return;
+
+		_completedThisSession.Add( tutorialId );
+
 		ProfileSaveData save = GetSave();
-		if ( save == null || string.IsNullOrEmpty( tutorialId ) )
+		if ( save == null )
 			return;
 
 		save.EnsureTutorialProgress();
@@ -435,15 +1191,20 @@ public class TutorialManager : MonoBehaviour
 
 	public void DebugResetProgress()
 	{
-		_pending.Clear();
 		_active = null;
-		_activeStepIndex = 0;
+		_pendingShow = null;
 		_activeIsReplay = false;
-		_startedThisSession.Clear();
+		_phase = CeremonyPhase.None;
+		_phaseUntil = 0f;
+		_finishMarkedComplete = false;
 		_lastShownId = null;
-		_cooldownUntil = 0f;
+		_lastActivatedId = null;
+		_sessionCompletedTaskKeys.Clear();
+		_completedThisSession.Clear();
+		_insideVolumes.Clear();
+		MapOverlayRegistrar.ClearHighlightedLabels();
 		if ( _popup != null )
-			_popup.Hide();
+			_popup.HideImmediate();
 
 		ProfileSaveData save = GetSave();
 		if ( save != null )
@@ -451,6 +1212,7 @@ public class TutorialManager : MonoBehaviour
 			save.EnsureTutorialProgress();
 			save.discoveredTutorialIds.Clear();
 			save.completedTutorialIds.Clear();
+			save.completedTutorialTaskIds.Clear();
 			if ( ProfileManager.Instance != null )
 				ProfileManager.Instance.SaveCurrentStatsToProfile();
 		}

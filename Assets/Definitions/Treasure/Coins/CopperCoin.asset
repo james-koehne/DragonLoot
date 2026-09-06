@@ -52,7 +52,7 @@ MonoBehaviour:
   cleaningRequirement: 0
   canStack: 1
   usesInterleavedBarStack: 0
-  coinThickness: 0.0615
+  coinThickness: 0.05
   cartGridSize: {x: 1, y: 1}
   pickupClips:
   - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}

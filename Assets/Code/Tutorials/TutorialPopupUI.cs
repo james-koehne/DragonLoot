@@ -1,12 +1,15 @@
 using System;
+using System.Text;
+
+using FeedbackSystem;
 
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Corner contextual tutorial popup. Non-blocking; advances on timer or dismiss.
-/// Uses unscaled time so pause-menu replay works.
-/// Wire references on the Interface prefab.
+/// Corner contextual tutorial popup: explanation + multi-task checkboxes.
+/// Non-blocking, gameplay-driven; no click required.
+/// Wire Feedbacks on the Interface prefab (show / hide / task complete / tutorial complete).
 /// </summary>
 public class TutorialPopupUI : MonoBehaviour
 {
@@ -14,82 +17,176 @@ public class TutorialPopupUI : MonoBehaviour
 	[SerializeField] Text titleText;
 	[SerializeField] Text bodyText;
 	[SerializeField] Text hintText;
+	[SerializeField] Text tasksText;
 	[SerializeField] Text stepText;
 	[SerializeField] Button dismissButton;
+	[SerializeField] Feedbacks showFeedback;
+	[SerializeField] Feedbacks hideFeedback;
+	[SerializeField] Feedbacks taskCompleteFeedback;
+	[SerializeField] Feedbacks tutorialCompleteFeedback;
+	[SerializeField] CanvasGroup completeGlowGroup;
 
-	Action _onAdvanced;
-	float _hideAt = -1f;
 	bool _visible;
 	bool _ready;
+	string _bodyBase = string.Empty;
+	string _tasksFormatted = string.Empty;
+	Vector3 _restScale = Vector3.one;
+	Vector2 _restAnchored;
+	bool _restAnchoredCaptured;
 
 	public bool IsVisible => _visible;
+
+	public float TaskCompleteFeedbackDuration => ResolveFeedbackDuration( taskCompleteFeedback, 0.35f );
+
+	public float TutorialCompleteFeedbackDuration => ResolveFeedbackDuration( tutorialCompleteFeedback, 0.9f );
+
+	public float HideFeedbackDuration => ResolveFeedbackDuration( hideFeedback, 0.25f );
 
 	public void Setup()
 	{
 		if ( dismissButton != null )
 		{
-			dismissButton.onClick.RemoveListener( OnDismissClicked );
-			dismissButton.onClick.AddListener( OnDismissClicked );
+			dismissButton.onClick.RemoveAllListeners();
+			dismissButton.gameObject.SetActive( false );
+			dismissButton.interactable = false;
+		}
+
+		if ( stepText != null )
+			stepText.gameObject.SetActive( false );
+
+		if ( group == null )
+			group = GetComponent<CanvasGroup>();
+
+		EnsureUnscaledFeedbacks();
+
+		_restScale = transform.localScale;
+		if ( _restScale.sqrMagnitude < 0.0001f )
+			_restScale = Vector3.one;
+
+		RectTransform rect = transform as RectTransform;
+		if ( rect != null )
+		{
+			_restAnchored = rect.anchoredPosition;
+			_restAnchoredCaptured = true;
 		}
 
 		HideImmediate();
 		_ready = true;
 	}
 
-	void Update()
+	void EnsureUnscaledFeedbacks()
 	{
-		if ( !_ready || !_visible )
-			return;
-
-		if ( _hideAt > 0f && Time.unscaledTime >= _hideAt )
-			Advance();
+		SetUnscaled( showFeedback );
+		SetUnscaled( hideFeedback );
+		SetUnscaled( taskCompleteFeedback );
+		SetUnscaled( tutorialCompleteFeedback );
 	}
 
-	public void Show( string title, string body, string hint, int stepIndex, int stepCount, Action onAdvanced )
+	static void SetUnscaled( Feedbacks feedbacks )
 	{
+		if ( feedbacks != null )
+			feedbacks.UseUnscaledTime = true;
+	}
+
+	public void Show( string title, string body, string hint, string tasksFormatted )
+	{
+		if ( !_ready )
+			Setup();
+
 		transform.SetAsLastSibling();
-		_onAdvanced = onAdvanced;
 		_visible = true;
+		_bodyBase = body ?? string.Empty;
+		_tasksFormatted = tasksFormatted ?? string.Empty;
+
+		StopAllFeedbacksExcept( null );
+
+		transform.localScale = _restScale;
+		transform.localRotation = Quaternion.identity;
+		RestoreRestAnchored();
+		RestoreTasksTransform();
+		SetGlowAlpha( 0f );
 
 		if ( titleText != null )
 			titleText.text = title ?? string.Empty;
-		if ( bodyText != null )
-			bodyText.text = body ?? string.Empty;
 		if ( hintText != null )
 		{
 			hintText.text = hint ?? string.Empty;
 			hintText.gameObject.SetActive( !string.IsNullOrEmpty( hint ) );
 		}
 
-		if ( stepText != null )
-		{
-			bool multi = stepCount > 1;
-			stepText.gameObject.SetActive( multi );
-			if ( multi )
-				stepText.text = stepIndex.ToString() + " / " + stepCount.ToString();
-		}
+		RefreshBodyAndTasks();
 
 		if ( group != null )
 		{
-			group.alpha = 1f;
-			group.blocksRaycasts = true;
-			group.interactable = true;
+			group.blocksRaycasts = false;
+			group.interactable = false;
 		}
 
-		float hold = EstimateReadSeconds( body ) + EstimateReadSeconds( hint ) * 0.35f;
-		_hideAt = Time.unscaledTime + hold;
+		if ( showFeedback != null )
+			showFeedback.Play();
+		else if ( group != null )
+			group.alpha = 1f;
+	}
+
+	public void SetTasks( string tasksFormatted )
+	{
+		_tasksFormatted = tasksFormatted ?? string.Empty;
+		RefreshBodyAndTasks();
+	}
+
+	public void PlayTaskComplete()
+	{
+		if ( taskCompleteFeedback != null )
+			taskCompleteFeedback.Play();
+	}
+
+	public void PlayTutorialComplete()
+	{
+		if ( tutorialCompleteFeedback != null )
+			tutorialCompleteFeedback.Play();
 	}
 
 	public void Hide()
 	{
-		_onAdvanced = null;
+		if ( !_visible )
+		{
+			HideImmediate();
+			return;
+		}
+
+		_visible = false;
+		if ( showFeedback != null )
+			showFeedback.Stop();
+		if ( taskCompleteFeedback != null )
+			taskCompleteFeedback.Stop();
+		if ( tutorialCompleteFeedback != null )
+			tutorialCompleteFeedback.Stop();
+
+		transform.localScale = _restScale;
+		transform.localRotation = Quaternion.identity;
+		RestoreRestAnchored();
+		RestoreTasksTransform();
+
+		if ( hideFeedback != null )
+		{
+			hideFeedback.Play();
+			return;
+		}
+
 		HideImmediate();
 	}
 
-	void HideImmediate()
+	public void HideImmediate()
 	{
 		_visible = false;
-		_hideAt = -1f;
+		StopAllFeedbacksExcept( null );
+
+		transform.localScale = _restScale;
+		transform.localRotation = Quaternion.identity;
+		RestoreRestAnchored();
+		RestoreTasksTransform();
+		SetGlowAlpha( 0f );
+
 		if ( group != null )
 		{
 			group.alpha = 0f;
@@ -98,27 +195,113 @@ public class TutorialPopupUI : MonoBehaviour
 		}
 	}
 
-	void OnDismissClicked()
+	void StopAllFeedbacksExcept( Feedbacks keep )
 	{
-		Advance();
+		StopIfNot( showFeedback, keep );
+		StopIfNot( hideFeedback, keep );
+		StopIfNot( taskCompleteFeedback, keep );
+		StopIfNot( tutorialCompleteFeedback, keep );
 	}
 
-	void Advance()
+	static void StopIfNot( Feedbacks feedbacks, Feedbacks keep )
 	{
-		if ( !_visible )
+		if ( feedbacks != null && feedbacks != keep )
+			feedbacks.Stop();
+	}
+
+	void SetGlowAlpha( float alpha )
+	{
+		if ( completeGlowGroup != null )
+			completeGlowGroup.alpha = alpha;
+	}
+
+	void RestoreTasksTransform()
+	{
+		if ( tasksText == null )
+			return;
+		Transform t = tasksText.transform;
+		t.localScale = Vector3.one;
+		t.localRotation = Quaternion.identity;
+	}
+
+	void RestoreRestAnchored()
+	{
+		if ( !_restAnchoredCaptured )
+			return;
+		RectTransform rect = transform as RectTransform;
+		if ( rect != null )
+			rect.anchoredPosition = _restAnchored;
+	}
+
+	void RefreshBodyAndTasks()
+	{
+		if ( tasksText != null )
+		{
+			if ( bodyText != null )
+				bodyText.text = _bodyBase;
+			tasksText.text = _tasksFormatted;
+			tasksText.supportRichText = true;
+			tasksText.gameObject.SetActive( !string.IsNullOrEmpty( _tasksFormatted ) );
+			return;
+		}
+
+		if ( bodyText == null )
 			return;
 
-		Action done = _onAdvanced;
-		_onAdvanced = null;
-		HideImmediate();
-		if ( done != null )
-			done();
+		bodyText.supportRichText = true;
+		if ( string.IsNullOrEmpty( _tasksFormatted ) )
+			bodyText.text = _bodyBase;
+		else if ( string.IsNullOrEmpty( _bodyBase ) )
+			bodyText.text = _tasksFormatted;
+		else
+			bodyText.text = _bodyBase + "\n\n" + _tasksFormatted;
 	}
 
-	static float EstimateReadSeconds( string text )
+	static float ResolveFeedbackDuration( Feedbacks feedbacks, float fallback )
 	{
-		if ( string.IsNullOrEmpty( text ) )
-			return 1.75f;
-		return Mathf.Clamp( text.Length / 16f, 2.25f, 10f );
+		if ( feedbacks == null || feedbacks.FeedbackList == null || feedbacks.FeedbackList.Count == 0 )
+			return fallback;
+
+		float max = 0f;
+		for ( int i = 0; i < feedbacks.FeedbackList.Count; i++ )
+		{
+			Feedback feedback = feedbacks.FeedbackList[ i ];
+			if ( feedback == null || !feedback.Enabled )
+				continue;
+			float hold = feedback.GetHoldDuration();
+			if ( hold > max )
+				max = hold;
+		}
+
+		return max > 0.01f ? max : fallback;
+	}
+
+	public static string FormatTasks( TutorialTask[] tasks, Func<string, bool> isComplete )
+	{
+		if ( tasks == null || tasks.Length == 0 )
+			return string.Empty;
+
+		StringBuilder sb = new StringBuilder();
+		for ( int i = 0; i < tasks.Length; i++ )
+		{
+			TutorialTask task = tasks[ i ];
+			if ( task == null )
+				continue;
+
+			if ( sb.Length > 0 )
+				sb.Append( '\n' );
+
+			bool done = isComplete != null && !string.IsNullOrEmpty( task.id ) && isComplete( task.id );
+			if ( done )
+				sb.Append( "<color=#9ad89a>✓ " );
+			else
+				sb.Append( "• " );
+
+			sb.Append( task.label ?? string.Empty );
+			if ( done )
+				sb.Append( "</color>" );
+		}
+
+		return sb.ToString();
 	}
 }

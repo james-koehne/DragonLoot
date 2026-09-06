@@ -20,11 +20,18 @@ public class DebugPlayerSection : DebugOverlaySection
 		if ( climbingEnabled != player.IsClimbingEnabled )
 			player.SetClimbingEnabled( climbingEnabled );
 
+		bool sprintHold = player.CurrentSlideInputMode == SlideInputMode.SprintHold;
+		bool nextSprintHold = GUILayout.Toggle( sprintHold, "Slide: Sprint Hold (off = Charge)" );
+		if ( nextSprintHold != sprintHold )
+			player.SetSlideInputMode( nextSprintHold ? SlideInputMode.SprintHold : SlideInputMode.Charge );
+
 		GUILayout.Label( $"Climbing: {player.IsClimbing}" );
 		GUILayout.Label( $"Sliding: {player.IsSliding}" );
 		if ( player.IsSlideExitBoostActive )
 			GUILayout.Label( $"Exit boost: {player.SlideExitBoostSpeed:0.00} u/s" );
-		if ( !player.IsSliding && player.SlideEnterChargeProgress > 0f )
+		if ( player.CurrentSlideInputMode == SlideInputMode.Charge
+		     && !player.IsSliding
+		     && player.SlideEnterChargeProgress > 0f )
 			GUILayout.Label( $"Slide charge: {player.SlideEnterChargeProgress * 100f:0}%" );
 		GUILayout.Label( $"State: {player.MovementState}" );
 

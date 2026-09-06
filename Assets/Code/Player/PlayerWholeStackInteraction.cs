@@ -79,7 +79,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			if ( carry == null || carry.Count <= 0 )
 				return false;
 
-			return TryResolveWholePlace( out _, out _, out _, out _, out _, out _, out _, out _ );
+			return TryResolveWholePlace( out _, out _, out bool valid, out _, out _, out _, out _, out _ ) && valid;
 		}
 	}
 
@@ -327,23 +327,29 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( _pickupCoinStack != null )
 		{
 			CompleteCoinStackPickup( carry, _pickupCoinStack );
+			EventBus.Publish( new WholeStackPickupCompletedEvent { Bucket = CarryBucketKind.Coin } );
 			return;
 		}
 
 		if ( _pickupGoldBarStack != null )
 		{
 			CompleteGoldBarStackPickup( carry, _pickupGoldBarStack );
+			EventBus.Publish( new WholeStackPickupCompletedEvent { Bucket = CarryBucketKind.Artifact } );
 			return;
 		}
 
 		if ( _pickupDisplay != null && _pickupDisplaySlot >= 0 )
 		{
 			CompleteDisplaySlotPickup( carry, _pickupDisplay, _pickupDisplaySlot );
+			EventBus.Publish( new WholeStackPickupCompletedEvent { Bucket = CarryBucketKind.Coin } );
 			return;
 		}
 
 		if ( _pickupPyramid != null )
+		{
 			CompleteGemPyramidPickup( carry, _pickupPyramid );
+			EventBus.Publish( new WholeStackPickupCompletedEvent { Bucket = CarryBucketKind.Gem } );
+		}
 	}
 
 	void CompleteCoinStackPickup( PlayerCarry carry, GroundCoinStack stack )
@@ -510,7 +516,10 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			{
 				CoinSortingStation station = _placeHopper.Station;
 				if ( station != null )
+				{
 					station.TryDumpCarryIntoHopperAnimated( carry );
+					EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+				}
 				return;
 			}
 
@@ -520,6 +529,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 					carry,
 					_placeDisplay,
 					_placeDisplaySlot );
+				EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
 				return;
 			}
 
@@ -530,6 +540,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				return;
 
 			PlaceCoinDefinitions( defs, startPos, startRot, carry.CoinHandVariationSeed, _placePos, _placeRot, _placeCoinTarget );
+			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
 			return;
 		}
 
@@ -539,6 +550,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( bucket == CarryBucketKind.Gem )
 		{
 			PlaceGemCollection( items, _placePos );
+			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
 			return;
 		}
 
@@ -564,6 +576,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				carry.TryAbsorbAtHeldBottom( ItemScratch );
 			PlaceScratch.Clear();
 			ItemScratch.Clear();
+			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
 			return;
 		}
 
@@ -573,6 +586,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			PlaceArtifactCollection( ItemScratch, _placePos, _placeRot );
 		PlaceScratch.Clear();
 		ItemScratch.Clear();
+		EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
 	}
 
 	void PlaceCoinDefinitionsOnDisplay(

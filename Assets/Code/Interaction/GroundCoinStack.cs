@@ -42,6 +42,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	CoinSortingStation _machineStation;
 	int _visualGeneration;
 	float _variationSeed;
+	bool _preferImperfectLod = true;
 
 	[SerializeField]
 	Feedbacks onLandFeedback;
@@ -267,6 +268,41 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		EnsureVariationSeed();
 		EnsureCountFeedback();
 		SetInteractionName( "Coin Stack" );
+		_preferImperfectLod = EvaluatePreferImperfectLod( forceNear: true );
+	}
+
+	void LateUpdate()
+	{
+		bool wantImperfect = EvaluatePreferImperfectLod( forceNear: false );
+		if ( wantImperfect == _preferImperfectLod )
+			return;
+
+		_preferImperfectLod = wantImperfect;
+		RefreshVisuals( snap: true );
+	}
+
+	bool EvaluatePreferImperfectLod( bool forceNear )
+	{
+		CoinStackVisualDefinition def = null;
+		def = RuntimeDefinition.Resolve( ref def );
+		if ( !CoinStackImperfectLayout.IsImperfectEnabled( def ) )
+			return false;
+
+		float maxDist = def.imperfectCylinderDistance;
+		if ( maxDist <= 0.0001f )
+			return true;
+
+		if ( !TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
+			return true;
+
+		float distSq = ( ContactPosition - playerPos ).sqrMagnitude;
+		if ( forceNear || _preferImperfectLod )
+		{
+			float leave = maxDist + Mathf.Max( 0f, def.imperfectCylinderDistanceHysteresis );
+			return distSq <= leave * leave;
+		}
+
+		return distSq <= maxDist * maxDist;
 	}
 
 	void EnsureVariationSeed()
@@ -274,8 +310,22 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( _variationSeed > 0.0001f )
 			return;
 
+		// Mix instance id with contact XZ so nearby stacks rarely share the same pattern.
 		int id = Mathf.Abs( GetInstanceID() );
-		_variationSeed = ( id % 9973 ) + 1;
+		Vector3 p = transform.position;
+		unchecked
+		{
+			int h = id;
+			h ^= (int)( p.x * 738.56093f );
+			h ^= (int)( p.z * 193.49663f );
+			h ^= (int)( p.y * 83.492791f );
+			if ( h < 0 )
+				h = -h;
+			_variationSeed = ( h % 99773 ) + 1 + ( ( h >> 3 ) & 1023 ) * 0.001f;
+		}
+
+		if ( _variationSeed < 0.0001f )
+			_variationSeed = 1f;
 	}
 
 	public void ApplyCylinderVariationSeed()
@@ -838,7 +888,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		while ( _settledLive.Count <= slotIndex )
 			_settledLive.Add( null );
 
-		Vector3 localPos = Vector3.up * GetOffsetForIndex( slotIndex );
+		Vector3 localPos = GetSlotLocalPosition( slotIndex );
 		item.EnterStacked( this, transform, localPos, Quaternion.identity );
 		_settledLive[ slotIndex ] = item;
 		RefreshVisuals( snap: true );
@@ -1295,7 +1345,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			_slots.Add( def );
 			if ( live != null )
 			{
-				Vector3 localPos = Vector3.up * GetOffsetForIndex( _slots.Count - 1 );
+				Vector3 localPos = GetSlotLocalPosition( _slots.Count - 1 );
 				live.EnterStacked( this, transform, localPos, Quaternion.identity );
 				_settledLive.Add( live );
 			}
@@ -1344,7 +1394,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			transform,
 			BindDefBuffer,
 			snap,
-			bindCovered );
+			bindCovered,
+			useHeldScale: false,
+			variationSeed: VariationSeed,
+			preferImperfect: _preferImperfectLod );
 		ApplyCylinderVariationSeed();
 
 		for ( int b = 0; b < BindIndexMap.Count; b++ )
@@ -1370,7 +1423,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 			if ( live != null )
 			{
-				live.EnterStacked( this, transform, Vector3.up * GetOffsetForIndex( i ), Quaternion.identity );
+				Vector3 localPos = GetSlotLocalPosition( i );
+				live.EnterStacked( this, transform, localPos, Quaternion.identity );
 				live.SetMeshVisible( true );
 				continue;
 			}
@@ -1439,7 +1493,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return;
 		}
 
-		item.EnterStacked( this, transform, Vector3.up * GetOffsetForIndex( index ), Quaternion.identity );
+		item.EnterStacked( this, transform, GetSlotLocalPosition( index ), Quaternion.identity );
 		item.SetMeshVisible( true );
 		_settledLive[ index ] = item;
 	}
@@ -1525,10 +1579,44 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		return height;
 	}
 
-	public Vector3 GetSlotWorldPosition( int index )
+	public Vector3 GetSlotLocalPosition( int index )
 	{
 		float y = GetOffsetForIndex( index );
-		return transform.position + Vector3.up * y;
+		Vector2 xz = ResolveSlotLocalXz( index );
+		return new Vector3( xz.x, y, xz.y );
+	}
+
+	public Vector3 GetSlotWorldPosition( int index )
+	{
+		return transform.TransformPoint( GetSlotLocalPosition( index ) );
+	}
+
+	Vector2 ResolveSlotLocalXz( int index )
+	{
+		if ( !_preferImperfectLod )
+			return Vector2.zero;
+
+		CoinStackVisualDefinition def = null;
+		def = RuntimeDefinition.Resolve( ref def );
+		if ( !CoinStackImperfectLayout.IsImperfectEnabled( def ) )
+			return Vector2.zero;
+
+		int layoutCount = Mathf.Max( _slots.Count, index + 1 );
+		if ( !CoinStackImperfectLayout.TryGetLocalXz(
+			def,
+			VariationSeed,
+			layoutCount,
+			index,
+			_slots,
+			out Vector2 xz ) )
+		{
+			return Vector2.zero;
+		}
+
+		def.GetMeshReferenceSize( out float refDiameter, out _ );
+		refDiameter = Mathf.Max( 0.0001f, refDiameter );
+		float scaleXZ = ( ResolveDiameter() * def.diameterScale ) / refDiameter;
+		return xz * scaleXZ;
 	}
 
 	public bool TryGetHomogeneousDefinition( out TreasureDefinition definition )

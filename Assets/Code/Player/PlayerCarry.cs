@@ -75,6 +75,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	float _smoothedUprightPitch;
 	float _cycleCooldown;
 	CarryBucketKind _selected = CarryBucketKind.Coin;
+	CarryBucketKind _lastPublishedHeldBucket = (CarryBucketKind)(-1);
+	int _lastPublishedHeldCount = -1;
 	float _coinHandVariationSeed;
 
 	CarryDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
@@ -203,7 +205,74 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			Bucket = kind,
 			Carry = this
 		} );
+		PublishHeldCategoryChanged();
 		return true;
+	}
+
+	public bool IsHoldingCategory( TreasureCategory category )
+	{
+		EnsureBuckets();
+		if ( !TryMapCategoryToBucket( category, out CarryBucketKind bucketKind ) )
+			return false;
+		if ( _selected != bucketKind )
+			return false;
+		return GetBucket( bucketKind ).Count > 0;
+	}
+
+	public static bool TryMapCategoryToBucket( TreasureCategory category, out CarryBucketKind bucket )
+	{
+		switch ( category )
+		{
+			case TreasureCategory.Coin:
+				bucket = CarryBucketKind.Coin;
+				return true;
+			case TreasureCategory.Gem:
+				bucket = CarryBucketKind.Gem;
+				return true;
+			case TreasureCategory.Artifact:
+			case TreasureCategory.Crown:
+			case TreasureCategory.Goblet:
+			case TreasureCategory.Helmet:
+			case TreasureCategory.Key:
+				bucket = CarryBucketKind.Artifact;
+				return true;
+			default:
+				bucket = CarryBucketKind.Coin;
+				return false;
+		}
+	}
+
+	public static TreasureCategory MapBucketToCategory( CarryBucketKind bucket )
+	{
+		switch ( bucket )
+		{
+			case CarryBucketKind.Gem:
+				return TreasureCategory.Gem;
+			case CarryBucketKind.Artifact:
+				return TreasureCategory.Artifact;
+			default:
+				return TreasureCategory.Coin;
+		}
+	}
+
+	void PublishHeldCategoryChanged()
+	{
+		EnsureBuckets();
+		CategoryBucket bucket = GetBucket( _selected );
+		int count = bucket != null ? bucket.Count : 0;
+		if ( _selected == _lastPublishedHeldBucket && count == _lastPublishedHeldCount )
+			return;
+
+		_lastPublishedHeldBucket = _selected;
+		_lastPublishedHeldCount = count;
+
+		TreasureCategory category = MapBucketToCategory( _selected );
+		EventBus.Publish( new PlayerHeldCategoryChangedEvent
+		{
+			Category = category,
+			IsHolding = count > 0,
+			Carry = this
+		} );
 	}
 
 	public bool ContainsItem( TreasureItem item )
@@ -352,6 +421,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		TryCycleFromScroll();
 		SmoothCarryPoses();
 		RefreshHeldCoinCylinder();
+		PublishHeldCategoryChanged();
 	}
 
 	/// <summary>

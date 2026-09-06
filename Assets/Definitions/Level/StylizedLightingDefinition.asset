@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c48e51e92be38b940a96cd4667bbe7d0, type: 3}
   m_Name: StylizedLightingDefinition
   m_EditorClassIdentifier: Assembly-CSharp::StylizedLightingDefinition
-  falloffExponent: 2
+  falloffExponent: 3
   falloffEdgeSoftness: 0.25
   diffuseWrap: 0.4
   directLightScale: 1
   enableSpecular: 1
   specularIntensity: 7.5
-  specularSize: 50
+  specularSize: 80
   specularColor: {r: 1, g: 1, b: 1, a: 1}
   rimColor: {r: 1, g: 0.33686084, b: 0, a: 1}
   rimIntensity: 0
@@ -28,7 +28,7 @@ MonoBehaviour:
   receiveShadows: 1
   ambientIntensity: 4
   ambientTint: {r: 0.028301895, g: 0.023095414, b: 0.015085444, a: 1}
-  ambientFloor: 0.15
+  ambientFloor: 0.1
   saturation: 1.1
   contrast: 1
   environmentReflections: 0

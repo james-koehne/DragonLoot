@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_FindCoinHall
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_find_coin_hall
+  title: Coin Hall
+  tags:
+  - coins
+  - map
+  trigger: 9
+  holdingCategory: 0
+  volumeId: 
+  fallbackVolumeId: volume_coin_hall
+  alsoShowWhenAimingTreasurePile: 0
+  prerequisiteTutorialIds:
+  - tut_digging
+  - tut_coin_placement
+  - tut_coin_stacking
+  highlightMapLabel: Coin Hall
+  body: Time to store your coins in the Coin Hall. Open the map (M) and look for
+    the highlighted Coin Hall marker, then head there.
+  keybindHint: '[M] Open map'
+  tasks:
+  - id: open_map
+    label: Open the map
+    completeTrigger: 10
+    completeVolumeId: 
+  - id: reach_coin_hall
+    label: Find the Coin Hall
+    completeTrigger: 11
+    completeVolumeId: volume_coin_hall

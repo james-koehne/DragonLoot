@@ -26,6 +26,8 @@ CBUFFER_START(UnityPerMaterial)
     half _ValueVariation;
     half _VariationSeed;
     half _CoinCount;
+    half _UseBakedCoinIndex;
+    half _ChunkBaseIndex;
     half _BandContrast;
     half _GrooveDarkness;
     half _MeshBoundsMinY;

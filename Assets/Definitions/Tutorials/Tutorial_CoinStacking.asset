@@ -17,14 +17,25 @@ MonoBehaviour:
   tags:
   - coins
   - stacking
-  trigger: 4
+  trigger: 9
+  holdingCategory: 0
   volumeId: 
   fallbackVolumeId: 
-  prerequisiteTutorialIds: []
-  steps:
-  - body: Drop matching coins onto each other to build a stack.
-    keybindHint: '[{SecondaryInteract}] Place on coin'
-  - body: Hold the stack pickup control to lift an entire stack at once.
-    keybindHint: '[{WholeStackPickup}] Whole stack'
-  - body: Hold the stack place control to set a whole stack back down.
-    keybindHint: '[{WholeStackPlace}] Place stack'
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 1
+  prerequisiteTutorialIds:
+  - tut_coin_placement
+  highlightMapLabel: 
+  body: Stack matching coins, then hold to pick up or place an entire stack at once.
+  keybindHint: '[{SecondaryInteract}] Stack  [{WholeStackPickup}] Hold pickup  [{WholeStackPlace}]
+    Hold place'
+  tasks:
+  - id: stack_coins
+    label: Stack coins
+    completeTrigger: 4
+  - id: whole_stack_place
+    label: Hold to place a stack
+    completeTrigger: 6
+  - id: whole_stack_pickup
+    label: Hold to pick up a stack
+    completeTrigger: 5

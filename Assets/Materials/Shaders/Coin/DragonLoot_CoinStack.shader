@@ -43,6 +43,8 @@ Shader "DragonLoot/Coin Stack"
 
         [Header(Stack Bands)]
         _CoinCount("Coin Count", Float) = 1
+        [HideInInspector] _UseBakedCoinIndex("Use Baked Coin Index", Float) = 0
+        [HideInInspector] _ChunkBaseIndex("Chunk Base Index", Float) = 0
         _BandContrast("Band Contrast", Range(0, 2)) = 1.1
         _GrooveDarkness("Groove Darkness", Range(0, 1)) = 0.35
         _GrooveWidth("Groove Width", Range(0.01, 0.25)) = 0.08

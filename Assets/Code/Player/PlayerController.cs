@@ -134,12 +134,24 @@ public class PlayerController : MonoBehaviour
 	float ClimbJumpForce => RuntimeDefinition.Get( Definition, d => d.climbJumpForce, 9f );
 	float ClimbExitHysteresis => RuntimeDefinition.Get( Definition, d => d.climbExitHysteresis, 5f );
 	float ClimbReleaseHoldTime => RuntimeDefinition.Get( Definition, d => d.climbReleaseHoldTime, 0.25f );
+	SlideInputMode ActiveSlideInputMode
+	{
+		get
+		{
+			PlayerControllerDefinition definition = Definition;
+			if ( definition == null )
+				return global::SlideInputMode.SprintHold;
+			return definition.slideInputMode;
+		}
+	}
 	float SlideAngle => RuntimeDefinition.Get( Definition, d => d.slideAngle, 45f );
 	float SlideGravityScale => RuntimeDefinition.Get( Definition, d => d.slideGravityScale, 1f );
+	float SlideMaxSpeed => RuntimeDefinition.Get( Definition, d => d.slideMaxSpeed, 32f );
 	float SlideSteer => RuntimeDefinition.Get( Definition, d => d.slideSteer, 12f );
 	float SlideBrake => RuntimeDefinition.Get( Definition, d => d.slideBrake, 18f );
 	float SlideExitDot => RuntimeDefinition.Get( Definition, d => d.slideExitDot, 0.55f );
 	float SlideExitHysteresis => RuntimeDefinition.Get( Definition, d => d.slideExitHysteresis, 5f );
+	float SlideMinDownhillSpeed => RuntimeDefinition.Get( Definition, d => d.slideMinDownhillSpeed, 1.5f );
 	float SlideEnterHoldTime => RuntimeDefinition.Get( Definition, d => d.slideEnterHoldTime, 0.4f );
 	float SlideEnterMinPitch => RuntimeDefinition.Get( Definition, d => d.slideEnterMinPitch, 20f );
 	float SlideEnterDownhillDot => RuntimeDefinition.Get( Definition, d => d.slideEnterDownhillDot, 0.5f );
@@ -193,6 +205,7 @@ public class PlayerController : MonoBehaviour
 	public bool IsSliding => _isSliding;
 	public bool IsClimbing => _isClimbing;
 	public bool IsClimbingEnabled => ClimbingEnabled;
+	public SlideInputMode CurrentSlideInputMode => ActiveSlideInputMode;
 	public bool IsSlideExitBoostActive => _slideExitBoostActive;
 	public float SlideExitBoostSpeed => _slideExitBoostSpeed;
 	public bool IsGliding => _isGliding;
@@ -277,11 +290,28 @@ public class PlayerController : MonoBehaviour
 			ClearClimb();
 	}
 
-	/// <summary>0–1 progress toward committed slide while entry conditions are held.</summary>
+	/// <summary>Switch slide entry between Charge (W hold) and SprintHold (Shift). Clears charge / exits active SprintHold slide.</summary>
+	public void SetSlideInputMode( SlideInputMode mode )
+	{
+		PlayerControllerDefinition definition = Definition;
+		if ( definition == null )
+			return;
+
+		SlideInputMode previous = definition.slideInputMode;
+		definition.slideInputMode = mode;
+		if ( previous == global::SlideInputMode.Charge && mode != global::SlideInputMode.Charge )
+			_slideEnterCharge = 0f;
+		if ( previous == global::SlideInputMode.SprintHold && mode != global::SlideInputMode.SprintHold && _isSliding )
+			ExitSlide( retainMomentum: true );
+	}
+
+	/// <summary>0–1 progress toward committed slide while Charge-mode entry conditions are held.</summary>
 	public float SlideEnterChargeProgress
 	{
 		get
 		{
+			if ( ActiveSlideInputMode != global::SlideInputMode.Charge )
+				return 0f;
 			float hold = SlideEnterHoldTime;
 			if ( hold <= 0.0001f )
 				return 0f;
@@ -968,7 +998,8 @@ public class PlayerController : MonoBehaviour
 
 	void BeginSlideExitBoost( float slideSpeed, Vector3 exitDirection )
 	{
-		if ( slideSpeed <= 0.01f )
+		// Slow exits keep residual velocity into walk/sprint — no ice-coast boost.
+		if ( slideSpeed <= WalkSpeed + 0.5f )
 		{
 			ClearSlideExitBoost();
 			return;
@@ -1043,6 +1074,7 @@ public class PlayerController : MonoBehaviour
 		// slopes (where 3D downhill is mostly vertical) can still align with W.
 		Vector3 flatDownhill = GetFlatDirection( downhill );
 		bool hasFlatDownhill = flatDownhill.sqrMagnitude > MinDownhillSqr;
+		bool sprintHoldMode = ActiveSlideInputMode == global::SlideInputMode.SprintHold;
 
 		if ( _isSliding )
 		{
@@ -1061,7 +1093,15 @@ public class PlayerController : MonoBehaviour
 				     && ( climbDot > 0.85f || _planarVelocity.magnitude <= SlideExitSpeedThreshold ) )
 				{
 					ExitSlide( retainMomentum: true );
+					return;
 				}
+			}
+
+			// No longer traveling downhill (contour / stall) — end the slide.
+			if ( hasDownhill && Vector3.Dot( _planarVelocity, downhill ) < SlideMinDownhillSpeed )
+			{
+				ExitSlide( retainMomentum: true );
+				return;
 			}
 
 			return;
@@ -1073,7 +1113,7 @@ public class PlayerController : MonoBehaviour
 			return;
 		}
 
-		// Uphill intent must never charge a slide.
+		// Uphill intent must never enter a slide.
 		if ( moveIntent.sqrMagnitude > 0.0001f )
 		{
 			float uphillDot = Vector3.Dot( moveIntent.normalized, -flatDownhill );
@@ -1085,10 +1125,23 @@ public class PlayerController : MonoBehaviour
 		}
 
 		bool lookingDown = _cameraLook != null && _cameraLook.Pitch >= SlideEnterMinPitch;
-		bool forwardHeld = forwardInput >= SlideEnterForwardInput;
 		bool alignedDownhill = moveIntent.sqrMagnitude > 0.0001f
 			&& Vector3.Dot( moveIntent.normalized, flatDownhill ) >= SlideEnterDownhillDot;
 
+		if ( sprintHoldMode )
+		{
+			_slideEnterCharge = 0f;
+			if ( _wantsSprint && lookingDown && alignedDownhill )
+			{
+				_isSliding = true;
+				ClearClimb();
+				ClearSlideExitBoost();
+			}
+
+			return;
+		}
+
+		bool forwardHeld = forwardInput >= SlideEnterForwardInput;
 		if ( lookingDown && forwardHeld && alignedDownhill )
 		{
 			_slideEnterCharge += Time.deltaTime;
@@ -1147,6 +1200,10 @@ public class PlayerController : MonoBehaviour
 
 		if ( _hasGroundHit )
 			_planarVelocity = Vector3.ProjectOnPlane( _planarVelocity, _groundNormal );
+
+		float maxSpeed = SlideMaxSpeed;
+		if ( maxSpeed > 0.01f && _planarVelocity.sqrMagnitude > maxSpeed * maxSpeed )
+			_planarVelocity = _planarVelocity.normalized * maxSpeed;
 
 		UpdateLastSlideTravelDirection( downhill );
 

@@ -292,9 +292,10 @@ public static class CoinColumnCylinderBinder
 
 	/// <summary>
 	/// One multi-type cylinder from logical definitions (no per-coin meshes required).
-	/// Fills <paramref name="cylinderCovered"/> with true for slots represented by the cylinder.
-	/// When <paramref name="useHeldScale"/> is true, diameter and thickness use heldScale
-	/// (heldScale.y / worldScale.y, typically 0.2/0.3).
+	/// Fills <paramref name="cylinderCovered"/> with true for slots represented by chunks
+	/// or the cylinder. Imperfect leftover slots (no chunk) stay uncovered so live coins show.
+	/// When <paramref name="useHeldScale"/> is true, imperfect LOD is skipped.
+	/// When <paramref name="preferImperfect"/> is false, the full column uses the cylinder.
 	/// </summary>
 	public static void BindDefinitions(
 		ref CoinStackCylinderVisual primaryVisual,
@@ -302,7 +303,9 @@ public static class CoinColumnCylinderBinder
 		IList<TreasureDefinition> slots,
 		bool snap,
 		bool[] cylinderCovered,
-		bool useHeldScale = false )
+		bool useHeldScale = false,
+		float variationSeed = 1f,
+		bool preferImperfect = true )
 	{
 		if ( cylinderCovered != null )
 		{
@@ -325,7 +328,16 @@ public static class CoinColumnCylinderBinder
 			coinCount++;
 		}
 
-		if ( coinCount < MinCountForCylinder )
+		CoinStackVisualDefinition visualDef = ResolveVisualDefinition();
+		bool useImperfect = !useHeldScale
+			&& preferImperfect
+			&& CoinStackImperfectLayout.IsImperfectEnabled( visualDef );
+		int imperfectBudget = useImperfect
+			? CoinStackImperfectLayout.ResolveImperfectBudget( visualDef, coinCount )
+			: 0;
+
+		// Below cylinder min and nothing to batch: leave individuals to the owner.
+		if ( coinCount < MinCountForCylinder && imperfectBudget <= 0 )
 		{
 			DestroyContainerOnParent( parent, HostChildName );
 			primaryVisual = null;
@@ -343,20 +355,61 @@ public static class CoinColumnCylinderBinder
 		container.localRotation = Quaternion.identity;
 		container.localScale = Vector3.one;
 
-		MultiSlotBuffer.Clear();
-		float runHeight = 0f;
 		float maxDiameter = 0f;
 		for ( int i = 0; i < coinCount; i++ )
+		{
+			float d = ResolveRunDiameter( slots[ i ], -1f, useHeldScale );
+			if ( d > maxDiameter )
+				maxDiameter = d;
+		}
+
+		List<CoinStackImperfectLayout.ChunkPlacement> imperfectPlacements = ImperfectPlacementScratch;
+		int chunkCovered = 0;
+		if ( imperfectBudget > 0 )
+		{
+			chunkCovered = CoinStackImperfectLayout.BuildVisiblePlacements(
+				visualDef,
+				variationSeed,
+				imperfectBudget,
+				slots,
+				imperfectPlacements );
+		}
+		else
+		{
+			imperfectPlacements.Clear();
+		}
+
+		// If near imperfect but no complete chunks and no coins above budget, skip binder entirely.
+		int cylinderStart = imperfectBudget;
+		int cylinderCount = coinCount - cylinderStart;
+		if ( chunkCovered <= 0 && cylinderCount <= 0 )
+		{
+			DestroyContainerOnParent( parent, HostChildName );
+			primaryVisual = null;
+			return;
+		}
+
+		BindImperfectChunks(
+			container,
+			visualDef,
+			slots,
+			imperfectPlacements,
+			maxDiameter,
+			variationSeed,
+			ref primaryVisual );
+
+		MultiSlotBuffer.Clear();
+		float runHeight = 0f;
+		for ( int i = cylinderStart; i < coinCount; i++ )
 		{
 			TreasureDefinition def = slots[ i ];
 			MultiSlotBuffer.Add( def );
 			runHeight += useHeldScale
 				? TreasureStackSpacing.GetHeldStep( def )
 				: TreasureStackSpacing.GetStep( def );
-			float d = ResolveRunDiameter( def, -1f, useHeldScale );
-			if ( d > maxDiameter )
-				maxDiameter = d;
 		}
+
+		float imperfectHeight = CoinStackImperfectLayout.MeasureSlotHeight( slots, 0, cylinderStart );
 
 		CoinStackCylinderVisual segmentVisual = EnsureSegmentVisual( container, 0, ref primaryVisual );
 		if ( segmentVisual == null )
@@ -367,22 +420,211 @@ public static class CoinColumnCylinderBinder
 		}
 
 		Transform segmentHost = segmentVisual.transform;
-		segmentHost.localPosition = Vector3.zero;
+		segmentHost.localPosition = Vector3.up * imperfectHeight;
 		segmentHost.localRotation = Quaternion.identity;
 		segmentHost.localScale = Vector3.one;
+		segmentVisual.SetVariationSeed( variationSeed );
 
-		if ( snap )
-			segmentVisual.SnapToCountMulti( MultiSlotBuffer, maxDiameter, runHeight );
+		if ( MultiSlotBuffer.Count > 0 )
+		{
+			if ( snap )
+			{
+				segmentVisual.SnapToCountMulti(
+					MultiSlotBuffer,
+					maxDiameter,
+					runHeight,
+					slots,
+					cylinderStart );
+			}
+			else
+			{
+				segmentVisual.SetStackMulti(
+					MultiSlotBuffer,
+					snap: false,
+					maxDiameter,
+					runHeight,
+					slots,
+					cylinderStart );
+			}
+
+			ApplyCylinderShadowCasting( segmentVisual, heldColumn: useHeldScale );
+		}
 		else
-			segmentVisual.SetStackMulti( MultiSlotBuffer, snap: false, maxDiameter, runHeight );
+		{
+			segmentVisual.SetStack( null, 0 );
+			if ( segmentVisual.MeshRenderer != null )
+				segmentVisual.MeshRenderer.enabled = false;
+			if ( imperfectPlacements.Count > 0 )
+				segmentVisual.EnsureSharedTypeMap( slots );
+		}
 
-		ApplyCylinderShadowCasting( segmentVisual, heldColumn: useHeldScale );
+		ApplyImperfectChunkMpbs( container, imperfectPlacements, visualDef, primaryVisual, variationSeed );
+
 		DestroyExtraSegmentChildren( container, 1 );
+		DestroyExtraImperfectChildren( container, imperfectPlacements.Count );
 
 		if ( cylinderCovered != null )
 		{
 			for ( int i = 0; i < coinCount && i < cylinderCovered.Length; i++ )
-				cylinderCovered[ i ] = true;
+			{
+				if ( i < imperfectBudget )
+					cylinderCovered[ i ] = false;
+				else
+					cylinderCovered[ i ] = true;
+			}
+
+			for ( int p = 0; p < imperfectPlacements.Count; p++ )
+			{
+				CoinStackImperfectLayout.ChunkPlacement placement = imperfectPlacements[ p ];
+				int end = placement.BaseIndex + placement.CoinCount;
+				for ( int i = placement.BaseIndex; i < end && i < cylinderCovered.Length; i++ )
+					cylinderCovered[ i ] = true;
+			}
+		}
+	}
+
+	static readonly List<CoinStackImperfectLayout.ChunkPlacement> ImperfectPlacementScratch =
+		new List<CoinStackImperfectLayout.ChunkPlacement>( 16 );
+
+	static CoinStackVisualDefinition ResolveVisualDefinition()
+	{
+		CoinStackVisualDefinition def = null;
+		def = RuntimeDefinition.Resolve( ref def );
+#if UNITY_EDITOR
+		if ( def == null )
+		{
+			def = UnityEditor.AssetDatabase.LoadAssetAtPath<CoinStackVisualDefinition>(
+				"Assets/Definitions/CoinStackVisualDefinition.asset" );
+		}
+#endif
+		return def;
+	}
+
+	static void BindImperfectChunks(
+		Transform container,
+		CoinStackVisualDefinition visualDef,
+		IList<TreasureDefinition> slots,
+		List<CoinStackImperfectLayout.ChunkPlacement> placements,
+		float maxDiameter,
+		float variationSeed,
+		ref CoinStackCylinderVisual primaryVisual )
+	{
+		if ( container == null || placements == null || placements.Count == 0 )
+		{
+			DestroyExtraImperfectChildren( container, 0 );
+			return;
+		}
+
+		Material multiMat = visualDef != null ? visualDef.multiStackMaterial : null;
+		float refDiameter = 1f;
+		float refHeight = 0.1f;
+		float diameterScale = 1f;
+		if ( visualDef != null )
+		{
+			visualDef.GetMeshReferenceSize( out refDiameter, out refHeight );
+			diameterScale = visualDef.diameterScale;
+		}
+
+		refDiameter = Mathf.Max( 0.0001f, refDiameter );
+		refHeight = Mathf.Max( 0.0001f, refHeight );
+		float diameter = maxDiameter > 0.0001f ? maxDiameter : refDiameter;
+
+		for ( int i = 0; i < placements.Count; i++ )
+		{
+			CoinStackImperfectLayout.ChunkPlacement placement = placements[ i ];
+			if ( placement.Entry == null || placement.Entry.mesh == null )
+				continue;
+
+			Transform chunk = EnsureImperfectChild( container, i );
+			MeshFilter filter = chunk.GetComponent<MeshFilter>();
+			if ( filter == null )
+				filter = chunk.gameObject.AddComponent<MeshFilter>();
+			MeshRenderer renderer = chunk.GetComponent<MeshRenderer>();
+			if ( renderer == null )
+				renderer = chunk.gameObject.AddComponent<MeshRenderer>();
+
+			filter.sharedMesh = placement.Entry.mesh;
+			if ( multiMat != null )
+				renderer.sharedMaterial = multiMat;
+
+			float slotHeight = CoinStackImperfectLayout.MeasureSlotHeight( slots, placement.BaseIndex, placement.CoinCount );
+			float bakedHeight = Mathf.Max( 0.0001f, placement.Entry.height );
+			float scaleY = slotHeight / bakedHeight;
+			float scaleXZ = ( diameter * diameterScale ) / refDiameter;
+			float yaw = CoinStackImperfectLayout.GetScatterYawDegrees( variationSeed );
+
+			chunk.localPosition = Vector3.up * placement.LocalY;
+			chunk.localRotation = Quaternion.Euler( 0f, yaw, 0f );
+			chunk.localScale = new Vector3( scaleXZ, scaleY, scaleXZ );
+
+			renderer.shadowCastingMode = ShadowCastingMode.On;
+			renderer.enabled = true;
+		}
+	}
+
+	static void ApplyImperfectChunkMpbs(
+		Transform container,
+		List<CoinStackImperfectLayout.ChunkPlacement> placements,
+		CoinStackVisualDefinition visualDef,
+		CoinStackCylinderVisual typeMapOwner,
+		float variationSeed )
+	{
+		if ( container == null || placements == null || typeMapOwner == null )
+			return;
+
+		typeMapOwner.SetVariationSeed( variationSeed );
+
+		for ( int i = 0; i < placements.Count; i++ )
+		{
+			Transform chunk = container.Find( CoinStackImperfectLayout.ImperfectChildPrefix + i );
+			if ( chunk == null )
+				continue;
+
+			MeshRenderer renderer = chunk.GetComponent<MeshRenderer>();
+			if ( renderer == null )
+				continue;
+
+			CoinStackImperfectLayout.ChunkPlacement placement = placements[ i ];
+			typeMapOwner.ApplyImperfectChunkMpb(
+				renderer,
+				placement.CoinCount,
+				placement.BaseIndex,
+				visualDef );
+		}
+	}
+
+	static Transform EnsureImperfectChild( Transform container, int index )
+	{
+		string name = CoinStackImperfectLayout.ImperfectChildPrefix + index;
+		Transform existing = container.Find( name );
+		if ( existing != null )
+			return existing;
+
+		GameObject go = new GameObject( name );
+		go.transform.SetParent( container, false );
+		return go.transform;
+	}
+
+	static void DestroyExtraImperfectChildren( Transform container, int keepCount )
+	{
+		if ( container == null )
+			return;
+
+		for ( int i = container.childCount - 1; i >= 0; i-- )
+		{
+			Transform child = container.GetChild( i );
+			if ( child == null )
+				continue;
+
+			if ( !child.name.StartsWith( CoinStackImperfectLayout.ImperfectChildPrefix ) )
+				continue;
+
+			string suffix = child.name.Substring( CoinStackImperfectLayout.ImperfectChildPrefix.Length );
+			if ( !int.TryParse( suffix, out int index ) || index >= keepCount )
+			{
+				DisableRenderersUnder( child );
+				DestroyGameObject( child.gameObject );
+			}
 		}
 	}
 

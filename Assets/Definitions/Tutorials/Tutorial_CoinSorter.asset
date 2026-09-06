@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_CoinSorter
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_coin_sorter
+  title: Coin Sorter
+  tags:
+  - coins
+  - sorter
+  - workshop
+  trigger: 13
+  holdingCategory: 0
+  volumeId: 
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  prerequisiteTutorialIds:
+  - tut_coin_displays
+  highlightMapLabel: Workshop
+  body: Got a lot of coins? The Workshop has a coin sorter that sorts mixed stacks
+    for you. Open the map (M) and head to the highlighted Workshop.
+  keybindHint: '[M] Open map'
+  tasks:
+  - id: use_sorter
+    label: Sort coins with the sorter
+    completeTrigger: 14
+    completeVolumeId: 

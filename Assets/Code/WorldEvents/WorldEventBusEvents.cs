@@ -7,6 +7,13 @@ public struct VolumeEnteredEvent
 	public QuestVolume Volume;
 }
 
+/// <summary>Player left a <see cref="QuestVolume"/> / <see cref="EventVolume"/>.</summary>
+public struct VolumeExitedEvent
+{
+	public string VolumeId;
+	public QuestVolume Volume;
+}
+
 /// <summary>A one-shot world event finished firing.</summary>
 public struct WorldEventFiredEvent
 {
@@ -49,6 +56,13 @@ public struct CoinSorterUsedEvent
 {
 	public CoinSortingStation Station;
 	public TreasureDefinition Coin;
+}
+
+/// <summary>A ground coin stack (2+) was loaded into the coin sorter hopper.</summary>
+public struct CoinSorterStackLoadedEvent
+{
+	public CoinSortingStation Station;
+	public int CoinCount;
 }
 
 static class TutorialHudDistance

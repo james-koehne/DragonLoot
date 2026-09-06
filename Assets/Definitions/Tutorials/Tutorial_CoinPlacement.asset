@@ -17,12 +17,19 @@ MonoBehaviour:
   tags:
   - coins
   - placement
-  trigger: 3
+  trigger: 9
+  holdingCategory: 0
   volumeId: 
   fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
   prerequisiteTutorialIds: []
-  steps:
-  - body: Place held coins onto the floor or a surface with Place / Throw.
-    keybindHint: '[{SecondaryInteract}] Place'
-  - body: Rotate before placing to line coins up neatly.
-    keybindHint: '[{RotateLeft}] / [{RotateRight}] Rotate'
+  body: Move all coins into the Coin Hall. Place carefully on the ground, or throw
+    to toss them farther.
+  keybindHint: '[{SecondaryInteract}] Place / Throw'
+  tasks:
+  - id: place_coin_floor
+    label: Place a coin on the ground
+    completeTrigger: 2
+  - id: throw_coin
+    label: Throw a coin
+    completeTrigger: 3

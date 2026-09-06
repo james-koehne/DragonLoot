@@ -185,10 +185,7 @@ public class InteractionContextUI : MonoBehaviour
 			return "Hold to move sorter";
 
 		if ( focus is TreasurePileInteractable )
-		{
-			string pileName = focus.InteractionName;
-			return string.IsNullOrEmpty( pileName ) ? "Dig" : "Dig " + pileName;
-		}
+			return "Dig";
 
 		if ( focus is GroundCoinStack || focus is CoinStackInteractable )
 			return "Take coin";
@@ -251,26 +248,10 @@ public class InteractionContextUI : MonoBehaviour
 	static string FormatRotateBinding( GameInput gameInput )
 	{
 		string scroll = FormatBindingDisplay( gameInput.ScrollWheel );
-		string left = FormatBindingDisplay( gameInput.RotateLeft );
-		string right = FormatBindingDisplay( gameInput.RotateRight );
+		if ( string.IsNullOrEmpty( scroll ) )
+			return null;
 
-		StringBuilder rotate = new StringBuilder( 48 );
-		if ( !string.IsNullOrEmpty( scroll ) )
-			rotate.Append( '[' ).Append( scroll ).Append( ']' );
-
-		if ( !string.IsNullOrEmpty( left ) || !string.IsNullOrEmpty( right ) )
-		{
-			if ( rotate.Length > 0 )
-				rotate.Append( " / " );
-			if ( !string.IsNullOrEmpty( left ) )
-				rotate.Append( '[' ).Append( left ).Append( ']' );
-			if ( !string.IsNullOrEmpty( left ) && !string.IsNullOrEmpty( right ) )
-				rotate.Append( ' ' );
-			if ( !string.IsNullOrEmpty( right ) )
-				rotate.Append( '[' ).Append( right ).Append( ']' );
-		}
-
-		return rotate.Length > 0 ? rotate.ToString() : null;
+		return "[" + scroll + "]";
 	}
 
 	void AppendBound( InputAction action, string prompt )

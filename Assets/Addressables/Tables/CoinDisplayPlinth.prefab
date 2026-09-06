@@ -81,12 +81,12 @@ MonoBehaviour:
   interactionName: Coin Display
   acceptedTreasure: {fileID: 0}
   displayArea: {fileID: 8224263856743405148}
-  rows: 4
-  columns: 6
-  slotSpacing: 0.12
+  rows: 6
+  columns: 14
+  slotSpacing: 0.22
   margin: 0.05
   fillDirection: 0
-  maxStackPerSlot: 0
+  maxStackPerSlot: 1000
   snapDuration: 0.25
   bounceScale: 1.15
   countLabel: {fileID: 0}
@@ -94,8 +94,13 @@ MonoBehaviour:
   drawLayoutGizmosAlways: 0
   fillSlotsOnStart: 1
   minCoinsPerSlot: 0
-  maxCoinsPerSlot: 6
+  maxCoinsPerSlot: 2
+  emptySlotChance: 0.8
   fillSeed: 0
+  autoLevelAfterWholeStackPlace: 1
+  levelCoinStagger: 0.06
+  levelStartDelay: 0.12
+  levelCrossSlotArcHeight: 0.28
 --- !u!1 &4398170695080236926
 GameObject:
   m_ObjectHideFlags: 0
