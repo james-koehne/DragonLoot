@@ -19,7 +19,7 @@ MonoBehaviour:
   level3CoinsPerSecond: 10
   crankHoldGrace: 0.2
   crankToSortMultiplier: 2
-  maxReserveSeconds: 8
+  maxReserveSeconds: 16
   crankChargeSpinDegreesPerSecond: 360
   crankDischargeSpinDegreesPerSecond: 140
   crankClickDegrees: 90

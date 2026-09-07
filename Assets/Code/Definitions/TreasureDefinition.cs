@@ -15,6 +15,9 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "Variant within the category, e.g. Gold or Sapphire." )]
 	public string variant;
 
+	[Tooltip( "When true, first pickup still counts as discovered but skips the New Discovery toast." )]
+	public bool suppressDiscoveryPopup;
+
 	[Header( "Stats" )]
 	[Min( 0 )]
 	public int value = 1;

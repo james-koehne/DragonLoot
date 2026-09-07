@@ -31,6 +31,8 @@ public sealed class MapUI : MonoBehaviour
 
 	readonly List<MapLabelMarker> _labelSources = new List<MapLabelMarker>( 32 );
 	readonly List<MapLabelWidget> _labelWidgets = new List<MapLabelWidget>( 32 );
+	readonly List<TutorialMapMarker> _tutorialMarkerSources = new List<TutorialMapMarker>( 8 );
+	readonly List<TempMarkerWidget> _tutorialMarkerWidgets = new List<TempMarkerWidget>( 8 );
 	Font _font;
 	Texture2D _coneTexture;
 	Texture2D _dotTexture;
@@ -41,6 +43,14 @@ public sealed class MapUI : MonoBehaviour
 		public RectTransform Root;
 		public Image Glow;
 		public Image Icon;
+		public Text Text;
+	}
+
+	struct TempMarkerWidget
+	{
+		public RectTransform Root;
+		public Image Glow;
+		public Image Pin;
 		public Text Text;
 	}
 
@@ -321,6 +331,7 @@ public sealed class MapUI : MonoBehaviour
 		BindMapTexture();
 		RefreshPlayerMarker( map, def );
 		RefreshLabels( map, def );
+		RefreshTutorialMarkers( map, def );
 	}
 
 	void RefreshPlayerMarker( MapSystem map, MapDefinition def )
@@ -460,6 +471,76 @@ public sealed class MapUI : MonoBehaviour
 		}
 	}
 
+	void RefreshTutorialMarkers( MapSystem map, MapDefinition def )
+	{
+		if ( labelsRoot == null )
+			return;
+
+		MapOverlayRegistrar.CollectActiveTutorialMarkers( _tutorialMarkerSources );
+		EnsureTempMarkerWidgetCount( _tutorialMarkerSources.Count, def );
+
+		const float pinSize = 22f;
+		for ( int i = 0; i < _tutorialMarkerWidgets.Count; i++ )
+		{
+			TempMarkerWidget widget = _tutorialMarkerWidgets[ i ];
+			if ( widget.Root == null )
+				continue;
+
+			if ( i >= _tutorialMarkerSources.Count )
+			{
+				widget.Root.gameObject.SetActive( false );
+				continue;
+			}
+
+			TutorialMapMarker marker = _tutorialMarkerSources[ i ];
+			if ( marker == null || !map.TryWorldToUv( marker.WorldPosition, out Vector2 uv ) )
+			{
+				widget.Root.gameObject.SetActive( false );
+				continue;
+			}
+
+			widget.Root.gameObject.SetActive( true );
+			widget.Root.anchoredPosition = UvToPanelLocal( uv );
+
+			float pulse = 0.5f + 0.5f * Mathf.Sin( Time.unscaledTime * 5.5f );
+			widget.Root.localScale = Vector3.one * ( 1f + 0.12f * pulse );
+
+			Color baseHi = new Color( 0.35f, 0.9f, 1f, 1f );
+			Color brightHi = new Color( 0.85f, 1f, 1f, 1f );
+			Color pinColor = Color.Lerp( baseHi, brightHi, pulse );
+
+			if ( widget.Glow != null )
+			{
+				if ( widget.Glow.sprite == null )
+					widget.Glow.sprite = EnsureDotSprite();
+				float glowSize = pinSize * ( 2.1f + 0.55f * pulse );
+				widget.Glow.rectTransform.sizeDelta = new Vector2( glowSize, glowSize );
+				widget.Glow.color = new Color( 0.3f, 0.85f, 1f, 0.22f + 0.4f * pulse );
+			}
+
+			if ( widget.Pin != null )
+			{
+				if ( widget.Pin.sprite == null )
+					widget.Pin.sprite = EnsureDotSprite();
+				widget.Pin.rectTransform.sizeDelta = new Vector2( pinSize, pinSize );
+				widget.Pin.color = pinColor;
+			}
+
+			if ( widget.Text != null )
+			{
+				bool hasLabel = !string.IsNullOrEmpty( marker.MapLabel );
+				widget.Text.gameObject.SetActive( hasLabel );
+				if ( hasLabel )
+				{
+					widget.Text.text = marker.MapLabel;
+					widget.Text.fontSize = def != null ? def.labelFontSize : 22;
+					widget.Text.color = pinColor;
+					widget.Text.rectTransform.anchoredPosition = new Vector2( 0f, -( pinSize * 0.5f + 10f ) );
+				}
+			}
+		}
+	}
+
 	Vector2 UvToPanelLocal( Vector2 uv )
 	{
 		Rect rect = panel.rect;
@@ -527,6 +608,68 @@ public sealed class MapUI : MonoBehaviour
 				Root = root,
 				Glow = glow,
 				Icon = icon,
+				Text = text
+			} );
+		}
+	}
+
+	void EnsureTempMarkerWidgetCount( int count, MapDefinition def )
+	{
+		while ( _tutorialMarkerWidgets.Count < count )
+		{
+			GameObject go = new GameObject( "TutorialMapPin", typeof( RectTransform ) );
+			go.transform.SetParent( labelsRoot, false );
+			RectTransform root = go.GetComponent<RectTransform>();
+			root.anchorMin = new Vector2( 0.5f, 0.5f );
+			root.anchorMax = new Vector2( 0.5f, 0.5f );
+			root.pivot = new Vector2( 0.5f, 0.5f );
+			root.sizeDelta = new Vector2( 160f, 80f );
+
+			GameObject glowGo = new GameObject( "Glow", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+			glowGo.transform.SetParent( go.transform, false );
+			RectTransform glowRect = glowGo.GetComponent<RectTransform>();
+			glowRect.anchorMin = new Vector2( 0.5f, 0.5f );
+			glowRect.anchorMax = new Vector2( 0.5f, 0.5f );
+			glowRect.pivot = new Vector2( 0.5f, 0.5f );
+			glowRect.sizeDelta = new Vector2( 48f, 48f );
+			Image glow = glowGo.GetComponent<Image>();
+			glow.sprite = EnsureDotSprite();
+			glow.raycastTarget = false;
+
+			GameObject pinGo = new GameObject( "Pin", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+			pinGo.transform.SetParent( go.transform, false );
+			RectTransform pinRect = pinGo.GetComponent<RectTransform>();
+			pinRect.anchorMin = new Vector2( 0.5f, 0.5f );
+			pinRect.anchorMax = new Vector2( 0.5f, 0.5f );
+			pinRect.pivot = new Vector2( 0.5f, 0.5f );
+			pinRect.sizeDelta = new Vector2( 22f, 22f );
+			Image pin = pinGo.GetComponent<Image>();
+			pin.sprite = EnsureDotSprite();
+			pin.raycastTarget = false;
+
+			GameObject textGo = new GameObject( "Text", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
+			textGo.transform.SetParent( go.transform, false );
+			RectTransform textRect = textGo.GetComponent<RectTransform>();
+			textRect.anchorMin = new Vector2( 0.5f, 0.5f );
+			textRect.anchorMax = new Vector2( 0.5f, 0.5f );
+			textRect.pivot = new Vector2( 0.5f, 0.5f );
+			textRect.sizeDelta = new Vector2( 160f, 36f );
+
+			Text text = textGo.GetComponent<Text>();
+			text.font = ResolveFont();
+			text.fontSize = def != null ? def.labelFontSize : 22;
+			text.fontStyle = FontStyle.Bold;
+			text.alignment = TextAnchor.MiddleCenter;
+			text.color = new Color( 0.35f, 0.9f, 1f, 1f );
+			text.raycastTarget = false;
+			text.horizontalOverflow = HorizontalWrapMode.Overflow;
+			text.verticalOverflow = VerticalWrapMode.Overflow;
+
+			_tutorialMarkerWidgets.Add( new TempMarkerWidget
+			{
+				Root = root,
+				Glow = glow,
+				Pin = pin,
 				Text = text
 			} );
 		}

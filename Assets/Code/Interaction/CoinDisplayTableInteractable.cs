@@ -7,15 +7,18 @@ using UnityEngine;
 /// Typed coin display: accepts one coin <see cref="TreasureDefinition"/> and snaps matching
 /// carried coins into a generated horizontal slot grid (Displayed state).
 /// Coins are stackable, so they pile vertically in each slot. Pickup takes from the top down.
-/// Placement ignores the aimed pile: targeting the table or any stack fills the shortest
-/// pile, searching left-to-right from the top-left (ties keep the earlier slot).
-/// Hold-F whole-stack place lands on the shortest pile, then peels excess coins from every
-/// player-placed pile on this table and flips them into shorter columns.
+/// Aim at an existing pile to stack onto it; aim at the table body fills the shortest pile
+/// (left-to-right, top-left wins ties).
+/// Hold-F whole-stack place lands on the aimed pile when stacking, otherwise the shortest
+/// pile, then peels excess coins from every player-placed pile on this table and flips them
+/// into shorter columns.
 /// Each display levels independently; placing on another table does not interrupt this one.
 /// Setup: collider on root, child DisplayArea, assign accepted treasure + grid settings.
 /// </summary>
 public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 {
+	static readonly List<CoinDisplayTableInteractable> All = new List<CoinDisplayTableInteractable>( 32 );
+
 	struct LevelMove
 	{
 		public int FromSlot;
@@ -87,6 +90,36 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 	public bool IsAutoLeveling => _levelRoutine != null;
 
+	public static IReadOnlyList<CoinDisplayTableInteractable> ActiveTables => All;
+
+	public static int CountAllDisplayedCoins()
+	{
+		int total = 0;
+		for ( int i = 0; i < All.Count; i++ )
+		{
+			CoinDisplayTableInteractable table = All[ i ];
+			if ( table == null || !table.isActiveAndEnabled )
+				continue;
+			total += table.CurrentCount;
+		}
+		return total;
+	}
+
+	void OnEnable()
+	{
+		for ( int i = 0; i < All.Count; i++ )
+		{
+			if ( All[ i ] == this )
+				return;
+		}
+		All.Add( this );
+	}
+
+	void OnDisable()
+	{
+		All.Remove( this );
+	}
+
 	/// <summary>
 	/// Hold-F whole-stack place: every carried coin must match this table's accepted definition.
 	/// </summary>
@@ -114,6 +147,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 	protected override void OnDestroy()
 	{
+		All.Remove( this );
 		_levelRoutine = null;
 		_levelPending = false;
 		_levelSourceSlots.Clear();

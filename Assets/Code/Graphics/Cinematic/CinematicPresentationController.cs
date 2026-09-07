@@ -2,31 +2,30 @@ using System.Collections;
 using System.Collections.Generic;
 
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public struct CinematicPresentationOverrides
 {
 	public float FovPeak;
 	public float LetterboxPeak;
-	public bool OverrideMicroPush;
-	public bool EnableMicroPush;
-	public float MicroPushDistance;
 	public float Rise;
 	public float Hold;
 	public float Fall;
 }
 
 /// <summary>
-/// FOV widen, UI letterbox, crosshair fade, look dampening, and optional micro camera push.
+/// FOV widen, UI letterbox, crosshair fade, look dampening, and optional camera pose blend.
+/// Player body stays frozen and cannot move; only the camera blends to the pose target and fades back.
 /// Scene setup (manual in Editor):
 /// 1. Add <see cref="CinematicPresentationController"/> to the level (same object as LanternRevealSweepController is fine).
 /// 2. Set presentation id to <see cref="IntroLedgePresentationId"/>.
-/// 3. Tune rise/hold/fall and peaks in Inspector (defaults: 0.5s / 4s / 1.2s, FOV 80, letterbox 0.12, push 0.2m).
-/// 4. Toggle <c>_enableMicroPush</c> to enable/disable the forward dolly.
+/// 3. Place an empty Transform for the framed camera pose and assign <see cref="_cameraPoseTarget"/>.
+/// 4. Tune rise/hold/fall and peaks in Inspector (defaults: 0.5s / 4s / 1.2s, FOV 80, letterbox 0.12).
 ///
 /// Testing:
 /// 1. Play Mode → Debug overlay → World Events → Ledge.
-/// 2. Expect bars + FOV widen over ~0.5s; hold ~4s; fall ~1.2s; crosshair fades; look dampened.
-/// 3. With micro push on, expect subtle forward camera nudge. Toggle off and re-fire to confirm no push.
+/// 2. Expect bars + FOV widen; look at 25% sensitivity; player root does not move/rotate.
+/// 3. Camera eases to the pose target, then fades back to the starting camera view.
 /// 4. Walk into volume_hallway_end naturally for the full intro_ledge beat (once per profile).
 /// </summary>
 public class CinematicPresentationController : MonoBehaviour
@@ -35,7 +34,7 @@ public class CinematicPresentationController : MonoBehaviour
 
 	const float DefaultBaseFov = 60f;
 	const float DefaultBarPeakHeight = 0.12f;
-	const float LookSensitivityDampened = 0.35f;
+	const float LookSensitivityDampened = 0.25f;
 
 	static readonly Dictionary<string, CinematicPresentationController> Controllers = new Dictionary<string, CinematicPresentationController>();
 
@@ -46,7 +45,8 @@ public class CinematicPresentationController : MonoBehaviour
 	float _baseFov = DefaultBaseFov;
 
 	[SerializeField]
-	bool _enableMicroPush = true;
+	[Tooltip( "World-space camera pose to blend toward during the presentation. Leave empty to skip pose blend." )]
+	Transform _cameraPoseTarget;
 
 	[SerializeField]
 	RevealPunchChannel _fovChannel = new RevealPunchChannel
@@ -66,16 +66,20 @@ public class CinematicPresentationController : MonoBehaviour
 		peak = DefaultBarPeakHeight
 	};
 
+	[FormerlySerializedAs( "_microPushChannel" )]
 	[SerializeField]
-	RevealPunchChannel _microPushChannel = new RevealPunchChannel
+	[Tooltip( "Envelope for blending camera position/rotation toward the pose target and back. Peak is unused (weight only)." )]
+	RevealPunchChannel _cameraPoseChannel = new RevealPunchChannel
 	{
 		rise = 0.5f,
 		hold = 4f,
 		fall = 1.2f,
-		peak = 0.2f
+		peak = 1f
 	};
 
 	Coroutine _presentationRoutine;
+	bool _poseBlendActive;
+	float _restorePitch;
 
 #if UNITY_EDITOR
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.SubsystemRegistration )]
@@ -140,11 +144,13 @@ public class CinematicPresentationController : MonoBehaviour
 	{
 		RevealPunchChannel fovChannel = ResolveChannel( _fovChannel, overrides.Rise, overrides.Hold, overrides.Fall, overrides.FovPeak );
 		RevealPunchChannel letterboxChannel = ResolveChannel( _letterboxChannel, overrides.Rise, overrides.Hold, overrides.Fall, overrides.LetterboxPeak );
-		RevealPunchChannel pushChannel = ResolveChannel( _microPushChannel, overrides.Rise, overrides.Hold, overrides.Fall, overrides.MicroPushDistance );
-		bool enableMicroPush = ResolveMicroPushEnabled( overrides );
+		RevealPunchChannel poseChannel = ResolveChannel( _cameraPoseChannel, overrides.Rise, overrides.Hold, overrides.Fall, 0f );
+		bool blendPose = _cameraPoseTarget != null;
 
-		float duration = Mathf.Max( fovChannel.TotalDuration, letterboxChannel.TotalDuration, enableMicroPush ? pushChannel.TotalDuration : 0f );
+		float duration = Mathf.Max( fovChannel.TotalDuration, letterboxChannel.TotalDuration, blendPose ? poseChannel.TotalDuration : 0f );
 		float elapsed = 0f;
+
+		LockPlayerMovementForCinematic( true );
 
 		CinematicLetterboxUI letterbox = CinematicLetterboxUI.EnsureExists();
 		FirstPersonCameraController firstPerson = ResolveFirstPersonCamera();
@@ -155,6 +161,21 @@ public class CinematicPresentationController : MonoBehaviour
 			_baseFov = firstPerson.Camera.fieldOfView;
 
 		float baseFov = _baseFov > 0f ? _baseFov : DefaultBaseFov;
+
+		Vector3 startCameraWorldPos = Vector3.zero;
+		Quaternion startCameraWorldRot = Quaternion.identity;
+		Vector3 targetCameraWorldPos = Vector3.zero;
+		Quaternion targetCameraWorldRot = Quaternion.identity;
+		if ( blendPose && firstPerson != null && cameraRig != null )
+		{
+			_restorePitch = firstPerson.Pitch;
+			startCameraWorldPos = cameraRig.transform.position;
+			startCameraWorldRot = ResolveCameraWorldRotation( cameraRig, firstPerson );
+			targetCameraWorldPos = _cameraPoseTarget.position;
+			targetCameraWorldRot = _cameraPoseTarget.rotation;
+			firstPerson.BeginCinematicDetachedLook();
+			_poseBlendActive = true;
+		}
 
 		while ( elapsed < duration )
 		{
@@ -178,16 +199,13 @@ public class CinematicPresentationController : MonoBehaviour
 			if ( crosshair != null )
 				crosshair.SetAlpha( 1f - letterboxWeight );
 
-			if ( enableMicroPush && cameraRig != null )
-			{
-				float pushWeight = pushChannel.EvaluateWeight( elapsed );
-				cameraRig.SetLocalPositionZOffset( pushChannel.peak * pushWeight );
-			}
+			if ( blendPose && _poseBlendActive && firstPerson != null && cameraRig != null )
+				ApplyCameraPoseBlend( cameraRig, firstPerson, startCameraWorldPos, startCameraWorldRot, targetCameraWorldPos, targetCameraWorldRot, poseChannel.EvaluateWeight( elapsed ) );
 
 			yield return null;
 		}
 
-		ApplyFinalFrame( fovChannel, letterboxChannel, pushChannel, enableMicroPush, baseFov, letterbox, firstPerson, cameraRig, crosshair, duration );
+		ApplyFinalFrame( fovChannel, letterboxChannel, poseChannel, blendPose, baseFov, startCameraWorldPos, startCameraWorldRot, targetCameraWorldPos, targetCameraWorldRot, letterbox, firstPerson, cameraRig, crosshair, duration );
 		ResetPresentationState();
 		_presentationRoutine = null;
 	}
@@ -195,9 +213,13 @@ public class CinematicPresentationController : MonoBehaviour
 	static void ApplyFinalFrame(
 		RevealPunchChannel fovChannel,
 		RevealPunchChannel letterboxChannel,
-		RevealPunchChannel pushChannel,
-		bool enableMicroPush,
+		RevealPunchChannel poseChannel,
+		bool blendPose,
 		float baseFov,
+		Vector3 startCameraWorldPos,
+		Quaternion startCameraWorldRot,
+		Vector3 targetCameraWorldPos,
+		Quaternion targetCameraWorldRot,
 		CinematicLetterboxUI letterbox,
 		FirstPersonCameraController firstPerson,
 		CameraController cameraRig,
@@ -219,25 +241,64 @@ public class CinematicPresentationController : MonoBehaviour
 		if ( crosshair != null )
 			crosshair.SetAlpha( 1f - letterboxWeight );
 
-		if ( enableMicroPush && cameraRig != null )
-		{
-			float pushWeight = pushChannel.EvaluateWeight( elapsed );
-			cameraRig.SetLocalPositionZOffset( pushChannel.peak * pushWeight );
-		}
+		if ( blendPose && firstPerson != null && cameraRig != null )
+			ApplyCameraPoseBlend( cameraRig, firstPerson, startCameraWorldPos, startCameraWorldRot, targetCameraWorldPos, targetCameraWorldRot, poseChannel.EvaluateWeight( elapsed ) );
+	}
+
+	static void ApplyCameraPoseBlend(
+		CameraController cameraRig,
+		FirstPersonCameraController firstPerson,
+		Vector3 startPos,
+		Quaternion startRot,
+		Vector3 targetPos,
+		Quaternion targetRot,
+		float poseWeight )
+	{
+		Vector3 pos = Vector3.Lerp( startPos, targetPos, poseWeight );
+		Quaternion rot = Quaternion.Slerp( startRot, targetRot, poseWeight );
+
+		// Free-look offsets fade with the pose weight so return settles on the original view.
+		float yawOffset = firstPerson.CinematicYawOffset * poseWeight;
+		float pitchOffset = firstPerson.CinematicPitchOffset * poseWeight;
+		rot = Quaternion.AngleAxis( yawOffset, Vector3.up ) * rot;
+		rot = rot * Quaternion.AngleAxis( pitchOffset, Vector3.right );
+
+		// Parent carries world pose; child pitch stays identity while detached.
+		firstPerson.transform.localPosition = Vector3.zero;
+		firstPerson.transform.localRotation = Quaternion.identity;
+		cameraRig.SetWorldPose( pos, rot );
+	}
+
+	static Quaternion ResolveCameraWorldRotation( CameraController cameraRig, FirstPersonCameraController firstPerson )
+	{
+		if ( firstPerson != null && firstPerson.Camera != null )
+			return firstPerson.Camera.transform.rotation;
+
+		if ( cameraRig != null )
+			return cameraRig.transform.rotation;
+
+		return Quaternion.identity;
 	}
 
 	void ResetPresentationState()
 	{
+		LockPlayerMovementForCinematic( false );
+
 		FirstPersonCameraController firstPerson = ResolveFirstPersonCamera();
 		if ( firstPerson != null )
 		{
+			if ( _poseBlendActive )
+				firstPerson.EndCinematicDetachedLook( _restorePitch );
+
 			firstPerson.ResetFieldOfView();
 			firstPerson.ResetLookSensitivityMultiplier();
 		}
 
+		_poseBlendActive = false;
+
 		CameraController cameraRig = ResolveCameraRig();
 		if ( cameraRig != null )
-			cameraRig.ResetLocalPosition();
+			cameraRig.ResetLocalPose();
 
 		CinematicLetterboxUI letterbox = CinematicLetterboxUI.Instance;
 		if ( letterbox != null )
@@ -248,12 +309,12 @@ public class CinematicPresentationController : MonoBehaviour
 			crosshair.SetAlpha( 1f );
 	}
 
-	bool ResolveMicroPushEnabled( CinematicPresentationOverrides overrides )
+	static void LockPlayerMovementForCinematic( bool locked )
 	{
-		if ( overrides.OverrideMicroPush )
-			return overrides.EnableMicroPush;
+		if ( GameMode.Instance == null || GameMode.Instance.Player == null )
+			return;
 
-		return _enableMicroPush;
+		GameMode.Instance.Player.SetCinematicPlanarMovementLock( locked );
 	}
 
 	static RevealPunchChannel ResolveChannel( RevealPunchChannel defaults, float riseOverride, float holdOverride, float fallOverride, float peakOverride )
@@ -285,4 +346,16 @@ public class CinematicPresentationController : MonoBehaviour
 
 		return GameMode.Instance.cameraController;
 	}
+
+#if UNITY_EDITOR
+	void OnDrawGizmosSelected()
+	{
+		if ( _cameraPoseTarget == null )
+			return;
+
+		Gizmos.color = new Color( 0.3f, 0.85f, 1f, 0.9f );
+		Gizmos.DrawWireSphere( _cameraPoseTarget.position, 0.12f );
+		Gizmos.DrawLine( _cameraPoseTarget.position, _cameraPoseTarget.position + _cameraPoseTarget.forward * 0.75f );
+	}
+#endif
 }

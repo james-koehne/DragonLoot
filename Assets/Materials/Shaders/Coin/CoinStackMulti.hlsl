@@ -15,7 +15,6 @@ TEXTURE2D(_CoinTypeMap);
 SAMPLER(sampler_CoinTypeMap);
 
 float4 _TypeFresnelColor[COIN_STACK_MAX_TYPES];
-float _TypeCount;
 
 int CoinStackClampTypeId(int typeId)
 {

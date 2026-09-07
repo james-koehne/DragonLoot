@@ -18,7 +18,8 @@ public enum TutorialTriggerType
 	AimTreasurePile = 10,
 	GameStart = 11,
 	AimCoinStack = 12,
-	ManyCoins = 13
+	ManyCoins = 13,
+	AboveHeight = 14
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -38,7 +39,10 @@ public enum TutorialTaskCompleteType
 	EnterVolume = 11,
 	Move = 12,
 	Look = 13,
-	UseCoinSorter = 14
+	UseCoinSorter = 14,
+	Glide = 15,
+	PlaceChestFloor = 16,
+	OpenChest = 17
 }
 
 [Serializable]
@@ -90,18 +94,30 @@ public class TutorialDefinition : ScriptableObject
 	[Tooltip( "When trigger is ManyCoins: show if this many coins are carried." )]
 	public int minCarriedCoinsToShow = 50;
 
+	[Tooltip( "When trigger is ManyCoins: show if this many coins are on coin display tables." )]
+	public int minDisplayCoinsToShow = 50;
+
 	[Tooltip( "When a UseCoinSorter task is active: complete after this many coins are sorted (whichever comes first with sorting a stack)." )]
 	public int sorterCoinsToComplete = 30;
+
+	[Tooltip( "When trigger is AboveHeight: show while player world Y is at or above this value." )]
+	public float minHeightY = 30f;
 
 	public string[] prerequisiteTutorialIds;
 
 	[Tooltip( "Optional map label text to highlight while this tutorial is active (e.g. Coin Hall)." )]
 	public string highlightMapLabel;
 
+	[Tooltip( "Optional TutorialMapMarker id to show as a pulsing temp pin on the map while active." )]
+	public string mapMarkerId;
+
+	[Tooltip( "When true, entering a task EnterVolume / TutorialMapMarker zone completes all remaining tasks (destination tutorials)." )]
+	public bool completeAllTasksOnVolumeEnter;
+
 	[TextArea( 2, 8 )]
 	public string body;
 
-	[Tooltip( "Optional hint using {Interact}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}." )]
+	[Tooltip( "Optional hint using {Interact}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}." )]
 	public string keybindHint;
 
 	public TutorialTask[] tasks;

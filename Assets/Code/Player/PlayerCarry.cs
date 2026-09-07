@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>Hand rig a treasure is carried in. Chest treasure is uncarriable.</summary>
+/// <summary>Hand rig a treasure is carried in. Chests use the Artifact bucket (exclusiveCarry).</summary>
 public enum CarryBucketKind
 {
 	Coin = 0,
@@ -230,6 +230,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				bucket = CarryBucketKind.Gem;
 				return true;
 			case TreasureCategory.Artifact:
+			case TreasureCategory.Chest:
 			case TreasureCategory.Crown:
 			case TreasureCategory.Goblet:
 			case TreasureCategory.Helmet:
@@ -267,6 +268,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		_lastPublishedHeldCount = count;
 
 		TreasureCategory category = MapBucketToCategory( _selected );
+		if ( TryPeekActive( out TreasureDefinition activeDef, out _ ) && activeDef != null )
+			category = activeDef.category;
+
 		EventBus.Publish( new PlayerHeldCategoryChangedEvent
 		{
 			Category = category,
@@ -821,6 +825,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		bucket.Active = entry;
 		bucket.HasActive = true;
 		item.transform.SetParent( bucket.ActiveRoot, true );
+		NotifyIfNewlyDiscovered( item.Definition );
 
 		CarryDefinition def = Definition;
 		float duration = def != null ? def.coinFlipDuration : 0.32f;
@@ -958,9 +963,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( treasure == null )
 			return false;
 
-		if ( treasure.category == TreasureCategory.Chest )
-			return false;
-
 		return PassesMixingRules( treasure, GetBucketFor( treasure ) );
 	}
 
@@ -978,9 +980,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	public int CountAffordableUnits( TreasureDefinition treasure, int maxUnits )
 	{
 		if ( treasure == null || maxUnits <= 0 )
-			return 0;
-
-		if ( treasure.category == TreasureCategory.Chest )
 			return 0;
 
 		ResetAffordabilitySim();
@@ -1011,7 +1010,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return false;
 
 			TreasureDefinition def = item.Definition;
-			if ( def == null || def.category == TreasureCategory.Chest )
+			if ( def == null )
 				return false;
 
 			if ( !SimulateAdd( def, (int)ResolveBucket( def ) ) )
@@ -1038,7 +1037,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				break;
 
 			TreasureDefinition def = item.Definition;
-			if ( def == null || def.category == TreasureCategory.Chest )
+			if ( def == null )
 				break;
 
 			if ( !SimulateAdd( def, (int)ResolveBucket( def ) ) )
@@ -1067,7 +1066,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				break;
 
 			TreasureDefinition def = item.Definition;
-			if ( def == null || def.category == TreasureCategory.Chest )
+			if ( def == null )
 				break;
 
 			if ( !SimulateAdd( def, (int)ResolveBucket( def ) ) )
@@ -1095,7 +1094,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		for ( int i = orderedBottomToTop.Count - 1; i >= startIndex; i-- )
 		{
 			TreasureDefinition def = orderedBottomToTop[ i ];
-			if ( def == null || def.category == TreasureCategory.Chest )
+			if ( def == null )
 				break;
 
 			if ( !SimulateAdd( def, (int)ResolveBucket( def ) ) )
@@ -1186,6 +1185,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		};
 
 		InsertEntry( bucket, entry, 0, allowActive: true );
+		NotifyIfNewlyDiscovered( treasure );
 		AutoSelectIfIdle( bucket );
 		RestackPoses();
 		SpawnHeldItemAsync( treasure, token );
@@ -1268,6 +1268,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		};
 
 		InsertEntry( bucket, entry, 0, allowActive: true );
+		NotifyIfNewlyDiscovered( treasure );
 		AutoSelectIfIdle( bucket );
 		return true;
 	}
@@ -1485,7 +1486,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			if ( def == null )
 				continue;
 
-			if ( def.category == TreasureCategory.Chest || !PassesMixingRules( def, bucket ) )
+			if ( !PassesMixingRules( def, bucket ) )
 				break;
 
 			int token = _nextToken++;
@@ -1501,6 +1502,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			};
 
 			InsertEntry( bucket, entry, insertAt, allowActive: false );
+			NotifyIfNewlyDiscovered( def );
 			insertAt++;
 			any = true;
 		}
@@ -1617,10 +1619,26 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		becameActive = InsertEntry( bucket, entry, heldInsertIndex, allowActive );
 		item.transform.SetParent( GetItemParent( bucket, becameActive ), true );
+		NotifyIfNewlyDiscovered( item.Definition );
 		StartHoldTween( item, token, tweenDuration, playPickupFeedback: true );
 
 		// Coin left-hand merges still fly fully; HoldTweenRoutine collapses the mesh on arrival.
 		return true;
+	}
+
+	void NotifyIfNewlyDiscovered( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return;
+
+		if ( !TreasureDiscoveryProgress.TryMarkDiscovered( definition ) )
+			return;
+
+		if ( definition.suppressDiscoveryPopup )
+			return;
+
+		EventBus.Publish( new TreasureDiscoveredEvent { Treasure = definition } );
+		DiscoveryToastUI.NotifyNewTreasure( definition );
 	}
 
 	float GetHeldCoinCylinderHeight( CategoryBucket bucket )

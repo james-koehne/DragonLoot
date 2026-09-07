@@ -19,13 +19,27 @@ MonoBehaviour:
   trigger: 9
   holdingCategory: 5
   volumeId: 
-  fallbackVolumeId: 
+  fallbackVolumeId: volume_artifact_museum
   alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
   prerequisiteTutorialIds: []
-  body: Take artifacts to the Artifact Storage museum and place them on a presentation
-    stand. Dirty artifacts may need polishing first.
-  keybindHint: '[{SecondaryInteract}] Place  [{Clean}] Clean / Polish'
+  highlightMapLabel: Artifact Museum
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: Take artifacts to the Artifact Museum and place them on a presentation stand.
+    Open the map (M) and look for the highlighted Artifact Museum. Dirty artifacts
+    may need polishing first.
+  keybindHint: '[{SecondaryInteract}] Place  [{Clean}] Clean / Polish  [M] Open map'
   tasks:
+  - id: reach_artifact_museum
+    label: Go to the Artifact Museum
+    completeTrigger: 11
+    completeVolumeId: volume_artifact_museum
   - id: place_artifact
-    label: Put an artifact in its place
+    label: Put an artifact on a stand
     completeTrigger: 8
+    completeVolumeId: 

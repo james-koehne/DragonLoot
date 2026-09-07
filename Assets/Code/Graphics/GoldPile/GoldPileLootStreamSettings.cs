@@ -166,6 +166,35 @@ public class GoldPileLootStreamSettings : ScriptableObject
 
 	public bool drawOverlayStats = true;
 
+	/// <summary>
+	/// Hash of knobs that change GPU coin seat poses / densify targets. Used by coin-seat bake fingerprints.
+	/// </summary>
+	public int ComputeCoinSeatPlacementFingerprint()
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			h = ( h ^ ( uint )FloatBits( chunkSize ) ) * 16777619u;
+			h = ( h ^ ( uint )Mathf.Max( 1, lod0InstancesPerChunk ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatBits( coinTiltStrength ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatBits( coinTipJitterDegrees ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatBits( coinYawJitterDegrees ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatBits( coinEmbedSinkFraction ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatBits( coinScaleJitter ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatBits( coinPlacementMinSpacing ) ) * 16777619u;
+			h = ( h ^ ( enforceCoinOverlap ? 1u : 0u ) ) * 16777619u;
+			h = ( h ^ ( uint )( int )coinOverlapMode ) * 16777619u;
+			h = ( h ^ ( useEmbeddedVolumeSeats ? 1u : 0u ) ) * 16777619u;
+			h = ( h ^ ( useSurfaceDecorSeats ? 1u : 0u ) ) * 16777619u;
+			return ( int )h;
+		}
+	}
+
+	static int FloatBits( float value )
+	{
+		return System.BitConverter.SingleToInt32Bits( value );
+	}
+
 	public int InstancesPerChunkForLod( int lod )
 	{
 		switch ( lod )

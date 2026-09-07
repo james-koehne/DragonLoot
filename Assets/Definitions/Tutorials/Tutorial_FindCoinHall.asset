@@ -27,6 +27,8 @@ MonoBehaviour:
   - tut_coin_placement
   - tut_coin_stacking
   highlightMapLabel: Coin Hall
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 1
   body: Time to store your coins in the Coin Hall. Open the map (M) and look for
     the highlighted Coin Hall marker, then head there.
   keybindHint: '[M] Open map'

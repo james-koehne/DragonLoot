@@ -10,6 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 6380427121504347878}
   - component: {fileID: 5803909321799451940}
+  - component: {fileID: 8123401001001001001}
+  - component: {fileID: 8123401001001001002}
   m_Layer: 6
   m_Name: IronChest
   m_TagString: Untagged
@@ -31,6 +33,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 5698826901420226694}
+  - {fileID: 8123401001001001011}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!54 &5803909321799451940
@@ -60,6 +63,131 @@ Rigidbody:
   m_Interpolate: 1
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &8123401001001001001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7104946103180843443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e5b2af5baa7495438bac2c6047c421e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TreasureItem
+  definition: {fileID: 0}
+--- !u!114 &8123401001001001002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7104946103180843443}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbea71b7fcd95a349bdd7ee0200da39a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChestInteractable
+  interactionName: Chest
+  chestDefinition: {fileID: 11400000, guid: 73e89bf88a080c543a62700580587045, type: 2}
+  state: 0
+  onOpenFeedback: {fileID: 8123401001001001012}
+--- !u!1 &8123401001001001010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8123401001001001011}
+  - component: {fileID: 8123401001001001012}
+  m_Layer: 6
+  m_Name: OnOpenFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8123401001001001011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8123401001001001010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6380427121504347878}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8123401001001001012
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8123401001001001010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8123401001001002001
+  _useUnscaledTime: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 8123401001001002001
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8123401001001002002
+        - rid: 8123401001001002003
+    - rid: 8123401001001002002
+      type: {class: RotateTransformFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 5698826901420226688}
+        TargetEuler: {x: -115, y: 0, z: 0}
+        Duration: 0.28
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 3
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        WorldSpace: 0
+    - rid: 8123401001001002003
+      type: {class: ShakeTransformFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 6380427121504347878}
+        Duration: 0.22
+        Strength: 0.035
 --- !u!1001 &5698826901419827716
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -117,6 +245,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 3b47776d91bdaa746a44e2fa46acb61c, type: 3}
+--- !u!4 &5698826901420226688 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400004, guid: 3b47776d91bdaa746a44e2fa46acb61c, type: 3}
+  m_PrefabInstance: {fileID: 5698826901419827716}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &5698826901420226694 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 400002, guid: 3b47776d91bdaa746a44e2fa46acb61c, type: 3}

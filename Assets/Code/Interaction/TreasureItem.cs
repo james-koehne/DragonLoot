@@ -10,8 +10,8 @@ public class TreasureItem : MonoBehaviour
 	[SerializeField]
 	TreasureDefinition definition;
 
-	static readonly int VariationSeedId = Shader.PropertyToID( "_VariationSeed" );
 	static readonly int DirtStrengthId = Shader.PropertyToID( "_DirtStrength" );
+	static readonly int ConnectedGlowId = Shader.PropertyToID( "_ConnectedGlow" );
 	static MaterialPropertyBlock s_PropertyBlock;
 
 	Rigidbody _body;
@@ -27,8 +27,8 @@ public class TreasureItem : MonoBehaviour
 	bool _inFlight;
 	float _stableTimer;
 	bool _usingContinuous;
-	float _variationSeed;
 	float _cleanProgress = 1f;
+	float _connectedGlow;
 	int _artifactSurfaceBouncesRemaining;
 
 	public TreasureDefinition Definition => definition;
@@ -64,6 +64,20 @@ public class TreasureItem : MonoBehaviour
 	public bool IsDirty
 	{
 		get { return RequiresCleaning && _cleanProgress < 0.999f; }
+	}
+
+	/// <summary>Connected / ignition rim glow for constellation gems (MaterialPropertyBlock). Typically 0–2.</summary>
+	public float ConnectedGlow => _connectedGlow;
+
+	/// <summary>Drives <c>_ConnectedGlow</c> on gem materials. Cleared when leaving a constellation.</summary>
+	public void SetConnectedGlow( float amount )
+	{
+		float next = Mathf.Clamp( amount, 0f, 2f );
+		if ( Mathf.Abs( next - _connectedGlow ) < 0.0001f )
+			return;
+
+		_connectedGlow = next;
+		ApplyDirtVisual();
 	}
 
 	/// <summary>
@@ -105,12 +119,10 @@ public class TreasureItem : MonoBehaviour
 	{
 		EnsureComponents();
 		ApplyPhysicsFromDefinition();
-		ApplyVariationSeed();
 	}
 
 	void OnEnable()
 	{
-		ApplyVariationSeed();
 		ApplyDirtVisual();
 		StripSparkleMaskContributor();
 	}
@@ -121,14 +133,12 @@ public class TreasureItem : MonoBehaviour
 		_releasedViaAddressables = viaAddressables;
 		_renderers = null;
 		_meshVisibilityState = null;
-		_variationSeed = 0f;
 		if ( definition != null )
 			definition.EnsurePhysicsDefaults();
 		EnsureComponents();
 		ApplyPhysicsFromDefinition();
 		ApplyVisualOverrides();
 		ResetCleanlinessFromDefinition();
-		ApplyVariationSeed();
 		ApplyDirtVisual();
 		ApplyDisplayName();
 		ApplyCollectableLayer();
@@ -198,7 +208,6 @@ public class TreasureItem : MonoBehaviour
 		_inFlight = false;
 		_renderers = null;
 		_meshVisibilityState = null;
-		_variationSeed = 0f;
 		_cleanProgress = 1f;
 	}
 
@@ -267,6 +276,7 @@ public class TreasureItem : MonoBehaviour
 		TreasureProximitySleep.Unregister( this );
 		UnregisterFromSurface();
 		CoinColumnCylinderBinder.StripFromItem( this );
+		SetConnectedGlow( 0f );
 
 		_owner = playerOwner;
 		_state = TreasureItemState.Held;
@@ -297,6 +307,7 @@ public class TreasureItem : MonoBehaviour
 		TreasureProximitySleep.Unregister( this );
 		UnregisterFromSurface();
 		CoinColumnCylinderBinder.StripFromItem( this );
+		SetConnectedGlow( 0f );
 
 		_owner = null;
 		_state = TreasureItemState.Physics;
@@ -1019,37 +1030,6 @@ public class TreasureItem : MonoBehaviour
 			DestroyImmediate( contributor );
 	}
 
-	/// <summary>
-	/// Pins DragonLoot/Coin instance variation to a stable per-item seed so moving/jittering
-	/// transforms do not rehash tint/smoothness every frame.
-	/// </summary>
-	void ApplyVariationSeed()
-	{
-		if ( definition == null || definition.category != TreasureCategory.Coin )
-			return;
-
-		EnsureRendererCache();
-		if ( _renderers == null || _renderers.Length == 0 )
-			return;
-
-		if ( _variationSeed <= 0f )
-			_variationSeed = ( Mathf.Abs( GetInstanceID() ) % 9973 ) + 1;
-
-		if ( s_PropertyBlock == null )
-			s_PropertyBlock = new MaterialPropertyBlock();
-
-		for ( int i = 0; i < _renderers.Length; i++ )
-		{
-			Renderer renderer = _renderers[ i ];
-			if ( renderer == null )
-				continue;
-
-			renderer.GetPropertyBlock( s_PropertyBlock );
-			s_PropertyBlock.SetFloat( VariationSeedId, _variationSeed );
-			renderer.SetPropertyBlock( s_PropertyBlock );
-		}
-	}
-
 	void ApplyDirtVisual()
 	{
 		if ( !RequiresCleaning && _cleanProgress < 0.999f )
@@ -1070,7 +1050,9 @@ public class TreasureItem : MonoBehaviour
 			dirtStrength = ( 1f - Mathf.Clamp01( _cleanProgress ) ) * maxDirt;
 		}
 
-		if ( s_PropertyBlock == null )
+		bool applyDirt = dirtStrength > 0.0001f;
+		bool applyGlow = _connectedGlow > 0.0001f;
+		if ( ( applyDirt || applyGlow ) && s_PropertyBlock == null )
 			s_PropertyBlock = new MaterialPropertyBlock();
 
 		for ( int i = 0; i < _renderers.Length; i++ )
@@ -1079,11 +1061,29 @@ public class TreasureItem : MonoBehaviour
 			if ( renderer == null )
 				continue;
 
-			if ( !RendererSupportsDirt( renderer ) )
+			bool supportsDirt = RendererSupportsDirt( renderer );
+			bool supportsGlow = RendererSupportsConnectedGlow( renderer );
+			bool useDirt = applyDirt && supportsDirt;
+			bool useGlow = applyGlow && supportsGlow;
+
+			// Clear MPB when idle so SRP Batcher can share the material.
+			if ( !useDirt && !useGlow )
+			{
+				renderer.SetPropertyBlock( null );
 				continue;
+			}
 
 			renderer.GetPropertyBlock( s_PropertyBlock );
-			s_PropertyBlock.SetFloat( DirtStrengthId, dirtStrength );
+			if ( useDirt )
+				s_PropertyBlock.SetFloat( DirtStrengthId, dirtStrength );
+			else if ( supportsDirt )
+				s_PropertyBlock.SetFloat( DirtStrengthId, 0f );
+
+			if ( useGlow )
+				s_PropertyBlock.SetFloat( ConnectedGlowId, _connectedGlow );
+			else if ( supportsGlow )
+				s_PropertyBlock.SetFloat( ConnectedGlowId, 0f );
+
 			renderer.SetPropertyBlock( s_PropertyBlock );
 		}
 	}
@@ -1113,6 +1113,29 @@ public class TreasureItem : MonoBehaviour
 		if ( material.HasProperty( DirtStrengthId ) )
 			return true;
 		return material.shader != null && material.shader.name == "DragonLoot/Artifact";
+	}
+
+	static bool RendererSupportsConnectedGlow( Renderer renderer )
+	{
+		Material[] mats = renderer.sharedMaterials;
+		if ( mats == null || mats.Length == 0 )
+		{
+			Material single = renderer.sharedMaterial;
+			return MaterialSupportsConnectedGlow( single );
+		}
+
+		for ( int i = 0; i < mats.Length; i++ )
+		{
+			if ( MaterialSupportsConnectedGlow( mats[ i ] ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool MaterialSupportsConnectedGlow( Material material )
+	{
+		return material != null && material.HasProperty( ConnectedGlowId );
 	}
 
 	static TreasureCleaningDefinition s_cleaningDefinitionCache;

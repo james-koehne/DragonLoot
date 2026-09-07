@@ -521,9 +521,6 @@ public class WorldEventSystem : MonoBehaviour
 		{
 			FovPeak = action.cinematicFovPeak,
 			LetterboxPeak = action.cinematicLetterboxPeak,
-			OverrideMicroPush = action.cinematicOverrideMicroPush,
-			EnableMicroPush = action.cinematicEnableMicroPush,
-			MicroPushDistance = action.cinematicMicroPushDistance,
 			Rise = action.cinematicRise,
 			Hold = action.cinematicHold,
 			Fall = action.cinematicFall

@@ -137,6 +137,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
   - rid: 9170125570492334175
+  _useUnscaledTime: 0
   references:
     version: 2
     RefIds:
@@ -297,7 +298,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &5349401621053178782
 Transform:
   m_ObjectHideFlags: 0
@@ -598,6 +599,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
   - rid: 9170125570492334174
+  _useUnscaledTime: 0
   references:
     version: 2
     RefIds:
@@ -703,6 +705,7 @@ MonoBehaviour:
   _light: {fileID: 7789743901271174470}
   _emissiveRenderers: []
   _emissiveMaterialIndex: 1
+  _volumetricRenderer: {fileID: 7082904242716320453}
 --- !u!114 &2112285429867489560
 MonoBehaviour:
   m_ObjectHideFlags: 0

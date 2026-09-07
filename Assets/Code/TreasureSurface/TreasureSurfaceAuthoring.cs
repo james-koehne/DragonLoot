@@ -914,6 +914,128 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		if ( !TryGetPaintArrays( out byte[] trav, out _, out float[] heights, out int cellsX, out int cellsZ ) )
 			return 0;
 
+		int written = BakeHeightsFromRaycastsRegion(
+			trav,
+			heights,
+			cellsX,
+			cellsZ,
+			0,
+			0,
+			cellsX - 1,
+			cellsZ - 1,
+			useRadius: false,
+			radiusSq: 0f,
+			localCenterX: 0f,
+			localCenterZ: 0f,
+			layerMask,
+			rayStartY,
+			rayDistance,
+			hitOffset,
+			traversableOnly,
+			missBehavior,
+			triggerInteraction );
+
+		NotifyPaintChanged();
+		return written;
+	}
+
+	/// <summary>
+	/// Raycasts downward for cells inside a world-space disc using Height Bake settings.
+	/// Same hit / miss rules as <see cref="BakeHeightsFromRaycasts"/>.
+	/// </summary>
+	public int PaintBrushBakeHeights( Vector3 worldCenter, float radiusMeters )
+	{
+		ResolveBakeRay( out float startY, out float distance );
+		return PaintBrushBakeHeights(
+			worldCenter,
+			radiusMeters,
+			heightBakeMask,
+			startY,
+			distance,
+			heightBakeHitOffset,
+			heightBakeTraversableOnly,
+			heightBakeMissBehavior,
+			heightBakeTriggerInteraction );
+	}
+
+	public int PaintBrushBakeHeights(
+		Vector3 worldCenter,
+		float radiusMeters,
+		LayerMask layerMask,
+		float rayStartY,
+		float rayDistance,
+		float hitOffset,
+		bool traversableOnly,
+		HeightBakeMissBehavior missBehavior,
+		QueryTriggerInteraction triggerInteraction )
+	{
+		if ( !TryGetPaintArrays( out byte[] trav, out _, out float[] heights, out int cellsX, out int cellsZ ) )
+			return 0;
+		if ( radiusMeters <= 0f )
+			return 0;
+
+		float halfX = worldSizeX * 0.5f;
+		float halfZ = worldSizeZ * 0.5f;
+		float cell = CellSize;
+		int cellRadius = Mathf.Max( 0, Mathf.CeilToInt( radiusMeters / cell ) );
+		if ( !TryWorldToCell( worldCenter, out int cx, out int cz ) )
+		{
+			float localX = Mathf.Clamp( worldCenter.x - worldOrigin.x + halfX, 0f, worldSizeX - 0.001f );
+			float localZ = Mathf.Clamp( worldCenter.z - worldOrigin.z + halfZ, 0f, worldSizeZ - 0.001f );
+			cx = Mathf.FloorToInt( localX / cell );
+			cz = Mathf.FloorToInt( localZ / cell );
+		}
+
+		float localCenterX = worldCenter.x - worldOrigin.x + halfX;
+		float localCenterZ = worldCenter.z - worldOrigin.z + halfZ;
+		float radiusSq = radiusMeters * radiusMeters;
+
+		int written = BakeHeightsFromRaycastsRegion(
+			trav,
+			heights,
+			cellsX,
+			cellsZ,
+			cx - cellRadius,
+			cz - cellRadius,
+			cx + cellRadius,
+			cz + cellRadius,
+			useRadius: true,
+			radiusSq,
+			localCenterX,
+			localCenterZ,
+			layerMask,
+			rayStartY,
+			rayDistance,
+			hitOffset,
+			traversableOnly,
+			missBehavior,
+			triggerInteraction );
+
+		NotifyPaintChanged();
+		return written;
+	}
+
+	int BakeHeightsFromRaycastsRegion(
+		byte[] trav,
+		float[] heights,
+		int cellsX,
+		int cellsZ,
+		int minX,
+		int minZ,
+		int maxX,
+		int maxZ,
+		bool useRadius,
+		float radiusSq,
+		float localCenterX,
+		float localCenterZ,
+		LayerMask layerMask,
+		float rayStartY,
+		float rayDistance,
+		float hitOffset,
+		bool traversableOnly,
+		HeightBakeMissBehavior missBehavior,
+		QueryTriggerInteraction triggerInteraction )
+	{
 		int written = 0;
 		float halfX = worldSizeX * 0.5f;
 		float halfZ = worldSizeZ * 0.5f;
@@ -921,10 +1043,31 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		Vector3 down = Vector3.down;
 		float dist = Mathf.Max( 0.1f, rayDistance );
 
-		for ( int z = 0; z < cellsZ; z++ )
+		int z0 = Mathf.Max( 0, minZ );
+		int z1 = Mathf.Min( cellsZ - 1, maxZ );
+		int x0 = Mathf.Max( 0, minX );
+		int x1 = Mathf.Min( cellsX - 1, maxX );
+
+		for ( int z = z0; z <= z1; z++ )
 		{
-			for ( int x = 0; x < cellsX; x++ )
+			float dzSq = 0f;
+			if ( useRadius )
 			{
+				float dz = ( z + 0.5f ) * cell - localCenterZ;
+				dzSq = dz * dz;
+				if ( dzSq > radiusSq )
+					continue;
+			}
+
+			for ( int x = x0; x <= x1; x++ )
+			{
+				if ( useRadius )
+				{
+					float dx = ( x + 0.5f ) * cell - localCenterX;
+					if ( dx * dx + dzSq > radiusSq )
+						continue;
+				}
+
 				int i = z * cellsX + x;
 				if ( traversableOnly && trav[ i ] == 0 )
 					continue;
@@ -947,7 +1090,6 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 			}
 		}
 
-		NotifyPaintChanged();
 		return written;
 	}
 

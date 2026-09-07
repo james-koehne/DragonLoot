@@ -79,6 +79,7 @@ public class TreasurePileVisualEditor : Editor
 			+ "(or parent it under _AuthoredLoot). Assign Treasure Definition on TreasurePileAuthoredItem. "
 			+ "Move with gizmos — the mesh stays visible. Then Bake Latents For This Pile. "
 			+ "Bake fills definition gems/artifacts around your piece, only where Treasure surface paint is below. "
+			+ "Also bakes GPU coin seats (TreasurePileCoinSeatBake) so play-mode bind skips placement probes. "
 			+ "Assign TreasurePileLatentBakeSettings to change placement (e.g. near-surface), then rebake. "
 			+ "Coins/gems are not curated.",
 			MessageType.Info );
@@ -95,13 +96,33 @@ public class TreasurePileVisualEditor : Editor
 				MessageType.Warning );
 		}
 
+		int sharedCoinBakeUsers = CountOtherScenePilesUsingCoinSeatBake( visual.CoinSeatBake, visual );
+		if ( !Application.isPlaying && sharedCoinBakeUsers > 0 )
+		{
+			EditorGUILayout.HelpBox(
+				$"This coin-seat bake is shared with {sharedCoinBakeUsers} other pile{( sharedCoinBakeUsers == 1 ? "" : "s" )}. "
+				+ "Each pile needs its own coin bake — Bake Latents will create a unique asset for this pile.",
+				MessageType.Warning );
+		}
+
 		string staleReason = visual.GetLatentBakeStaleReason();
 		if ( !Application.isPlaying && staleReason != null )
 		{
 			EditorGUILayout.HelpBox(
-				$"Bake is stale ({staleReason}) — rebake to update fill.",
+				$"Latent bake is stale ({staleReason}) — rebake to update fill.",
 				MessageType.Warning );
 		}
+
+		string coinStaleReason = visual.GetCoinSeatBakeStaleReason();
+		if ( !Application.isPlaying && coinStaleReason != null )
+		{
+			EditorGUILayout.HelpBox(
+				$"Coin seat bake is stale ({coinStaleReason}) — rebake to update seats.",
+				MessageType.Warning );
+		}
+
+		if ( visual.CoinSeatBake != null )
+			EditorGUILayout.LabelField( "Coin seats baked", visual.CoinSeatBake.SeatCount.ToString() );
 
 		if ( GUILayout.Button( "Bake Latents For This Pile" ) )
 		{
@@ -342,6 +363,10 @@ public class TreasurePileVisualEditor : Editor
 			return;
 		}
 
+		string coinLine = result.CoinBakeRan
+			? $"\nWrote {result.CoinSeatCount} coin seats to {result.CoinBakeName}."
+			: "\n(No coin contents — skipped coin seat bake.)";
+
 		if ( !result.Complete )
 		{
 			string perType = string.IsNullOrEmpty( result.PerType ) ? "" : "\n" + result.PerType;
@@ -349,8 +374,9 @@ public class TreasurePileVisualEditor : Editor
 				"Bake Latents",
 				$"Wrote {result.PoseCount} of {result.Expected} remainder poses to {result.BakeName} for pile '{result.PileName}' "
 				+ $"(+ {result.Authored} curated authored).\n"
-				+ $"Missing {Mathf.Max( 0, result.Expected - result.Placed )} — all treasure needs to spawn.{perType}\n"
-				+ "Check Treasure surface paint under the sculpted footprint, neighborhood radius, and loot ground height.",
+				+ $"Missing {Mathf.Max( 0, result.Expected - result.Placed )} — all treasure needs to spawn.{perType}"
+				+ coinLine
+				+ "\nCheck Treasure surface paint under the sculpted footprint, neighborhood radius, and loot ground height.",
 				"OK" );
 			return;
 		}
@@ -358,7 +384,8 @@ public class TreasurePileVisualEditor : Editor
 		EditorUtility.DisplayDialog(
 			"Bake Latents",
 			$"Wrote {result.PoseCount} remainder poses to {result.BakeName} for pile '{result.PileName}' "
-			+ $"(+ {result.Authored} curated authored).",
+			+ $"(+ {result.Authored} curated authored)."
+			+ coinLine,
 			"OK" );
 	}
 
@@ -515,6 +542,58 @@ public class TreasurePileVisualEditor : Editor
 		public int Placed;
 		public int Authored;
 		public string PerType;
+		public string CoinBakeName;
+		public int CoinSeatCount;
+		public bool CoinBakeRan;
+	}
+
+	static int CountOtherScenePilesUsingCoinSeatBake( TreasurePileCoinSeatBake bake, TreasurePileVisual except )
+	{
+		if ( bake == null )
+			return 0;
+
+		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
+			FindObjectsInactive.Include,
+			FindObjectsSortMode.None );
+		int count = 0;
+		for ( int i = 0; i < piles.Length; i++ )
+		{
+			TreasurePileVisual visual = piles[ i ];
+			if ( visual == except || !IsScenePile( visual ) )
+				continue;
+			if ( visual.CoinSeatBake == bake )
+				count++;
+		}
+
+		return count;
+	}
+
+	static TreasurePileCoinSeatBake EnsureUniqueCoinSeatBakeForVisual( TreasurePileVisual visual )
+	{
+		if ( visual == null )
+			return null;
+
+		TreasurePileCoinSeatBake bake = visual.CoinSeatBake;
+		if ( bake != null && CountOtherScenePilesUsingCoinSeatBake( bake, visual ) == 0 )
+			return bake;
+
+		string scenePath = visual.gameObject.scene.path;
+		string folder = "Assets";
+		if ( !string.IsNullOrEmpty( scenePath ) )
+		{
+			string sceneDir = System.IO.Path.GetDirectoryName( scenePath );
+			if ( !string.IsNullOrEmpty( sceneDir ) )
+				folder = sceneDir.Replace( '\\', '/' );
+		}
+
+		string safeName = visual.name.Replace( '/', '_' ).Replace( '\\', '_' );
+		string path = AssetDatabase.GenerateUniqueAssetPath( $"{folder}/{safeName}_CoinSeatBake.asset" );
+		bake = ScriptableObject.CreateInstance<TreasurePileCoinSeatBake>();
+		AssetDatabase.CreateAsset( bake, path );
+		Undo.RecordObject( visual, "Assign Treasure Pile Coin Seat Bake" );
+		visual.SetCoinSeatBake( bake );
+		EditorUtility.SetDirty( visual );
+		return bake;
 	}
 
 	static LatentSceneBakeResult TryBakeLatentsForVisual( TreasurePileVisual visual, bool saveAssets )
@@ -567,9 +646,6 @@ public class TreasurePileVisualEditor : Editor
 			bake );
 		EditorUtility.SetDirty( bake );
 		EditorUtility.SetDirty( visual );
-		if ( saveAssets )
-			AssetDatabase.SaveAssets();
-		RefreshLatentBakePreview( visual );
 
 		result.Ran = true;
 		result.Complete = report.Complete;
@@ -579,6 +655,55 @@ public class TreasurePileVisualEditor : Editor
 		result.Placed = report.Placed;
 		result.Authored = visual.CountAuthoredItems();
 		result.PerType = report.PerType;
+
+		bool hasCoinContents = definition.coinContents != null && definition.coinContents.Length > 0;
+		if ( hasCoinContents )
+		{
+			TreasurePileCoinSeatBake coinBake = EnsureUniqueCoinSeatBakeForVisual( visual );
+			GoldPileLootInstances loot = visual.LootInstances;
+			if ( loot == null )
+			{
+				loot = visual.GetComponent<GoldPileLootInstances>();
+				if ( loot == null )
+					loot = visual.gameObject.AddComponent<GoldPileLootInstances>();
+			}
+
+			if ( coinBake != null && loot != null )
+			{
+				Undo.RecordObject( coinBake, "Bake Treasure Pile Coin Seats" );
+				try
+				{
+					GoldPileLootInstances.CoinSeatFillReport coinReport = loot.BakeCoinSeatsInto(
+						visual,
+						definition,
+						visual.Heightfield,
+						visual.transform,
+						visual.LootLayoutSeed,
+						coinBake,
+						( t, label ) =>
+						{
+							EditorUtility.DisplayProgressBar(
+								"Bake Coin Seats",
+								string.IsNullOrEmpty( label ) ? visual.name : $"{visual.name}: {label}",
+								Mathf.Clamp01( t ) );
+						} );
+					EditorUtility.SetDirty( coinBake );
+					EditorUtility.SetDirty( visual );
+					result.CoinBakeRan = true;
+					result.CoinBakeName = coinBake.name;
+					result.CoinSeatCount = coinReport.SeatCount;
+				}
+				finally
+				{
+					EditorUtility.ClearProgressBar();
+				}
+			}
+		}
+
+		if ( saveAssets )
+			AssetDatabase.SaveAssets();
+		RefreshLatentBakePreview( visual );
+
 		return result;
 	}
 

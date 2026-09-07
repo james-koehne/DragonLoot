@@ -31,6 +31,8 @@ CBUFFER_START(UnityPerMaterial)
     half _SparkleIntensity;
     half _SparkleDensity;
     half _SparkleSharpness;
+    half _ConnectedGlow;
+    half4 _ConnectedGlowColor;
     half _BrightnessVariation;
     half _SaturationVariation;
     half _HueVariation;

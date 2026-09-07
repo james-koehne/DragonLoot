@@ -77,6 +77,7 @@ public static class DragonLootMenus
 
 	public const string GameObjectMapRegion = "GameObject/DragonLoot/Map Region Volume";
 	public const string GameObjectMapLabel = "GameObject/DragonLoot/Map Label Marker";
+	public const string GameObjectTutorialMapMarker = "GameObject/DragonLoot/Tutorial Map Marker";
 
 	// --- Tutorials ---
 	public const string TutorialsInstallCatalog = Root + "/Tutorials/Install Catalog";

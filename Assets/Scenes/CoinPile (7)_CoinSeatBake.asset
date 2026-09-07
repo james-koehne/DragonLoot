@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05c4da76aeca66445817545844fe0270, type: 3}
+  m_Name: CoinPile (7)_CoinSeatBake
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
+  authoredLayoutSeed: 0
+  effectivePileSeed: 0
+  heightFingerprint: 0
+  contentsFingerprint: 0
+  placementFingerprint: 0
+  maxVisibleTotal: 0
+  steadyVisibleBudget: 0
+  sourceDefinitionName: 
+  seats: []

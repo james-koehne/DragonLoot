@@ -22,11 +22,23 @@ MonoBehaviour:
   volumeId: 
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  sorterCoinsToComplete: 30
   prerequisiteTutorialIds: []
-  body: Gems can go in constellation sockets that match their shape, or in stacks
-    in the Coin Hall. Fill a constellation pattern to complete it.
-  keybindHint: '[{SecondaryInteract}] Place gem'
+  highlightMapLabel: 
+  mapMarkerId: marker_gem_constellation
+  completeAllTasksOnVolumeEnter: 0
+  body: Gems fit constellation sockets that match their shape. Open the map (M)
+    and follow the glowing pin to a constellation, then place a gem.
+  keybindHint: '[{SecondaryInteract}] Place gem  [M] Open map'
   tasks:
+  - id: reach_constellation
+    label: Find a constellation
+    completeTrigger: 11
+    completeVolumeId: marker_gem_constellation
   - id: place_gem_constellation
     label: Put a gem in a constellation
     completeTrigger: 9
+    completeVolumeId: 

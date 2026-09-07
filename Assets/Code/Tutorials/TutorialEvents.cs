@@ -38,3 +38,9 @@ public struct TreasurePileAimChangedEvent
 public struct MapOpenedEvent
 {
 }
+
+/// <summary>A chest finished opening and spawned loot.</summary>
+public struct ChestOpenedEvent
+{
+	public ChestInteractable Chest;
+}

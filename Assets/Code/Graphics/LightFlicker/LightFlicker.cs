@@ -54,7 +54,7 @@ public class LightFlicker : MonoBehaviour
 	int _emissiveMaterialIndex = 1;
 
 	[SerializeField]
-	[Tooltip( "Optional SoftVolume mesh renderer. When empty, looks for a child named VolumetricLight." )]
+	[Tooltip( "Optional SoftVolume mesh renderer. When empty, looks for a child named VolumetricLight. That child is kept inactive in edit mode (avoids Scene picking) and enabled at runtime." )]
 	MeshRenderer _volumetricRenderer;
 
 	Light _cachedLight;
@@ -118,6 +118,7 @@ public class LightFlicker : MonoBehaviour
 		EnsureCaches();
 		EnsureLight();
 		EnsureVolumetricRenderer();
+		SyncVolumetricActiveForMode();
 		ResolveEmissiveRenderers();
 		CaptureBase();
 		_noiseSeed = HashSeed( GetInstanceID() );
@@ -141,6 +142,8 @@ public class LightFlicker : MonoBehaviour
 
 		EnsureCaches();
 		EnsureLight();
+		EnsureVolumetricRenderer();
+		SyncVolumetricActiveForMode();
 		if ( !Application.isPlaying && !_playInEditMode )
 		{
 			RestoreBase();
@@ -453,6 +456,23 @@ public class LightFlicker : MonoBehaviour
 		Transform child = transform.Find( DefaultVolumetricChildName );
 		if ( child != null )
 			_volumetricRenderer = child.GetComponent<MeshRenderer>();
+	}
+
+	/// <summary>
+	/// SoftVolume meshes steal Scene picks; keep them off outside play mode and on at runtime.
+	/// </summary>
+	void SyncVolumetricActiveForMode()
+	{
+		EnsureVolumetricRenderer();
+		if ( _volumetricRenderer == null )
+			return;
+
+		GameObject volumetricObject = _volumetricRenderer.gameObject;
+		bool wantActive = Application.isPlaying;
+		if ( volumetricObject.activeSelf == wantActive )
+			return;
+
+		volumetricObject.SetActive( wantActive );
 	}
 
 	void ResolveEmissiveRenderers()

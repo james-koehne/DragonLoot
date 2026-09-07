@@ -131,6 +131,17 @@ public class GameMode : MonoBehaviour, IGameMode
 				contextUi = interfacePrefab.AddComponent<InteractionContextUI>();
 			contextUi.Setup();
 
+			DisplayRequirementUI displayRequirementUi = interfacePrefab.GetComponentInChildren<DisplayRequirementUI>( true );
+			if ( displayRequirementUi == null )
+			{
+				Transform displayRequirements = interfacePrefab.transform.Find( "DisplayRequirements" );
+				if ( displayRequirements != null )
+					displayRequirementUi = displayRequirements.gameObject.AddComponent<DisplayRequirementUI>();
+				else
+					displayRequirementUi = interfacePrefab.AddComponent<DisplayRequirementUI>();
+			}
+			displayRequirementUi.Setup();
+
 			InteractionProgressRingUI progressRing = interfacePrefab.GetComponentInChildren<InteractionProgressRingUI>( true );
 			if ( progressRing == null )
 			{
@@ -181,6 +192,25 @@ public class GameMode : MonoBehaviour, IGameMode
 				tutorialPopup.Setup();
 			else
 				Debug.LogWarning( "GameMode: TutorialPopupUI missing on Interface prefab." );
+
+			DiscoveryToastUI discoveryToast = interfacePrefab.GetComponentInChildren<DiscoveryToastUI>( true );
+			if ( discoveryToast == null )
+			{
+				Transform existing = interfacePrefab.transform.Find( "DiscoveryToast" );
+				GameObject toastGo = existing != null
+					? existing.gameObject
+					: new GameObject( "DiscoveryToast", typeof( RectTransform ), typeof( CanvasGroup ), typeof( DiscoveryToastUI ) );
+				if ( existing == null )
+					toastGo.transform.SetParent( interfacePrefab.transform, false );
+				discoveryToast = toastGo.GetComponent<DiscoveryToastUI>();
+				if ( discoveryToast == null )
+					discoveryToast = toastGo.AddComponent<DiscoveryToastUI>();
+			}
+
+			if ( discoveryToast != null )
+				discoveryToast.Setup();
+			else
+				Debug.LogWarning( "GameMode: DiscoveryToastUI missing on Interface prefab." );
 
 			TutorialManager tutorials = TutorialManager.EnsureExists();
 			tutorials.StartCatalog( tutorialPopup );

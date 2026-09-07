@@ -41,6 +41,10 @@ Shader "DragonLoot/Gem"
         _SparkleDensity("Glint Density", Range(0.5, 32)) = 8
         _SparkleSharpness("Glint Sharpness", Range(1, 64)) = 24
 
+        [Header(Connected Glow)]
+        _ConnectedGlow("Connected Glow", Range(0, 2)) = 0
+        [HDR] _ConnectedGlowColor("Connected Glow Boost", Color) = (2.2, 2.2, 2.2, 1)
+
         [Header(Instance Variation)]
         _BrightnessVariation("Brightness Variation", Range(0, 0.2)) = 0.1
         _SaturationVariation("Saturation Variation", Range(0, 0.2)) = 0.1

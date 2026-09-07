@@ -41,6 +41,9 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Contextual tutorials the player has seen at least once.</summary>
 	public List<string> discoveredTutorialIds;
 
+	/// <summary>Treasure definition ids the player has picked up at least once.</summary>
+	public List<string> discoveredTreasureIds;
+
 	/// <summary>Contextual tutorials whose tasks were all completed.</summary>
 	public List<string> completedTutorialIds;
 
@@ -92,6 +95,7 @@ public class ProfileSaveData : IGameStats
 
 		EnsureWorldEventProgress();
 		EnsureTutorialProgress();
+		EnsureTreasureDiscoveryProgress();
 		EnsureDoorProgress();
 
 		if ( float.IsNaN( masterVolume ) || float.IsInfinity( masterVolume ) )
@@ -116,6 +120,12 @@ public class ProfileSaveData : IGameStats
 			completedTutorialIds = new List<string>();
 		if ( completedTutorialTaskIds == null )
 			completedTutorialTaskIds = new List<string>();
+	}
+
+	public void EnsureTreasureDiscoveryProgress()
+	{
+		if ( discoveredTreasureIds == null )
+			discoveredTreasureIds = new List<string>();
 	}
 
 	public void EnsureDoorProgress()
@@ -188,6 +198,9 @@ public class ProfileSaveData : IGameStats
 		if ( MergeTutorialProgressFrom( other ) )
 			changed = true;
 
+		if ( MergeTreasureDiscoveryProgressFrom( other ) )
+			changed = true;
+
 		return changed;
 	}
 
@@ -218,6 +231,18 @@ public class ProfileSaveData : IGameStats
 		changed |= MergeIdList( completedTutorialIds, other.completedTutorialIds );
 		changed |= MergeIdList( completedTutorialTaskIds, other.completedTutorialTaskIds );
 		return changed;
+	}
+
+	/// <summary>Union discovered treasure definition ids between two saves.</summary>
+	public bool MergeTreasureDiscoveryProgressFrom( ProfileSaveData other )
+	{
+		if ( other == null )
+			return false;
+
+		EnsureTreasureDiscoveryProgress();
+		other.EnsureTreasureDiscoveryProgress();
+
+		return MergeIdList( discoveredTreasureIds, other.discoveredTreasureIds );
 	}
 
 	/// <summary>Union event-unlocked and open door ids from <paramref name="other"/>.</summary>

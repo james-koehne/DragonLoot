@@ -23,11 +23,13 @@ MonoBehaviour:
   discoverySoftness: 0
   openDuration: 0.22
   openStartScale: 0.92
-  playerDotSize: 14
+  playerDotSize: 16
   aimConeHalfAngle: 14
   aimConeLength: 48
   aimConeBaseWidth: 36
-  playerDotColor: {r: 0.95, g: 0.95, b: 1, a: 1}
-  aimConeColor: {r: 0.95, g: 0.95, b: 1, a: 0.45}
+  playerDotColor: {r: 0.23113209, g: 0.5597214, b: 1, a: 1}
+  aimConeColor: {r: 0.95, g: 0.95, b: 1, a: 0.8}
   labelFontSize: 22
   labelColor: {r: 0.92, g: 0.9, b: 0.82, a: 0.95}
+  labelIconSize: 28
+  labelIconTextGap: 4

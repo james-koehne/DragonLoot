@@ -124,6 +124,10 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0.5f, 1f )]
 	public float treasureReleaseOutsideFraction = 0.9f;
 
+	[Header( "Coin Seat Bake" )]
+	[Tooltip( "Prefer a TreasurePileCoinSeatBake when fingerprint matches. Huge runtime win — skips thousands of placement probes. Bake assets are per-pile on TreasurePileVisual." )]
+	public bool preferBakedCoinSeats = true;
+
 	[Header( "Artifact Latent Bind" )]
 	[Tooltip( "Paint-cell radius that must be traversable under a latent. 1 = the cell below plus a 1-cell ring (3x3). Increase for a larger support pad." )]
 	[Min( 1 )]
@@ -331,6 +335,58 @@ public class TreasurePileDefinition : ScriptableObject
 
 			return ( int )h;
 		}
+	}
+
+	/// <summary>
+	/// Deterministic hash of GPU coin contents + densify budget for coin-seat bake keys.
+	/// </summary>
+	public int HashCoinContents()
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			h = ( h ^ ( uint )Mathf.Max( 1, maxVisibleTotal ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( coinVisibleBufferFraction ) ) * 16777619u;
+			if ( coinContents == null )
+				return ( int )h;
+
+			for ( int i = 0; i < coinContents.Length; i++ )
+			{
+				TreasurePileEntry entry = coinContents[ i ];
+				TreasureDefinition def = entry.treasure;
+				if ( def == null || entry.count <= 0 )
+					continue;
+
+				h = MixStableString( h, def.name );
+				h = ( h ^ ( uint )( int )def.category ) * 16777619u;
+				h = ( h ^ ( uint )entry.count ) * 16777619u;
+			}
+
+			return ( int )h;
+		}
+	}
+
+	/// <summary>
+	/// Placement knobs on the definition that affect coin seat poses (stream settings hashed separately).
+	/// </summary>
+	public int HashCoinPlacementSettings()
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( buryDepth ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( initialRevealDepth ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( placementMinSpacing ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( placementJitter ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( placementScaleJitter ) ) * 16777619u;
+			h = ( h ^ ( enforcePlacementSpacing ? 1u : 0u ) ) * 16777619u;
+			return ( int )h;
+		}
+	}
+
+	static int AuthoredFloatToBits( float value )
+	{
+		return System.BitConverter.SingleToInt32Bits( value );
 	}
 
 	static uint MixStableString( uint h, string value )

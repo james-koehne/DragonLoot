@@ -40,9 +40,16 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	[SerializeField]
 	TreasurePileLatentBake latentBake;
 
+	[Header( "Coin Seat Bake" )]
+	[Tooltip( "Per-pile baked GPU coin seats for this heightmap + layout seed. Pure data — never share this asset across piles." )]
+	[SerializeField]
+	TreasurePileCoinSeatBake coinSeatBake;
+
 	public TreasurePileLatentBakeSettings LatentBakeSettings => latentBakeSettings;
 
 	public TreasurePileLatentBake LatentBake => latentBake;
+
+	public TreasurePileCoinSeatBake CoinSeatBake => coinSeatBake;
 
 	public const string AuthoredLootRootName = "_AuthoredLoot";
 	public const string LatentBakePreviewRootName = "_LatentBakePreview";
@@ -50,6 +57,11 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	public void SetLatentBake( TreasurePileLatentBake bake )
 	{
 		latentBake = bake;
+	}
+
+	public void SetCoinSeatBake( TreasurePileCoinSeatBake bake )
+	{
+		coinSeatBake = bake;
 	}
 
 	/// <summary>Persisted child that holds curated scene props (artifacts, chests, keys).</summary>
@@ -175,6 +187,11 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		return GetLatentBakeStaleReason() != null;
 	}
 
+	public bool IsCoinSeatBakeStale()
+	{
+		return GetCoinSeatBakeStaleReason() != null;
+	}
+
 	/// <summary>Null when the bake matches. Otherwise a short reason for the inspector warning.</summary>
 	public string GetLatentBakeStaleReason()
 	{
@@ -203,6 +220,36 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			avoidCoins,
 			authoredFp,
 			nearSurface );
+	}
+
+	/// <summary>Null when the coin-seat bake matches. Otherwise a short reason for the inspector warning.</summary>
+	public string GetCoinSeatBakeStaleReason()
+	{
+		TreasurePileDefinition def = ResolveDefinitionForEditor();
+		if ( def == null || def.coinContents == null || def.coinContents.Length == 0 )
+			return null;
+
+		if ( coinSeatBake == null )
+			return "no bake asset";
+
+		if ( !TryGetCoinSeatBakeFingerprint(
+			out int layoutSeed,
+			out int heightFp,
+			out int contentsFp,
+			out int placementFp,
+			out int maxVisible,
+			out int steadyBudget ) )
+		{
+			return null;
+		}
+
+		return coinSeatBake.DescribeFingerprintMismatch(
+			layoutSeed,
+			heightFp,
+			contentsFp,
+			placementFp,
+			maxVisible,
+			steadyBudget );
 	}
 
 	public bool TryGetLatentBakeFingerprint(
@@ -237,6 +284,43 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		authoredFp = ComputeAuthoredFingerprint();
 		if ( latentBakeSettings != null )
 			nearSurface = latentBakeSettings.spawnTreasureNearSurface;
+		return true;
+	}
+
+	public bool TryGetCoinSeatBakeFingerprint(
+		out int layoutSeed,
+		out int heightFp,
+		out int contentsFp,
+		out int placementFp,
+		out int maxVisible,
+		out int steadyBudget )
+	{
+		layoutSeed = 0;
+		heightFp = 0;
+		contentsFp = 0;
+		placementFp = 0;
+		maxVisible = 0;
+		steadyBudget = 0;
+
+		TreasurePileDefinition def = ResolveDefinitionForEditor();
+		if ( def == null )
+			return false;
+
+		layoutSeed = lootLayoutSeed;
+		heightFp = ComputeAuthoredHeightFingerprint( def );
+		contentsFp = def.HashCoinContents();
+		maxVisible = Mathf.Max( 1, def.maxVisibleTotal );
+		steadyBudget = def.SteadyCoinVisibleBudget();
+
+		unchecked
+		{
+			uint h = ( uint )def.HashCoinPlacementSettings();
+			GoldPileLootStreamSettings stream = lootInstances != null ? lootInstances.StreamSettings : null;
+			if ( stream != null )
+				h = ( h ^ ( uint )stream.ComputeCoinSeatPlacementFingerprint() ) * 16777619u;
+			placementFp = ( int )h;
+		}
+
 		return true;
 	}
 

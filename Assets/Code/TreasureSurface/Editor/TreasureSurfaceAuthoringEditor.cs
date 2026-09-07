@@ -13,7 +13,8 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		Traversable,
 		NonTraversable,
 		Material,
-		Height
+		Height,
+		BakeHeight
 	}
 
 	BoxBoundsHandle _boundsHandle;
@@ -106,7 +107,8 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		EditorGUILayout.HelpBox(
 			"Drag the green box handles to move/resize bounds.\n"
 			+ "Paint with LMB in the Scene view (snaps to cells).\n"
-			+ "Height mode sets absolute world Y. Bake raycasts traversable cells.\n"
+			+ "Height mode sets absolute world Y. Bake Height mode raycasts within the brush.\n"
+			+ "Bake Heights button raycasts all (traversable) cells.\n"
 			+ "Overlay is a HideAndDontSave transparent green height mesh.",
 			MessageType.Info );
 
@@ -276,7 +278,7 @@ public class TreasureSurfaceAuthoringEditor : Editor
 		{
 			Handles.color = _paintMode == PaintMode.NonTraversable
 				? new Color( 1f, 0.2f, 0.2f, 0.4f )
-				: _paintMode == PaintMode.Height
+				: _paintMode == PaintMode.Height || _paintMode == PaintMode.BakeHeight
 					? new Color( 0.35f, 0.85f, 1f, 0.4f )
 					: new Color( 0.2f, 1f, 0.35f, 0.4f );
 			Handles.DrawSolidDisc( _brushHit, Vector3.up, _brushRadius );
@@ -323,7 +325,11 @@ public class TreasureSurfaceAuthoringEditor : Editor
 				_paintUndoRegistered = true;
 			}
 
-			if ( _paintMode == PaintMode.Height )
+			if ( _paintMode == PaintMode.BakeHeight )
+			{
+				authoring.PaintBrushBakeHeights( _brushHit, _brushRadius );
+			}
+			else if ( _paintMode == PaintMode.Height )
 			{
 				float h = _paintHeightFromHit ? _brushHit.y : _paintHeight;
 				authoring.PaintBrush(

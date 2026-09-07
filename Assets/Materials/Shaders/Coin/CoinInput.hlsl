@@ -15,13 +15,6 @@ CBUFFER_START(UnityPerMaterial)
     half4 _FresnelColor;
     half _FresnelIntensity;
     half _FresnelPower;
-    half _TintVariation;
-    half _SmoothnessVariation;
-    half _SpecularVariation;
-    half _HueVariation;
-    half _ValueVariation;
-    half _RoughnessUvScale;
-    half _RoughnessUvAmount;
     half _EdgeWearStrength;
     half _DirtStrength;
     half _Cutoff;
@@ -29,22 +22,11 @@ CBUFFER_START(UnityPerMaterial)
     half _Cull;
 CBUFFER_END
 
-// Per-renderer seed via MPB. Must stay out of UnityPerMaterial so GPU instancing
-// / SRP Batcher do not ignore the override and fall back to a moving world hash.
-UNITY_INSTANCING_BUFFER_START(DragonLootCoinVars)
-    UNITY_DEFINE_INSTANCED_PROP(float, _VariationSeed)
-UNITY_INSTANCING_BUFFER_END(DragonLootCoinVars)
-
 TEXTURE2D(_BaseMap);            SAMPLER(sampler_BaseMap);
 TEXTURE2D(_BumpMap);            SAMPLER(sampler_BumpMap);
 TEXTURE2D(_MetallicGlossMap);   SAMPLER(sampler_MetallicGlossMap);
 TEXTURE2D(_OcclusionMap);       SAMPLER(sampler_OcclusionMap);
 TEXTURE2D(_EdgeWearMap);        SAMPLER(sampler_EdgeWearMap);
 TEXTURE2D(_DirtMap);            SAMPLER(sampler_DirtMap);
-
-float CoinReadVariationSeed()
-{
-    return UNITY_ACCESS_INSTANCED_PROP(DragonLootCoinVars, _VariationSeed);
-}
 
 #endif

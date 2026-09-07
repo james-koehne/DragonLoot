@@ -20,6 +20,14 @@ MonoBehaviour:
   lockpickDuration: 8
   contents:
   - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 20
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     count: 8
   - treasure: {fileID: 11400000, guid: 3f8a2d6c9e1b4570a4d8c2f6b0e5a937, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
     count: 1

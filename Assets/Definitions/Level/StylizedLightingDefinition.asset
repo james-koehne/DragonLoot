@@ -26,7 +26,7 @@ MonoBehaviour:
   shadowColor: {r: 0.15, g: 0.18, b: 0.28, a: 1}
   shadowStrength: 0.8
   receiveShadows: 1
-  ambientIntensity: 4
+  ambientIntensity: 5
   ambientTint: {r: 0.028301895, g: 0.023095414, b: 0.015085444, a: 1}
   ambientFloor: 0.1
   saturation: 1.1

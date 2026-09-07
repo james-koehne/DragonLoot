@@ -19,8 +19,15 @@ public class FirstPersonCameraController : MonoBehaviour
 	float _pitch;
 	bool _inputEnabled = true;
 	float _baseFieldOfView;
+	bool _cinematicDetachedLook;
+	float _cinematicYawOffset;
+	float _cinematicPitchOffset;
 
 	public float Pitch => _pitch;
+
+	public float CinematicYawOffset => _cinematicYawOffset;
+
+	public float CinematicPitchOffset => _cinematicPitchOffset;
 
 	public float MinLookSensitivity => RuntimeDefinition.Get( Definition, d => d.minLookSensitivity, 0.01f );
 	public float MaxLookSensitivity => RuntimeDefinition.Get( Definition, d => d.maxLookSensitivity, 5f );
@@ -85,6 +92,27 @@ public class FirstPersonCameraController : MonoBehaviour
 	{
 		_pitch = Mathf.Clamp( NormalizePitch( pitch ), MinPitch, MaxPitch );
 		transform.localRotation = Quaternion.Euler( _pitch, 0f, 0f );
+	}
+
+	/// <summary>
+	/// Look accumulates as yaw/pitch offsets only — does not move the player body or camera transform.
+	/// </summary>
+	public void BeginCinematicDetachedLook()
+	{
+		_cinematicDetachedLook = true;
+		_cinematicYawOffset = 0f;
+		_cinematicPitchOffset = 0f;
+	}
+
+	public void EndCinematicDetachedLook( float restorePitch )
+	{
+		if ( !_cinematicDetachedLook )
+			return;
+
+		_cinematicDetachedLook = false;
+		_cinematicYawOffset = 0f;
+		_cinematicPitchOffset = 0f;
+		SetPitch( restorePitch );
 	}
 
 	public void SetFieldOfView( float fov )
@@ -152,15 +180,21 @@ public class FirstPersonCameraController : MonoBehaviour
 			return;
 
 		float sensitivity = CurrentLookSensitivity * _lookSensitivityMultiplier;
-		_body.Rotate( 0f, delta.x * sensitivity, 0f, Space.World );
-
+		float yawDelta = delta.x * sensitivity;
 		float pitchDelta = delta.y * sensitivity;
-		if ( InvertY )
-			_pitch += pitchDelta;
-		else
-			_pitch -= pitchDelta;
+		if ( !InvertY )
+			pitchDelta = -pitchDelta;
 
-		_pitch = Mathf.Clamp( _pitch, MinPitch, MaxPitch );
+		if ( _cinematicDetachedLook )
+		{
+			_cinematicYawOffset += yawDelta;
+			_cinematicPitchOffset = Mathf.Clamp( _cinematicPitchOffset + pitchDelta, MinPitch, MaxPitch );
+			return;
+		}
+
+		_body.Rotate( 0f, yawDelta, 0f, Space.World );
+
+		_pitch = Mathf.Clamp( _pitch + pitchDelta, MinPitch, MaxPitch );
 		transform.localRotation = Quaternion.Euler( _pitch, 0f, 0f );
 	}
 

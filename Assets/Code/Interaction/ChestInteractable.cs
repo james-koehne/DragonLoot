@@ -1,22 +1,34 @@
+using FeedbackSystem;
+
 using UnityEngine;
 
 /// <summary>
 /// Primary interact for buried / revealed treasure chests.
-/// Unlock with a matching key (or skeleton key), lockpick over time, then open for placeholder loot.
+/// Chests must be picked up from a gold pile and placed on the ground before unlock / open.
+/// Unlock with a matching key (or skeleton key), or lockpick when hands cannot take the chest.
 /// </summary>
 [RequireComponent( typeof( TreasureItem ) )]
 public class ChestInteractable : InteractableBase
 {
 	public const string LockpickAbilityId = "lockpick";
 	const float DefaultLockpickDuration = 8f;
-	const float LootScatterRadius = 0.55f;
-	const float LootUpBias = 0.35f;
+	const float LootScatterMinRadius = 1.1f;
+	const float LootScatterMaxRadius = 2.0f;
+	const float LootUpBias = 0.75f;
+	const float LootLaunchHorizontalMin = 2.0f;
+	const float LootLaunchHorizontalMax = 4.2f;
+	const float LootLaunchUpMin = 4.5f;
+	const float LootLaunchUpMax = 6.5f;
 
 	[SerializeField]
 	ChestDefinition chestDefinition;
 
 	[SerializeField]
 	ChestState state = ChestState.Locked;
+
+	[Header( "Feedbacks" )]
+	[SerializeField]
+	Feedbacks onOpenFeedback;
 
 	TreasureItem _item;
 	float _lockpickEndsAt = -1f;
@@ -83,23 +95,57 @@ public class ChestInteractable : InteractableBase
 		if ( IsBuried( item ) )
 			return false;
 
+		if ( item.State == TreasureItemState.Held
+			|| item.State == TreasureItemState.Stacked
+			|| item.IsReclaiming )
+			return false;
+
+		string label = ResolveChestLabel();
+
+		// Still seated in a gold pile — carry out first; unlock/open only on the ground.
+		if ( IsAttachedToPile( item ) )
+		{
+			if ( !CanPickup( player, item ) )
+				return false;
+
+			SetInteractionName( "Pick up " + label );
+			return true;
+		}
+
 		switch ( state )
 		{
 			case ChestState.Locked:
+				if ( ChestProgress.DisableKeys )
+				{
+					SetInteractionName( "Open " + label );
+					return true;
+				}
 				if ( TryGetUsableKey( player, out _ ) )
 				{
-					SetInteractionName( "Unlock " + ResolveChestLabel() );
+					SetInteractionName( "Unlock " + label );
 					return true;
 				}
 				if ( CanStartLockpick( player ) )
 				{
-					SetInteractionName( "Lockpick " + ResolveChestLabel() );
+					SetInteractionName( "Lockpick " + label );
+					return true;
+				}
+				if ( CanPickup( player, item ) )
+				{
+					SetInteractionName( "Pick up " + label );
 					return true;
 				}
 				return false;
 			case ChestState.Unlocked:
-				SetInteractionName( "Open " + ResolveChestLabel() );
+				SetInteractionName( "Open " + label );
 				return true;
+			case ChestState.Opened:
+				if ( CanPickup( player, item ) )
+				{
+					SetInteractionName( "Pick up " + label );
+					return true;
+				}
+				return false;
 			default:
 				return false;
 		}
@@ -110,26 +156,85 @@ public class ChestInteractable : InteractableBase
 		if ( player == null || !CanInteract( player ) )
 			return;
 
+		TreasureItem item = Item;
+		if ( item != null && IsAttachedToPile( item ) )
+		{
+			TryPickup( player );
+			return;
+		}
+
 		switch ( state )
 		{
 			case ChestState.Locked:
+				if ( ChestProgress.DisableKeys )
+				{
+					TryForceOpen();
+					return;
+				}
 				if ( TryUnlockWithHeldKey( player ) )
 					return;
-				TryBeginLockpick( player );
+				if ( CanStartLockpick( player ) )
+				{
+					TryBeginLockpick( player );
+					return;
+				}
+				TryPickup( player );
 				return;
 			case ChestState.Unlocked:
 				TryOpen();
 				return;
+			case ChestState.Opened:
+				TryPickup( player );
+				return;
 		}
+	}
+
+	bool CanPickup( PlayerController player, TreasureItem item )
+	{
+		if ( player == null || item == null )
+			return false;
+
+		item.TryRepairPickupState();
+		if ( item.State == TreasureItemState.Held
+			|| item.State == TreasureItemState.Stacked
+			|| item.IsReclaiming )
+			return false;
+
+		return player.CanReceiveTreasureItem( item );
+	}
+
+	bool TryPickup( PlayerController player )
+	{
+		TreasureItem item = Item;
+		if ( player == null || item == null || !CanPickup( player, item ) )
+			return false;
+
+		TreasurePileVisual pile = item.PileOwner;
+		if ( pile != null )
+		{
+			if ( !pile.TryBeginSteal( item ) )
+				return false;
+		}
+
+		if ( !player.TryReceiveTreasureItem( item ) )
+		{
+			if ( pile != null )
+				pile.CancelSteal( item );
+			return false;
+		}
+
+		if ( pile != null )
+			pile.CompleteSteal( item );
+		return true;
 	}
 
 	public bool TryBeginLockpick( PlayerController player )
 	{
-		if ( state != ChestState.Locked )
+		if ( state != ChestState.Locked || ChestProgress.DisableKeys )
 			return false;
 
 		TreasureItem item = Item;
-		if ( item == null || IsBuried( item ) )
+		if ( item == null || IsBuried( item ) || IsAttachedToPile( item ) )
 			return false;
 
 		if ( !CanStartLockpick( player ) )
@@ -172,12 +277,36 @@ public class ChestInteractable : InteractableBase
 		_lockpickEndsAt = -1f;
 		RefreshInteractionName();
 		ChestProgress.RecordChestOpened();
+		EventBus.Publish( new ChestOpenedEvent { Chest = this } );
+		PlayOpenFeedback();
 		SpawnLootAsync();
 		return true;
 	}
 
+	void PlayOpenFeedback()
+	{
+		if ( onOpenFeedback == null )
+			return;
+
+		FeedbackContext context = new FeedbackContext();
+		context.Source = gameObject;
+		context.Target = gameObject;
+		context.Position = transform.position;
+		onOpenFeedback.Play( context );
+	}
+
+#if UNITY_EDITOR
+	public void EditorSetOpenFeedback( Feedbacks value )
+	{
+		onOpenFeedback = value;
+	}
+#endif
+
 	bool TryUnlockWithHeldKey( PlayerController player )
 	{
+		if ( ChestProgress.DisableKeys )
+			return false;
+
 		if ( !TryGetUsableKey( player, out TreasureItem keyItem ) )
 			return false;
 
@@ -289,15 +418,21 @@ public class ChestInteractable : InteractableBase
 				int count = entry.count;
 				for ( int n = 0; n < count; n++ )
 				{
-					Vector2 planar = Random.insideUnitCircle * LootScatterRadius;
-					Vector3 pos = origin + new Vector3( planar.x, 0.05f * n, planar.y );
+					float angle = Random.Range( 0f, Mathf.PI * 2f );
+					float radius = Random.Range( LootScatterMinRadius, LootScatterMaxRadius );
+					Vector3 planarDir = new Vector3( Mathf.Cos( angle ), 0f, Mathf.Sin( angle ) );
+
+					// Start just outside the chest volume, then launch farther out.
+					Vector3 pos = origin + planarDir * ( radius * 0.35f ) + Vector3.up * ( 0.04f * n );
 					Quaternion rot = Quaternion.Euler( 0f, Random.Range( 0f, 360f ), 0f );
 
 					TreasureItem spawned = await TreasureItemFactory.SpawnAsync( entry.treasure, pos, rot, null );
 					if ( spawned == null )
 						continue;
 
-					Vector3 velocity = new Vector3( planar.x, 1.2f, planar.y ) * 1.5f;
+					float horizontal = Random.Range( LootLaunchHorizontalMin, LootLaunchHorizontalMax );
+					float up = Random.Range( LootLaunchUpMin, LootLaunchUpMax );
+					Vector3 velocity = planarDir * horizontal + Vector3.up * up;
 					spawned.EnterPhysics( pos, rot, velocity );
 				}
 			}
@@ -385,6 +520,18 @@ public class ChestInteractable : InteractableBase
 			return true;
 
 		return false;
+	}
+
+	/// <summary>True while the chest is still owned by / seated in a gold pile.</summary>
+	static bool IsAttachedToPile( TreasureItem item )
+	{
+		if ( item == null )
+			return false;
+
+		if ( item.PileOwner != null )
+			return true;
+
+		return item.State == TreasureItemState.InPile;
 	}
 
 	/// <summary>Resolves a chest interactable from a focused interactable or collider chain.</summary>

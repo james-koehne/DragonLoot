@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
+using FeedbackSystem;
+
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -126,12 +128,66 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 	float snapDuration = 0.25f;
 
 	[SerializeField]
+	[Min( 0.05f )]
+	float approachDuration = 0.18f;
+
+	[SerializeField]
+	[Min( 0f )]
+	float approachHold = 0.06f;
+
+	[SerializeField]
+	[Min( 0.05f )]
+	float placeSpinDuration = 0.28f;
+
+	[SerializeField]
+	[Min( 0.05f )]
+	float approachDistance = 0.35f;
+
+	[SerializeField]
+	[Min( 0f )]
+	float placeSpins = 1.1f;
+
+	[SerializeField]
 	[Min( 1f )]
 	float bounceScale = 1.15f;
 
 	[Tooltip( "Euler rotation applied to every gem relative to its slot anchor." )]
 	[SerializeField]
 	Vector3 gemSocketRotation;
+
+	[Header( "Connected Glow" )]
+	[SerializeField]
+	[Min( 0.1f )]
+	float connectedGlowLerpSpeed = 4f;
+
+	[Header( "Complete Ignition" )]
+	[SerializeField]
+	[Min( 0f )]
+	float cascadeStagger = 0.1f;
+
+	[SerializeField]
+	[Min( 0.05f )]
+	float ignitionBoostDuration = 0.55f;
+
+	[SerializeField]
+	[Min( 1f )]
+	float ignitionPeakGlow = 1.35f;
+
+	[SerializeField]
+	[Min( 1f )]
+	float completedGlowBaseline = 1.06f;
+
+	[SerializeField]
+	[Min( 0f )]
+	float breatheAmplitude = 0.08f;
+
+	[SerializeField]
+	[Min( 0.05f )]
+	float breatheSpeed = 0.85f;
+
+	[SerializeField]
+	[Min( 0.05f )]
+	float completeSurgeDuration = 1.8f;
 
 	[Header( "Feedback" )]
 	[SerializeField]
@@ -143,15 +199,29 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 	[SerializeField]
 	GemConstellationLineVisual lineVisual;
 
+	[SerializeField]
+	Feedbacks placeFeedbacks;
+
+	[SerializeField]
+	Feedbacks connectionFeedbacks;
+
+	[SerializeField]
+	Feedbacks completeFeedbacks;
+
 	[Header( "Editor Gizmos" )]
 	[SerializeField]
 	bool drawGizmosAlways;
 
 	readonly List<TreasureItem> _displayedItems = new List<TreasureItem>();
 	readonly List<GemConstellationResolvedConnection> _resolvedConnections = new List<GemConstellationResolvedConnection>();
+	readonly List<bool> _edgeLit = new List<bool>();
 	TreasureItem[] _occupants;
+	float[] _glowCurrent;
+	float[] _glowBoost;
 	int _currentCount;
 	bool _isComplete;
+	bool _completeBreatheActive;
+	Coroutine _completeIgnitionRoutine;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.DisplayCabinet;
 	public GemConstellationAcceptanceMode AcceptanceMode => acceptanceMode;
@@ -180,6 +250,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		RefreshCountLabel();
 		SetCompletedVisual( false );
 		RefreshLineVisual();
+		SyncEdgeLitState( playConnectionFeedback: false );
 	}
 
 	protected virtual void Start()
@@ -187,10 +258,28 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		TryFillSlotsOnStart();
 	}
 
+	protected virtual void Update()
+	{
+		TickConnectedGlow();
+	}
+
 	protected virtual void OnValidate()
 	{
 		snapDuration = Mathf.Max( 0.05f, snapDuration );
+		approachDuration = Mathf.Max( 0.05f, approachDuration );
+		approachHold = Mathf.Max( 0f, approachHold );
+		placeSpinDuration = Mathf.Max( 0.05f, placeSpinDuration );
+		approachDistance = Mathf.Max( 0.05f, approachDistance );
+		placeSpins = Mathf.Max( 0f, placeSpins );
 		bounceScale = Mathf.Max( 1f, bounceScale );
+		connectedGlowLerpSpeed = Mathf.Max( 0.1f, connectedGlowLerpSpeed );
+		cascadeStagger = Mathf.Max( 0f, cascadeStagger );
+		ignitionBoostDuration = Mathf.Max( 0.05f, ignitionBoostDuration );
+		ignitionPeakGlow = Mathf.Max( 1f, ignitionPeakGlow );
+		completedGlowBaseline = Mathf.Max( 1f, completedGlowBaseline );
+		breatheAmplitude = Mathf.Max( 0f, breatheAmplitude );
+		breatheSpeed = Mathf.Max( 0.05f, breatheSpeed );
+		completeSurgeDuration = Mathf.Max( 0.05f, completeSurgeDuration );
 		slotFillChance = Mathf.Clamp01( slotFillChance );
 		minFilledSlots = Mathf.Max( 0, minFilledSlots );
 		maxFilledSlots = Mathf.Max( 0, maxFilledSlots );
@@ -260,11 +349,14 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		RefreshCountLabel();
 		PublishChanged();
 		RefreshLineVisual();
+		SyncEdgeLitState( playConnectionFeedback: false );
 		if ( !_isComplete && EvaluateComplete() )
 		{
 			_isComplete = true;
 			SetCompletedVisual( true );
 			PublishCompleted();
+			// Start-fill: breathe only — skip noisy ignition cascade on load.
+			BeginCompleteBreathe();
 		}
 	}
 
@@ -631,14 +723,24 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 				continue;
 
 			_occupants[ i ] = null;
+			if ( _glowCurrent != null && i < _glowCurrent.Length )
+				_glowCurrent[ i ] = 0f;
+			if ( _glowBoost != null && i < _glowBoost.Length )
+				_glowBoost[ i ] = 0f;
+			item.SetConnectedGlow( 0f );
 			_displayedItems.Remove( item );
 			_currentCount = Mathf.Max( 0, _currentCount - 1 );
+			StopCompleteIgnition();
 			_isComplete = false;
+			_completeBreatheActive = false;
+			if ( lineVisual != null )
+				lineVisual.StopCompleteEffects();
 			SetCompletedVisual( false );
 			RefreshCountLabel();
 			PublishChanged();
 			NotifySortedDelta( item.Definition, -1 );
 			RefreshLineVisual();
+			SyncEdgeLitState( playConnectionFeedback: false );
 			EventBus.Publish( new TreasureRemovedEvent
 			{
 				Target = this,
@@ -730,6 +832,31 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 			return false;
 
 		return _occupants[ slotIndex ] != null;
+	}
+
+	/// <summary>
+	/// Required gem for a slot. Null means any gem (AnyGem with no override).
+	/// </summary>
+	public TreasureDefinition GetRequiredGem( int slotIndex )
+	{
+		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
+			return null;
+
+		TreasureDefinition slotOverride = slots[ slotIndex ].overrideGem;
+		if ( slotOverride != null )
+			return slotOverride;
+
+		switch ( acceptanceMode )
+		{
+			case GemConstellationAcceptanceMode.SetGem:
+				return defaultAcceptedGem;
+			case GemConstellationAcceptanceMode.AnyGem:
+				return null;
+			case GemConstellationAcceptanceMode.PerSlot:
+				return null;
+			default:
+				return null;
+		}
 	}
 
 	public void GetSlotWorldPose( int slotIndex, out Vector3 worldPos, out Quaternion worldRot )
@@ -968,23 +1095,80 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		Vector3 startScale = t.lossyScale;
 		Vector3 endScale = item.GetWorldScale();
 
-		float duration = Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
-		float arcHeight = CoinFlipMotion.DefaultItemArcHeight;
-		float elapsed = 0f;
+		Vector3 approachPos = endWorldPos - transform.forward * approachDistance;
+		Quaternion approachRot = ResolveApproachRotation( startRot, endWorldRot );
 
-		while ( elapsed < duration )
+		float flyDuration = Mathf.Max( approachDuration, 0.05f );
+		float flyElapsed = 0f;
+		float flyArc = CoinFlipMotion.DefaultItemArcHeight;
+
+		while ( flyElapsed < flyDuration )
 		{
 			if ( item == null )
 				yield break;
 
-			elapsed += Time.deltaTime;
-			float u = Mathf.Clamp01( elapsed / duration );
+			flyElapsed += Time.deltaTime;
+			float u = Mathf.Clamp01( flyElapsed / flyDuration );
+			float ease = CoinFlipMotion.SmoothStep( u );
+
+			t.position = CoinFlipMotion.EvaluateArcPosition( startPos, approachPos, u, flyArc );
+			t.rotation = Quaternion.Slerp( startRot, approachRot, ease );
+			item.ApplyDesiredWorldScale( Vector3.Lerp( startScale, endScale, ease ) );
+
+			yield return null;
+		}
+
+		if ( item == null )
+			yield break;
+
+		t.position = approachPos;
+		t.rotation = approachRot;
+		item.ApplyDesiredWorldScale( endScale );
+
+		if ( approachHold > 0.0001f )
+		{
+			float holdElapsed = 0f;
+			while ( holdElapsed < approachHold )
+			{
+				if ( item == null )
+					yield break;
+
+				holdElapsed += Time.deltaTime;
+				t.position = approachPos;
+				t.rotation = approachRot;
+				yield return null;
+			}
+		}
+
+		if ( item == null )
+			yield break;
+
+		GetSlotWorldPose( slotIndex, out endWorldPos, out endWorldRot );
+		Quaternion spinStartRot = t.rotation;
+		Vector3 spinStartScale = endScale;
+		float spinDuration = Mathf.Max( placeSpinDuration, snapDuration * 0.5f );
+		float spinElapsed = 0f;
+		float spinArc = CoinFlipMotion.DefaultItemArcHeight * 0.5f;
+		float spins = placeSpins;
+		Vector3 screwAxis = transform.forward;
+		if ( screwAxis.sqrMagnitude < 0.0001f )
+			screwAxis = Vector3.forward;
+		else
+			screwAxis.Normalize();
+
+		while ( spinElapsed < spinDuration )
+		{
+			if ( item == null )
+				yield break;
+
+			spinElapsed += Time.deltaTime;
+			float u = Mathf.Clamp01( spinElapsed / spinDuration );
 			float ease = CoinFlipMotion.SmoothStep( u );
 			float bounce = 1f + ( bounceScale - 1f ) * Mathf.Sin( u * Mathf.PI );
 
-			t.position = CoinFlipMotion.EvaluateArcPosition( startPos, endWorldPos, u, arcHeight );
-			t.rotation = Quaternion.Slerp( startRot, endWorldRot, ease );
-			item.ApplyDesiredWorldScale( Vector3.Lerp( startScale, endScale, ease ) * bounce );
+			t.position = CoinFlipMotion.EvaluateArcPosition( approachPos, endWorldPos, u, spinArc );
+			t.rotation = EvaluateScrewRotation( spinStartRot, endWorldRot, screwAxis, u, spins );
+			item.ApplyDesiredWorldScale( Vector3.Lerp( spinStartScale, endScale, ease ) * bounce );
 
 			yield return null;
 		}
@@ -999,18 +1183,43 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 			GetSlotWorldPose( slotIndex, out endWorldPos, out endWorldRot );
 			item.EnterDisplayed( this, GetSlotParent( slotIndex ), endWorldPos, endWorldRot );
 			TreasureInteractSfx.PlayPlace( item.Definition, endWorldPos );
+			CoinGemInteractFeedback.PlayPlace( item );
+			PlayPlaceFx( endWorldPos );
 		}
 
-		PlayPlaceFx();
 		RefreshLineVisual();
+		SyncEdgeLitState( playConnectionFeedback: true );
 
 		if ( !_isComplete && EvaluateComplete() )
 		{
 			_isComplete = true;
 			SetCompletedVisual( true );
 			PublishCompleted();
-			PlayCompleteFx();
+			StartCompleteIgnition();
 		}
+	}
+
+	Quaternion ResolveApproachRotation( Quaternion startRot, Quaternion endWorldRot )
+	{
+		// Approach sits on local -Z; face along +Z (into the slot) so the screw-in reads cleanly.
+		Vector3 forward = transform.forward;
+		if ( forward.sqrMagnitude < 0.0001f )
+			return Quaternion.Slerp( startRot, endWorldRot, 0.5f );
+
+		Vector3 up = Vector3.up;
+		if ( Mathf.Abs( Vector3.Dot( forward.normalized, up ) ) > 0.95f )
+			up = transform.up;
+
+		Quaternion faceIntoSlot = Quaternion.LookRotation( forward.normalized, up );
+		return Quaternion.Slerp( faceIntoSlot, endWorldRot, 0.35f );
+	}
+
+	static Quaternion EvaluateScrewRotation( Quaternion start, Quaternion end, Vector3 axis, float u, float spins )
+	{
+		float ease = CoinFlipMotion.SmoothStep( u );
+		Quaternion baseRot = Quaternion.Slerp( start, end, ease );
+		float angle = spins * 360f * Mathf.Clamp01( u );
+		return Quaternion.AngleAxis( angle, axis ) * baseRot;
 	}
 
 	bool EvaluateComplete()
@@ -1042,6 +1251,186 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 
 			_occupants = next;
 		}
+
+		EnsureGlowArray( count );
+	}
+
+	void EnsureGlowArray( int count )
+	{
+		if ( _glowCurrent == null || _glowCurrent.Length != count )
+		{
+			float[] next = new float[ count ];
+			if ( _glowCurrent != null )
+			{
+				int copy = Mathf.Min( _glowCurrent.Length, count );
+				for ( int i = 0; i < copy; i++ )
+					next[ i ] = _glowCurrent[ i ];
+			}
+
+			_glowCurrent = next;
+		}
+
+		if ( _glowBoost == null || _glowBoost.Length != count )
+		{
+			float[] nextBoost = new float[ count ];
+			if ( _glowBoost != null )
+			{
+				int copy = Mathf.Min( _glowBoost.Length, count );
+				for ( int i = 0; i < copy; i++ )
+					nextBoost[ i ] = _glowBoost[ i ];
+			}
+
+			_glowBoost = nextBoost;
+		}
+	}
+
+	void TickConnectedGlow()
+	{
+		if ( _occupants == null || _occupants.Length == 0 )
+			return;
+
+		EnsureGlowArray( _occupants.Length );
+		float step = Time.deltaTime * connectedGlowLerpSpeed;
+		float boostDecay = ignitionBoostDuration > 0.0001f
+			? Time.deltaTime / ignitionBoostDuration
+			: 1f;
+		float breathe = 0f;
+		if ( _completeBreatheActive )
+			breathe = Mathf.Sin( Time.time * breatheSpeed ) * breatheAmplitude;
+
+		for ( int i = 0; i < _occupants.Length; i++ )
+		{
+			TreasureItem item = _occupants[ i ];
+			bool connected = item != null && IsSlotConnectedLit( i );
+			float connectedAmount = connected ? 1f : 0f;
+			float baseline = ( _isComplete && connected ) ? completedGlowBaseline : 1f;
+
+			if ( _glowBoost[ i ] > 0f )
+				_glowBoost[ i ] = Mathf.Max( 0f, _glowBoost[ i ] - ( ignitionPeakGlow - completedGlowBaseline ) * boostDecay );
+
+			float boost = connected ? _glowBoost[ i ] : 0f;
+			float breatheTerm = ( _completeBreatheActive && connected ) ? breathe : 0f;
+			float target = Mathf.Clamp( connectedAmount * baseline + boost + breatheTerm, 0f, 2f );
+
+			float current = _glowCurrent[ i ];
+			float next = Mathf.MoveTowards( current, target, step );
+			if ( Mathf.Abs( next - current ) < 0.0001f && ( item == null || Mathf.Abs( item.ConnectedGlow - next ) < 0.0001f ) )
+				continue;
+
+			_glowCurrent[ i ] = next;
+			if ( item != null )
+				item.SetConnectedGlow( next );
+		}
+	}
+
+	void StartCompleteIgnition()
+	{
+		StopCompleteIgnition();
+		_completeIgnitionRoutine = StartCoroutine( PlayCompleteIgnitionRoutine() );
+	}
+
+	void StopCompleteIgnition()
+	{
+		if ( _completeIgnitionRoutine != null )
+		{
+			StopCoroutine( _completeIgnitionRoutine );
+			_completeIgnitionRoutine = null;
+		}
+
+		if ( _glowBoost != null )
+		{
+			for ( int i = 0; i < _glowBoost.Length; i++ )
+				_glowBoost[ i ] = 0f;
+		}
+	}
+
+	void BeginCompleteBreathe()
+	{
+		_completeBreatheActive = true;
+		if ( lineVisual != null )
+			lineVisual.SetCompleteBreathe( true );
+	}
+
+	IEnumerator PlayCompleteIgnitionRoutine()
+	{
+		EnsureGlowArray( SlotCount );
+		PlayCompleteFx();
+
+		if ( lineVisual != null )
+			lineVisual.PlayCompleteSurge( completeSurgeDuration );
+
+		float peakBoost = Mathf.Max( 0f, ignitionPeakGlow - completedGlowBaseline );
+		int count = SlotCount;
+		for ( int i = 0; i < count; i++ )
+		{
+			if ( _occupants != null && i < _occupants.Length && _occupants[ i ] != null )
+			{
+				_glowBoost[ i ] = peakBoost;
+				float peak = Mathf.Clamp( completedGlowBaseline + peakBoost, 0f, 2f );
+				_glowCurrent[ i ] = peak;
+				_occupants[ i ].SetConnectedGlow( peak );
+			}
+
+			if ( cascadeStagger > 0.0001f && i < count - 1 )
+				yield return new WaitForSeconds( cascadeStagger );
+		}
+
+		float settleWait = Mathf.Max( ignitionBoostDuration, completeSurgeDuration * 0.75f );
+		if ( settleWait > 0.0001f )
+			yield return new WaitForSeconds( settleWait );
+
+		BeginCompleteBreathe();
+		_completeIgnitionRoutine = null;
+	}
+
+	bool IsSlotConnectedLit( int slotIndex )
+	{
+		if ( _occupants == null || slotIndex < 0 || slotIndex >= _occupants.Length )
+			return false;
+		if ( _occupants[ slotIndex ] == null )
+			return false;
+
+		for ( int i = 0; i < _resolvedConnections.Count; i++ )
+		{
+			GemConstellationResolvedConnection edge = _resolvedConnections[ i ];
+			if ( edge.SlotA != slotIndex && edge.SlotB != slotIndex )
+				continue;
+			if ( IsSlotOccupied( edge.SlotA ) && IsSlotOccupied( edge.SlotB ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	void SyncEdgeLitState( bool playConnectionFeedback )
+	{
+		EnsureEdgeLitCount( _resolvedConnections.Count );
+
+		for ( int i = 0; i < _resolvedConnections.Count; i++ )
+		{
+			GemConstellationResolvedConnection edge = _resolvedConnections[ i ];
+			bool lit = IsSlotOccupied( edge.SlotA ) && IsSlotOccupied( edge.SlotB );
+			bool wasLit = i < _edgeLit.Count && _edgeLit[ i ];
+
+			if ( playConnectionFeedback && lit && !wasLit )
+			{
+				GetSlotWorldPose( edge.SlotA, out Vector3 a, out _ );
+				GetSlotWorldPose( edge.SlotB, out Vector3 b, out _ );
+				PlayConnectionFx( ( a + b ) * 0.5f );
+			}
+
+			if ( i < _edgeLit.Count )
+				_edgeLit[ i ] = lit;
+		}
+	}
+
+	void EnsureEdgeLitCount( int count )
+	{
+		while ( _edgeLit.Count < count )
+			_edgeLit.Add( false );
+
+		while ( _edgeLit.Count > count )
+			_edgeLit.RemoveAt( _edgeLit.Count - 1 );
 	}
 
 	void EnsureLineVisual()
@@ -1109,10 +1498,34 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 
 	protected virtual void PlayPlaceFx()
 	{
+		PlayPlaceFx( transform.position );
+	}
+
+	protected virtual void PlayPlaceFx( Vector3 worldPos )
+	{
+		PlayFeedback( placeFeedbacks, worldPos );
+	}
+
+	protected virtual void PlayConnectionFx( Vector3 worldPos )
+	{
+		PlayFeedback( connectionFeedbacks, worldPos );
 	}
 
 	protected virtual void PlayCompleteFx()
 	{
+		PlayFeedback( completeFeedbacks, transform.position );
+	}
+
+	void PlayFeedback( Feedbacks feedbacks, Vector3 worldPos )
+	{
+		if ( feedbacks == null )
+			return;
+
+		FeedbackContext context = new FeedbackContext();
+		context.Source = gameObject;
+		context.Target = gameObject;
+		context.Position = worldPos;
+		feedbacks.Play( context );
 	}
 
 	static void NormalizeConnectionPairs( List<GemConstellationConnectionPair> pairs )

@@ -6,6 +6,7 @@ using UnityEngine.Rendering;
 
 /// <summary>
 /// Fades roof skylight lights, sky portal intensity, and light-ray density from zero.
+/// Per-instance reveal timing/punch is read by <see cref="LanternRevealSweepController"/>.
 /// </summary>
 public class SkylightReveal : MonoBehaviour
 {
@@ -21,6 +22,27 @@ public class SkylightReveal : MonoBehaviour
 	[SerializeField]
 	Renderer _lightRaysRenderer;
 
+	[Header( "Reveal Timing" )]
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Seconds after reveal start before this skylight begins fading in." )]
+	float _startDelay;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Seconds for this skylight to fade from 0 to 1. 0 = use LanternRevealSweepController default / world-event override." )]
+	float _fadeDuration;
+
+	[SerializeField]
+	[Tooltip( "Overshoot punch for this skylight. Timeline is relative to this skylight's start delay. Peak <= 1 disables punch." )]
+	RevealPunchChannel _punch = new RevealPunchChannel
+	{
+		rise = 0.1f,
+		hold = 0.15f,
+		fall = 0.8f,
+		peak = 2.5f
+	};
+
 	MaterialPropertyBlock _propertyBlock;
 	float[] _targetLightIntensities = Array.Empty<float>();
 	float _targetSkyIntensity;
@@ -32,6 +54,12 @@ public class SkylightReveal : MonoBehaviour
 	public float CurrentRevealT => _currentT;
 
 	public float CurrentOvershootScale => _overshootScale;
+
+	public float StartDelay => _startDelay;
+
+	public float FadeDuration => _fadeDuration;
+
+	public RevealPunchChannel Punch => _punch;
 
 	void Awake()
 	{

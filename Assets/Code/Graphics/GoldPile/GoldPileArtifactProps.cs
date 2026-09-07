@@ -704,7 +704,25 @@ public class GoldPileArtifactProps : MonoBehaviour
 		int startIndex )
 	{
 		int generation = ++_revealGeneration;
-		_ = RefreshRevealAsync( bindId, generation, spatialFilter, worldCenter, radius, startIndex );
+		_ = RunRevealObservedAsync( bindId, generation, spatialFilter, worldCenter, radius, startIndex );
+	}
+
+	async Task RunRevealObservedAsync(
+		int bindId,
+		int generation,
+		bool spatialFilter,
+		Vector3 worldCenter,
+		float radius,
+		int startIndex )
+	{
+		try
+		{
+			await RefreshRevealAsync( bindId, generation, spatialFilter, worldCenter, radius, startIndex );
+		}
+		catch ( MissingReferenceException )
+		{
+			// Component destroyed mid-reveal (play-mode exit / ClearAll / domain reload).
+		}
 	}
 
 	void OnDisable()
@@ -715,6 +733,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 	void OnDestroy()
 	{
 		_revealGeneration++;
+		_bindSerial++;
 		ClearAll();
 	}
 
@@ -1538,7 +1557,21 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	async Task SeatLatentAsync( int latentIndex, TreasureItem reuse )
 	{
-		if ( latentIndex < 0 || latentIndex >= _latent.Count || _pileRoot == null )
+		try
+		{
+			await SeatLatentAsyncCore( latentIndex, reuse );
+		}
+		catch ( MissingReferenceException )
+		{
+			// Destroyed mid-spawn (play-mode exit / ClearAll).
+		}
+	}
+
+	async Task SeatLatentAsyncCore( int latentIndex, TreasureItem reuse )
+	{
+		if ( this == null || latentIndex < 0 || _pileRoot == null )
+			return;
+		if ( latentIndex >= _latent.Count )
 			return;
 
 		LatentEntry latent = _latent[ latentIndex ];
@@ -1573,14 +1606,23 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( item == null )
 			item = await TreasureItemFactory.SpawnAsync( definition, worldPos, worldRot, transform );
 
-		if ( item == null || this == null || _pileRoot == null )
+		// Destroyed during Addressables await (exit play mode / rebake / ClearAll).
+		if ( this == null )
+		{
+			if ( item != null && reuse == null )
+				TreasureItemFactory.Despawn( item );
+			return;
+		}
+
+		if ( item == null || _pileRoot == null )
 		{
 			if ( item != null && reuse == null )
 				TreasureItemFactory.Despawn( item );
 			if ( item == null && reuse == null )
 			{
+				string defName = definition != null ? definition.name : "(null)";
 				Debug.LogWarning(
-					$"[GoldPileArtifactProps] Pile '{PileLogName()}' failed to instantiate '{definition.name}' at {worldPos}. "
+					$"[GoldPileArtifactProps] Pile '{PileLogName()}' failed to instantiate '{defName}' at {worldPos}. "
 					+ "All treasure needs to spawn.",
 					this );
 			}
@@ -2595,6 +2637,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	string PileLogName()
 	{
+		if ( this == null )
+			return "(destroyed)";
 		if ( _owner != null )
 			return _owner.name;
 		return name;

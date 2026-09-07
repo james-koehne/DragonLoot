@@ -5,6 +5,20 @@ using UnityEngine;
 /// </summary>
 public static class ChestProgress
 {
+	/// <summary>
+	/// Debug: skip key / lockpick requirements and allow opening locked chests on the ground.
+	/// Default on while keys are still being tuned.
+	/// </summary>
+	public static bool DisableKeys { get; private set; } = true;
+
+	public static void SetDisableKeys( bool disableKeys )
+	{
+		if ( DisableKeys == disableKeys )
+			return;
+
+		DisableKeys = disableKeys;
+	}
+
 	public static int ChestsOpened
 	{
 		get

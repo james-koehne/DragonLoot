@@ -13,6 +13,13 @@ using UnityEngine.UI;
 /// </summary>
 public class TutorialPopupUI : MonoBehaviour
 {
+	const float ContentPadX = 20f;
+	const float ContentPadTop = 18f;
+	const float ContentPadBottom = 18f;
+	const float ContentGap = 10f;
+	const float MinPopupHeight = 140f;
+	const float DefaultPopupWidth = 520f;
+
 	[SerializeField] CanvasGroup group;
 	[SerializeField] Text titleText;
 	[SerializeField] Text bodyText;
@@ -33,6 +40,7 @@ public class TutorialPopupUI : MonoBehaviour
 	Vector3 _restScale = Vector3.one;
 	Vector2 _restAnchored;
 	bool _restAnchoredCaptured;
+	float _popupWidth = DefaultPopupWidth;
 
 	public bool IsVisible => _visible;
 
@@ -68,10 +76,27 @@ public class TutorialPopupUI : MonoBehaviour
 		{
 			_restAnchored = rect.anchoredPosition;
 			_restAnchoredCaptured = true;
+			if ( rect.rect.width > 1f )
+				_popupWidth = rect.rect.width;
 		}
+
+		ConfigureTextOverflow( titleText );
+		ConfigureTextOverflow( bodyText );
+		ConfigureTextOverflow( hintText );
+		ConfigureTextOverflow( tasksText );
+		ConfigureTextOverflow( stepText );
 
 		HideImmediate();
 		_ready = true;
+	}
+
+	static void ConfigureTextOverflow( Text text )
+	{
+		if ( text == null )
+			return;
+		text.horizontalOverflow = HorizontalWrapMode.Wrap;
+		text.verticalOverflow = VerticalWrapMode.Overflow;
+		text.resizeTextForBestFit = false;
 	}
 
 	void EnsureUnscaledFeedbacks()
@@ -115,6 +140,7 @@ public class TutorialPopupUI : MonoBehaviour
 		}
 
 		RefreshBodyAndTasks();
+		LayoutContent();
 
 		if ( group != null )
 		{
@@ -132,6 +158,7 @@ public class TutorialPopupUI : MonoBehaviour
 	{
 		_tasksFormatted = tasksFormatted ?? string.Empty;
 		RefreshBodyAndTasks();
+		LayoutContent();
 	}
 
 	public void PlayTaskComplete()
@@ -255,6 +282,49 @@ public class TutorialPopupUI : MonoBehaviour
 			bodyText.text = _tasksFormatted;
 		else
 			bodyText.text = _bodyBase + "\n\n" + _tasksFormatted;
+	}
+
+	void LayoutContent()
+	{
+		RectTransform root = transform as RectTransform;
+		if ( root == null )
+			return;
+
+		float width = _popupWidth > 1f ? _popupWidth : DefaultPopupWidth;
+		root.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, width );
+
+		float contentWidth = Mathf.Max( 40f, width - ContentPadX * 2f );
+		Canvas.ForceUpdateCanvases();
+
+		float y = -ContentPadTop;
+		y = PlaceTextBlock( titleText, contentWidth, y, ContentGap );
+		y = PlaceTextBlock( bodyText, contentWidth, y, ContentGap );
+		y = PlaceTextBlock( tasksText, contentWidth, y, ContentGap );
+		y = PlaceTextBlock( hintText, contentWidth, y, ContentGap );
+		y = PlaceTextBlock( stepText, contentWidth, y, ContentGap );
+
+		float height = Mathf.Max( MinPopupHeight, -y + ContentPadBottom );
+		root.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );
+	}
+
+	float PlaceTextBlock( Text text, float contentWidth, float yFromTop, float gapAfter )
+	{
+		if ( text == null || !text.gameObject.activeInHierarchy )
+			return yFromTop;
+
+		RectTransform rt = text.rectTransform;
+		rt.anchorMin = new Vector2( 0.5f, 1f );
+		rt.anchorMax = new Vector2( 0.5f, 1f );
+		rt.pivot = new Vector2( 0.5f, 1f );
+		rt.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, contentWidth );
+
+		Canvas.ForceUpdateCanvases();
+		float preferred = text.preferredHeight;
+		float height = Mathf.Max( preferred, text.fontSize * 1.1f );
+		rt.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );
+		rt.anchoredPosition = new Vector2( 0f, yFromTop );
+
+		return yFromTop - height - gapAfter;
 	}
 
 	static float ResolveFeedbackDuration( Feedbacks feedbacks, float fallback )

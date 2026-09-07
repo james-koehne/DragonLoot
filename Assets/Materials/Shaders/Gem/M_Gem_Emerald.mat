@@ -59,6 +59,7 @@ Material:
     - _BumpScale: 1
     - _CatchLightIntensity: 1.7
     - _CatchLightSize: 8
+    - _ConnectedGlow: 0.131
     - _Cull: 2
     - _Cutoff: 0.5
     - _DirectLightScale: 1.85
@@ -103,6 +104,7 @@ Material:
     - _Transparency: 0.95
     m_Colors:
     - _BaseColor: {r: 0, g: 0.754717, b: 0.32571992, a: 0.88}
+    - _ConnectedGlowColor: {r: 7.2, g: 7.2, b: 7.2, a: 1}
     - _FresnelColor: {r: 0.45, g: 1, b: 0.7, a: 1}
     - _InternalColor: {r: 0.02, g: 0.28, b: 0.12, a: 1}
   m_BuildTextureStacks: []

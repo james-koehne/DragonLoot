@@ -15,11 +15,11 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	const string CoinTypeMapProp = "_CoinTypeMap";
 	const string TypeCountProp = "_TypeCount";
 	const string TypeFresnelProp = "_TypeFresnelColor";
-	const string VariationSeedProp = "_VariationSeed";
 	const string UseBakedCoinIndexProp = "_UseBakedCoinIndex";
 	const string ChunkBaseIndexProp = "_ChunkBaseIndex";
 
 	static readonly Vector4[] TypeFresnelScratch = new Vector4[CoinStackVisualDefinition.MaxTypeSlots];
+	static bool s_multiMaterialTypePropsApplied;
 
 	[SerializeField]
 	CoinStackVisualDefinition visualDefinition;
@@ -61,12 +61,6 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	public void SetVariationSeed( float seed )
 	{
 		_variationSeed = Mathf.Abs( seed ) < 0.0001f ? 1f : seed;
-		if ( meshRenderer != null && _mpb != null )
-		{
-			meshRenderer.GetPropertyBlock( _mpb );
-			_mpb.SetFloat( VariationSeedProp, _variationSeed );
-			meshRenderer.SetPropertyBlock( _mpb );
-		}
 	}
 
 	CoinStackVisualDefinition Definition
@@ -234,7 +228,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		{
 			IList<TreasureDefinition> mapSource = typeMapSlots != null ? typeMapSlots : slots;
 			UploadTypeMap( mapSource, def );
-			ApplyMpbMulti( _targetCount, def, useBakedCoinIndex: false, chunkBaseIndex: _typeMapBaseIndex );
+			ApplyMpbMulti( _targetCount, useBakedCoinIndex: false, chunkBaseIndex: _typeMapBaseIndex );
 		}
 		else
 		{
@@ -308,10 +302,13 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		if ( target == null )
 			return;
 
+		if ( def != null && def.multiStackMaterial != null )
+			EnsureMultiMaterialTypeProps( def.multiStackMaterial, def );
+
 		if ( _mpb == null )
 			_mpb = new MaterialPropertyBlock();
 
-		FillMultiMpb( _mpb, Mathf.Max( 1, chunkCoinCount ), def, useBakedCoinIndex: true, chunkBaseIndex );
+		FillMultiMpb( _mpb, Mathf.Max( 1, chunkCoinCount ), useBakedCoinIndex: true, chunkBaseIndex );
 		target.SetPropertyBlock( _mpb );
 	}
 
@@ -407,8 +404,29 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			return;
 		}
 
+		EnsureMultiMaterialTypeProps( mat, def );
+
 		if ( meshRenderer.sharedMaterial != mat )
 			meshRenderer.sharedMaterial = mat;
+	}
+
+	static void EnsureMultiMaterialTypeProps( Material mat, CoinStackVisualDefinition def )
+	{
+		if ( mat == null || s_multiMaterialTypePropsApplied )
+			return;
+
+		int typeCount = 3;
+		if ( def != null )
+			typeCount = def.typeCount > 0
+				? Mathf.Clamp( def.typeCount, 1, CoinStackVisualDefinition.MaxTypeSlots )
+				: 3;
+
+		if ( mat.HasProperty( TypeCountProp ) )
+			mat.SetFloat( TypeCountProp, typeCount );
+
+		FillTypeFresnelArray( def, typeCount );
+		mat.SetVectorArray( TypeFresnelProp, TypeFresnelScratch );
+		s_multiMaterialTypePropsApplied = true;
 	}
 
 	void UploadTypeMap( IList<TreasureDefinition> slots, CoinStackVisualDefinition def )
@@ -471,13 +489,12 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		_mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
 		_mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
 		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
-		_mpb.SetFloat( VariationSeedProp, _variationSeed );
 		_mpb.SetFloat( UseBakedCoinIndexProp, 0f );
 		_mpb.SetFloat( ChunkBaseIndexProp, 0f );
 		meshRenderer.SetPropertyBlock( _mpb );
 	}
 
-	void ApplyMpbMulti( int count, CoinStackVisualDefinition def, bool useBakedCoinIndex, int chunkBaseIndex )
+	void ApplyMpbMulti( int count, bool useBakedCoinIndex, int chunkBaseIndex )
 	{
 		if ( meshRenderer == null )
 			return;
@@ -485,14 +502,13 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		if ( _mpb == null )
 			_mpb = new MaterialPropertyBlock();
 
-		FillMultiMpb( _mpb, count, def, useBakedCoinIndex, chunkBaseIndex );
+		FillMultiMpb( _mpb, count, useBakedCoinIndex, chunkBaseIndex );
 		meshRenderer.SetPropertyBlock( _mpb );
 	}
 
 	void FillMultiMpb(
 		MaterialPropertyBlock mpb,
 		int count,
-		CoinStackVisualDefinition def,
 		bool useBakedCoinIndex,
 		int chunkBaseIndex )
 	{
@@ -500,22 +516,11 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		mpb.SetFloat( CoinCountProp, Mathf.Max( 1, count ) );
 		mpb.SetFloat( MeshBoundsMinYProp, _meshBoundsMinY );
 		mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
-		mpb.SetFloat( VariationSeedProp, _variationSeed );
 		mpb.SetFloat( UseBakedCoinIndexProp, useBakedCoinIndex ? 1f : 0f );
 		mpb.SetFloat( ChunkBaseIndexProp, Mathf.Max( 0, chunkBaseIndex ) );
 
 		if ( _typeMap != null )
 			mpb.SetTexture( CoinTypeMapProp, _typeMap );
-
-		int typeCount = 3;
-		if ( def != null )
-			typeCount = def.typeCount > 0
-				? Mathf.Clamp( def.typeCount, 1, CoinStackVisualDefinition.MaxTypeSlots )
-				: 3;
-		mpb.SetFloat( TypeCountProp, typeCount );
-
-		FillTypeFresnelArray( def, typeCount );
-		mpb.SetVectorArray( TypeFresnelProp, TypeFresnelScratch );
 	}
 
 	static void FillTypeFresnelArray( CoinStackVisualDefinition def, int typeCount )

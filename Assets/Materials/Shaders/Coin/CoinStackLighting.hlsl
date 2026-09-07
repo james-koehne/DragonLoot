@@ -4,8 +4,6 @@
 #include "../Stylized/StylizedLightingCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 #include "CoinStackBand.hlsl"
-#include "CoinStackSeamClip.hlsl"
-#include "CoinStackSparkle.hlsl"
 
 #if defined(_COIN_STACK_MULTI)
 #include "CoinStackMulti.hlsl"
@@ -39,12 +37,11 @@ struct Varyings
     half4  tangentWS  : TEXCOORD2;
     float2 uv         : TEXCOORD3;
     half   fogFactor  : TEXCOORD4;
-    nointerpolation float instanceSeed : TEXCOORD5;
-    half3  vertexSH   : TEXCOORD6;
-    half3  vertexLighting : TEXCOORD7;
-    float3 normalOS   : TEXCOORD8;
-    float  stackY01   : TEXCOORD9;
-    nointerpolation float bakedCoinIndex : TEXCOORD10;
+    half3  vertexSH   : TEXCOORD5;
+    half3  vertexLighting : TEXCOORD6;
+    float3 normalOS   : TEXCOORD7;
+    float  stackY01   : TEXCOORD8;
+    nointerpolation float bakedCoinIndex : TEXCOORD9;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
 };
@@ -55,8 +52,6 @@ Varyings CoinStackLitVert(Attributes input)
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_TRANSFER_INSTANCE_ID(input, output);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-
-    float instanceSeed = CoinStackInstanceSeed();
 
     VertexPositionInputs posInputs = GetVertexPositionInputs(input.positionOS.xyz);
     VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS, input.tangentOS);
@@ -70,7 +65,6 @@ Varyings CoinStackLitVert(Attributes input)
     output.tangentWS = half4(normalInputs.tangentWS, sign);
     output.uv = TRANSFORM_TEX(input.texcoord, _BaseMap);
     output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
-    output.instanceSeed = instanceSeed;
 
     output.stackY01 = CoinStackComputeStackY01(input.positionOS.y);
     output.bakedCoinIndex = input.texcoord1.x;
@@ -91,10 +85,6 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-    float seed = input.instanceSeed;
-    half tint = 1.0h + ((half)CoinStackHash11(seed) * 2.0h - 1.0h) * _TintVariation;
-    half value = 1.0h + ((half)CoinStackHash11(seed + 17.13) * 2.0h - 1.0h) * _ValueVariation;
-
     float coinCount = max((float)_CoinCount, 1.0);
     bool isCap = CoinStackIsCap(input.normalOS);
     bool useBakedIndex = (float)_UseBakedCoinIndex > 0.5;
@@ -102,21 +92,11 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     float2 sampleUv = input.uv;
     half bandShade = 1.0h;
     CoinStackBandData bands = (CoinStackBandData)0;
-    CoinStackSeamView seam = (CoinStackSeamView)0;
 
     if (!useBakedIndex && !isCap)
     {
         bands = CoinStackEvaluateBands(input.stackY01, coinCount);
         bandShade = bands.bandShade;
-        seam = CoinStackEvaluateSeamView(
-            input.positionWS,
-            input.normalOS,
-            input.stackY01,
-            coinCount,
-            seed,
-            bands.grooveMask,
-            bands.ridgeMask);
-        CoinStackClipSeamSide(seam);
     }
     else if (isCap)
     {
@@ -136,10 +116,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half3 fresnelRgb = _FresnelColor.rgb;
 #endif
 
-    half seamAO = useBakedIndex ? 1.0h : CoinStackSeamSoftAO(seam);
-    half3 albedo = albedoSample.rgb * tint * value * bandShade * seamAO;
-    half warm = ((half)CoinStackHash11(seed + 31.71) * 2.0h - 1.0h) * 0.03h;
-    albedo += half3(warm, warm * 0.35h, -warm);
+    half3 albedo = albedoSample.rgb * bandShade;
 
     half metallic = saturate(maskSample.r * _Metallic);
     half smoothness = saturate(maskSample.a * _Smoothness);
@@ -164,11 +141,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     half3x3 tangentToWorld = half3x3(input.tangentWS.xyz, bitangent, input.normalWS.xyz);
 
     half3 normalWS;
-    if (useBakedIndex)
-    {
-        normalWS = NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, tangentToWorld));
-    }
-    else if (isCap)
+    if (useBakedIndex || isCap)
     {
         normalWS = NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, tangentToWorld));
     }
@@ -178,7 +151,6 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
         half3 nProcWS = NormalizeNormalPerPixel(TransformObjectToWorldNormal(nOS));
         half3 nBumpWS = TransformTangentToWorld(normalTS, tangentToWorld);
         normalWS = NormalizeNormalPerPixel(normalize(nProcWS + nBumpWS - dot(nBumpWS, nProcWS) * nProcWS));
-        normalWS = CoinStackApplySeamNormalWS(normalWS, seam);
     }
 
     SurfaceData surfaceData = (SurfaceData)0;
@@ -188,7 +160,7 @@ half4 CoinStackLitFrag(Varyings input) : SV_Target
     surfaceData.smoothness = smoothness;
     surfaceData.normalTS = normalTS;
     surfaceData.emission = 0;
-    surfaceData.occlusion = seamAO;
+    surfaceData.occlusion = 1.0h;
     surfaceData.alpha = 1;
     surfaceData.clearCoatMask = 0;
     surfaceData.clearCoatSmoothness = 0;

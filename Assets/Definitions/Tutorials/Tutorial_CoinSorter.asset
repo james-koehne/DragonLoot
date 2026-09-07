@@ -21,19 +21,26 @@ MonoBehaviour:
   trigger: 13
   holdingCategory: 0
   volumeId: 
-  fallbackVolumeId: 
+  fallbackVolumeId: volume_workshop
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
-  minWorldCoinsToShow: 100
-  minCarriedCoinsToShow: 50
+  minWorldCoinsToShow: 50
+  minCarriedCoinsToShow: 30
+  minDisplayCoinsToShow: 30
   sorterCoinsToComplete: 30
   prerequisiteTutorialIds:
   - tut_coin_displays
   highlightMapLabel: Workshop
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
   body: Got a lot of coins? The Workshop has a coin sorter that sorts mixed stacks
     for you. Open the map (M) and head to the highlighted Workshop.
   keybindHint: '[M] Open map'
   tasks:
+  - id: reach_workshop
+    label: Go to the Workshop
+    completeTrigger: 11
+    completeVolumeId: volume_workshop
   - id: use_sorter
     label: Sort coins with the sorter
     completeTrigger: 14

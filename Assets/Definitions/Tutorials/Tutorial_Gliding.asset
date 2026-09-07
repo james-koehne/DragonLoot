@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_Gliding
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_gliding
+  title: Gliding
+  tags:
+  - movement
+  - glide
+  trigger: 14
+  holdingCategory: 0
+  volumeId: 
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  prerequisiteTutorialIds: []
+  highlightMapLabel: 
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: You're high up! Jump again in the air to start gliding, then hold jump to
+    stay gliding.
+  keybindHint: '[{Jump}] Air jump to glide  Hold [{Jump}] Keep gliding'
+  tasks:
+  - id: glide
+    label: Glide
+    completeTrigger: 15
+    completeVolumeId: 

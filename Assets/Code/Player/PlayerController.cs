@@ -65,6 +65,7 @@ public class PlayerController : MonoBehaviour
 	float _planarBrakeDuration;
 	Vector3 _planarBrakeStartVelocity;
 	float _planarMovementLockRemaining;
+	bool _cinematicPlanarMovementLock;
 
 	// Cached for optional movement gizmos (updated each move tick).
 	Vector3 _debugFlatMoveIntent;
@@ -212,7 +213,7 @@ public class PlayerController : MonoBehaviour
 	public float GroundAngle => _groundAngle;
 	public bool GameplayInputEnabled => gameplayInputEnabled;
 	public bool IsPlanarBraking => _planarBrakeActive;
-	public bool IsPlanarMovementLocked => _planarMovementLockRemaining > 0f;
+	public bool IsPlanarMovementLocked => _planarMovementLockRemaining > 0f || _cinematicPlanarMovementLock;
 	bool IsPlanarMovementRestricted => _planarBrakeActive || IsPlanarMovementLocked;
 
 	/// <summary>
@@ -252,6 +253,21 @@ public class PlayerController : MonoBehaviour
 			return;
 
 		_planarMovementLockRemaining = Mathf.Max( _planarMovementLockRemaining, duration );
+		ApplyPlanarMovementLockSideEffects();
+	}
+
+	/// <summary>
+	/// Hard lock for cinematic presentations — stays on until cleared, independent of timed locks.
+	/// </summary>
+	public void SetCinematicPlanarMovementLock( bool locked )
+	{
+		_cinematicPlanarMovementLock = locked;
+		if ( locked )
+			ApplyPlanarMovementLockSideEffects();
+	}
+
+	void ApplyPlanarMovementLockSideEffects()
+	{
 		_isSliding = false;
 		_slideEnterCharge = 0f;
 		ClearSlideExitBoost();
@@ -1085,7 +1101,9 @@ public class PlayerController : MonoBehaviour
 				return;
 			}
 
-			if ( hasFlatDownhill && moveIntent.sqrMagnitude > 0.0001f )
+			// Charge mode: uphill commit can exit back into climb/walk.
+			// SprintHold: move input only steers/adds — never cancels.
+			if ( !sprintHoldMode && hasFlatDownhill && moveIntent.sqrMagnitude > 0.0001f )
 			{
 				Vector3 uphill = -flatDownhill;
 				float climbDot = Vector3.Dot( moveIntent.normalized, uphill );
@@ -1098,7 +1116,11 @@ public class PlayerController : MonoBehaviour
 			}
 
 			// No longer traveling downhill (contour / stall) — end the slide.
-			if ( hasDownhill && Vector3.Dot( _planarVelocity, downhill ) < SlideMinDownhillSpeed )
+			// SprintHold: ignore while player is steering so reverse/strafe control cannot cancel.
+			bool allowStallExit = !sprintHoldMode || moveIntent.sqrMagnitude <= 0.0001f;
+			if ( allowStallExit
+			     && hasDownhill
+			     && Vector3.Dot( _planarVelocity, downhill ) < SlideMinDownhillSpeed )
 			{
 				ExitSlide( retainMomentum: true );
 				return;
@@ -1172,6 +1194,8 @@ public class PlayerController : MonoBehaviour
 		float slideAccel = Mathf.Abs( Gravity ) * Mathf.Sin( slopeRad ) * SlideGravityScale;
 		_planarVelocity += downhill * ( slideAccel * dt );
 
+		bool sprintHoldMode = ActiveSlideInputMode == global::SlideInputMode.SprintHold;
+
 		if ( moveIntent.sqrMagnitude > 0.0001f )
 		{
 			Vector3 intent = moveIntent.normalized;
@@ -1187,7 +1211,17 @@ public class PlayerController : MonoBehaviour
 			_planarVelocity += lateralAxis * ( lateral * SlideSteer * dt );
 
 			float alongVelocity = Vector3.Dot( intent, velDir );
-			if ( alongVelocity < -SlideBrakeExitDot )
+			float alongDownhill = Vector3.Dot( intent, downhill );
+
+			if ( sprintHoldMode )
+			{
+				// Steer + add downhill speed; reverse only softens, never plants.
+				if ( alongDownhill > 0.1f )
+					_planarVelocity += downhill * ( alongDownhill * SlideSteer * dt );
+				else if ( alongVelocity < 0f )
+					_planarVelocity += velDir * ( alongVelocity * SlideBrake * dt );
+			}
+			else if ( alongVelocity < -SlideBrakeExitDot )
 			{
 				float reverseBrake = SlideBrake * SlideReverseBrakeScale;
 				_planarVelocity += velDir * ( alongVelocity * reverseBrake * dt );
@@ -1207,7 +1241,9 @@ public class PlayerController : MonoBehaviour
 
 		UpdateLastSlideTravelDirection( downhill );
 
-		if ( _isSliding && _planarVelocity.sqrMagnitude <= SlideBrakeExitSpeed * SlideBrakeExitSpeed
+		if ( !sprintHoldMode
+		     && _isSliding
+		     && _planarVelocity.sqrMagnitude <= SlideBrakeExitSpeed * SlideBrakeExitSpeed
 		     && moveIntent.sqrMagnitude > 0.0001f )
 		{
 			Vector3 velDir = _planarVelocity.sqrMagnitude > 0.0001f
@@ -1589,6 +1625,7 @@ public class PlayerController : MonoBehaviour
 		_planarBrakeDuration = 0f;
 		_planarBrakeStartVelocity = Vector3.zero;
 		_planarMovementLockRemaining = 0f;
+		_cinematicPlanarMovementLock = false;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;
@@ -1627,6 +1664,7 @@ public class PlayerController : MonoBehaviour
 		_planarBrakeDuration = 0f;
 		_planarBrakeStartVelocity = Vector3.zero;
 		_planarMovementLockRemaining = 0f;
+		_cinematicPlanarMovementLock = false;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;

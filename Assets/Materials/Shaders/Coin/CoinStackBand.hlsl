@@ -3,26 +3,6 @@
 
 #include "CoinStackMaterial.hlsl"
 
-float CoinStackHash11(float p)
-{
-    float3 p3 = frac(float3(p, p, p) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return frac((p3.x + p3.y) * p3.z);
-}
-
-float CoinStackInstanceSeed()
-{
-	// Prefer an authored/static seed from C# (_VariationSeed). Never hash world position —
-	// stacks fly and must keep a stable look.
-	float seed = (float)_VariationSeed;
-	if ( abs( seed ) < 1e-5 )
-		seed = 1.0;
-#if defined(UNITY_INSTANCING_ENABLED)
-	seed += (float)unity_InstanceID * 19.19;
-#endif
-	return CoinStackHash11( seed );
-}
-
 float CoinStackComputeStackY01(float positionYOS)
 {
     float sizeY = max((float)_MeshBoundsSizeY, 1e-5);

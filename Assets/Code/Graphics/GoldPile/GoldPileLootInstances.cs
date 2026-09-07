@@ -22,10 +22,18 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	/// <summary>Near-surface top-up spawns per play-mode seed slice (time budget usually stops first).</summary>
 	const int BindSeedSpawnsPerFrame = 512;
 	const int BindSeedMaxPasses = 64;
+	/// <summary>How often intermediate bind commits refresh Drawn seats for progressive fill.</summary>
+	const int BindProgressiveCommitSeatStride = 256;
 	/// <summary>0 = any pile column above <see cref="GoldPileHeightfield.LootGroundLevel"/>.</summary>
 	const float CoinMinSurfaceHeightFraction = 0f;
 	/// <summary>Full heightfield footprint; empty / below-mesh cells are rejected per-column.</summary>
 	const float CoinPlacementRadiusFraction = 1f;
+
+	public struct CoinSeatFillReport
+	{
+		public int SeatCount;
+		public bool Complete;
+	}
 
 	struct Slot
 	{
@@ -277,6 +285,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	Vector3 _pendingDensifyWorld;
 	float _pendingDensifyRadius;
 	int _pendingDensifyCarveUnits = 1;
+	bool _forceSyncBind;
 	int _digPhysicalSerial;
 	CoinSeatOccupancy _coinOccupancy;
 	int _occupancySerial;
@@ -385,15 +394,22 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		AllocateChunkDrawnLists();
 		_steadyVisibleBudget = ComputeSteadyVisibleBudget();
 
-		// Play mode: spread placement across frames by CPU budget. Edit/sync finishes in one go.
-		await BuildSlotsAsync( definition, visuals, bindId );
-		if ( !IsBindTargetAlive( bindId ) )
-			return;
+		bool usedBake = false;
+		if ( definition.preferBakedCoinSeats )
+			usedBake = TryHydrateFromCoinBake( visuals );
 
-		// Fill near-surface seats up to the steady draw target (not just one 48-seat pass).
-		await SeedSteadyNearSurfaceCoinsAsync( bindId );
-		if ( !IsBindTargetAlive( bindId ) )
-			return;
+		if ( !usedBake )
+		{
+			// Play mode: spread placement across frames by CPU budget. Edit/sync finishes in one go.
+			await BuildSlotsAsync( definition, visuals, bindId );
+			if ( !IsBindTargetAlive( bindId ) )
+				return;
+
+			// Fill near-surface seats up to the steady draw target (not just one 48-seat pass).
+			await SeedSteadyNearSurfaceCoinsAsync( bindId );
+			if ( !IsBindTargetAlive( bindId ) )
+				return;
+		}
 
 		RebuildColumnCoinReserves();
 		_ready = _slots != null;
@@ -417,7 +433,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return;
 
 		float topUpRadius = _heightfield.WorldSize * 0.55f;
-		bool timeSlice = Application.isPlaying;
+		bool timeSlice = Application.isPlaying && !_forceSyncBind;
 		_steadyVisibleBudget = ComputeSteadyVisibleBudget();
 
 		int need = CountUnderfilledChunkSlotsNear( Vector3.zero, topUpRadius );
@@ -486,6 +502,489 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _pileRoot == null )
 			return false;
 		return true;
+	}
+
+	/// <summary>
+	/// Editor-only: place coin seat poses into a bake asset.
+	/// Pose data only — no Addressables, no GameObject spawns, no GPU visibility rebuilds.
+	/// </summary>
+	public CoinSeatFillReport BakeCoinSeatsInto(
+		TreasurePileVisual owner,
+		TreasurePileDefinition definition,
+		GoldPileHeightfield heightfield,
+		Transform pileRoot,
+		int authoredLayoutSeed,
+		TreasurePileCoinSeatBake bake,
+		System.Action<float, string> progress = null )
+	{
+		CoinSeatFillReport report = default;
+		if ( bake == null || definition == null || heightfield == null )
+			return report;
+
+		int bindId = ++_bindSerial;
+		_definition = definition;
+		_heightfield = heightfield;
+		_pileRoot = pileRoot != null ? pileRoot : transform;
+		_owner = owner;
+		_ready = false;
+		_drawCacheDirty = true;
+		_pendingCoinWorldReleases.Clear();
+		_coinReleasePassRunning = false;
+		_columnCoinReserve = null;
+		ReleaseVisualHandles();
+		_streamer.Clear();
+		_chunkGrid.Release();
+		_slots = null;
+		_slotCount = 0;
+		_batches = null;
+
+		_pickRadius = definition.pickRadius;
+		_buryDepth = definition.buryDepth;
+		_initialRevealDepth = definition.initialRevealDepth;
+		_maxVisibleTotal = Mathf.Max( 1, definition.maxVisibleTotal );
+		_steadyVisibleBudget = definition.SteadyCoinVisibleBudget();
+		_placementMinSpacing = Mathf.Max( 0.05f, definition.placementMinSpacing );
+		_enforcePlacementSpacing = definition.enforcePlacementSpacing;
+		_placementJitter = Mathf.Clamp( definition.placementJitter, 0f, 0.49f );
+		_placementScaleJitter = Mathf.Clamp( definition.placementScaleJitter, 0f, 0.5f );
+		_coinPullToCarveCount = Mathf.Max( 0, definition.coinPullToCarveCount );
+		_treasureRadialPower = Mathf.Clamp( definition.treasureRadialPower, 0.25f, 3f );
+		_treasureHeightBias = Mathf.Clamp( definition.treasureHeightBias, 0f, 3f );
+		_treasurePickupOutsideFraction = Mathf.Clamp( definition.treasurePickupOutsideFraction, 0.05f, 0.95f );
+		_pileLootSeed = WorldLootSeed.GetPileEffectiveSeed( _pileRoot, authoredLayoutSeed );
+		_hasLastDig = false;
+		_pendingDensify = false;
+
+		EnsureStreamSettings();
+		EnsureCoinOccupancy();
+		BuildRemaining( definition );
+
+		// Bake uses authored/fallback meshes only — never Addressables or RenderMesh setup.
+		if ( fallbackMesh == null )
+		{
+			GameObject temp = GameObject.CreatePrimitive( PrimitiveType.Cylinder );
+			MeshFilter mf = temp.GetComponent<MeshFilter>();
+			if ( mf != null )
+				fallbackMesh = mf.sharedMesh;
+			UnityEngine.Object.DestroyImmediate( temp );
+		}
+
+		int worldSeed = GoldPileChunkGrid.HashChunkSeed(
+			_pileLootSeed,
+			Mathf.RoundToInt( _pileRoot.position.x * 10f ),
+			Mathf.RoundToInt( _pileRoot.position.z * 10f ) );
+		_chunkGrid.Build( _heightfield, _pileRoot, streamSettings.chunkSize, worldSeed );
+		_steadyVisibleBudget = ComputeSteadyVisibleBudget();
+
+		List<Slot> seats = BuildCoinSeatPosesForBake( definition, bindId, progress );
+		if ( bindId != _bindSerial || seats == null )
+			return report;
+
+		WriteCoinSeatBakeFromList( bake, authoredLayoutSeed, seats );
+		report.SeatCount = seats.Count;
+		report.Complete = seats.Count > 0;
+
+		_streamer.Clear();
+		_chunkGrid.Release();
+		_slots = null;
+		_slotCount = 0;
+		_batches = null;
+		_ready = false;
+		_remaining = null;
+		_columnCoinReserve = null;
+		_coinOccupancy = null;
+		_batchKeyByDef = null;
+		_coinMeshBoundsByDef = null;
+		return report;
+	}
+
+	/// <summary>
+	/// Places coin seats for baking without committing GPU batches / RebuildVisibility.
+	/// </summary>
+	List<Slot> BuildCoinSeatPosesForBake(
+		TreasurePileDefinition definition,
+		int bindId,
+		System.Action<float, string> progress )
+	{
+		List<Slot> list = new List<Slot>( Mathf.Max( 256, definition != null ? definition.maxVisibleTotal : 256 ) );
+		_coinMeshBoundsByDef = new Dictionary<TreasureDefinition, Bounds>();
+		_batchKeyByDef = new Dictionary<TreasureDefinition, int>();
+		_coinUnitSerial = 0;
+		_cellLists = null;
+		_drawnCellLists = null;
+
+		TreasurePileEntry[] coinContents = definition.coinContents;
+		if ( coinContents == null || coinContents.Length == 0 )
+			return list;
+
+		int[] seatTargets = definition.ComputeCoinSeatTargets();
+		float buryBand = Mathf.Max( _buryDepth, _initialRevealDepth );
+		int drawCap = Mathf.Max( 1, definition.maxVisibleTotal );
+		int steadyBudget = definition.SteadyCoinVisibleBudget();
+		float shallowFraction = Mathf.Clamp01( steadyBudget / ( float )drawCap );
+
+		int totalWant = 0;
+		for ( int e = 0; e < coinContents.Length; e++ )
+		{
+			TreasurePileEntry entry = coinContents[ e ];
+			if ( entry.treasure == null || entry.count <= 0 || !UsesGpuInstances( entry.treasure ) )
+				continue;
+			if ( seatTargets != null && e < seatTargets.Length )
+				totalWant += Mathf.Max( 0, seatTargets[ e ] );
+		}
+
+		int placedAttempts = 0;
+		const int ProgressStride = 128;
+
+		for ( int e = 0; e < coinContents.Length; e++ )
+		{
+			if ( !IsBindTargetAlive( bindId ) )
+				return null;
+
+			TreasurePileEntry entry = coinContents[ e ];
+			if ( entry.treasure == null || entry.count <= 0 )
+				continue;
+			if ( !UsesGpuInstances( entry.treasure ) )
+				continue;
+
+			if ( !_batchKeyByDef.TryGetValue( entry.treasure, out int batchKey ) )
+			{
+				batchKey = _batchKeyByDef.Count;
+				_batchKeyByDef[ entry.treasure ] = batchKey;
+				CacheCoinMeshBoundsFromDefinition( entry.treasure );
+			}
+
+			Mesh coinMesh = GetCoinMesh( entry.treasure );
+			Bounds meshBounds = GetCoinMeshBounds( entry.treasure );
+
+			int want = 0;
+			if ( seatTargets != null && e < seatTargets.Length )
+				want = Mathf.Max( 0, seatTargets[ e ] );
+
+			int shallowWant = Mathf.Clamp( Mathf.RoundToInt( want * shallowFraction ), 0, want );
+			bool useSurface = UseSurfaceDecorSeats();
+			bool useEmbedded = UseEmbeddedVolumeSeats();
+			float scaleJitter = ResolveCoinScaleJitter();
+
+			for ( int i = 0; i < want; i++ )
+			{
+				if ( !IsBindTargetAlive( bindId ) )
+					return null;
+
+				int unitIndex = _coinUnitSerial++;
+				float scale = entry.treasure.worldScale.x;
+				if ( scale < 0.01f )
+					scale = 0.12f;
+				if ( scaleJitter > 0f )
+				{
+					float jitter = GoldPileTreasurePlacement.HashRange(
+						_pileLootSeed,
+						unitIndex * 19 + e,
+						1f - scaleJitter,
+						1f + scaleJitter );
+					scale *= jitter;
+				}
+
+				float probe = Mathf.Max(
+					0.04f,
+					Mathf.Max( meshBounds.extents.x, meshBounds.extents.z ) * scale );
+
+				bool preferShallow = i < shallowWant;
+				Slot volumeSlot;
+				bool placed = false;
+
+				bool asSurface = useSurface && ( !useEmbedded || preferShallow );
+				if ( asSurface )
+				{
+					placed = TryCreateSurfaceDecorCoinSlot(
+						entry.treasure,
+						e,
+						batchKey,
+						unitIndex,
+						scale,
+						probe,
+						buryBand,
+						coinMesh,
+						preferNear: Vector3.zero,
+						searchRadius: 0f,
+						out volumeSlot,
+						out _ );
+				}
+				else if ( useEmbedded )
+				{
+					if ( preferShallow )
+					{
+						placed = TryCreateShallowCoinSlot(
+							entry.treasure,
+							e,
+							batchKey,
+							unitIndex,
+							scale,
+							probe,
+							buryBand,
+							coinMesh,
+							preferNear: Vector3.zero,
+							searchRadius: 0f,
+							out volumeSlot,
+							out _ );
+						if ( !placed )
+						{
+							placed = TryCreateVolumeCoinSlot(
+								entry.treasure,
+								e,
+								batchKey,
+								unitIndex,
+								scale,
+								probe,
+								coinMesh,
+								out volumeSlot,
+								out _ );
+						}
+					}
+					else
+					{
+						placed = TryCreateVolumeCoinSlot(
+							entry.treasure,
+							e,
+							batchKey,
+							unitIndex,
+							scale,
+							probe,
+							coinMesh,
+							out volumeSlot,
+							out _ );
+						if ( !placed )
+						{
+							placed = TryCreateShallowCoinSlot(
+								entry.treasure,
+								e,
+								batchKey,
+								unitIndex,
+								scale,
+								probe,
+								buryBand,
+								coinMesh,
+								preferNear: Vector3.zero,
+								searchRadius: 0f,
+								out volumeSlot,
+								out _ );
+						}
+					}
+				}
+				else
+				{
+					volumeSlot = default;
+				}
+
+				if ( placed )
+					list.Add( volumeSlot );
+
+				placedAttempts++;
+				if ( progress != null
+					&& ( placedAttempts % ProgressStride == 0 || placedAttempts >= totalWant ) )
+				{
+					float t = totalWant > 0 ? placedAttempts / ( float )totalWant : 1f;
+					progress( t, $"Coin seats {list.Count}/{totalWant}" );
+				}
+			}
+		}
+
+		return list;
+	}
+
+	void CacheCoinMeshBoundsFromDefinition( TreasureDefinition definition )
+	{
+		if ( definition == null || _coinMeshBoundsByDef == null || _coinMeshBoundsByDef.ContainsKey( definition ) )
+			return;
+
+		Mesh mesh = definition.meshOverride != null ? definition.meshOverride : fallbackMesh;
+		_coinMeshBoundsByDef[ definition ] = mesh != null
+			? mesh.bounds
+			: new Bounds( Vector3.zero, Vector3.one * 0.2f );
+	}
+
+	void WriteCoinSeatBakeFromList(
+		TreasurePileCoinSeatBake bake,
+		int authoredLayoutSeed,
+		List<Slot> seats )
+	{
+		if ( bake == null || _definition == null || seats == null )
+			return;
+
+		bake.authoredLayoutSeed = authoredLayoutSeed;
+		bake.effectivePileSeed = _pileLootSeed;
+		bake.sourceDefinitionName = _definition.name;
+		bake.maxVisibleTotal = Mathf.Max( 1, _definition.maxVisibleTotal );
+		bake.steadyVisibleBudget = _definition.SteadyCoinVisibleBudget();
+
+		if ( _owner != null
+			&& _owner.TryGetCoinSeatBakeFingerprint(
+				out int layoutSeed,
+				out int heightFp,
+				out int contentsFp,
+				out int placementFp,
+				out int maxVisible,
+				out int steadyBudget ) )
+		{
+			bake.authoredLayoutSeed = layoutSeed;
+			bake.heightFingerprint = heightFp;
+			bake.contentsFingerprint = contentsFp;
+			bake.placementFingerprint = placementFp;
+			bake.maxVisibleTotal = maxVisible;
+			bake.steadyVisibleBudget = steadyBudget;
+		}
+		else
+		{
+			bake.heightFingerprint = _heightfield != null ? _heightfield.ComputeLayoutFingerprint() : 0;
+			bake.contentsFingerprint = _definition.HashCoinContents();
+			unchecked
+			{
+				uint h = ( uint )_definition.HashCoinPlacementSettings();
+				if ( streamSettings != null )
+					h = ( h ^ ( uint )streamSettings.ComputeCoinSeatPlacementFingerprint() ) * 16777619u;
+				bake.placementFingerprint = ( int )h;
+			}
+		}
+
+		TreasurePileCoinSeatBake.Seat[] baked = new TreasurePileCoinSeatBake.Seat[ seats.Count ];
+		for ( int i = 0; i < seats.Count; i++ )
+		{
+			Slot slot = seats[ i ];
+			baked[ i ] = new TreasurePileCoinSeatBake.Seat
+			{
+				definition = slot.Definition,
+				entryIndex = slot.EntryIndex,
+				localPos = slot.LocalPos,
+				localRot = slot.LocalRot,
+				scale = slot.Scale,
+				embedDepth = slot.EmbedDepth,
+				placeSurfaceHeight = slot.PlaceSurfaceHeight,
+				probeRadius = slot.ProbeRadius,
+				fixedVolumePose = slot.FixedVolumePose,
+				coinVisual = slot.CoinVisual
+			};
+		}
+
+		bake.seats = baked;
+	}
+
+	bool TryHydrateFromCoinBake( Dictionary<TreasureDefinition, VisualAssets> visuals )
+	{
+		if ( _owner == null || _definition == null || visuals == null )
+			return false;
+
+		TreasurePileCoinSeatBake bake = _owner.CoinSeatBake;
+		if ( bake == null || bake.seats == null || bake.seats.Length == 0 )
+			return false;
+
+		if ( !_owner.TryGetCoinSeatBakeFingerprint(
+			out int layoutSeed,
+			out int heightFp,
+			out int contentsFp,
+			out int placementFp,
+			out int maxVisible,
+			out int steadyBudget ) )
+		{
+			return false;
+		}
+
+		if ( !bake.MatchesFingerprint( layoutSeed, heightFp, contentsFp, placementFp, maxVisible, steadyBudget ) )
+			return false;
+
+		List<Slot> list = new List<Slot>( bake.seats.Length );
+		List<BatchGroup> batches = new List<BatchGroup>();
+		_coinMeshBoundsByDef = new Dictionary<TreasureDefinition, Bounds>();
+		_batchKeyByDef = new Dictionary<TreasureDefinition, int>();
+		_coinUnitSerial = 0;
+
+		TreasurePileEntry[] coinContents = _definition.coinContents;
+		_visibleCountByEntry = coinContents != null ? new int[ coinContents.Length ] : null;
+
+		for ( int i = 0; i < bake.seats.Length; i++ )
+		{
+			TreasurePileCoinSeatBake.Seat seat = bake.seats[ i ];
+			TreasureDefinition def = seat.definition;
+			if ( def == null || !UsesGpuInstances( def ) )
+				continue;
+
+			if ( !_batchKeyByDef.TryGetValue( def, out int batchKey ) )
+			{
+				if ( !visuals.TryGetValue( def, out VisualAssets visual )
+					|| visual.Parts == null
+					|| visual.Parts.Length == 0 )
+				{
+					visual = new VisualAssets
+					{
+						Parts = new[]
+						{
+							new VisualPart
+							{
+								Mesh = fallbackMesh,
+								SubmeshIndex = 0,
+								Material = fallbackMaterial,
+								LocalToRoot = Matrix4x4.identity
+							}
+						}
+					};
+				}
+
+				batchKey = batches.Count;
+				_batchKeyByDef[ def ] = batchKey;
+				CacheCoinMeshBounds( def, visual );
+				List<int> sharedSlots = new List<int>();
+				for ( int p = 0; p < visual.Parts.Length; p++ )
+				{
+					VisualPart part = visual.Parts[ p ];
+					Material mat = part.Material != null ? part.Material : fallbackMaterial;
+					if ( mat != null )
+						mat.enableInstancing = true;
+
+					batches.Add( new BatchGroup
+					{
+						Mesh = part.Mesh != null ? part.Mesh : fallbackMesh,
+						Material = mat,
+						SubmeshIndex = part.SubmeshIndex,
+						PartLocal = part.LocalToRoot,
+						IsPrimaryPart = p == 0,
+						AlwaysDraw = false,
+						SupportsInstancing = MaterialSupportsPileInstancing( mat )
+							|| ( mat != null && mat.enableInstancing ),
+						SlotIndices = sharedSlots,
+						Matrices = null,
+						DrawBatch = new Matrix4x4[ BatchSize ]
+					} );
+				}
+
+				_batches = batches.ToArray();
+			}
+
+			list.Add( new Slot
+			{
+				Definition = def,
+				EntryIndex = seat.entryIndex,
+				LocalPos = seat.localPos,
+				LocalRot = seat.localRot,
+				Scale = seat.scale,
+				EmbedDepth = seat.embedDepth,
+				PlaceSurfaceHeight = seat.placeSurfaceHeight,
+				ProbeRadius = seat.probeRadius,
+				FixedVolumePose = seat.fixedVolumePose,
+				CoinVisual = seat.coinVisual,
+				Taken = false,
+				Drawn = false,
+				BatchKey = batchKey,
+				MatrixIndex = -1,
+				StreamRankInChunk = -1
+			} );
+			_coinUnitSerial++;
+		}
+
+		if ( list.Count == 0 )
+			return false;
+
+		CommitBindSlotProgress( list, batches, rebuildVisibility: true );
+		_ready = _slots != null;
+		return _ready;
 	}
 
 	void EnsureStreamSettings()
@@ -3827,12 +4326,15 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int steadyBudget = definition.SteadyCoinVisibleBudget();
 		// Prefer shallow (visible) seats for the steady fill; dig-buffer remainder stays buried volume.
 		float shallowFraction = Mathf.Clamp01( steadyBudget / ( float )drawCap );
-		bool timeSlice = Application.isPlaying;
+		bool timeSlice = Application.isPlaying && !_forceSyncBind;
 		bool publishedSparse = false;
 		int attemptsThisFrame = 0;
+		int lastProgressiveCommitCount = 0;
 		System.Diagnostics.Stopwatch frameWorkSw = timeSlice
 			? System.Diagnostics.Stopwatch.StartNew()
 			: null;
+
+		ResolveBindPreferNear( out Vector3 preferNearLocal, out float preferSearchRadius );
 
 		for ( int e = 0; e < coinContents.Length; e++ )
 		{
@@ -3940,6 +4442,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				Slot volumeSlot;
 				bool placed = false;
 
+				Vector3 near = preferShallow ? preferNearLocal : Vector3.zero;
+				float nearRadius = preferShallow ? preferSearchRadius : 0f;
+
 				// When both modes on: shallow seats become surface decor; remainder stay embedded.
 				bool asSurface = useSurface && ( !useEmbedded || preferShallow );
 				if ( asSurface )
@@ -3953,8 +4458,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 						probe,
 						buryBand,
 						coinMesh,
-						preferNear: Vector3.zero,
-						searchRadius: 0f,
+						preferNear: near,
+						searchRadius: nearRadius,
 						out volumeSlot,
 						out _ );
 				}
@@ -3971,8 +4476,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 							probe,
 							buryBand,
 							coinMesh,
-							preferNear: Vector3.zero,
-							searchRadius: 0f,
+							preferNear: near,
+							searchRadius: nearRadius,
 							out volumeSlot,
 							out _ );
 						if ( !placed )
@@ -4012,8 +4517,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 								probe,
 								buryBand,
 								coinMesh,
-								preferNear: Vector3.zero,
-								searchRadius: 0f,
+								preferNear: near,
+								searchRadius: nearRadius,
 								out volumeSlot,
 								out _ );
 						}
@@ -4039,13 +4544,16 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					continue;
 
 
-				// Commit only on first sparse publish (so coins appear early) and at the end.
-				// Intermediate yields keep growing `list` only — avoids O(n) cell rebuilds every slice.
 				if ( !publishedSparse )
 				{
 					CommitBindSlotProgress( list, batches, rebuildVisibility: true );
 					_ready = _slots != null;
 					publishedSparse = true;
+					lastProgressiveCommitCount = list.Count;
+				}
+				else if ( list.Count - lastProgressiveCommitCount >= BindProgressiveCommitSeatStride )
+				{
+					PublishBindProgressiveCommit( list, batches, ref lastProgressiveCommitCount );
 				}
 
 
@@ -4064,6 +4572,43 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		CommitBindSlotProgress( list, batches, rebuildVisibility: true );
 		if ( !publishedSparse )
 			_ready = _slots != null;
+	}
+
+	void ResolveBindPreferNear( out Vector3 preferNearLocal, out float preferSearchRadius )
+	{
+		preferNearLocal = Vector3.zero;
+		preferSearchRadius = 0f;
+		if ( _pileRoot == null || _heightfield == null )
+			return;
+
+		Vector3 worldFocus = _pileRoot.position;
+		if ( TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
+			worldFocus = playerPos;
+		else if ( Camera.main != null )
+			worldFocus = Camera.main.transform.position;
+
+		preferNearLocal = _pileRoot.InverseTransformPoint( worldFocus );
+		preferNearLocal.y = 0f;
+		preferSearchRadius = Mathf.Max( 1f, _heightfield.WorldSize * 0.55f );
+	}
+
+	void PublishBindProgressiveCommit(
+		List<Slot> list,
+		List<BatchGroup> batches,
+		ref int lastProgressiveCommitCount )
+	{
+		int start = lastProgressiveCommitCount;
+		CommitBindSlotProgress( list, batches, rebuildVisibility: false );
+		int marked = MarkAppendedSeatsDrawn( start, _slotCount );
+		if ( marked > 0 )
+		{
+			RebuildBatchMatrices();
+			MarkStreamDrawCacheDirty();
+		}
+
+		for ( int i = start; i < _slotCount && i < list.Count; i++ )
+			list[ i ] = _slots[ i ];
+		lastProgressiveCommitCount = list.Count;
 	}
 
 	void CommitBindSlotProgress(

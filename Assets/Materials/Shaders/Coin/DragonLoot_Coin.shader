@@ -23,17 +23,6 @@ Shader "DragonLoot/Coin"
         _FresnelIntensity("Fresnel Intensity", Range(0, 2)) = 0.35
         _FresnelPower("Fresnel Power", Range(1, 8)) = 4
 
-        [Header(Instance Variation)]
-        _TintVariation("Gold Tint Variation", Range(0, 0.2)) = 0.05
-        _SmoothnessVariation("Smoothness Variation", Range(0, 0.3)) = 0.1
-        _SpecularVariation("Specular Variation", Range(0, 0.3)) = 0.1
-        _HueVariation("Hue Variation", Range(0, 0.15)) = 0.04
-        _ValueVariation("Value Variation", Range(0, 0.2)) = 0.05
-
-        [Header(Surface Detail)]
-        _RoughnessUvScale("Roughness UV Scale", Range(1, 128)) = 32
-        _RoughnessUvAmount("Roughness UV Amount", Range(0, 0.5)) = 0.08
-
         [Toggle(_EDGEWEAR_ON)] _EdgeWearEnabled("Edge Wear", Float) = 0
         _EdgeWearMap("Edge Wear Mask", 2D) = "black" {}
         _EdgeWearStrength("Edge Wear Strength", Range(0, 2)) = 0.5
@@ -42,7 +31,6 @@ Shader "DragonLoot/Coin"
         _DirtMap("Dirt Mask", 2D) = "black" {}
         _DirtStrength("Dirt Strength", Range(0, 2)) = 0.4
 
-        [HideInInspector] _VariationSeed("Variation Seed", Float) = 0
         [HideInInspector] _Cutoff("Cutoff", Range(0, 1)) = 0.5
         [HideInInspector] _Surface("__surface", Float) = 0
         [HideInInspector] _Cull("__cull", Float) = 2

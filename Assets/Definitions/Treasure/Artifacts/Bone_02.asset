@@ -51,6 +51,7 @@ MonoBehaviour:
   heldStackLocalEuler: {x: 0, y: 0, z: 0}
   cleaningRequirement: 0
   canStack: 0
+  usesInterleavedBarStack: 0
   coinThickness: 0.6
   cartGridSize: {x: 1, y: 1}
   pickupClips:

@@ -260,6 +260,14 @@ half4 GemLitFrag(Varyings input) : SV_Target
     half rim = GemSchlickFresnel(ndotv, _RimPower) * _RimIntensity * saturate(lightAmount + _ReflectionFloor);
     color += _FresnelColor.rgb * (graphicShine + rim);
 
+    half connected = clamp(_ConnectedGlow, 0.0h, 2.0h);
+    if (connected > 1e-4h)
+    {
+        // Gem-colored emissive rim only (no flat body fill). Values >1 are ignition peaks.
+        half connectedRim = GemSchlickFresnel(ndotv, _RimPower) * connected;
+        color += _BaseColor.rgb * _ConnectedGlowColor.rgb * connectedRim;
+    }
+
     color = DragonLootMixFog(color, inputData.fogCoord, input.positionWS);
     return half4(color, 1.0h);
 }

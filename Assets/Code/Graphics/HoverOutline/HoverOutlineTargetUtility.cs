@@ -60,7 +60,7 @@ public static class HoverOutlineTargetUtility
 
 	public static bool CanOutlineChest( ChestInteractable chest )
 	{
-		if ( chest == null || chest.State == ChestState.Opened )
+		if ( chest == null )
 			return false;
 
 		TreasureItem item = chest.Item;

@@ -164,16 +164,6 @@ public class WorldEventAction
 	[Min( 0f )]
 	public float cinematicLetterboxPeak;
 
-	[Tooltip( "When true, cinematicEnableMicroPush overrides the scene controller toggle." )]
-	public bool cinematicOverrideMicroPush;
-
-	[Tooltip( "Micro push on/off when cinematicOverrideMicroPush is true." )]
-	public bool cinematicEnableMicroPush;
-
-	[Tooltip( "Micro push local Z distance for CinematicPresentation. 0 = use controller default." )]
-	[Min( 0f )]
-	public float cinematicMicroPushDistance;
-
 	[Tooltip( "Rise duration override for CinematicPresentation. 0 = use controller default." )]
 	[Min( 0f )]
 	public float cinematicRise;

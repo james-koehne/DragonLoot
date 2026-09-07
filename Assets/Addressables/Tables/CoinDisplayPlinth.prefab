@@ -83,8 +83,8 @@ MonoBehaviour:
   displayArea: {fileID: 8224263856743405148}
   rows: 6
   columns: 14
-  slotSpacing: 0.22
-  margin: 0.05
+  slotSpacing: 0.23
+  margin: 0.025
   fillDirection: 0
   maxStackPerSlot: 1000
   snapDuration: 0.25
@@ -95,7 +95,7 @@ MonoBehaviour:
   fillSlotsOnStart: 1
   minCoinsPerSlot: 0
   maxCoinsPerSlot: 2
-  emptySlotChance: 0.8
+  emptySlotChance: 0.95
   fillSeed: 0
   autoLevelAfterWholeStackPlace: 1
   levelCoinStagger: 0.06

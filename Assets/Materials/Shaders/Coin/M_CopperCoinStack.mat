@@ -40,6 +40,7 @@ Material:
     - _BandContrast: 1.1
     - _BumpScale: 0.1
     - _CapNormalThreshold: 0.55
+    - _ChunkBaseIndex: 0
     - _CoinCount: 1
     - _CoinEdgeBevelStrength: 0.45
     - _CoinEdgeBevelWidth: 0.12
@@ -82,8 +83,9 @@ Material:
     - _SparkleSpeed: 2
     - _SpecularIntensity: 0.75
     - _SpecularPower: 64
-    - _TintVariation: 0.03
-    - _ValueVariation: 0.03
+    - _TintVariation: 0
+    - _UseBakedCoinIndex: 0
+    - _ValueVariation: 0
     - _VariationSeed: 1
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}

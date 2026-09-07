@@ -586,7 +586,8 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	}
 
 	/// <summary>
-	/// Coin tables ignore the aimed pile and fill the shortest slot in top-left order.
+	/// Coin tables: aim at an existing pile to stack onto it; aim at the table body (or an
+	/// unstackable pile) fills the shortest slot in top-left order.
 	/// Other typed tables snap to the nearest generated slot based on aim; invalid slots
 	/// still resolve so the preview stays on the hovered pile instead of jumping to table center.
 	/// </summary>
@@ -606,7 +607,19 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			return false;
 
 		if ( UsesLowestPilePlacement )
+		{
+			// Prefer stacking onto the aimed column when the ray hits a displayed coin in that slot.
+			if ( TryResolveAimedOccupiedSlot( in query, out int aimedSlot )
+				&& TryGetStackIndexForSlot( item, aimedSlot, out int aimedStack ) )
+			{
+				slotIndex = aimedSlot;
+				stackIndex = aimedStack;
+				valid = true;
+				return true;
+			}
+
 			return TryResolveLowestPileSlot( item, out slotIndex, out stackIndex, out valid );
+		}
 
 		if ( !TryResolveAimedSlot( in query, out slotIndex ) )
 			return false;
@@ -634,6 +647,34 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 		stackIndex = Slots[ slotIndex ].Count;
 		valid = false;
+		return true;
+	}
+
+	/// <summary>
+	/// True when aim hits a displayed treasure in a slot, or lands close to an occupied column
+	/// (cylinder visuals often have no collider, so the table mesh under a pile still counts).
+	/// </summary>
+	bool TryResolveAimedOccupiedSlot( in PlacementQuery query, out int slotIndex )
+	{
+		slotIndex = -1;
+		if ( !query.HasHit || query.Hit.collider == null || Slots == null )
+			return false;
+
+		TreasureItem hitItem = query.Hit.collider.GetComponentInParent<TreasureItem>();
+		if ( hitItem != null && TryFindSlotContaining( hitItem, out slotIndex ) )
+			return true;
+
+		if ( !TryFindNearestSlot( query.Hit.point, out int nearest, out float distSq ) )
+			return false;
+
+		if ( nearest < 0 || nearest >= Slots.Length || Slots[ nearest ].IsEmpty )
+			return false;
+
+		float maxDist = Mathf.Max( 0.05f, slotSpacing * 0.55f );
+		if ( distSq > maxDist * maxDist )
+			return false;
+
+		slotIndex = nearest;
 		return true;
 	}
 

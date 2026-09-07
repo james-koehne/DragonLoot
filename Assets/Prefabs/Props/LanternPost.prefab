@@ -46,6 +46,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
   - rid: 9170125570492334174
+  _useUnscaledTime: 0
   references:
     version: 2
     RefIds:
@@ -193,6 +194,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
   - rid: 9170125570492334175
+  _useUnscaledTime: 0
   references:
     version: 2
     RefIds:
@@ -444,7 +446,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &7311158688325671163
 Transform:
   m_ObjectHideFlags: 0

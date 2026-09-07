@@ -22,13 +22,12 @@ struct Varyings
     half4  tangentWS  : TEXCOORD2;
     float2 uv         : TEXCOORD3;
     half   fogFactor  : TEXCOORD4;
-    nointerpolation float instanceSeed : TEXCOORD5;
 #if defined(REQUIRES_VERTEX_SHADOW_COORD_INTERPOLATOR)
-    float4 shadowCoord : TEXCOORD6;
+    float4 shadowCoord : TEXCOORD5;
 #endif
-    DECLARE_LIGHTMAP_OR_SH(staticLightmapUV, vertexSH, 7);
+    DECLARE_LIGHTMAP_OR_SH(staticLightmapUV, vertexSH, 6);
 #ifdef USE_APV_PROBE_OCCLUSION
-    float4 probeOcclusion : TEXCOORD8;
+    float4 probeOcclusion : TEXCOORD7;
 #endif
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
@@ -93,7 +92,6 @@ Varyings CoinLitVert(Attributes input)
     output.tangentWS = half4(normalInputs.tangentWS, sign);
     output.uv = TRANSFORM_TEX(input.texcoord, _BaseMap);
     output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
-    output.instanceSeed = CoinInstanceSeed();
 
 #if defined(REQUIRES_VERTEX_SHADOW_COORD_INTERPOLATOR)
     output.shadowCoord = GetShadowCoord(posInputs);
@@ -109,21 +107,13 @@ half4 CoinLitFrag(Varyings input) : SV_Target
     UNITY_SETUP_INSTANCE_ID(input);
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-    CoinVariation variation = CoinBuildVariation(input.instanceSeed);
-
     half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv) * _BaseColor;
     half4 maskSample = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, input.uv);
     half occlusion = lerp(1.0h, SAMPLE_TEXTURE2D(_OcclusionMap, sampler_OcclusionMap, input.uv).g, _OcclusionStrength);
 
     half3 albedo = albedoSample.rgb;
-    CoinApplyAlbedoVariation(albedo, variation);
-
     half metallic = saturate(maskSample.r * _Metallic);
-    half smoothness = saturate(maskSample.a * _Smoothness * variation.smoothnessScale * CoinUvRoughnessScale(input.uv));
-
-    // Specular intensity (±10%): metallic F0 comes from albedo, so scale albedo for metals.
-    albedo = lerp(albedo, albedo * variation.specularScale, metallic);
-
+    half smoothness = saturate(maskSample.a * _Smoothness);
     half3 normalTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv), _BumpScale);
 
 #if defined(_EDGEWEAR_ON)

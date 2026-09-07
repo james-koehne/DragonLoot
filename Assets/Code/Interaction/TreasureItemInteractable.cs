@@ -93,9 +93,6 @@ public class TreasureItemInteractable : InteractableBase
 		if ( !base.CanInteract( player ) || player == null || item == null )
 			return false;
 
-		if ( item.Definition != null && item.Definition.category == TreasureCategory.Chest )
-			return false;
-
 		item.TryRepairPickupState();
 
 		if ( item.State == TreasureItemState.Held
@@ -145,9 +142,6 @@ public class TreasureItemInteractable : InteractableBase
 	{
 		TreasureItem item = Item;
 		if ( player == null || item == null )
-			return;
-
-		if ( item.Definition != null && item.Definition.category == TreasureCategory.Chest )
 			return;
 
 		if ( item.State == TreasureItemState.Held

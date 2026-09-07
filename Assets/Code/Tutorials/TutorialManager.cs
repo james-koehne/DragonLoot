@@ -38,6 +38,8 @@ public class TutorialManager : MonoBehaviour
 	bool _subscribed;
 	bool _aimingTreasurePile;
 	bool _aimingCoinStack;
+	bool _playerAboveHeight;
+	bool _wasPlayerGliding;
 	int _sorterCoinsSortedWhileActive;
 	bool _sorterStackLoadedWhileActive;
 	TreasureCategory _heldCategory;
@@ -108,6 +110,8 @@ public class TutorialManager : MonoBehaviour
 		_insideVolumes.Clear();
 		_aimingTreasurePile = false;
 		_aimingCoinStack = false;
+		_playerAboveHeight = false;
+		_wasPlayerGliding = false;
 		_sorterCoinsSortedWhileActive = 0;
 		_sorterStackLoadedWhileActive = false;
 		_isHolding = false;
@@ -165,6 +169,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<MapOpenedEvent>( OnMapOpened );
 		EventBus.Subscribe<CoinSorterUsedEvent>( OnCoinSorterUsed );
 		EventBus.Subscribe<CoinSorterStackLoadedEvent>( OnCoinSorterStackLoaded );
+		EventBus.Subscribe<ChestOpenedEvent>( OnChestOpened );
 		_subscribed = true;
 	}
 
@@ -189,6 +194,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<MapOpenedEvent>( OnMapOpened );
 		EventBus.Unsubscribe<CoinSorterUsedEvent>( OnCoinSorterUsed );
 		EventBus.Unsubscribe<CoinSorterStackLoadedEvent>( OnCoinSorterStackLoaded );
+		EventBus.Unsubscribe<ChestOpenedEvent>( OnChestOpened );
 		_subscribed = false;
 	}
 
@@ -206,6 +212,7 @@ public class TutorialManager : MonoBehaviour
 
 		RefreshFromPlayerState();
 		PollMoveLookTasks();
+		PollGlideTask();
 		EvaluateContext( force: false );
 	}
 
@@ -263,7 +270,7 @@ public class TutorialManager : MonoBehaviour
 		PlayerCarry carry = player != null ? player.Carry : null;
 		if ( carry != null )
 		{
-			_heldCategory = PlayerCarry.MapBucketToCategory( carry.SelectedBucket );
+			_heldCategory = ResolveHeldCategory( carry );
 			_isHolding = carry.Count > 0;
 		}
 		else
@@ -285,6 +292,59 @@ public class TutorialManager : MonoBehaviour
 			_aimingTreasurePile = false;
 			_aimingCoinStack = false;
 		}
+
+		bool above = player != null && IsPlayerAboveAnyHeightTrigger( player.transform.position.y );
+		if ( above && !_playerAboveHeight )
+			NoteActivationForAboveHeight();
+		_playerAboveHeight = above;
+	}
+
+	bool IsPlayerAboveAnyHeightTrigger( float playerY )
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return playerY >= 30f;
+
+		bool any = false;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || def.trigger != TutorialTriggerType.AboveHeight )
+				continue;
+			any = true;
+			float minY = def.minHeightY > 0f ? def.minHeightY : 30f;
+			if ( playerY >= minY )
+				return true;
+		}
+
+		return !any && playerY >= 30f;
+	}
+
+	void NoteActivationForAboveHeight()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.AboveHeight )
+				continue;
+			if ( !IsContextActive( def ) )
+				continue;
+			MarkRecentlyActivated( def.id );
+		}
+	}
+
+	static TreasureCategory ResolveHeldCategory( PlayerCarry carry )
+	{
+		if ( carry == null )
+			return TreasureCategory.Coin;
+
+		if ( carry.TryPeekActive( out TreasureDefinition def, out _ ) && def != null )
+			return def.category;
+
+		return PlayerCarry.MapBucketToCategory( carry.SelectedBucket );
 	}
 
 	static bool IsAimingCoinStack( IInteractable current )
@@ -341,6 +401,15 @@ public class TutorialManager : MonoBehaviour
 		}
 	}
 
+	void PollGlideTask()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		bool gliding = player != null && player.IsGliding;
+		if ( gliding && !_wasPlayerGliding )
+			TryCompleteTask( TutorialTaskCompleteType.Glide );
+		_wasPlayerGliding = gliding;
+	}
+
 	void OnVolumeEntered( VolumeEnteredEvent evt )
 	{
 		if ( string.IsNullOrEmpty( evt.VolumeId ) )
@@ -363,8 +432,10 @@ public class TutorialManager : MonoBehaviour
 	{
 		_heldCategory = evt.Category;
 		_isHolding = evt.IsHolding;
+		if ( evt.IsHolding && evt.Carry != null )
+			_heldCategory = ResolveHeldCategory( evt.Carry );
 		if ( evt.IsHolding )
-			NoteActivationForHolding( evt.Category );
+			NoteActivationForHolding( _heldCategory );
 		EvaluateContext( force: true );
 	}
 
@@ -383,7 +454,17 @@ public class TutorialManager : MonoBehaviour
 
 	void OnPlacementCompleted( PlacementCompletedEvent evt )
 	{
-		if ( evt.Definition != null && evt.Definition.category != TreasureCategory.Coin )
+		if ( evt.Definition == null )
+			return;
+
+		if ( evt.Definition.category == TreasureCategory.Chest )
+		{
+			if ( evt.Target is FloorPlacementTarget )
+				TryCompleteTask( TutorialTaskCompleteType.PlaceChestFloor );
+			return;
+		}
+
+		if ( evt.Definition.category != TreasureCategory.Coin )
 			return;
 
 		// Coins on the ground always go through GroundCoinStack / ground stack targets, not FloorPlacementTarget.
@@ -412,6 +493,8 @@ public class TutorialManager : MonoBehaviour
 	void OnCoinDisplayChanged( CoinDisplayTableChangedEvent evt )
 	{
 		TryCompleteTask( TutorialTaskCompleteType.PlaceCoinDisplay );
+		NoteActivationForManyCoinsIfReady();
+		EvaluateContext( force: true );
 	}
 
 	void OnConstellationChanged( GemConstellationChangedEvent evt )
@@ -446,6 +529,11 @@ public class TutorialManager : MonoBehaviour
 	void OnMapOpened( MapOpenedEvent evt )
 	{
 		TryCompleteTask( TutorialTaskCompleteType.OpenMap );
+	}
+
+	void OnChestOpened( ChestOpenedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.OpenChest );
 	}
 
 	void OnCoinSorterUsed( CoinSorterUsedEvent evt )
@@ -487,12 +575,58 @@ public class TutorialManager : MonoBehaviour
 			break;
 		}
 
-		if ( matched )
+		if ( !matched )
+			return;
+
+		if ( _active.completeAllTasksOnVolumeEnter )
 		{
-			// Reaching the destination completes the guidance tutorial even if map wasn't opened.
 			ForceCompleteAllRemainingTasks();
 			return;
 		}
+
+		CompleteMatchingEnterVolumeTasks( volumeId );
+	}
+
+	void CompleteMatchingEnterVolumeTasks( string volumeId )
+	{
+		if ( _active == null || _active.tasks == null || string.IsNullOrEmpty( volumeId ) )
+			return;
+
+		bool any = false;
+		for ( int i = 0; i < _active.tasks.Length; i++ )
+		{
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || task.completeTrigger != TutorialTaskCompleteType.EnterVolume )
+				continue;
+			if ( string.IsNullOrEmpty( task.id ) || task.completeVolumeId != volumeId )
+				continue;
+			if ( IsTaskCompleted( _active.id, task.id ) )
+				continue;
+
+			MarkTaskCompleted( _active.id, task.id );
+			any = true;
+		}
+
+		if ( !any )
+			return;
+
+		if ( _popup != null )
+		{
+			_popup.SetTasks( TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive ) );
+			_popup.PlayTaskComplete();
+		}
+
+		if ( AreAllTasksComplete( _active ) )
+		{
+			BeginTutorialCompleteCeremony();
+			return;
+		}
+
+		_phase = CeremonyPhase.TaskLock;
+		float lockSeconds = 0.35f;
+		if ( _popup != null )
+			lockSeconds = _popup.TaskCompleteFeedbackDuration + TaskCompleteHoldPadding;
+		_phaseUntil = Time.unscaledTime + lockSeconds;
 	}
 
 	void NoteActivationForVolume( string volumeId )
@@ -551,6 +685,23 @@ public class TutorialManager : MonoBehaviour
 		}
 	}
 
+	void NoteActivationForManyCoinsIfReady()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.ManyCoins )
+				continue;
+			if ( !IsManyCoinsContext( def ) )
+				continue;
+			MarkRecentlyActivated( def.id );
+		}
+	}
+
 	void MarkRecentlyActivated( string id )
 	{
 		if ( string.IsNullOrEmpty( id ) )
@@ -573,14 +724,6 @@ public class TutorialManager : MonoBehaviour
 			return;
 		}
 
-		// Once shown, stay until all tasks are complete (do not hide or switch on context loss).
-		if ( _active != null && IsEligible( _active ) )
-		{
-			if ( force )
-				RefreshActivePopup();
-			return;
-		}
-
 		_matchingScratch.Clear();
 		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
@@ -593,6 +736,25 @@ public class TutorialManager : MonoBehaviour
 		}
 
 		TutorialDefinition best = PickBestMatch( _matchingScratch );
+
+		// Sticky incomplete tutorials: do not hide on context loss, but allow a freshly
+		// activated context (e.g. picking up a gem) to take priority.
+		if ( _active != null && IsEligible( _active ) )
+		{
+			if ( best != null
+			     && best.id != _active.id
+			     && best.id == _lastActivatedId
+			     && IsContextActive( best ) )
+			{
+				RequestShow( best );
+				return;
+			}
+
+			if ( force )
+				RefreshActivePopup();
+			return;
+		}
+
 		if ( best == null )
 			return;
 
@@ -667,6 +829,9 @@ public class TutorialManager : MonoBehaviour
 			case TutorialTriggerType.ManyCoins:
 				primary = IsManyCoinsContext( def );
 				break;
+			case TutorialTriggerType.AboveHeight:
+				primary = IsAboveHeightContext( def );
+				break;
 			default:
 				primary = false;
 				break;
@@ -688,13 +853,26 @@ public class TutorialManager : MonoBehaviour
 	{
 		int minWorld = def != null && def.minWorldCoinsToShow > 0 ? def.minWorldCoinsToShow : 100;
 		int minCarry = def != null && def.minCarriedCoinsToShow > 0 ? def.minCarriedCoinsToShow : 50;
+		int minDisplay = def != null && def.minDisplayCoinsToShow > 0 ? def.minDisplayCoinsToShow : 50;
 
 		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
 		PlayerCarry carry = player != null ? player.Carry : null;
 		if ( carry != null && carry.GetBucketCount( CarryBucketKind.Coin ) >= minCarry )
 			return true;
 
+		if ( CoinDisplayTableInteractable.CountAllDisplayedCoins() >= minDisplay )
+			return true;
+
 		return CountWorldGroundCoins() >= minWorld;
+	}
+
+	static bool IsAboveHeightContext( TutorialDefinition def )
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		if ( player == null )
+			return false;
+		float minY = def != null && def.minHeightY > 0f ? def.minHeightY : 30f;
+		return player.transform.position.y >= minY;
 	}
 
 	static int CountWorldGroundCoins()
@@ -837,7 +1015,11 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( !_insideVolumes.Contains( task.completeVolumeId ) )
 				continue;
-			ForceCompleteAllRemainingTasks();
+
+			if ( _active.completeAllTasksOnVolumeEnter )
+				ForceCompleteAllRemainingTasks();
+			else
+				CompleteMatchingEnterVolumeTasks( task.completeVolumeId );
 			return;
 		}
 	}
@@ -845,8 +1027,13 @@ public class TutorialManager : MonoBehaviour
 	void ApplyMapHighlight( TutorialDefinition def )
 	{
 		MapOverlayRegistrar.ClearHighlightedLabels();
-		if ( def != null && !string.IsNullOrEmpty( def.highlightMapLabel ) )
+		MapOverlayRegistrar.ClearTempMarkers();
+		if ( def == null )
+			return;
+		if ( !string.IsNullOrEmpty( def.highlightMapLabel ) )
 			MapOverlayRegistrar.SetLabelHighlighted( def.highlightMapLabel, true );
+		if ( !string.IsNullOrEmpty( def.mapMarkerId ) )
+			MapOverlayRegistrar.SetTempMarkerActive( def.mapMarkerId, true );
 	}
 
 	void RequestHide( bool complete )
@@ -890,6 +1077,7 @@ public class TutorialManager : MonoBehaviour
 		_activeIsReplay = false;
 		_finishMarkedComplete = false;
 		MapOverlayRegistrar.ClearHighlightedLabels();
+		MapOverlayRegistrar.ClearTempMarkers();
 		if ( _popup != null && _popup.IsVisible )
 			_popup.HideImmediate();
 
@@ -1203,6 +1391,7 @@ public class TutorialManager : MonoBehaviour
 		_completedThisSession.Clear();
 		_insideVolumes.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
+		MapOverlayRegistrar.ClearTempMarkers();
 		if ( _popup != null )
 			_popup.HideImmediate();
 
@@ -1245,6 +1434,7 @@ public static class TutorialKeybindFormatter
 		result = ReplaceToken( result, "RotateLeft", gameInput.RotateLeft );
 		result = ReplaceToken( result, "RotateRight", gameInput.RotateRight );
 		result = ReplaceToken( result, "Clean", gameInput.Clean );
+		result = ReplaceToken( result, "Jump", gameInput.Jump );
 		return result;
 	}
 

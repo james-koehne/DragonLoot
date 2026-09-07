@@ -10,6 +10,10 @@ public class DebugChestsSection : DebugOverlaySection
 
 	public void Draw()
 	{
+		bool disableKeys = GUILayout.Toggle( ChestProgress.DisableKeys, "Disable Keys (always open)" );
+		if ( disableKeys != ChestProgress.DisableKeys )
+			ChestProgress.SetDisableKeys( disableKeys );
+
 		GUILayout.Label( $"Chests opened: {ChestProgress.ChestsOpened}" );
 		GUILayout.Label( $"Skeleton claimed: {ChestProgress.SkeletonKeyClaimed}" );
 

@@ -13,18 +13,7 @@ CBUFFER_START(UnityPerMaterial)
     half _FresnelPower;
     half _ShineBoost;
     half _SpecularIntensity;
-    half _SpecularPower;
-    half _SparkleEnabled;
-    half4 _SparkleColor;
-    half _SparkleIntensity;
-    half _SparkleDensity;
-    half _SparkleSharpness;
-    half _SparkleSpeed;
-    half _SparkleCoverage;
-    half _SparkleFlicker;
-    half _TintVariation;
-    half _ValueVariation;
-    half _VariationSeed;
+    half _TypeCount;
     half _CoinCount;
     half _UseBakedCoinIndex;
     half _ChunkBaseIndex;
@@ -46,14 +35,6 @@ CBUFFER_START(UnityPerMaterial)
     half _CoinEdgeBevelStrength;
     half _SideFacetStrength;
     half _SideFacetFrequency;
-    half _SeamSideClip;
-    half _SeamClipWidth;
-    half _SeamClipGrooveOnly;
-    half _SeamWorldOffsetMax;
-    half _SeamViewAlignStart;
-    half _SeamViewAlignEnd;
-    half _SeamNormalStrength;
-    half _SeamSoftAO;
     half _Cutoff;
     half _Cull;
 CBUFFER_END

@@ -24,25 +24,10 @@ Shader "DragonLoot/Coin Stack"
         [Header(Shine)]
         _ShineBoost("Shine Boost", Range(0, 2)) = 0.35
         _SpecularIntensity("Specular Intensity", Range(0, 4)) = 0.75
-        _SpecularPower("Specular Power", Range(8, 256)) = 64
-
-        [Header(Sparkles)]
-        [Toggle] _SparkleEnabled("Sparkles", Float) = 0
-        [HDR] _SparkleColor("Sparkle Color", Color) = (1, 0.92, 0.65, 1)
-        _SparkleIntensity("Sparkle Intensity", Range(0, 8)) = 0
-        _SparkleDensity("Sparkle Density", Range(1, 64)) = 14
-        _SparkleSharpness("Sparkle Sharpness", Range(4, 128)) = 48
-        _SparkleSpeed("Sparkle Speed", Range(0, 10)) = 2
-        _SparkleCoverage("Sparkle Coverage", Range(0.05, 1)) = 0.3
-        _SparkleFlicker("Sparkle Flicker", Range(0, 1)) = 0.45
-
-        [Header(Instance Variation)]
-        _TintVariation("Tint Variation", Range(0, 0.2)) = 0.04
-        _ValueVariation("Value Variation", Range(0, 0.2)) = 0.04
-        [HideInInspector] _VariationSeed("Variation Seed", Float) = 1
 
         [Header(Stack Bands)]
         _CoinCount("Coin Count", Float) = 1
+        [HideInInspector] _TypeCount("Type Count", Float) = 3
         [HideInInspector] _UseBakedCoinIndex("Use Baked Coin Index", Float) = 0
         [HideInInspector] _ChunkBaseIndex("Chunk Base Index", Float) = 0
         _BandContrast("Band Contrast", Range(0, 2)) = 1.1
@@ -64,16 +49,6 @@ Shader "DragonLoot/Coin Stack"
         _CoinEdgeBevelStrength("Coin Edge Bevel Strength", Range(0, 1)) = 0.45
         _SideFacetStrength("Side Facet Strength", Range(0, 0.5)) = 0.04
         _SideFacetFrequency("Side Facet Frequency", Range(1, 32)) = 12
-
-        [Header(Seam Parallax)]
-        _SeamWorldOffsetMax("Seam World Offset Max", Range(0, 0.05)) = 0.012
-        _SeamViewAlignStart("Seam View Align Start", Range(0, 1)) = 0.7
-        _SeamViewAlignEnd("Seam View Align End", Range(0, 1)) = 0.92
-        _SeamClipWidth("Seam Rim Width", Range(0.001, 0.45)) = 0.12
-        [Toggle] _SeamClipGrooveOnly("Seam Grooves Only", Float) = 0
-        _SeamSideClip("Seam Side Clip", Range(0, 1)) = 0
-        _SeamNormalStrength("Seam Normal Strength", Range(0, 2)) = 0.55
-        _SeamSoftAO("Seam Soft AO", Range(0, 1)) = 0.4
 
         [HideInInspector] _Cutoff("Cutoff", Range(0, 1)) = 0.5
         [HideInInspector] _Cull("__cull", Float) = 2
@@ -144,7 +119,6 @@ Shader "DragonLoot/Coin Stack"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
             #include "CoinStackMaterial.hlsl"
-            #include "CoinStackSeamClip.hlsl"
 
             float3 _LightDirection;
             float3 _LightPosition;
@@ -159,10 +133,6 @@ Shader "DragonLoot/Coin Stack"
             struct ShadowVaryings
             {
                 float4 positionCS : SV_POSITION;
-                float3 positionWS : TEXCOORD0;
-                float3 normalOS   : TEXCOORD1;
-                float stackY01    : TEXCOORD2;
-                nointerpolation float instanceSeed : TEXCOORD3;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -174,12 +144,7 @@ Shader "DragonLoot/Coin Stack"
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-                output.normalOS = input.normalOS;
-                output.stackY01 = CoinStackComputeStackY01(input.positionOS.y);
-                output.instanceSeed = CoinStackInstanceSeed();
-
                 float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                output.positionWS = positionWS;
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
 
 #if _CASTING_PUNCTUAL_LIGHT_SHADOW
@@ -201,20 +166,6 @@ Shader "DragonLoot/Coin Stack"
             half4 CoinStackShadowFrag(ShadowVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                float coinCount = max((float)_CoinCount, 1.0);
-                if (!CoinStackIsCap(input.normalOS))
-                {
-                    CoinStackBandData bands = CoinStackEvaluateBands(input.stackY01, coinCount);
-                    CoinStackSeamView seam = CoinStackEvaluateSeamView(
-                        input.positionWS,
-                        input.normalOS,
-                        input.stackY01,
-                        coinCount,
-                        input.instanceSeed,
-                        bands.grooveMask,
-                        bands.ridgeMask);
-                    CoinStackClipSeamSide(seam);
-                }
                 return 0;
             }
             ENDHLSL
@@ -237,22 +188,16 @@ Shader "DragonLoot/Coin Stack"
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "CoinStackMaterial.hlsl"
-            #include "CoinStackSeamClip.hlsl"
 
             struct DepthAttributes
             {
                 float4 positionOS : POSITION;
-                float3 normalOS   : NORMAL;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct DepthVaryings
             {
                 float4 positionCS : SV_POSITION;
-                float3 positionWS : TEXCOORD0;
-                float3 normalOS   : TEXCOORD1;
-                float stackY01    : TEXCOORD2;
-                nointerpolation float instanceSeed : TEXCOORD3;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -263,31 +208,13 @@ Shader "DragonLoot/Coin Stack"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-                output.normalOS = input.normalOS;
-                output.stackY01 = CoinStackComputeStackY01(input.positionOS.y);
-                output.instanceSeed = CoinStackInstanceSeed();
-                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 return output;
             }
 
-			half4 CoinStackDepthFrag(DepthVaryings input) : SV_Target
+            half4 CoinStackDepthFrag(DepthVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                float coinCount = max((float)_CoinCount, 1.0);
-                if (!CoinStackIsCap(input.normalOS))
-                {
-                    CoinStackBandData bands = CoinStackEvaluateBands(input.stackY01, coinCount);
-                    CoinStackSeamView seam = CoinStackEvaluateSeamView(
-                        input.positionWS,
-                        input.normalOS,
-                        input.stackY01,
-                        coinCount,
-                        input.instanceSeed,
-                        bands.grooveMask,
-                        bands.ridgeMask);
-                    CoinStackClipSeamSide(seam);
-                }
                 return 0;
             }
             ENDHLSL
@@ -309,7 +236,6 @@ Shader "DragonLoot/Coin Stack"
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "CoinStackMaterial.hlsl"
-            #include "CoinStackSeamClip.hlsl"
 
             struct DepthNormalsAttributes
             {
@@ -321,11 +247,7 @@ Shader "DragonLoot/Coin Stack"
             struct DepthNormalsVaryings
             {
                 float4 positionCS : SV_POSITION;
-                float3 positionWS : TEXCOORD0;
-                float3 normalOS   : TEXCOORD1;
-                float3 normalWS   : TEXCOORD2;
-                float stackY01    : TEXCOORD3;
-                nointerpolation float instanceSeed : TEXCOORD4;
+                float3 normalWS   : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -336,10 +258,6 @@ Shader "DragonLoot/Coin Stack"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-                output.normalOS = input.normalOS;
-                output.stackY01 = CoinStackComputeStackY01(input.positionOS.y);
-                output.instanceSeed = CoinStackInstanceSeed();
-                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 return output;
@@ -348,20 +266,6 @@ Shader "DragonLoot/Coin Stack"
             half4 CoinStackDepthNormalsFrag(DepthNormalsVaryings input) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(input);
-                float coinCount = max((float)_CoinCount, 1.0);
-                if (!CoinStackIsCap(input.normalOS))
-                {
-                    CoinStackBandData bands = CoinStackEvaluateBands(input.stackY01, coinCount);
-                    CoinStackSeamView seam = CoinStackEvaluateSeamView(
-                        input.positionWS,
-                        input.normalOS,
-                        input.stackY01,
-                        coinCount,
-                        input.instanceSeed,
-                        bands.grooveMask,
-                        bands.ridgeMask);
-                    CoinStackClipSeamSide(seam);
-                }
                 return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
             }
             ENDHLSL
