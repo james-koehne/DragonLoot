@@ -5,12 +5,20 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Presentation table with hand-placed slots; each slot accepts one specific artifact definition.
-/// Placements are permanent. Empty slots show a cyan hologram of the required artifact.
+/// Presentation table with hand-placed slots. Each slot can require its own artifact, or every
+/// slot can share one required type. Placements are permanent. Empty slots show a cyan hologram.
 /// </summary>
 public class ArtifactPresentationTableInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget, IPermanentTreasureDisplayOwner
 {
 	[Header( "Slots" )]
+	[Tooltip( "When enabled, every slot uses Shared Required Artifact. Per-slot Required Artifact is ignored." )]
+	[SerializeField]
+	bool sameArtifactForAllSlots;
+
+	[Tooltip( "Artifact accepted by every slot when Same Artifact For All Slots is enabled." )]
+	[SerializeField]
+	TreasureDefinition sharedRequiredArtifact;
+
 	[SerializeField]
 	List<ArtifactPresentationSlotEntry> slots = new List<ArtifactPresentationSlotEntry>();
 
@@ -51,6 +59,8 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	int _aimFeedbackFrame = -1;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.DisplayCabinet;
+	public bool SameArtifactForAllSlots => sameArtifactForAllSlots;
+	public TreasureDefinition SharedRequiredArtifact => sharedRequiredArtifact;
 	public IReadOnlyList<ArtifactPresentationSlotEntry> Slots => slots;
 	public int CurrentCount => _currentCount;
 	public int SlotCount => slots != null ? slots.Count : 0;
@@ -252,6 +262,9 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	{
 		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
 			return null;
+
+		if ( sameArtifactForAllSlots )
+			return sharedRequiredArtifact;
 
 		return slots[ slotIndex ].requiredArtifact;
 	}
@@ -518,10 +531,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( definition == null || definition.category != TreasureCategory.Artifact )
 			return false;
 
-		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
-			return false;
-
-		TreasureDefinition required = slots[ slotIndex ].requiredArtifact;
+		TreasureDefinition required = GetRequiredArtifact( slotIndex );
 		return required != null && definition == required;
 	}
 

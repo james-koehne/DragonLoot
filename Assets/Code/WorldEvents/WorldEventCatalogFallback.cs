@@ -31,8 +31,7 @@ public static class WorldEventCatalogFallback
 		evt.tags = new[] { "intro" };
 		evt.conditions = new[]
 		{
-			new WorldEventCondition { type = WorldEventConditionType.PlayerGameplayInput },
-			new WorldEventCondition { type = WorldEventConditionType.ElapsedUnscaledSeconds, delaySeconds = 2f }
+			new WorldEventCondition { type = WorldEventConditionType.TutorialCompleted, targetId = "tut_movement" }
 		};
 		evt.actions = new[]
 		{

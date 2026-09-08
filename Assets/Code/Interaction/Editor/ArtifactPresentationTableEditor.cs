@@ -6,17 +6,67 @@ using UnityEngine;
 [CustomEditor( typeof( ArtifactPresentationTableInteractable ) )]
 public class ArtifactPresentationTableEditor : Editor
 {
+	int _previewRelevantHash;
+
 	public override void OnInspectorGUI()
 	{
-		DrawDefaultInspector();
+		serializedObject.Update();
+
+		SerializedProperty sameArtifactProp = serializedObject.FindProperty( "sameArtifactForAllSlots" );
+		SerializedProperty sharedRequiredProp = serializedObject.FindProperty( "sharedRequiredArtifact" );
+		bool sameArtifactForAllSlots = sameArtifactProp != null && sameArtifactProp.boolValue;
+
+		SerializedProperty iterator = serializedObject.GetIterator();
+		bool enterChildren = true;
+		while ( iterator.NextVisible( enterChildren ) )
+		{
+			enterChildren = false;
+			if ( iterator.propertyPath == "m_Script" )
+			{
+				using ( new EditorGUI.DisabledScope( true ) )
+					EditorGUILayout.PropertyField( iterator, true );
+				continue;
+			}
+
+			if ( iterator.propertyPath == "sharedRequiredArtifact" )
+			{
+				if ( sameArtifactForAllSlots )
+					EditorGUILayout.PropertyField( iterator, true );
+				continue;
+			}
+
+			if ( iterator.propertyPath == "slots" )
+			{
+				if ( sameArtifactForAllSlots )
+					DrawSlotsWithoutRequiredArtifact( iterator, sharedRequiredProp );
+				else
+					EditorGUILayout.PropertyField( iterator, true );
+				continue;
+			}
+
+			EditorGUILayout.PropertyField( iterator, true );
+			if ( iterator.propertyPath == "sameArtifactForAllSlots" )
+				sameArtifactForAllSlots = iterator.boolValue;
+		}
+
+		serializedObject.ApplyModifiedProperties();
 
 		ArtifactPresentationTableInteractable table = ( ArtifactPresentationTableInteractable )target;
+		int previewHash = ComputePreviewRelevantHash();
+		bool previewDirty = previewHash != _previewRelevantHash;
+		_previewRelevantHash = previewHash;
 		if ( table == null )
 			return;
 
 		ArtifactPresentationSlotIndicators indicators = table.GetComponent<ArtifactPresentationSlotIndicators>();
 		if ( indicators == null )
 			indicators = table.GetComponentInChildren<ArtifactPresentationSlotIndicators>();
+
+		if ( indicators != null && previewDirty && !Application.isPlaying )
+		{
+			indicators.Bind( table );
+			SceneView.RepaintAll();
+		}
 
 		if ( indicators != null )
 		{
@@ -60,8 +110,26 @@ public class ArtifactPresentationTableEditor : Editor
 		IReadOnlyList<ArtifactPresentationSlotEntry> slots = table.Slots;
 		if ( slots == null || slots.Count == 0 )
 		{
-			EditorGUILayout.HelpBox( "Add at least one slot with an anchor and required artifact.", MessageType.Warning );
+			string emptyMessage = table.SameArtifactForAllSlots
+				? "Add at least one slot with an anchor."
+				: "Add at least one slot with an anchor and required artifact.";
+			EditorGUILayout.HelpBox( emptyMessage, MessageType.Warning );
 			return;
+		}
+
+		if ( table.SameArtifactForAllSlots )
+		{
+			TreasureDefinition shared = table.SharedRequiredArtifact;
+			if ( shared == null )
+			{
+				EditorGUILayout.HelpBox( "Assign a shared required artifact.", MessageType.Error );
+			}
+			else if ( shared.category != TreasureCategory.Artifact )
+			{
+				EditorGUILayout.HelpBox(
+					"Shared required artifact \"" + shared.displayName + "\" is not TreasureCategory.Artifact.",
+					MessageType.Warning );
+			}
 		}
 
 		for ( int i = 0; i < slots.Count; i++ )
@@ -73,16 +141,20 @@ public class ArtifactPresentationTableEditor : Editor
 				continue;
 			}
 
-			if ( entry.requiredArtifact == null )
+			if ( table.SameArtifactForAllSlots )
+				continue;
+
+			TreasureDefinition required = table.GetRequiredArtifact( i );
+			if ( required == null )
 			{
 				EditorGUILayout.HelpBox( "Slot " + i + ": assign a required artifact definition.", MessageType.Error );
 				continue;
 			}
 
-			if ( entry.requiredArtifact.category != TreasureCategory.Artifact )
+			if ( required.category != TreasureCategory.Artifact )
 			{
 				EditorGUILayout.HelpBox(
-					"Slot " + i + ": \"" + entry.requiredArtifact.displayName + "\" is not TreasureCategory.Artifact.",
+					"Slot " + i + ": \"" + required.displayName + "\" is not TreasureCategory.Artifact.",
 					MessageType.Warning );
 			}
 		}
@@ -108,6 +180,81 @@ public class ArtifactPresentationTableEditor : Editor
 
 		Debug.Log( "Purged " + removed + " SlotIndicator orphan(s) from open scenes." );
 		SceneView.RepaintAll();
+	}
+
+	static void DrawSlotsWithoutRequiredArtifact( SerializedProperty slotsProp, SerializedProperty sharedRequiredProp )
+	{
+		slotsProp.isExpanded = EditorGUILayout.Foldout( slotsProp.isExpanded, slotsProp.displayName, true );
+		if ( !slotsProp.isExpanded )
+			return;
+
+		EditorGUI.indentLevel++;
+		slotsProp.arraySize = EditorGUILayout.IntField( "Size", slotsProp.arraySize );
+		for ( int i = 0; i < slotsProp.arraySize; i++ )
+		{
+			SerializedProperty element = slotsProp.GetArrayElementAtIndex( i );
+			element.isExpanded = EditorGUILayout.Foldout( element.isExpanded, "Slot " + i, true );
+			if ( !element.isExpanded )
+				continue;
+
+			EditorGUI.indentLevel++;
+			SerializedProperty anchorProp = element.FindPropertyRelative( "anchor" );
+			if ( anchorProp != null )
+				EditorGUILayout.PropertyField( anchorProp, true );
+
+			Object shared = sharedRequiredProp != null ? sharedRequiredProp.objectReferenceValue : null;
+			using ( new EditorGUI.DisabledScope( true ) )
+				EditorGUILayout.ObjectField( "Required Artifact", shared, typeof( TreasureDefinition ), false );
+
+			SerializedProperty rotationProp = element.FindPropertyRelative( "rotationOffset" );
+			if ( rotationProp != null )
+				EditorGUILayout.PropertyField( rotationProp, true );
+			EditorGUI.indentLevel--;
+		}
+
+		EditorGUI.indentLevel--;
+	}
+
+	int ComputePreviewRelevantHash()
+	{
+		unchecked
+		{
+			int hash = 17;
+			hash = MixBool( hash, serializedObject.FindProperty( "sameArtifactForAllSlots" ) );
+			hash = MixObject( hash, serializedObject.FindProperty( "sharedRequiredArtifact" ) );
+			hash = MixVector( hash, serializedObject.FindProperty( "socketRotation" ) );
+
+			SerializedProperty slotsProp = serializedObject.FindProperty( "slots" );
+			if ( slotsProp == null )
+				return hash;
+
+			hash = hash * 31 + slotsProp.arraySize;
+			for ( int i = 0; i < slotsProp.arraySize; i++ )
+			{
+				SerializedProperty element = slotsProp.GetArrayElementAtIndex( i );
+				hash = MixObject( hash, element.FindPropertyRelative( "anchor" ) );
+				hash = MixObject( hash, element.FindPropertyRelative( "requiredArtifact" ) );
+				hash = MixVector( hash, element.FindPropertyRelative( "rotationOffset" ) );
+			}
+
+			return hash;
+		}
+	}
+
+	static int MixBool( int hash, SerializedProperty prop )
+	{
+		return hash * 31 + ( prop != null && prop.boolValue ? 1 : 0 );
+	}
+
+	static int MixObject( int hash, SerializedProperty prop )
+	{
+		Object value = prop != null ? prop.objectReferenceValue : null;
+		return hash * 31 + ( value != null ? value.GetInstanceID() : 0 );
+	}
+
+	static int MixVector( int hash, SerializedProperty prop )
+	{
+		return hash * 31 + ( prop != null ? prop.vector3Value.GetHashCode() : 0 );
 	}
 
 	static void EnsureSlotVolumesOnTable( ArtifactPresentationTableInteractable table )

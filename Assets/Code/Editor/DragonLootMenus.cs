@@ -62,10 +62,16 @@ public static class DragonLootMenus
 
 	// --- Minecart ---
 	public const string MinecartCreateSetup = Root + "/Minecart/Create Setup";
+	public const string MinecartCreateDriveSetup = Root + "/Minecart/Create Drive Cart";
+	public const string MinecartCreateTrack = Root + "/Minecart/Create Track";
 	public const string MinecartCreateUnloadPoint = Root + "/Minecart/Create Unload Point";
+	public const string MinecartCreateCallPost = Root + "/Minecart/Create Call Post";
 
 	public const string GameObjectMinecartSetup = "GameObject/DragonLoot/Minecart Setup";
+	public const string GameObjectMinecartDriveSetup = "GameObject/DragonLoot/Minecart Drive Cart";
+	public const string GameObjectMinecartTrack = "GameObject/DragonLoot/Minecart Track";
 	public const string GameObjectMinecartUnloadPoint = "GameObject/DragonLoot/Minecart Unload Point";
+	public const string GameObjectMinecartCallPost = "GameObject/DragonLoot/Minecart Call Post";
 
 	// --- Tools ---
 	public const string ToolsMilanoteSettings = Root + "/Tools/Milanote Sync Settings";

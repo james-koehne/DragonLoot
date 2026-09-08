@@ -149,6 +149,12 @@ public class LanternActivator : MonoBehaviour
 			_lightFlicker = _light.GetComponent<LightFlicker>();
 
 		_emissiveRenderers.Clear();
+		if ( _lightFlicker != null )
+		{
+			_lightFlicker.CopyResolvedEmissiveRenderers( _emissiveRenderers );
+			return;
+		}
+
 		LODGroup lodGroup = GetComponent<LODGroup>();
 		if ( lodGroup != null )
 		{
@@ -156,10 +162,13 @@ public class LanternActivator : MonoBehaviour
 			for ( int i = 0; i < lods.Length; i++ )
 			{
 				Renderer[] renderers = lods[ i ].renderers;
+				if ( renderers == null )
+					continue;
+
 				for ( int j = 0; j < renderers.Length; j++ )
 				{
-					if ( renderers[ j ] is MeshRenderer meshRenderer && !_emissiveRenderers.Contains( meshRenderer ) )
-						_emissiveRenderers.Add( meshRenderer );
+					if ( renderers[ j ] is MeshRenderer meshRenderer )
+						TryAddEmissiveRenderer( meshRenderer );
 				}
 			}
 		}
@@ -168,7 +177,7 @@ public class LanternActivator : MonoBehaviour
 		{
 			MeshRenderer[] renderers = GetComponentsInChildren<MeshRenderer>( true );
 			for ( int i = 0; i < renderers.Length; i++ )
-				_emissiveRenderers.Add( renderers[ i ] );
+				TryAddEmissiveRenderer( renderers[ i ] );
 		}
 	}
 
@@ -191,7 +200,7 @@ public class LanternActivator : MonoBehaviour
 			if ( renderer == null )
 				continue;
 
-			if ( !TryResolveEmissiveMaterialIndex( renderer, out int materialIndex, out Material material ) )
+			if ( !TryResolveEmissiveMaterialIndex( renderer, out _, out Material material ) )
 				continue;
 
 			if ( material.HasProperty( BaseColorId ) )
@@ -345,9 +354,26 @@ public class LanternActivator : MonoBehaviour
 		}
 	}
 
+	void TryAddEmissiveRenderer( MeshRenderer renderer )
+	{
+		if ( renderer == null || IsVolumetricRenderer( renderer ) )
+			return;
+		if ( _emissiveRenderers.Contains( renderer ) )
+			return;
+		if ( !TryResolveEmissiveMaterialIndex( renderer, out _, out _ ) )
+			return;
+
+		_emissiveRenderers.Add( renderer );
+	}
+
+	static bool IsVolumetricRenderer( MeshRenderer renderer )
+	{
+		return renderer != null && renderer.gameObject.name == "VolumetricLight";
+	}
+
 	bool TryResolveEmissiveMaterialIndex( MeshRenderer renderer, out int materialIndex, out Material material )
 	{
-		materialIndex = 0;
+		materialIndex = -1;
 		material = null;
 		if ( renderer == null )
 			return false;
@@ -356,9 +382,32 @@ public class LanternActivator : MonoBehaviour
 		if ( materials == null || materials.Length == 0 )
 			return false;
 
-		materialIndex = Mathf.Clamp( _emissiveMaterialIndex, 0, materials.Length - 1 );
-		material = materials[ materialIndex ];
-		return material != null;
+		int preferredIndex = _lightFlicker != null ? _lightFlicker.EmissiveMaterialIndex : _emissiveMaterialIndex;
+		if ( preferredIndex >= 0 && preferredIndex < materials.Length )
+		{
+			Material candidate = materials[ preferredIndex ];
+			if ( candidate != null && candidate.HasProperty( EmissionColorId ) )
+			{
+				materialIndex = preferredIndex;
+				material = candidate;
+				return true;
+			}
+
+			return false;
+		}
+
+		for ( int i = 0; i < materials.Length; i++ )
+		{
+			Material candidate = materials[ i ];
+			if ( candidate == null || !candidate.HasProperty( EmissionColorId ) )
+				continue;
+
+			materialIndex = i;
+			material = candidate;
+			return true;
+		}
+
+		return false;
 	}
 
 	IEnumerator FadeRoutine( float targetT, float duration )

@@ -38,6 +38,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	bool _destroying;
 	bool _blockMergeAsTarget;
 	bool _machineBuffer;
+	bool _cartHosted;
+	MinecartInteractable _cartHost;
 	int _maxCountOverride;
 	CoinSortingStation _machineStation;
 	int _visualGeneration;
@@ -58,7 +60,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public bool HasInFlight => _inFlight.Count > 0 || _blockMergeAsTarget;
 	public bool IsHomogeneous => TryGetHomogeneousDefinition( out _ );
 	public bool IsMachineBuffer => _machineBuffer;
+	public bool IsCartHosted => _cartHosted;
+	public MinecartInteractable CartHost => _cartHost;
 	public CoinSortingStation MachineStation => _machineStation;
+	bool ExcludedFromWorldJoin => _machineBuffer || _cartHosted;
 	public int MaxHeight
 	{
 		get
@@ -188,7 +193,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		for ( int i = 0; i < All.Count; i++ )
 		{
 			GroundCoinStack stack = All[ i ];
-			if ( stack == null || stack._destroying || stack._machineBuffer || stack.IsFull )
+			if ( stack == null || stack._destroying || stack.ExcludedFromWorldJoin || stack.IsFull )
 				continue;
 
 			Vector3 delta = stack.ContactPosition - worldPos;
@@ -220,7 +225,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		for ( int i = 0; i < All.Count; i++ )
 		{
 			GroundCoinStack stack = All[ i ];
-			if ( stack == null || stack._destroying || stack._machineBuffer || stack.IsFull )
+			if ( stack == null || stack._destroying || stack.ExcludedFromWorldJoin || stack.IsFull )
 				continue;
 
 			Vector3 contact = stack.ContactPosition;
@@ -253,6 +258,25 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_machineStation = station;
 		SetInteractionName( "Hopper" );
 		RefreshCollider();
+	}
+
+	/// <summary>
+	/// Parent this stack to a minecart cargo slot: player take/place match world stacks,
+	/// but it does not merge with floor piles or collide with the rider.
+	/// </summary>
+	public void ConfigureForMinecart( MinecartInteractable cart, int maxCount = 0 )
+	{
+		_cartHosted = true;
+		_cartHost = cart;
+		_maxCountOverride = maxCount > 0 ? maxCount : 0;
+		SetInteractionName( "Coin Stack" );
+		RefreshCollider();
+	}
+
+	public void DetachCartHost()
+	{
+		_cartHost = null;
+		_cartHosted = true;
 	}
 
 	public void SetMaxCountOverride( int maxCount )
@@ -345,6 +369,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_destroying = true;
 		All.Remove( this );
 		ClearAllVisuals();
+		NotifyCartHostDestroyed();
 	}
 
 	public void ReleaseTreasure( TreasureItem item )
@@ -458,6 +483,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			BeginAppendFlight( member, transform.rotation );
 		}
 
+		NotifyCartHostCargoPlaced();
 		return true;
 	}
 
@@ -469,7 +495,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		AbsorbSettledImmediate( item );
 		PlayLandFeedback();
-		if ( !_machineBuffer )
+		if ( !ExcludedFromWorldJoin )
 		{
 			AbsorbNearbyLooseCoins();
 			TryMergeNearby();
@@ -482,7 +508,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	/// </summary>
 	public void AbsorbNearbyLooseCoins( float radius = DefaultJoinRadius )
 	{
-		if ( _absorbingNearby || _destroying || IsFull || radius <= 0.0001f )
+		if ( _absorbingNearby || _destroying || ExcludedFromWorldJoin || IsFull || radius <= 0.0001f )
 			return;
 
 		_absorbingNearby = true;
@@ -606,7 +632,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			spins: spins,
 			apexOffset: apexOffset ) );
 
-		if ( !_machineBuffer )
+		if ( !ExcludedFromWorldJoin )
 		{
 			TryMergeNearby();
 			AbsorbNearbyLooseCoins();
@@ -734,7 +760,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				DespawnCoveredLive( slotIndex );
 		}
 
-		if ( !_machineBuffer )
+		if ( !ExcludedFromWorldJoin )
 			AbsorbNearbyLooseCoins();
 
 		PlayLandFeedback();
@@ -953,11 +979,13 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		RefreshVisuals( snap: false );
 		RefreshCollider();
-		if ( !_machineBuffer )
+		if ( !ExcludedFromWorldJoin )
 			TryMergeNearby();
 		PlayLandFeedback();
-		if ( !_machineBuffer && added > 0 )
+		if ( !ExcludedFromWorldJoin && added > 0 )
 			PublishStackChanged( definitions[ definitions.Count - 1 ] );
+
+		NotifyCartHostCargoPlaced();
 		return added;
 	}
 
@@ -1100,6 +1128,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	{
 		DestroyStack();
 	}
+
+	public override bool UsesPickupInteract => true;
 
 	public override bool CanInteract( PlayerController player )
 	{
@@ -1249,7 +1279,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	public void TryMergeNearby()
 	{
-		if ( _destroying || _machineBuffer || Count <= 0 )
+		if ( _destroying || ExcludedFromWorldJoin || Count <= 0 )
 			return;
 
 		float radius = ResolveMergeRadius();
@@ -1267,7 +1297,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				continue;
 
 			GroundCoinStack other = col.GetComponentInParent<GroundCoinStack>();
-			if ( other == null || other == this || other._destroying || other._machineBuffer )
+			if ( other == null || other == this || other._destroying || other.ExcludedFromWorldJoin )
 				continue;
 
 			// Allow merge while this stack still has in-flight coins so spam-created twins collapse.
@@ -1538,7 +1568,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	void ApplyPlayerCollisionLayer()
 	{
 		int minCoins = MinCoinsForPlayerCollision;
-		bool collide = !_machineBuffer && minCoins > 0 && Count >= minCoins;
+		bool collide = !ExcludedFromWorldJoin && minCoins > 0 && Count >= minCoins;
 		PhysicsLayers.SetRootCollidesWithPlayer( gameObject, collide );
 	}
 
@@ -1659,6 +1689,87 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		}
 
 		CoinColumnCylinderBinder.ClearAndDestroy( ref _cylinderVisual, null );
+	}
+
+	void NotifyCartHostCargoPlaced()
+	{
+		if ( !_cartHosted || _cartHost == null )
+			return;
+
+		_cartHost.NotifyCargoPlaced();
+	}
+
+	void NotifyCartHostDestroyed()
+	{
+		if ( _cartHost == null )
+			return;
+
+		MinecartInteractable cart = _cartHost;
+		_cartHost = null;
+		cart.NotifyHostedCoinStackDestroyed( this );
+	}
+
+	/// <summary>
+	/// Releases every logical coin as a world <see cref="TreasureItem"/> and destroys this stack.
+	/// Used by minecart unload. Does not reclaim in-flight coins as physics drops.
+	/// </summary>
+	public void ExtractAllAsWorldItems( List<TreasureItem> into )
+	{
+		if ( into == null || _destroying )
+			return;
+
+		_destroying = true;
+		_cartHost = null;
+
+		bool[] taken = null;
+		if ( _slots.Count > 0 )
+			taken = new bool[ _slots.Count ];
+
+		for ( int i = 0; i < _inFlight.Count; i++ )
+		{
+			TreasureItem flight = _inFlight[ i ];
+			int slotIndex = i < _inFlightSlotIndices.Count ? _inFlightSlotIndices[ i ] : -1;
+			if ( flight == null )
+				continue;
+
+			flight.EndFlight();
+			flight.transform.SetParent( null, true );
+			into.Add( flight );
+			if ( taken != null && slotIndex >= 0 && slotIndex < taken.Length )
+				taken[ slotIndex ] = true;
+		}
+
+		_inFlight.Clear();
+		_inFlightSlotIndices.Clear();
+
+		for ( int i = 0; i < _slots.Count; i++ )
+		{
+			if ( taken != null && taken[ i ] )
+				continue;
+
+			TreasureItem live = i < _settledLive.Count ? _settledLive[ i ] : null;
+			if ( live != null )
+			{
+				_settledLive[ i ] = null;
+				live.transform.SetParent( null, true );
+				into.Add( live );
+				continue;
+			}
+
+			TreasureDefinition def = _slots[ i ];
+			if ( def == null )
+				continue;
+
+			TreasureItem spawned = TreasureItemFactory.SpawnSync( def, GetSlotWorldPosition( i ), transform.rotation, null );
+			if ( spawned != null )
+				into.Add( spawned );
+		}
+
+		ClearAllVisuals();
+		_slots.Clear();
+		_settledLive.Clear();
+		All.Remove( this );
+		Destroy( gameObject );
 	}
 
 	void DestroyIfEmpty()

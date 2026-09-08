@@ -41,11 +41,15 @@ public sealed class PlacementGhost
 	float _rimIntensity = 1.15f;
 	float _coreIntensity = 0.28f;
 
-	public PlacementGhost()
+	public PlacementGhost() : this( null )
+	{
+	}
+
+	public PlacementGhost( Shader shader )
 	{
 		_root = new GameObject( "PlacementGhost" );
 		_rootTransform = _root.transform;
-		_material = CreateFresnelMaterial();
+		_material = CreateFresnelMaterial( shader );
 		SetVisible( false );
 		ApplyTint( true );
 	}
@@ -331,6 +335,20 @@ public sealed class PlacementGhost
 		Color core = tint * 0.35f;
 		core.a = 1f;
 
+		// Player builds ignore MaterialPropertyBlock for UnityPerMaterial CBUFFER on some
+		// URP/SRP-batcher paths — write the same values onto the material instance.
+		_material.SetColor( BaseColorId, tint );
+		if ( _material.HasProperty( ColorId ) )
+			_material.SetColor( ColorId, tint );
+		_material.SetColor( RimColorId, rim );
+		_material.SetColor( CoreColorId, core );
+		_material.SetFloat( FresnelPowerId, _fresnelPower );
+		_material.SetFloat( FresnelBoostId, _fresnelBoost );
+		_material.SetFloat( RimIntensityId, _rimIntensity );
+		_material.SetFloat( CoreIntensityId, _coreIntensity );
+		_material.SetFloat( PulseSpeedId, _pulseSpeed );
+		_material.SetFloat( PulseAmountId, _pulseAmount );
+
 		_propertyBlock.Clear();
 		_propertyBlock.SetColor( BaseColorId, tint );
 		_propertyBlock.SetColor( ColorId, tint );
@@ -393,9 +411,10 @@ public sealed class PlacementGhost
 		return _builtinCube;
 	}
 
-	static Material CreateFresnelMaterial()
+	static Material CreateFresnelMaterial( Shader shader )
 	{
-		Shader shader = Shader.Find( "DragonLoot/Placement Ghost" );
+		if ( shader == null )
+			shader = Shader.Find( "DragonLoot/Placement Ghost" );
 		if ( shader == null )
 			shader = Shader.Find( "Universal Render Pipeline/Unlit" );
 		if ( shader == null )
@@ -406,6 +425,7 @@ public sealed class PlacementGhost
 			shader = Shader.Find( "Standard" );
 
 		Material mat = new Material( shader );
+		mat.enableInstancing = false;
 		Color color = PlacementFeedbackColors.ValidGhost;
 		mat.color = color;
 
@@ -413,6 +433,22 @@ public sealed class PlacementGhost
 			mat.SetColor( "_BaseColor", color );
 		if ( mat.HasProperty( "_Color" ) )
 			mat.SetColor( "_Color", color );
+		if ( mat.HasProperty( "_RimColor" ) )
+			mat.SetColor( "_RimColor", Color.Lerp( color, Color.white, 0.35f ) );
+		if ( mat.HasProperty( "_CoreColor" ) )
+			mat.SetColor( "_CoreColor", color * 0.35f );
+		if ( mat.HasProperty( "_FresnelPower" ) )
+			mat.SetFloat( "_FresnelPower", 2.4f );
+		if ( mat.HasProperty( "_FresnelBoost" ) )
+			mat.SetFloat( "_FresnelBoost", 0.7f );
+		if ( mat.HasProperty( "_RimIntensity" ) )
+			mat.SetFloat( "_RimIntensity", 1.15f );
+		if ( mat.HasProperty( "_CoreIntensity" ) )
+			mat.SetFloat( "_CoreIntensity", 0.28f );
+		if ( mat.HasProperty( "_PulseSpeed" ) )
+			mat.SetFloat( "_PulseSpeed", 0.85f );
+		if ( mat.HasProperty( "_PulseAmount" ) )
+			mat.SetFloat( "_PulseAmount", 0.12f );
 
 		if ( mat.HasProperty( "_Surface" ) )
 			mat.SetFloat( "_Surface", 1f );

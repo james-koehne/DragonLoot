@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// Left-dock IMGUI debug window (not game UI). Toggle with backtick.
-/// Also hosts Num± sensitivity and R reload hotkeys. Escape closes the panel when open.
+/// Also hosts Num± sensitivity hotkeys. Escape closes the panel when open.
 /// </summary>
 [DisallowMultipleComponent]
 public class DebugOverlay : MonoBehaviour
@@ -29,9 +29,6 @@ public class DebugOverlay : MonoBehaviour
 
 	[SerializeField]
 	Key quitKey = Key.Escape;
-
-	[SerializeField]
-	Key reloadKey = Key.R;
 
 	const string FoldoutPrefsPrefix = "DragonLoot.Debug.Foldout.";
 
@@ -83,6 +80,7 @@ public class DebugOverlay : MonoBehaviour
 		_sections.Add( new DebugInteractionSection() );
 		_sections.Add( new DebugGoldPileSection() );
 		_sections.Add( new DebugTreasureSurfaceSection() );
+		_sections.Add( new DebugMinecartsSection() );
 		_sections.Add( new DebugMapSection() );
 		_sections.Add( new DebugLoggingSection() );
 
@@ -131,9 +129,6 @@ public class DebugOverlay : MonoBehaviour
 			if ( _open )
 				SetOpen( false );
 		}
-
-		if ( keyboard[ reloadKey ].wasPressedThisFrame )
-			ReloadGame();
 	}
 
 	void OnGUI()

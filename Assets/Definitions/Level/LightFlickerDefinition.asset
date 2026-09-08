@@ -202,6 +202,27 @@ MonoBehaviour:
     affectRange: 1
     rangeMin: 0.92
     rangeMax: 1.08
+  - id: ArtifactArea
+    intensityMin: 0.82
+    intensityMax: 1.12
+    speed: 1.4
+    smoothness: 6
+    primaryWeight: 0.55
+    secondaryWeight: 0.3
+    tertiaryWeight: 0.15
+    secondarySpeed: 2.15
+    tertiarySpeed: 4.4
+    affectColor: 1
+    colorAmount: 0.55
+    tintA: {r: 0.55, g: 0.85, b: 1.4, a: 1}
+    tintB: {r: 1.1, g: 0.45, b: 1.35, a: 1}
+    affectEmissionColor: 1
+    emissionColorAmount: 0.7
+    emissionTintA: {r: 0.35, g: 1.4, b: 2.4, a: 1}
+    emissionTintB: {r: 2.2, g: 0.35, b: 2.1, a: 1}
+    affectRange: 1
+    rangeMin: 0.92
+    rangeMax: 1.08
   - id: Ember
     intensityMin: 0.35
     intensityMax: 1.05

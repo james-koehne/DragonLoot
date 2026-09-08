@@ -205,6 +205,13 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 		_block.SetColor( RimColorId, rimColor );
 		_block.SetColor( CoreColorId, coreColor );
 		fillRenderer.SetPropertyBlock( _block );
+
+		if ( _fillMaterial != null )
+		{
+			_fillMaterial.SetColor( BaseColorId, baseColor );
+			_fillMaterial.SetColor( RimColorId, rimColor );
+			_fillMaterial.SetColor( CoreColorId, coreColor );
+		}
 	}
 
 	void EnsureFillMaterial()
@@ -212,7 +219,11 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 		if ( fillRenderer == null )
 			return;
 
-		Shader shader = Shader.Find( GaugeShaderName );
+		PlayerPlacementDefinition placementDef = null;
+		placementDef = RuntimeDefinition.Resolve( ref placementDef );
+		Shader shader = placementDef != null ? placementDef.ghostShader : null;
+		if ( shader == null )
+			shader = Shader.Find( GaugeShaderName );
 		if ( shader == null )
 			shader = Shader.Find( "Universal Render Pipeline/Unlit" );
 		if ( shader == null )
@@ -222,6 +233,7 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 
 		_fillMaterial = new Material( shader );
 		_fillMaterial.name = "CoinSorterGaugeFill";
+		_fillMaterial.enableInstancing = false;
 		if ( _fillMaterial.HasProperty( "_Surface" ) )
 			_fillMaterial.SetFloat( "_Surface", 1f );
 		if ( _fillMaterial.HasProperty( "_Blend" ) )

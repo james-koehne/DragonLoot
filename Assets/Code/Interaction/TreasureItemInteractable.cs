@@ -19,6 +19,8 @@ public class TreasureItemInteractable : InteractableBase
 
 	public TreasureItem Item => ResolveItemReference();
 
+	public override bool UsesPickupInteract => true;
+
 	/// <summary>
 	/// Resolves pickup interactable from a raycast hit (mesh colliders often live on child transforms).
 	/// </summary>
@@ -28,6 +30,13 @@ public class TreasureItemInteractable : InteractableBase
 			return null;
 
 		TreasureItem item = collider.GetComponentInParent<TreasureItem>();
+		if ( item == null )
+		{
+			MinecartInteractable cart = collider.GetComponentInParent<MinecartInteractable>();
+			if ( cart != null )
+				cart.TryResolveTreasureFromCollider( collider, out item );
+		}
+
 		if ( item != null )
 		{
 			TreasureItemInteractable onItem = item.GetComponent<TreasureItemInteractable>();
@@ -109,9 +118,6 @@ public class TreasureItemInteractable : InteractableBase
 
 		if ( item.Owner is CleaningStationInteractable cleaningStation
 			&& !cleaningStation.AllowsPickup )
-			return false;
-
-		if ( item.Owner != null && item.Owner.OwnerKind == TreasureOwnerKind.Minecart )
 			return false;
 
 		if ( UsesDisplayedCoinStackPickup( item ) )

@@ -47,6 +47,9 @@ public class PlayerPlacementDefinition : ScriptableObject
 	public float previewSmoothSpeed = 18f;
 
 	[Header( "Placement Ghost Visual" )]
+	[Tooltip( "Must be assigned so the ghost shader is included in player builds (Shader.Find is stripped otherwise)." )]
+	public Shader ghostShader;
+
 	public Color validGhostColor = new Color( 0.25f, 0.9f, 0.35f, 0.35f );
 	public Color invalidGhostColor = new Color( 0.95f, 0.2f, 0.2f, 0.35f );
 

@@ -31,6 +31,9 @@ public class ChestDefinition : ScriptableObject
 	[Min( 0f )]
 	public float lockpickDuration = 8f;
 
+	[Tooltip( "When true, E bashes this container open and destroys it (barrels, crates). Regular chests stay in the world." )]
+	public bool destroyOnOpen;
+
 	[Header( "Contents" )]
 	public ChestContentEntry[] contents;
 

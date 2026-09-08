@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 4463840610993344117}
   - component: {fileID: 3073057272780998985}
   - component: {fileID: 2942461753245094248}
+  - component: {fileID: 7045632582356530982}
   m_Layer: 6
   m_Name: Statue_02Visual
   m_TagString: Untagged
@@ -141,3 +142,17 @@ MeshCollider:
   m_Convex: 1
   m_CookingOptions: 30
   m_Mesh: {fileID: -7162468090672394142, guid: 0db5d2ee3eeeb1c40ba53a248716f0b0, type: 3}
+--- !u!114 &7045632582356530982
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4275319775368544116}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abd60b71afc40994d86018b01fefdda4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileAuthoredItem
+  definition: {fileID: 11400000, guid: 37ad8f9bb61eee449a67f5dcb005adb0, type: 2}
+  treasureItem: {fileID: 0}

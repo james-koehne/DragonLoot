@@ -15,6 +15,7 @@ public sealed class GameInput : System.IDisposable
 	public InputAction CameraDelta { get; }
 	public InputAction Interact { get; }
 	public InputAction SecondaryInteract { get; }
+	public InputAction ContextualInteract { get; }
 	public InputAction Clean { get; }
 	public InputAction WholeStackPickup { get; }
 	public InputAction WholeStackPlace { get; }
@@ -35,9 +36,10 @@ public sealed class GameInput : System.IDisposable
 		CameraDelta = _game.FindAction( "CameraDelta", throwIfNotFound: true );
 		Interact = _game.FindAction( "Interact", throwIfNotFound: true );
 		SecondaryInteract = _game.FindAction( "SecondaryInteract", throwIfNotFound: true );
+		ContextualInteract = _game.FindAction( "ContextualInteract", throwIfNotFound: true );
 		Clean = _game.FindAction( "Clean", throwIfNotFound: false );
-		WholeStackPickup = _game.FindAction( "WholeStackPickup", throwIfNotFound: true );
-		WholeStackPlace = _game.FindAction( "WholeStackPlace", throwIfNotFound: true );
+		WholeStackPickup = _game.FindAction( "WholeStackPickup", throwIfNotFound: false );
+		WholeStackPlace = _game.FindAction( "WholeStackPlace", throwIfNotFound: false );
 		ScrollWheel = _game.FindAction( "ScrollWheel", throwIfNotFound: true );
 		RotateLeft = _game.FindAction( "RotateLeft", throwIfNotFound: false );
 		RotateRight = _game.FindAction( "RotateRight", throwIfNotFound: false );

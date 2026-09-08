@@ -103,6 +103,10 @@ public class DebugChestsSection : DebugOverlaySection
 		GUILayout.Space( 4f );
 		if ( GUILayout.Button( "Spawn Locked Iron Chest" ) )
 			SpawnChestAsync( player, "IronChest" );
+		if ( GUILayout.Button( "Spawn Barrel" ) )
+			SpawnChestAsync( player, "Barrel_01" );
+		if ( GUILayout.Button( "Spawn Crate" ) )
+			SpawnChestAsync( player, "Crate_01" );
 		if ( GUILayout.Button( "Spawn Skeleton Display Case" ) )
 			SpawnDisplayCaseAsync( player );
 

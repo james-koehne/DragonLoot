@@ -208,6 +208,7 @@ public class CinematicPresentationController : MonoBehaviour
 		ApplyFinalFrame( fovChannel, letterboxChannel, poseChannel, blendPose, baseFov, startCameraWorldPos, startCameraWorldRot, targetCameraWorldPos, targetCameraWorldRot, letterbox, firstPerson, cameraRig, crosshair, duration );
 		ResetPresentationState();
 		_presentationRoutine = null;
+		EventBus.Publish( new CinematicPresentationEndedEvent { PresentationId = _presentationId } );
 	}
 
 	static void ApplyFinalFrame(

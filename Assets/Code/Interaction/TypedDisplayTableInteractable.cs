@@ -289,6 +289,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		RefreshSlotCylinder( slotIndex, animate: true );
 		RefreshCountLabel();
 		PublishChanged();
+		OnDisplaySlotChanged( slotIndex );
 		return into.Count > 0;
 	}
 
@@ -467,6 +468,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 				Item = item,
 				Definition = item.Definition
 			} );
+			OnDisplaySlotChanged( s );
 			return;
 		}
 	}
@@ -911,6 +913,12 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 		PlayPlaceFx();
 		TryMarkCompleteIfNeeded();
+		OnDisplaySlotChanged( slotIndex );
+	}
+
+	/// <summary>Hook after a slot's displayed coins change from a player place or pickup.</summary>
+	protected virtual void OnDisplaySlotChanged( int slotIndex )
+	{
 	}
 
 	/// <summary>
@@ -921,7 +929,8 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		int slotIndex,
 		int stackIndex,
 		bool requireReservedInSlot,
-		float arcHeightOverride = -1f )
+		float arcHeightOverride = -1f,
+		float speedScale = 1f )
 	{
 		if ( item == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
 			yield break;
@@ -935,7 +944,9 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		Vector3 endScale = item.GetWorldScale();
 		bool flipCoin = CoinFlipMotion.IsCoin( item );
 
+		float scale = speedScale > 0.0001f ? speedScale : 1f;
 		float duration = flipCoin ? Mathf.Max( snapDuration, CoinFlipMotion.DefaultDuration ) : Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
+		duration = Mathf.Max( 0.04f, duration / scale );
 		float arcHeight = arcHeightOverride > 0f
 			? arcHeightOverride
 			: flipCoin ? CoinFlipMotion.DefaultArcHeight : CoinFlipMotion.DefaultItemArcHeight;

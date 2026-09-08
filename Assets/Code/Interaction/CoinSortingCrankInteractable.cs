@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Manual crank for level-1 coin sorting. Hold Interact to keep processing active.
+/// Manual crank for level-1 coin sorting. Hold ContextualInteract to keep processing active.
 /// Hidden (non-interactable) once the station is automatic (level 2+).
 /// </summary>
 [RequireComponent( typeof( Collider ) )]

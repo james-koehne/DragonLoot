@@ -35,6 +35,9 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 	ArtifactPresentationTableInteractable _table;
 	SlotVisual[] _slotVisuals;
 	bool _rebuildQueued;
+#if UNITY_EDITOR
+	int _editModeRequirementFingerprint;
+#endif
 
 	struct SlotVisual
 	{
@@ -84,9 +87,7 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 		if ( Application.isPlaying )
 			return;
 
-		if ( _table == null )
-			_table = GetComponent<ArtifactPresentationTableInteractable>();
-
+		ResolveTable();
 		QueueEditModeRebuild();
 	}
 
@@ -126,12 +127,12 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 		if ( !CanMutateHierarchy() )
 			return;
 
-		if ( _table == null )
-			_table = GetComponent<ArtifactPresentationTableInteractable>();
+		ResolveTable();
 
 		if ( !showEditModePreviews )
 		{
 			ClearVisuals();
+			RememberEditModeFingerprint();
 			return;
 		}
 
@@ -148,6 +149,16 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			return false;
 
 		return true;
+	}
+#endif
+
+#if UNITY_EDITOR
+	void Update()
+	{
+		if ( Application.isPlaying )
+			return;
+
+		TickEditModePreviewSync();
 	}
 #endif
 
@@ -187,11 +198,18 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			return;
 #endif
 		ClearVisuals();
+		ResolveTable();
 		if ( _table == null )
+		{
+			RememberEditModeFingerprint();
 			return;
+		}
 
 		if ( !Application.isPlaying && !showEditModePreviews )
+		{
+			RememberEditModeFingerprint();
 			return;
+		}
 
 		int count = _table.SlotCount;
 		_slotVisuals = new SlotVisual[ count ];
@@ -220,7 +238,7 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 				PropertyBlock = new MaterialPropertyBlock()
 			};
 
-			TreasureDefinition required = entry.requiredArtifact;
+			TreasureDefinition required = _table.GetRequiredArtifact( i );
 			if ( required != null )
 			{
 				if ( Application.isPlaying )
@@ -234,7 +252,76 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			ArtifactPresentationDisplayPose.ApplyDefinitionWorldScale( root.transform, required );
 			UpdateSlotVisualState( i );
 		}
+
+		RememberEditModeFingerprint();
 	}
+
+	void RememberEditModeFingerprint()
+	{
+#if UNITY_EDITOR
+		_editModeRequirementFingerprint = ComputeRequirementFingerprint();
+#endif
+	}
+
+	void ResolveTable()
+	{
+		if ( _table != null )
+			return;
+
+		_table = GetComponent<ArtifactPresentationTableInteractable>();
+		if ( _table == null )
+			_table = GetComponentInParent<ArtifactPresentationTableInteractable>();
+	}
+
+#if UNITY_EDITOR
+	void TickEditModePreviewSync()
+	{
+		if ( !CanMutateHierarchy() )
+			return;
+
+		ResolveTable();
+		if ( _table == null )
+			return;
+
+		int fingerprint = ComputeRequirementFingerprint();
+		if ( fingerprint == _editModeRequirementFingerprint )
+			return;
+
+		QueueEditModeRebuild();
+	}
+
+	int ComputeRequirementFingerprint()
+	{
+		if ( _table == null )
+			return 0;
+
+		unchecked
+		{
+			int hash = showEditModePreviews ? 1 : 0;
+			hash = hash * 31 + _table.SlotCount;
+			hash = hash * 31 + ( _table.SameArtifactForAllSlots ? 1 : 0 );
+			hash = hash * 31 + DefinitionId( _table.SharedRequiredArtifact );
+			hash = hash * 31 + _table.SocketRotation.GetHashCode();
+
+			IReadOnlyList<ArtifactPresentationSlotEntry> slots = _table.Slots;
+			if ( slots == null )
+				return hash;
+
+			for ( int i = 0; i < slots.Count; i++ )
+			{
+				hash = hash * 31 + DefinitionId( _table.GetRequiredArtifact( i ) );
+				hash = hash * 31 + slots[ i ].rotationOffset.GetHashCode();
+			}
+
+			return hash;
+		}
+	}
+
+	static int DefinitionId( TreasureDefinition definition )
+	{
+		return definition != null ? definition.GetInstanceID() : 0;
+	}
+#endif
 
 	int ClearVisuals()
 	{

@@ -15,11 +15,11 @@ MonoBehaviour:
   displayName: Treasure Pile
   coinContents:
   - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    count: 250000
+    count: 187500
   - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
-    count: 250000
+    count: 187500
   - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    count: 1250000
+    count: 937500
   treasureContents:
   - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
     count: 120
@@ -104,9 +104,15 @@ MonoBehaviour:
   - treasure: {fileID: 11400000, guid: 9fbccced7b04e6548be78a79e698ade1, type: 2}
     count: 3
   - treasure: {fileID: 11400000, guid: a07fd9b5f623e8d438d52ee42a52e66b, type: 2}
-    count: 2
+    count: 32
   - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
     count: 128
+  - treasure: {fileID: 11400000, guid: ef2d05c76e0ba3546a0cae70c7294e29, type: 2}
+    count: 4
+  - treasure: {fileID: 11400000, guid: 29aa876347858494f9c82cacd94f7f1e, type: 2}
+    count: 4
+  - treasure: {fileID: 11400000, guid: 91fbf62a2005898439ad0e700fe949c7, type: 2}
+    count: 8
   maxVisibleTotal: 32768
   coinVisibleBufferFraction: 0.2
   heightResolution: 512
@@ -132,6 +138,7 @@ MonoBehaviour:
   treasureXZSpread: 1
   treasurePickupOutsideFraction: 0.3
   treasureReleaseOutsideFraction: 0.9
+  preferBakedCoinSeats: 1
   latentSurfaceNeighborhoodCells: 1
   preferBakedLatents: 1
   latentVolumeMaxAttempts: 24

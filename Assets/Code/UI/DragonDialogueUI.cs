@@ -16,6 +16,10 @@ public class DragonDialogueUI : MonoBehaviour
 	public void Setup()
 	{
 		Subscribe();
+		if ( speaker != null )
+			speaker.gameObject.SetActive( false );
+		if ( body != null )
+			body.alignment = TextAnchor.MiddleCenter;
 		SetVisible( false );
 	}
 
@@ -58,8 +62,6 @@ public class DragonDialogueUI : MonoBehaviour
 			return;
 		}
 
-		if ( speaker != null )
-			speaker.text = evt.Speaker;
 		if ( body != null )
 			body.text = evt.Text;
 		SetVisible( true );

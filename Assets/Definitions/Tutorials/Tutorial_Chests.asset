@@ -31,8 +31,8 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Place the chest on the ground, then interact to open it.
-  keybindHint: '[{SecondaryInteract}] Place  [{Interact}] Open'
+  body: Place the chest on the ground, then press E to open it.
+  keybindHint: '[{SecondaryInteract}] Place  [{ContextualInteract}] Open'
   tasks:
   - id: place_chest
     label: Place the chest on the ground

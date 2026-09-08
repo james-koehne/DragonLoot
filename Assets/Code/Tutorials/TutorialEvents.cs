@@ -44,3 +44,28 @@ public struct ChestOpenedEvent
 {
 	public ChestInteractable Chest;
 }
+
+/// <summary>Empty-handed tap shove sent a minecart along the track.</summary>
+public struct MinecartShovedEvent
+{
+	public MinecartInteractable Cart;
+}
+
+/// <summary>Interact was held long enough to start follow-push on a minecart.</summary>
+public struct MinecartHoldPushStartedEvent
+{
+	public MinecartInteractable Cart;
+}
+
+/// <summary>An item was added to a minecart cargo bed.</summary>
+public struct MinecartCargoLoadedEvent
+{
+	public MinecartInteractable Cart;
+	public TreasureItem Item;
+}
+
+/// <summary>A cinematic presentation finished its rise/hold/fall (not an abort on disable).</summary>
+public struct CinematicPresentationEndedEvent
+{
+	public string PresentationId;
+}

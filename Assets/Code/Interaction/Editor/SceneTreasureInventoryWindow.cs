@@ -628,9 +628,15 @@ public class SceneTreasureInventoryWindow : EditorWindow
 			return;
 		}
 
+		if ( table.SameArtifactForAllSlots && table.SharedRequiredArtifact == null )
+		{
+			_warnings.Add( $"Artifact table '{table.name}' has no shared required artifact." );
+			return;
+		}
+
 		for ( int i = 0; i < slots.Count; i++ )
 		{
-			TreasureDefinition required = slots[ i ].requiredArtifact;
+			TreasureDefinition required = table.GetRequiredArtifact( i );
 			if ( required == null )
 			{
 				_warnings.Add( $"Artifact table '{table.name}' slot {i} has no required artifact." );

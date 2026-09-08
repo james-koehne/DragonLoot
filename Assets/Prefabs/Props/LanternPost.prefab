@@ -120,6 +120,7 @@ MonoBehaviour:
   _speedScale: 1
   _playInEditMode: 0
   _light: {fileID: 2493165191798075652}
+  _emissiveMode: 0
   _emissiveRenderers: []
   _emissiveMaterialIndex: 1
   _volumetricRenderer: {fileID: 858327941217110897}

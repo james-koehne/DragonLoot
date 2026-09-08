@@ -38,8 +38,10 @@ public class PlayerInteraction : MonoBehaviour
 	float _pickupHoldInitialDelay = -1f;
 	float _secondaryRepeatTimer;
 	float _primaryRepeatTimer;
+	float _contextualRepeatTimer;
 	bool _primaryPastInitialDelay;
 	bool _secondaryPastInitialDelay;
+	bool _contextualPastInitialDelay;
 	HoverOutlineVisualSettings _cachedPickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
 	public IInteractable Current => _current;
@@ -465,6 +467,7 @@ public class PlayerInteraction : MonoBehaviour
 			_previousPrimaryFocus = null;
 			ResetSecondaryRepeatState();
 			ResetPrimaryRepeatState();
+			ResetContextualRepeatState();
 			ClearPickableIndicator();
 		}
 	}
@@ -581,7 +584,7 @@ public class PlayerInteraction : MonoBehaviour
 			if ( interactable == null )
 				continue;
 
-			interactable = PromoteStackedCoinToOwnerStack( interactable );
+			interactable = PromoteStackedCoinToOwnerStack( interactable, _player );
 
 			if ( !withinPickRange || !IsWithinFocusRange( interactable, hit, playerPos, interactRange, rangeSq ) )
 				continue;
@@ -611,6 +614,35 @@ public class PlayerInteraction : MonoBehaviour
 				bestOtherHit = hit;
 			}
 		}
+
+		MinecartInteractable cartFocus = bestOther as MinecartInteractable;
+		bool carrying = _player != null && _player.Carry != null && _player.Carry.Count > 0;
+		if ( cartFocus != null && !carrying )
+		{
+			InteractableBase cargo;
+			if ( cartFocus.TryGetAimedCargoInteractable( ray, bestOtherHit.point, out cargo )
+				&& cargo != null
+				&& ( cargo.CanInteract( _player ) || HoverOutlineTargetUtility.CanOutlineFocus( cargo, _player ) ) )
+			{
+				TreasureItemInteractable cargoItem = cargo as TreasureItemInteractable;
+				if ( cargoItem != null )
+				{
+					if ( bestItem == null || bestOtherDist <= bestItemDist + 0.05f )
+					{
+						bestItem = cargoItem;
+						bestItemHit = bestOtherHit;
+						bestItemDist = bestOtherDist;
+					}
+				}
+				else
+				{
+					bestOther = cargo;
+				}
+			}
+		}
+
+		if ( carrying )
+			PreferMinecartPushOverCargo( ref bestItem, ref bestItemHit, ref bestItemDist, ref bestOther, ref bestOtherHit, ref bestOtherDist );
 
 		if ( hasSurface )
 		{
@@ -741,6 +773,7 @@ public class PlayerInteraction : MonoBehaviour
 
 		TrySecondaryRepeatInput( input, holding );
 		TryPrimaryRepeatInput( input );
+		TryContextualRepeatInput( input );
 	}
 
 	void TrySorterPlaceInput()
@@ -818,6 +851,9 @@ public class PlayerInteraction : MonoBehaviour
 
 	void TryPrimaryRepeatInput( GameInput input )
 	{
+		if ( input == null || input.Interact == null )
+			return;
+
 		if ( input.Interact.WasReleasedThisFrame() || !input.Interact.IsPressed() )
 		{
 			ResetPrimaryRepeatState();
@@ -827,7 +863,7 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( input.Interact.WasPressedThisFrame() )
 		{
-			TryInteractWithFocus();
+			TryPickupInteractWithFocus();
 			_primaryRepeatTimer = 0f;
 			_primaryPastInitialDelay = false;
 			if ( _current != null )
@@ -835,14 +871,14 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
-		// Skip hold delay only when the cursor moves onto a different live interactable.
+		// Skip hold delay only when the cursor moves onto a different live pickup.
 		// Do not treat "previous item was just picked up" as a cursor move.
-		if ( _current != null
+		if ( InteractableBase.IsPickupInteract( _current )
 			&& !ReferenceEquals( _current, _previousPrimaryFocus )
 			&& IsFocusStillHoverable( _previousPrimaryFocus )
 			&& _current.CanInteract( _player ) )
 		{
-			TryInteractWithFocus();
+			TryPickupInteractWithFocus();
 			_primaryRepeatTimer = 0f;
 			_previousPrimaryFocus = _current;
 			return;
@@ -851,6 +887,9 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _current != null )
 			_previousPrimaryFocus = _current;
 
+		if ( !InteractableBase.IsPickupInteract( _current ) )
+			return;
+
 		float wait = GetPrimaryHoldWait();
 		_primaryRepeatTimer += Time.deltaTime;
 		if ( _primaryRepeatTimer < wait )
@@ -858,6 +897,56 @@ public class PlayerInteraction : MonoBehaviour
 
 		_primaryRepeatTimer -= wait;
 		_primaryPastInitialDelay = true;
+		TryPickupInteractWithFocus();
+	}
+
+	void TryContextualRepeatInput( GameInput input )
+	{
+		if ( input == null || input.ContextualInteract == null )
+			return;
+
+		PlayerMinecartPush minecartPush = _player != null ? _player.MinecartPush : null;
+		if ( minecartPush != null && minecartPush.IsHandlingInteract )
+			return;
+
+		PlayerMinecartDrive minecartDrive = _player != null ? _player.MinecartDrive : null;
+		if ( minecartDrive != null && minecartDrive.IsHandlingInteract )
+			return;
+
+		PlayerWholeStackInteraction wholeStack = _player != null ? _player.WholeStack : null;
+		if ( wholeStack != null && wholeStack.IsCharging )
+		{
+			ResetContextualRepeatState();
+			return;
+		}
+
+		if ( input.ContextualInteract.WasReleasedThisFrame() || !input.ContextualInteract.IsPressed() )
+		{
+			ResetContextualRepeatState();
+			return;
+		}
+
+		if ( InteractableBase.IsPickupInteract( _current ) )
+			return;
+
+		if ( input.ContextualInteract.WasPressedThisFrame() )
+		{
+			TryInteractWithFocus();
+			_contextualRepeatTimer = 0f;
+			_contextualPastInitialDelay = false;
+			return;
+		}
+
+		if ( _current == null || !_current.CanInteract( _player ) )
+			return;
+
+		float wait = GetContextualHoldWait();
+		_contextualRepeatTimer += Time.deltaTime;
+		if ( _contextualRepeatTimer < wait )
+			return;
+
+		_contextualRepeatTimer -= wait;
+		_contextualPastInitialDelay = true;
 		TryInteractWithFocus();
 	}
 
@@ -869,6 +958,14 @@ public class PlayerInteraction : MonoBehaviour
 
 		return HoverOutlineTargetUtility.CanOutlineFocus( interactable, _player )
 			|| interactable.CanInteract( _player );
+	}
+
+	void TryPickupInteractWithFocus()
+	{
+		if ( !InteractableBase.IsPickupInteract( _current ) )
+			return;
+
+		TryInteractWithFocus();
 	}
 
 	void TryInteractWithFocus()
@@ -911,7 +1008,7 @@ public class PlayerInteraction : MonoBehaviour
 		return collider.GetComponentInParent<InteractableBase>();
 	}
 
-	static InteractableBase PromoteStackedCoinToOwnerStack( InteractableBase interactable )
+	static InteractableBase PromoteStackedCoinToOwnerStack( InteractableBase interactable, PlayerController player )
 	{
 		TreasureItemInteractable itemInteractable = interactable as TreasureItemInteractable;
 		if ( itemInteractable == null )
@@ -920,10 +1017,6 @@ public class PlayerInteraction : MonoBehaviour
 		TreasureItem item = itemInteractable.Item;
 		if ( item == null )
 			return interactable;
-
-		MinecartInteractable minecart = item.Owner as MinecartInteractable;
-		if ( minecart != null )
-			return minecart;
 
 		if ( item.State != TreasureItemState.Stacked )
 			return interactable;
@@ -937,6 +1030,48 @@ public class PlayerInteraction : MonoBehaviour
 			return coinStack;
 
 		return interactable;
+	}
+
+	static void PreferMinecartPushOverCargo(
+		ref InteractableBase bestItem,
+		ref RaycastHit bestItemHit,
+		ref float bestItemDist,
+		ref InteractableBase bestOther,
+		ref RaycastHit bestOtherHit,
+		ref float bestOtherDist )
+	{
+		GroundCoinStack otherStack = bestOther as GroundCoinStack;
+		if ( otherStack != null && otherStack.IsCartHosted )
+		{
+			MinecartInteractable host = otherStack.GetComponentInParent<MinecartInteractable>();
+			if ( host != null )
+				bestOther = host;
+		}
+
+		TreasureItemInteractable itemInteractable = bestItem as TreasureItemInteractable;
+		if ( itemInteractable == null )
+			return;
+
+		TreasureItem item = itemInteractable.Item;
+		if ( item == null )
+			return;
+
+		MinecartInteractable cargoCart = item.Owner as MinecartInteractable;
+		if ( cargoCart == null )
+		{
+			GroundCoinStack itemStack = item.Owner as GroundCoinStack;
+			if ( itemStack != null && itemStack.IsCartHosted )
+				cargoCart = itemStack.GetComponentInParent<MinecartInteractable>();
+		}
+
+		if ( cargoCart == null )
+			return;
+
+		bestOther = cargoCart;
+		bestOtherHit = bestItemHit;
+		bestOtherDist = bestItemDist;
+		bestItem = null;
+		bestItemDist = float.MaxValue;
 	}
 
 	static bool IsFloorExemptOutlineInteractable( InteractableBase interactable )
@@ -973,6 +1108,12 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		_primaryRepeatTimer = 0f;
 		_primaryPastInitialDelay = false;
+	}
+
+	void ResetContextualRepeatState()
+	{
+		_contextualRepeatTimer = 0f;
+		_contextualPastInitialDelay = false;
 	}
 
 	void TrySecondaryRepeatInput( GameInput input, bool holding )
@@ -1015,6 +1156,18 @@ public class PlayerInteraction : MonoBehaviour
 	float GetPrimaryHoldWait()
 	{
 		if ( !_primaryPastInitialDelay )
+		{
+			float initial = PickupHoldInitialDelay;
+			if ( initial > 0f )
+				return initial;
+		}
+
+		return PickupRepeatInterval;
+	}
+
+	float GetContextualHoldWait()
+	{
+		if ( !_contextualPastInitialDelay )
 		{
 			float initial = PickupHoldInitialDelay;
 			if ( initial > 0f )

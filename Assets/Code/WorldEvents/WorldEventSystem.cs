@@ -215,9 +215,30 @@ public class WorldEventSystem : MonoBehaviour
 				return _playerHasMadeGameplayInput;
 			case WorldEventConditionType.ElapsedUnscaledSeconds:
 				return Time.unscaledTime >= _catalogStartUnscaledTime + Mathf.Max( 0f, condition.delaySeconds );
+			case WorldEventConditionType.TutorialCompleted:
+				return IsRequiredTutorialCompleted( condition.targetId );
 			default:
 				return false;
 		}
+	}
+
+	static bool IsRequiredTutorialCompleted( string tutorialId )
+	{
+		if ( string.IsNullOrEmpty( tutorialId ) )
+			return false;
+
+		TutorialManager tutorials = TutorialManager.Instance;
+		if ( tutorials == null )
+			return false;
+
+		if ( !tutorials.IsCompleted( tutorialId ) )
+			return false;
+
+		// Wait until the completing tutorial popup has finished hiding.
+		if ( tutorials.IsSequencePlaying )
+			return false;
+
+		return true;
 	}
 
 	static bool MatchesPickup( WorldEventCondition condition, TreasureDefinition treasure )
@@ -685,7 +706,9 @@ public class WorldEventSystem : MonoBehaviour
 		if ( input == null )
 			return;
 
-		if ( input.Interact.WasPressedThisFrame() || input.SecondaryInteract.WasPressedThisFrame() )
+		if ( input.Interact.WasPressedThisFrame()
+			|| input.SecondaryInteract.WasPressedThisFrame()
+			|| ( input.ContextualInteract != null && input.ContextualInteract.WasPressedThisFrame() ) )
 			_dialogue.Skip();
 	}
 
@@ -709,6 +732,7 @@ public class WorldEventSystem : MonoBehaviour
 		     WasPressed( input.Sprint ) ||
 		     WasPressed( input.Interact ) ||
 		     WasPressed( input.SecondaryInteract ) ||
+		     WasPressed( input.ContextualInteract ) ||
 		     WasPressed( input.Clean ) ||
 		     WasPressed( input.WholeStackPickup ) ||
 		     WasPressed( input.WholeStackPlace ) ||

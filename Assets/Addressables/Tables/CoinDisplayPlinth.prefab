@@ -98,6 +98,8 @@ MonoBehaviour:
   emptySlotChance: 0.95
   fillSeed: 0
   autoLevelAfterWholeStackPlace: 1
+  autoLevelAllStacks: 1
+  autoLevelSpeed: 2
   levelCoinStagger: 0.06
   levelStartDelay: 0.12
   levelCrossSlotArcHeight: 0.28

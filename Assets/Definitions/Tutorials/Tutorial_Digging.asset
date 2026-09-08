@@ -22,13 +22,20 @@ MonoBehaviour:
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 1
   alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
   prerequisiteTutorialIds:
   - tut_movement
   highlightMapLabel: 
-  body: Aim at a gold pile and dig to pull treasure into your hands. Dug coins go
-    into your coin pouch.
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: Aim at a gold pile and dig to pull treasure into your hands.
   keybindHint: '[{Interact}] Dig'
   tasks:
   - id: dig
     label: Dig
     completeTrigger: 1
+    completeVolumeId: 

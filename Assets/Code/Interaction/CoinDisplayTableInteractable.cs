@@ -9,9 +9,9 @@ using UnityEngine;
 /// Coins are stackable, so they pile vertically in each slot. Pickup takes from the top down.
 /// Aim at an existing pile to stack onto it; aim at the table body fills the shortest pile
 /// (left-to-right, top-left wins ties).
-/// Hold-F whole-stack place lands on the aimed pile when stacking, otherwise the shortest
-/// pile, then peels excess coins from every player-placed pile on this table and flips them
-/// into shorter columns.
+/// Hold-R whole-stack place lands on the aimed pile when stacking, otherwise the shortest
+/// pile, then peels excess coins from player-placed piles (or every column when
+/// autoLevelAllStacks is on) and flips them into shorter columns.
 /// Each display levels independently; placing on another table does not interrupt this one.
 /// Setup: collider on root, child DisplayArea, assign accepted treasure + grid settings.
 /// </summary>
@@ -50,9 +50,18 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	int fillSeed;
 
 	[Header( "Auto Level" )]
-	[Tooltip( "After a hold-F whole stack lands, peel excess coins off that pile into shorter columns." )]
+	[Tooltip( "After a hold-R whole stack lands, peel excess coins off that pile into shorter columns." )]
 	[SerializeField]
 	bool autoLevelAfterWholeStackPlace = true;
+
+	[Tooltip( "When enabled, every column can donate coins and leveling also runs after single-coin place or pickup — not only after a stack is added." )]
+	[SerializeField]
+	bool autoLevelAllStacks;
+
+	[Tooltip( "Multiplier for leveling flight and stagger speed. 2 = twice as fast as the original timings." )]
+	[SerializeField]
+	[Min( 0.1f )]
+	float autoLevelSpeed = 2f;
 
 	[Tooltip( "Delay between starting each leveling coin flight." )]
 	[SerializeField]
@@ -140,9 +149,17 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	public int TryAppendWholeStackWithAutoLevel( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
 	{
 		int added = TryAppendSlotDefinitions( slotIndex, definitions );
-		if ( added > 0 && autoLevelAfterWholeStackPlace )
+		if ( added > 0 && ( autoLevelAfterWholeStackPlace || autoLevelAllStacks ) )
 			BeginAutoLevelStacks( slotIndex );
 		return added;
+	}
+
+	protected override void OnDisplaySlotChanged( int slotIndex )
+	{
+		if ( !autoLevelAllStacks )
+			return;
+
+		BeginAutoLevelStacks( slotIndex );
 	}
 
 	protected override void OnDestroy()
@@ -169,6 +186,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		minCoinsPerSlot = Mathf.Max( 0, minCoinsPerSlot );
 		maxCoinsPerSlot = Mathf.Max( minCoinsPerSlot, maxCoinsPerSlot );
 		emptySlotChance = Mathf.Clamp01( emptySlotChance );
+		autoLevelSpeed = Mathf.Max( 0.1f, autoLevelSpeed );
 		levelCoinStagger = Mathf.Max( 0f, levelCoinStagger );
 		levelStartDelay = Mathf.Max( 0f, levelStartDelay );
 		levelCrossSlotArcHeight = Mathf.Max( 0.05f, levelCrossSlotArcHeight );
@@ -222,10 +240,20 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		if ( !isActiveAndEnabled || Slots == null || DisplaySlotCapacity <= 0 )
 			return;
 
-		if ( placedSlot < 0 || placedSlot >= DisplaySlotCapacity )
-			return;
+		if ( autoLevelAllStacks )
+		{
+			MarkAllSlotsAsLevelSources();
+		}
+		else
+		{
+			if ( placedSlot < 0 || placedSlot >= DisplaySlotCapacity )
+				return;
 
-		_levelSourceSlots.Add( placedSlot );
+			_levelSourceSlots.Add( placedSlot );
+		}
+
+		if ( _levelSourceSlots.Count <= 0 )
+			return;
 
 		if ( _levelRoutine != null )
 		{
@@ -235,6 +263,21 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 		_levelStartDelayApplied = false;
 		_levelRoutine = StartCoroutine( AutoLevelStacksRoutine() );
+	}
+
+	void MarkAllSlotsAsLevelSources()
+	{
+		int slotCount = DisplaySlotCapacity;
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			if ( GetSlotCount( i ) > 0 )
+				_levelSourceSlots.Add( i );
+		}
+	}
+
+	float ResolveAutoLevelSpeed()
+	{
+		return Mathf.Max( 0.1f, autoLevelSpeed );
 	}
 
 	IEnumerator AutoLevelStacksRoutine()
@@ -250,9 +293,11 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 				continue;
 			}
 
-			if ( !_levelStartDelayApplied && levelStartDelay > 0f )
+			float speed = ResolveAutoLevelSpeed();
+			float startDelay = levelStartDelay / speed;
+			if ( !_levelStartDelayApplied && startDelay > 0f )
 			{
-				yield return new WaitForSeconds( levelStartDelay );
+				yield return new WaitForSeconds( startDelay );
 				_levelStartDelayApplied = true;
 			}
 
@@ -261,6 +306,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 			{
 				if ( _levelPending )
 				{
+					if ( autoLevelAllStacks )
+						MarkAllSlotsAsLevelSources();
 					BuildLevelMoves( _levelMoves, _levelSourceSlots );
 					moveIndex = 0;
 					_levelPending = false;
@@ -273,8 +320,9 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 				yield return AnimateLevelMoveRoutine( move.FromSlot, move.ToSlot );
 				moveIndex++;
 
-				if ( levelCoinStagger > 0f && moveIndex < _levelMoves.Count )
-					yield return new WaitForSeconds( levelCoinStagger );
+				float stagger = levelCoinStagger / speed;
+				if ( stagger > 0f && moveIndex < _levelMoves.Count )
+					yield return new WaitForSeconds( stagger );
 			}
 
 			RefreshDisplayCountAndPublish();
@@ -308,7 +356,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 			toSlot,
 			destStackIndex,
 			requireReservedInSlot: false,
-			arcHeightOverride: arcHeight );
+			arcHeightOverride: arcHeight,
+			speedScale: ResolveAutoLevelSpeed() );
 
 		if ( coin == null )
 			yield break;

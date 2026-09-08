@@ -23,14 +23,21 @@ MonoBehaviour:
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
   prerequisiteTutorialIds:
   - tut_find_coin_hall
   highlightMapLabel: 
-  body: Welcome to the Coin Hall. Each platform displays a different coin type —
-    match coins to their display to sort your hoard.
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: "Welcome to the Coin Hall. Each platform displays a different coin type \u2014
+    match coins to their display to sort the hoard."
   keybindHint: '[{SecondaryInteract}] Place on display'
   tasks:
   - id: place_coin_display
     label: Put a coin in a coin display
     completeTrigger: 7
-    completeVolumeId:
+    completeVolumeId: 

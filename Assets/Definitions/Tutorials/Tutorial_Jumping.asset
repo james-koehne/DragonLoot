@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_Jumping
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_jumping
+  title: Jumping
+  tags:
+  - movement
+  - jump
+  trigger: 16
+  holdingCategory: 0
+  volumeId: 
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  cinematicPresentationId: intro_ledge_cinematic
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteTutorialIds:
+  - tut_movement
+  highlightMapLabel: 
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: Press Jump to hop.
+  keybindHint: '[{Jump}] Jump'
+  tasks:
+  - id: jump
+    label: Jump
+    completeTrigger: 21
+    completeVolumeId: 

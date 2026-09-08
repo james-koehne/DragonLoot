@@ -125,7 +125,7 @@ public class CoinSortingStationDefinition : ScriptableObject
 	public bool repositionEnabled = false;
 
 	[Header( "Reposition — Pickup" )]
-	[Tooltip( "Hold Interact on the body this long to begin telekinetic carry." )]
+	[Tooltip( "Hold Use on the body this long to begin telekinetic carry." )]
 	[Min( 0.1f )]
 	public float moveHoldSeconds = 0.5f;
 

@@ -19,7 +19,10 @@ public enum TutorialTriggerType
 	GameStart = 11,
 	AimCoinStack = 12,
 	ManyCoins = 13,
-	AboveHeight = 14
+	AboveHeight = 14,
+	AimMinecart = 15,
+	AfterCinematic = 16,
+	WalkWithoutSprint = 17
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -42,7 +45,12 @@ public enum TutorialTaskCompleteType
 	UseCoinSorter = 14,
 	Glide = 15,
 	PlaceChestFloor = 16,
-	OpenChest = 17
+	OpenChest = 17,
+	PushMinecartTap = 18,
+	HoldMinecart = 19,
+	LoadMinecart = 20,
+	Jump = 21,
+	Sprint = 22
 }
 
 [Serializable]
@@ -103,6 +111,15 @@ public class TutorialDefinition : ScriptableObject
 	[Tooltip( "When trigger is AboveHeight: show while player world Y is at or above this value." )]
 	public float minHeightY = 30f;
 
+	[Tooltip( "When trigger is AfterCinematic: presentation id that must finish (empty uses intro_ledge_cinematic)." )]
+	public string cinematicPresentationId;
+
+	[Tooltip( "When trigger is AfterCinematic: seconds to wait after the cinematic ends before showing." )]
+	public float showDelaySeconds = 0.75f;
+
+	[Tooltip( "When trigger is WalkWithoutSprint: consecutive grounded walk seconds before showing." )]
+	public float walkSecondsToShow = 5f;
+
 	public string[] prerequisiteTutorialIds;
 
 	[Tooltip( "Optional map label text to highlight while this tutorial is active (e.g. Coin Hall)." )]
@@ -117,7 +134,7 @@ public class TutorialDefinition : ScriptableObject
 	[TextArea( 2, 8 )]
 	public string body;
 
-	[Tooltip( "Optional hint using {Interact}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}." )]
+	[Tooltip( "Optional hint using {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}." )]
 	public string keybindHint;
 
 	public TutorialTask[] tasks;

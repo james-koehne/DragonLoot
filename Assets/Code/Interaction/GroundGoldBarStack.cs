@@ -505,6 +505,8 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 		}
 	}
 
+	public override bool UsesPickupInteract => true;
+
 	public override bool CanInteract( PlayerController player )
 	{
 		if ( !IsAvailable || player == null || _taking || HasInFlight || Count <= 0 )

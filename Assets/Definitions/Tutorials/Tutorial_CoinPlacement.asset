@@ -22,14 +22,24 @@ MonoBehaviour:
   volumeId: 
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
   prerequisiteTutorialIds: []
-  body: Move all coins into the Coin Hall. Place carefully on the ground, or throw
-    to toss them farther.
+  highlightMapLabel: 
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: Place carefully on the ground, or throw to toss them farther.
   keybindHint: '[{SecondaryInteract}] Place / Throw'
   tasks:
   - id: place_coin_floor
     label: Place a coin on the ground
     completeTrigger: 2
+    completeVolumeId: 
   - id: throw_coin
     label: Throw a coin
     completeTrigger: 3
+    completeVolumeId: 

@@ -135,7 +135,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 	}
 
-	/// <summary>Hold duration for whole-stack pickup (E) and place (F) for a given quantity.</summary>
+	/// <summary>Hold duration for whole-stack pickup (F) and place (R) for a given quantity.</summary>
 	public float GetWholeStackHoldSeconds( int quantity )
 	{
 		CarryDefinition def = Definition;

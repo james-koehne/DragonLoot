@@ -12,10 +12,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 104a8db62d51f8140b7331cd1590bcd0, type: 3}
   m_Name: MinecartDefinition
   m_EditorClassIdentifier: Assembly-CSharp::MinecartDefinition
-  maxWeight: 40
-  emptyPushSpeed: 3.5
-  fullPushSpeed: 1.25
-  pushAttachRadius: 2.5
+  kind: 0
+  pushAttachRadius: 5
+  pushHoldThreshold: 0.18
+  shoveSpeed: 7
+  shoveDrag: 8
+  mouseSteerScale: 0
+  rideHeight: 0.15
+  wheelRadius: 0.21
+  blockingHalfLength: 1.1
+  trackSnapRadius: 4
+  attachPlayerWhenStanding: 1
+  riderSpeedMultiplier: 2
+  recallSpeed: 8
+  recallStopDistance: 0.2
+  driveMaxSpeed: 10
+  driveAcceleration: 12
+  driveBrake: 18
   gridColumns: 4
   gridRows: 3
   cellSpacing: 0.22

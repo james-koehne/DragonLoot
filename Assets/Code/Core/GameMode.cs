@@ -34,6 +34,9 @@ public class GameMode : MonoBehaviour, IGameMode
 				if ( !Application.isEditor )
 				{
 					_debugDefinition = ScriptableObject.CreateInstance<DebugDefinition>();
+					DebugDefinition authored = CoreDefinition.DebugDefinition;
+					if ( authored != null )
+						_debugDefinition.disableTutorials = authored.disableTutorials;
 				}
 				else
 				{

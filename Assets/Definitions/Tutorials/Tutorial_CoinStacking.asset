@@ -26,9 +26,10 @@ MonoBehaviour:
   prerequisiteTutorialIds:
   - tut_coin_placement
   highlightMapLabel: 
-  body: Stack matching coins, then hold to pick up or place an entire stack at once.
-  keybindHint: '[{SecondaryInteract}] Stack  [{WholeStackPickup}] Hold pickup  [{WholeStackPlace}]
-    Hold place'
+  body: Stack matching coins. Hold on a stack to pick it all up, or look at the ground
+    and hold to place your whole stack.
+  keybindHint: '[{SecondaryInteract}] Stack  Hold [{ContextualInteract}] Pick up or
+    place stack'
   tasks:
   - id: stack_coins
     label: Stack coins

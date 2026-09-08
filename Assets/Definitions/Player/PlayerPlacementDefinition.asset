@@ -22,13 +22,14 @@ MonoBehaviour:
   placementArcHeight: 0.12
   coinFlipSpeed: 1
   previewSmoothSpeed: 200
-  validGhostColor: {r: 0.25, g: 0.9, b: 0.35, a: 0.35}
+  ghostShader: {fileID: 4800000, guid: 1e663b1dc789049468dce8ca236ec965, type: 3}
+  validGhostColor: {r: 0.25, g: 0.9, b: 0.35, a: 0.34901962}
   invalidGhostColor: {r: 0.95, g: 0.2, b: 0.2, a: 0.35}
   ghostFresnelPower: 2.4
   ghostFresnelBoost: 0.7
   ghostPulseAmount: 0.12
   ghostPulseSpeed: 0.85
-  ghostRimIntensity: 1.15
+  ghostRimIntensity: 1.1
   ghostCoreIntensity: 0.28
   stackVolumeOversize: 1.1
   stackOutline:

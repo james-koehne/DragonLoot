@@ -493,7 +493,10 @@ public class PlayerPlacement : MonoBehaviour
 
 		CleaningStationInteractable cleaningStation = target as CleaningStationInteractable;
 		if ( cleaningStation != null )
+		{
 			AppendBehaviourRenderers( cleaningStation, renderers );
+			return;
+		}
 	}
 
 	static void AppendLooseColumnRenderers( TreasureItem seed, List<Renderer> renderers )
@@ -1395,14 +1398,31 @@ public class PlayerPlacement : MonoBehaviour
 		{
 			ITreasurePlacementTarget onHit = query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
 			if ( onHit != null && !ReferenceEquals( onHit, _floorTarget ) && IsDedicatedPlacementTarget( onHit ) )
-				return onHit;
+			{
+				MinecartInteractable cart = onHit as MinecartInteractable;
+				if ( cart == null || cart.CargoEnabled )
+				{
+					if ( cart != null && IsHeldItemStackable() )
+					{
+						GroundCoinStack pile = cart.FindHostedCoinStackAt( query.Hit.point );
+						if ( pile != null && !pile.IsFull )
+							return pile;
+					}
+
+					return onHit;
+				}
+			}
 
 			if ( allowGroundStack && ShouldResolveLooseStackTarget( in query )
 				&& TryResolveLooseVerticalStackTarget( in query, out ITreasurePlacementTarget groundStack ) )
 				return groundStack;
 
 			if ( onHit != null && !ReferenceEquals( onHit, _floorTarget ) )
-				return onHit;
+			{
+				MinecartInteractable skipCart = onHit as MinecartInteractable;
+				if ( skipCart == null || skipCart.CargoEnabled )
+					return onHit;
+			}
 
 			return null;
 		}
@@ -1881,7 +1901,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( _ghost != null )
 			return;
 
-		_ghost = new PlacementGhost();
+		_ghost = new PlacementGhost( Definition != null ? Definition.ghostShader : null );
 	}
 
 	void UpdateGroundStackPreviewReservation( TreasureItem placing )

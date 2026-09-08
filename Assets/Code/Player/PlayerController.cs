@@ -30,6 +30,8 @@ public class PlayerController : MonoBehaviour
 	PlayerPlacement _placement;
 	PlayerTreasurePilePull _pilePull;
 	PlayerMinecartPush _minecartPush;
+	PlayerMinecartRide _minecartRide;
+	PlayerMinecartDrive _minecartDrive;
 	PlayerSorterReposition _sorterReposition;
 	PlayerAbilities _abilities;
 	PlayerCleaning _cleaning;
@@ -173,6 +175,8 @@ public class PlayerController : MonoBehaviour
 	public PlayerTreasurePilePull PilePull => _pilePull;
 
 	public PlayerMinecartPush MinecartPush => _minecartPush;
+	public PlayerMinecartRide MinecartRide => _minecartRide;
+	public PlayerMinecartDrive MinecartDrive => _minecartDrive;
 	public PlayerSorterReposition SorterReposition => _sorterReposition;
 	public PlayerAbilities Abilities => _abilities;
 	public PlayerCleaning Cleaning => _cleaning;
@@ -185,8 +189,28 @@ public class PlayerController : MonoBehaviour
 	public Collider GroundCollider => _groundCollider;
 	public Vector3 PlanarVelocity => _planarVelocity;
 	public float PlanarSpeed => _planarVelocity.magnitude;
+
+	public void AddPlanarVelocity( Vector3 worldVelocity )
+	{
+		worldVelocity.y = 0f;
+		_planarVelocity += worldVelocity;
+	}
+
 	public Vector3 LocalPlanarVelocity => _localPlanarVelocity;
 	public Vector3 FlatMoveIntent => _debugFlatMoveIntent;
+
+	/// <summary>
+	/// Intended ground speed this frame (walk/sprint × carry), ignoring collision slowdown.
+	/// </summary>
+	public float DesiredPlanarSpeed
+	{
+		get
+		{
+			bool sprinting = _wantsSprint && _debugFlatMoveIntent.sqrMagnitude > 0.0001f;
+			float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
+			return ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale;
+		}
+	}
 
 	/// <summary>
 	/// Velocity baked into thrown treasure: full planar motion, plus vertical only while airborne
@@ -203,6 +227,8 @@ public class PlayerController : MonoBehaviour
 			return v;
 		}
 	}
+	public bool IsDrivingMinecart => _minecartDrive != null && _minecartDrive.IsDriving;
+
 	public bool IsSliding => _isSliding;
 	public bool IsClimbing => _isClimbing;
 	public bool IsClimbingEnabled => ClimbingEnabled;
@@ -411,6 +437,8 @@ public class PlayerController : MonoBehaviour
 		EnsurePlacement();
 		EnsurePilePull();
 		EnsureMinecartPush();
+		EnsureMinecartRide();
+		EnsureMinecartDrive();
 		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
@@ -443,6 +471,8 @@ public class PlayerController : MonoBehaviour
 		EnsurePlacement();
 		EnsurePilePull();
 		EnsureMinecartPush();
+		EnsureMinecartRide();
+		EnsureMinecartDrive();
 		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
@@ -460,6 +490,10 @@ public class PlayerController : MonoBehaviour
 			_wholeStack.Setup( this, _interaction, _placement );
 		if ( _minecartPush != null )
 			_minecartPush.Setup( this );
+		if ( _minecartRide != null )
+			_minecartRide.Setup( this );
+		if ( _minecartDrive != null )
+			_minecartDrive.Setup( this );
 		if ( _sorterReposition != null )
 			_sorterReposition.Setup( this );
 	}
@@ -578,6 +612,26 @@ public class PlayerController : MonoBehaviour
 			_minecartPush = GetComponent<PlayerMinecartPush>();
 		if ( _minecartPush == null )
 			_minecartPush = gameObject.AddComponent<PlayerMinecartPush>();
+	}
+
+	void EnsureMinecartRide()
+	{
+		if ( _minecartRide == null )
+			_minecartRide = GetComponent<PlayerMinecartRide>();
+		if ( _minecartRide == null )
+			_minecartRide = gameObject.AddComponent<PlayerMinecartRide>();
+
+		_minecartRide.Setup( this );
+	}
+
+	void EnsureMinecartDrive()
+	{
+		if ( _minecartDrive == null )
+			_minecartDrive = GetComponent<PlayerMinecartDrive>();
+		if ( _minecartDrive == null )
+			_minecartDrive = gameObject.AddComponent<PlayerMinecartDrive>();
+
+		_minecartDrive.Setup( this );
 	}
 
 	void EnsureSorterReposition()
@@ -703,21 +757,37 @@ public class PlayerController : MonoBehaviour
 	{
 		TickPlanarMovementLock( Time.deltaTime );
 
+		if ( IsDrivingMinecart )
+		{
+			_planarVelocity = Vector3.zero;
+			_verticalVelocity = 0f;
+			_wantsSprint = false;
+			WasJumpThisFrame = false;
+			WasLandingThisFrame = false;
+			IsGrounded = true;
+			_wasGrounded = true;
+			return;
+		}
+
 		Vector2 moveInput = Vector2.zero;
 		_wantsSprint = false;
 		bool jumpHeld = false;
 		bool jumpPressed = false;
 
-		if ( gameplayInputEnabled && !IsPlanarMovementLocked )
+		if ( gameplayInputEnabled )
 		{
 			GameInput input = GetGameInput();
 			if ( input != null )
 			{
-				moveInput = input.Move.ReadValue<Vector2>();
-				if ( moveInput.sqrMagnitude > 1f )
-					moveInput.Normalize();
+				if ( !IsPlanarMovementLocked )
+				{
+					moveInput = input.Move.ReadValue<Vector2>();
+					if ( moveInput.sqrMagnitude > 1f )
+						moveInput.Normalize();
 
-				_wantsSprint = input.Sprint.IsPressed();
+					_wantsSprint = input.Sprint.IsPressed();
+				}
+
 				jumpHeld = input.Jump.IsPressed();
 				jumpPressed = input.Jump.WasPressedThisFrame();
 			}
@@ -757,7 +827,7 @@ public class PlayerController : MonoBehaviour
 		else if ( grounded )
 			_coyoteTimer = 0f;
 
-		if ( gameplayInputEnabled && !IsPlanarMovementLocked )
+		if ( gameplayInputEnabled )
 		{
 			GameInput input = GetGameInput();
 			if ( input != null )

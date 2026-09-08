@@ -11,6 +11,8 @@ public abstract class PickupInteractable : InteractableBase
 
 	public TreasureDefinition Treasure => treasure;
 
+	public override bool UsesPickupInteract => true;
+
 	protected virtual void Awake()
 	{
 		ApplyTreasureDisplayName();

@@ -164,7 +164,7 @@ public class PlayerSorterReposition : MonoBehaviour
 
 	void TickCharge( GameInput input )
 	{
-		if ( input == null || input.Interact == null || !input.Interact.IsPressed() )
+		if ( input == null || input.ContextualInteract == null || !input.ContextualInteract.IsPressed() )
 		{
 			CancelCharge();
 			return;

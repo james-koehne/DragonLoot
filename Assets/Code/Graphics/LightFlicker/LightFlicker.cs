@@ -46,11 +46,15 @@ public class LightFlicker : MonoBehaviour
 	Light _light;
 
 	[SerializeField]
-	[Tooltip( "Optional emissive mesh renderers. When empty, uses LODGroup / child MeshRenderers." )]
+	[Tooltip( "Auto finds nearby emissive meshes. Manual uses only the assigned renderers (which can be a different object). None flickers the Light only." )]
+	LightFlickerEmissiveMode _emissiveMode = LightFlickerEmissiveMode.Auto;
+
+	[SerializeField]
+	[Tooltip( "Glow meshes used when Emissive Mode is Manual. Can be any MeshRenderer, not the light's own mesh." )]
 	MeshRenderer[] _emissiveRenderers;
 
 	[SerializeField]
-	[Tooltip( "Material index with the emissive DragonLoot/EnvironmentLit material." )]
+	[Tooltip( "Material slot with the emissive DragonLoot/EnvironmentLit material. Use -1 to pick the first emissive slot on each renderer." )]
 	int _emissiveMaterialIndex = 1;
 
 	[SerializeField]
@@ -75,6 +79,7 @@ public class LightFlicker : MonoBehaviour
 	Color _baseVolumetricColor = Color.white;
 	bool _hasVolumetricBase;
 	int _lastPresetFingerprint = int.MinValue;
+	bool _emissiveResolved;
 
 	public bool PlayInEditMode
 	{
@@ -89,6 +94,10 @@ public class LightFlicker : MonoBehaviour
 	public bool HasAuthoredBase => _hasBase;
 
 	public LightFlickerPreset ActivePreset => _activePreset;
+
+	public LightFlickerEmissiveMode EmissiveMode => _emissiveMode;
+
+	public int EmissiveMaterialIndex => _emissiveMaterialIndex;
 
 	public LightFlickerPresetKind Preset
 	{
@@ -136,7 +145,8 @@ public class LightFlicker : MonoBehaviour
 	{
 		_intensityScale = Mathf.Clamp( _intensityScale, 0f, 3f );
 		_speedScale = Mathf.Max( 0f, _speedScale );
-		_emissiveMaterialIndex = Mathf.Max( 0, _emissiveMaterialIndex );
+		_emissiveMaterialIndex = Mathf.Max( -1, _emissiveMaterialIndex );
+		_emissiveResolved = false;
 		if ( string.IsNullOrWhiteSpace( _customPresetName ) )
 			_customPresetName = nameof( LightFlickerPresetKind.Lantern );
 
@@ -144,6 +154,9 @@ public class LightFlicker : MonoBehaviour
 		EnsureLight();
 		EnsureVolumetricRenderer();
 		SyncVolumetricActiveForMode();
+		if ( isActiveAndEnabled )
+			ResolveEmissiveRenderers();
+
 		if ( !Application.isPlaying && !_playInEditMode )
 		{
 			RestoreBase();
@@ -152,7 +165,6 @@ public class LightFlicker : MonoBehaviour
 
 		if ( isActiveAndEnabled )
 		{
-			ResolveEmissiveRenderers();
 			if ( !_hasBase )
 				CaptureBase();
 			else
@@ -172,7 +184,7 @@ public class LightFlicker : MonoBehaviour
 			return;
 
 		EnsureCaches();
-		if ( _resolvedEmissiveRenderers.Count == 0 )
+		if ( !_emissiveResolved )
 		{
 			ResolveEmissiveRenderers();
 			if ( _hasBase )
@@ -233,8 +245,11 @@ public class LightFlicker : MonoBehaviour
 		if ( Application.isPlaying )
 			return;
 
+		ResolveEmissiveRenderers();
 		if ( !_hasBase )
 			CaptureBase();
+		else
+			CaptureEmissionBase();
 
 		int fingerprint = ComputePresetFingerprint();
 		if ( fingerprint != _lastPresetFingerprint )
@@ -475,28 +490,73 @@ public class LightFlicker : MonoBehaviour
 		volumetricObject.SetActive( wantActive );
 	}
 
+	public void CopyResolvedEmissiveRenderers( List<MeshRenderer> results )
+	{
+		if ( results == null )
+			return;
+
+		ResolveEmissiveRenderers();
+		results.Clear();
+		for ( int i = 0; i < _resolvedEmissiveRenderers.Count; i++ )
+		{
+			if ( _resolvedEmissiveRenderers[ i ] != null )
+				results.Add( _resolvedEmissiveRenderers[ i ] );
+		}
+	}
+
+	public int ResolvedEmissiveRendererCount => _resolvedEmissiveRenderers != null ? _resolvedEmissiveRenderers.Count : 0;
+
+	public MeshRenderer GetResolvedEmissiveRenderer( int index )
+	{
+		if ( _resolvedEmissiveRenderers == null || index < 0 || index >= _resolvedEmissiveRenderers.Count )
+			return null;
+		return _resolvedEmissiveRenderers[ index ];
+	}
+
 	void ResolveEmissiveRenderers()
 	{
 		EnsureCaches();
 		EnsureVolumetricRenderer();
-		_resolvedEmissiveRenderers.Clear();
 
-		if ( _emissiveRenderers != null )
+		List<MeshRenderer> previous = null;
+		if ( _resolvedEmissiveRenderers.Count > 0 )
 		{
-			for ( int i = 0; i < _emissiveRenderers.Length; i++ )
+			previous = new List<MeshRenderer>( _resolvedEmissiveRenderers );
+		}
+
+		_resolvedEmissiveRenderers.Clear();
+		_emissiveResolved = true;
+
+		if ( _emissiveMode == LightFlickerEmissiveMode.None )
+		{
+			ClearEmissionOverrides( previous );
+			return;
+		}
+
+		if ( _emissiveMode == LightFlickerEmissiveMode.Manual )
+		{
+			if ( _emissiveRenderers != null )
 			{
-				MeshRenderer renderer = _emissiveRenderers[ i ];
-				if ( renderer != null )
-					_resolvedEmissiveRenderers.Add( renderer );
+				for ( int i = 0; i < _emissiveRenderers.Length; i++ )
+					TryAddEmissiveRenderer( _emissiveRenderers[ i ] );
 			}
 
-			if ( _resolvedEmissiveRenderers.Count > 0 )
-				return;
+			ClearEmissionOverrides( previous );
+			return;
+		}
+
+		if ( HasAssignedEmissiveRenderers() )
+		{
+			for ( int i = 0; i < _emissiveRenderers.Length; i++ )
+				TryAddEmissiveRenderer( _emissiveRenderers[ i ] );
+
+			ClearEmissionOverrides( previous );
+			return;
 		}
 
 		LODGroup lodGroup = GetComponent<LODGroup>();
-		if ( lodGroup == null )
-			lodGroup = GetComponentInParent<LODGroup>();
+		if ( lodGroup == null && transform.parent != null )
+			lodGroup = transform.parent.GetComponent<LODGroup>();
 
 		if ( lodGroup != null )
 		{
@@ -509,24 +569,123 @@ public class LightFlicker : MonoBehaviour
 
 				for ( int j = 0; j < renderers.Length; j++ )
 				{
-					if ( renderers[ j ] is MeshRenderer meshRenderer
-						&& meshRenderer != _volumetricRenderer
-						&& !_resolvedEmissiveRenderers.Contains( meshRenderer ) )
-						_resolvedEmissiveRenderers.Add( meshRenderer );
+					if ( renderers[ j ] is MeshRenderer meshRenderer )
+						TryAddEmissiveRenderer( meshRenderer );
 				}
+			}
+
+			if ( _resolvedEmissiveRenderers.Count > 0 )
+			{
+				ClearEmissionOverrides( previous );
+				return;
 			}
 		}
 
-		if ( _resolvedEmissiveRenderers.Count > 0 )
+		CollectChildEmissiveRenderers( transform );
+		if ( _resolvedEmissiveRenderers.Count == 0 && transform.parent != null )
+			CollectChildEmissiveRenderers( transform.parent );
+
+		ClearEmissionOverrides( previous );
+	}
+
+	void ClearEmissionOverrides( List<MeshRenderer> previous )
+	{
+		if ( previous == null )
 			return;
 
-		Transform root = transform.parent != null ? transform.parent : transform;
+		for ( int i = 0; i < previous.Count; i++ )
+		{
+			MeshRenderer renderer = previous[ i ];
+			if ( renderer == null || _resolvedEmissiveRenderers.Contains( renderer ) )
+				continue;
+
+			ClearEmissionOverride( renderer );
+		}
+	}
+
+	void ClearEmissionOverride( MeshRenderer renderer )
+	{
+		if ( renderer == null )
+			return;
+
+		if ( TryResolveEmissiveMaterial( renderer, out int materialIndex, out _ ) )
+			renderer.SetPropertyBlock( null, materialIndex );
+		else
+			renderer.SetPropertyBlock( null );
+	}
+
+	bool HasAssignedEmissiveRenderers()
+	{
+		if ( _emissiveRenderers == null )
+			return false;
+
+		for ( int i = 0; i < _emissiveRenderers.Length; i++ )
+		{
+			if ( _emissiveRenderers[ i ] != null )
+				return true;
+		}
+
+		return false;
+	}
+
+	void CollectChildEmissiveRenderers( Transform root )
+	{
+		if ( root == null )
+			return;
+
 		MeshRenderer[] found = root.GetComponentsInChildren<MeshRenderer>( true );
 		for ( int i = 0; i < found.Length; i++ )
+			TryAddEmissiveRenderer( found[ i ] );
+	}
+
+	void TryAddEmissiveRenderer( MeshRenderer renderer )
+	{
+		if ( renderer == null || renderer == _volumetricRenderer )
+			return;
+		if ( _resolvedEmissiveRenderers.Contains( renderer ) )
+			return;
+		if ( !TryResolveEmissiveMaterial( renderer, out _, out _ ) )
+			return;
+
+		_resolvedEmissiveRenderers.Add( renderer );
+	}
+
+	bool TryResolveEmissiveMaterial( MeshRenderer renderer, out int materialIndex, out Material material )
+	{
+		materialIndex = -1;
+		material = null;
+		if ( renderer == null )
+			return false;
+
+		Material[] materials = renderer.sharedMaterials;
+		if ( materials == null || materials.Length == 0 )
+			return false;
+
+		if ( _emissiveMaterialIndex >= 0 && _emissiveMaterialIndex < materials.Length )
 		{
-			if ( found[ i ] != _volumetricRenderer )
-				_resolvedEmissiveRenderers.Add( found[ i ] );
+			Material candidate = materials[ _emissiveMaterialIndex ];
+			if ( candidate != null && candidate.HasProperty( EmissionColorId ) )
+			{
+				materialIndex = _emissiveMaterialIndex;
+				material = candidate;
+				return true;
+			}
+
+			return false;
 		}
+
+		for ( int i = 0; i < materials.Length; i++ )
+		{
+			Material candidate = materials[ i ];
+			if ( candidate == null || !candidate.HasProperty( EmissionColorId ) )
+				continue;
+
+			materialIndex = i;
+			material = candidate;
+			return true;
+		}
+
+		return false;
 	}
 
 	void CaptureVolumetricBase()
@@ -603,12 +762,7 @@ public class LightFlicker : MonoBehaviour
 			if ( renderer == null )
 				continue;
 
-			Material[] materials = renderer.sharedMaterials;
-			if ( _emissiveMaterialIndex < 0 || _emissiveMaterialIndex >= materials.Length )
-				continue;
-
-			Material material = materials[ _emissiveMaterialIndex ];
-			if ( material == null || !material.HasProperty( EmissionColorId ) )
+			if ( !TryResolveEmissiveMaterial( renderer, out _, out Material material ) )
 				continue;
 
 			_baseEmissionColors[ i ] = material.GetColor( EmissionColorId );
@@ -693,15 +847,15 @@ public class LightFlicker : MonoBehaviour
 	{
 		if ( renderer == null )
 			return;
+		if ( !TryResolveEmissiveMaterial( renderer, out int materialIndex, out Material material ) )
+			return;
 
 		EnsureCaches();
-		renderer.GetPropertyBlock( _propertyBlock, _emissiveMaterialIndex );
+		renderer.GetPropertyBlock( _propertyBlock, materialIndex );
 		_propertyBlock.SetColor( EmissionColorId, emission );
-		if ( renderer.sharedMaterials.Length > _emissiveMaterialIndex
-			&& renderer.sharedMaterials[ _emissiveMaterialIndex ] != null
-			&& renderer.sharedMaterials[ _emissiveMaterialIndex ].HasProperty( EmissionIntensityId ) )
+		if ( material.HasProperty( EmissionIntensityId ) )
 			_propertyBlock.SetFloat( EmissionIntensityId, emissionIntensity );
-		renderer.SetPropertyBlock( _propertyBlock, _emissiveMaterialIndex );
+		renderer.SetPropertyBlock( _propertyBlock, materialIndex );
 	}
 
 	static float SampleLayeredNoise( float time, float speed, float seed, LightFlickerPreset preset )
@@ -734,4 +888,11 @@ public class LightFlicker : MonoBehaviour
 			return ( x & 0xFFFF ) / 65535f * 100f + 1f;
 		}
 	}
+}
+
+public enum LightFlickerEmissiveMode
+{
+	Auto = 0,
+	Manual = 1,
+	None = 2
 }

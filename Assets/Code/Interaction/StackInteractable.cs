@@ -17,6 +17,8 @@ public abstract class StackInteractable : InteractableBase
 	public int RemainingCount => remainingCount;
 	public int TotalCount => _totalCount;
 
+	public override bool UsesPickupInteract => true;
+
 	protected void SetTreasureDefinition( TreasureDefinition definition )
 	{
 		treasure = definition;

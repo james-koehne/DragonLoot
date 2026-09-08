@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_Minecarts
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_minecarts
+  title: Minecarts
+  tags:
+  - minecart
+  - movement
+  trigger: 15
+  holdingCategory: 0
+  volumeId: 
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  prerequisiteTutorialIds:
+  - tut_movement
+  highlightMapLabel: 
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: Tap to shove the cart along the track. Hold to push or pull it with you. Place
+    treasure into the cart to haul it around.
+  keybindHint: '[{ContextualInteract}] Tap to shove  Hold [{ContextualInteract}] Push
+    [{SecondaryInteract}] Place in cart'
+  tasks:
+  - id: shove_cart
+    label: Tap to shove the cart
+    completeTrigger: 18
+    completeVolumeId: 
+  - id: hold_push
+    label: Hold to push the cart
+    completeTrigger: 19
+    completeVolumeId: 
+  - id: load_cart
+    label: Put something in the cart
+    completeTrigger: 20
+    completeVolumeId: 

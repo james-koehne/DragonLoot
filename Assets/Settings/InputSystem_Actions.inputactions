@@ -586,6 +586,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "ContextualInteract",
+                    "type": "Button",
+                    "id": "8f2c91a4-6b3d-4e17-9c58-a1d04e7b2f11",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "ScrollWheel",
                     "type": "PassThrough",
                     "id": "c5d6e7f8-a9b0-1234-cdef-234567890abc",
@@ -871,23 +880,23 @@
                 },
                 {
                     "name": "",
-                    "id": "1960fd0a-e3f2-48ea-b512-3c5edef6f6da",
+                    "id": "7c4e1a2b-9d80-4f31-b6c2-0e8a1f5d3b77",
                     "path": "<Keyboard>/e",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "WholeStackPickup",
+                    "action": "ContextualInteract",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
                 {
                     "name": "",
-                    "id": "46d00ce5-ea3a-4338-99e4-3c52b1fb84f9",
-                    "path": "<Keyboard>/f",
+                    "id": "3a9e6c10-2d4f-4b88-91c7-5e0f8a2b4d19",
+                    "path": "<Gamepad>/buttonEast",
                     "interactions": "",
                     "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "WholeStackPlace",
+                    "groups": "Gamepad",
+                    "action": "ContextualInteract",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

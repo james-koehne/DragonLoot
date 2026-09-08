@@ -25,13 +25,15 @@ MonoBehaviour:
   alsoShowWhenAimingCoinStack: 0
   minWorldCoinsToShow: 100
   minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
+  minHeightY: 30
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: marker_gem_constellation
   completeAllTasksOnVolumeEnter: 0
-  body: Gems fit constellation sockets that match their shape. Open the map (M)
-    and follow the glowing pin to a constellation, then place a gem.
+  body: Gems socket into constellations. Open the map (M) and follow the glowing
+    pin to a constellation, then place a gem.
   keybindHint: '[{SecondaryInteract}] Place gem  [M] Open map'
   tasks:
   - id: reach_constellation

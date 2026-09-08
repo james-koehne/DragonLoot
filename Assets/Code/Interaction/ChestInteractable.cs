@@ -1,10 +1,12 @@
+using System.Collections.Generic;
+
 using FeedbackSystem;
 
 using UnityEngine;
 
 /// <summary>
-/// Primary interact for buried / revealed treasure chests.
-/// Chests must be picked up from a gold pile and placed on the ground before unlock / open.
+/// ContextualInteract (E) opens a placed chest, or bashes open a barrel/crate and destroys it.
+/// Pickup from a gold pile uses primary Interact (LMB) like other treasure.
 /// Unlock with a matching key (or skeleton key), or lockpick when hands cannot take the chest.
 /// </summary>
 [RequireComponent( typeof( TreasureItem ) )]
@@ -12,6 +14,7 @@ public class ChestInteractable : InteractableBase
 {
 	public const string LockpickAbilityId = "lockpick";
 	const float DefaultLockpickDuration = 8f;
+	const float SmashDestroyDelay = 0.22f;
 	const float LootScatterMinRadius = 1.1f;
 	const float LootScatterMaxRadius = 2.0f;
 	const float LootUpBias = 0.75f;
@@ -32,11 +35,34 @@ public class ChestInteractable : InteractableBase
 
 	TreasureItem _item;
 	float _lockpickEndsAt = -1f;
+	float _destroyAt = -1f;
 	bool _spawningLoot;
+	bool _pendingDestroy;
+	bool _smashFeedbackEnsured;
 
 	public ChestState State => state;
 	public ChestDefinition Definition => ResolveDefinition();
 	public TreasureItem Item => ResolveItem();
+	public bool DestroyOnOpen => IsSmashable();
+
+	/// <summary>
+	/// Pile pickup (and carrying an already-opened chest) uses LMB.
+	/// Opening / bashing on the ground uses E.
+	/// </summary>
+	public override bool UsesPickupInteract
+	{
+		get
+		{
+			if ( _pendingDestroy )
+				return false;
+
+			TreasureItem item = Item;
+			if ( item != null && IsAttachedToPile( item ) )
+				return true;
+
+			return state == ChestState.Opened && !IsSmashable();
+		}
+	}
 
 	public float LockpickRemaining
 	{
@@ -64,6 +90,12 @@ public class ChestInteractable : InteractableBase
 
 	void Update()
 	{
+		if ( _pendingDestroy && _destroyAt >= 0f && Time.time >= _destroyAt )
+		{
+			FinishSmashDestroy();
+			return;
+		}
+
 		if ( state != ChestState.Lockpicking )
 			return;
 
@@ -85,7 +117,7 @@ public class ChestInteractable : InteractableBase
 
 	public override bool CanInteract( PlayerController player )
 	{
-		if ( !base.CanInteract( player ) || player == null )
+		if ( !base.CanInteract( player ) || player == null || _pendingDestroy )
 			return false;
 
 		TreasureItem item = Item;
@@ -109,6 +141,15 @@ public class ChestInteractable : InteractableBase
 				return false;
 
 			SetInteractionName( "Pick up " + label );
+			return true;
+		}
+
+		if ( IsSmashable() )
+		{
+			if ( state == ChestState.Opened )
+				return false;
+
+			SetInteractionName( "Bash open " + label );
 			return true;
 		}
 
@@ -160,6 +201,12 @@ public class ChestInteractable : InteractableBase
 		if ( item != null && IsAttachedToPile( item ) )
 		{
 			TryPickup( player );
+			return;
+		}
+
+		if ( IsSmashable() )
+		{
+			TryForceOpen();
 			return;
 		}
 
@@ -230,7 +277,7 @@ public class ChestInteractable : InteractableBase
 
 	public bool TryBeginLockpick( PlayerController player )
 	{
-		if ( state != ChestState.Locked || ChestProgress.DisableKeys )
+		if ( IsSmashable() || state != ChestState.Locked || ChestProgress.DisableKeys )
 			return false;
 
 		TreasureItem item = Item;
@@ -270,21 +317,33 @@ public class ChestInteractable : InteractableBase
 
 	bool TryOpen()
 	{
-		if ( state != ChestState.Unlocked )
+		if ( state != ChestState.Unlocked || _pendingDestroy )
 			return false;
 
 		state = ChestState.Opened;
 		_lockpickEndsAt = -1f;
 		RefreshInteractionName();
-		ChestProgress.RecordChestOpened();
-		EventBus.Publish( new ChestOpenedEvent { Chest = this } );
+
+		bool smash = IsSmashable();
+		if ( !smash )
+		{
+			ChestProgress.RecordChestOpened();
+			EventBus.Publish( new ChestOpenedEvent { Chest = this } );
+		}
+
+		Vector3 origin = transform.position + Vector3.up * LootUpBias;
 		PlayOpenFeedback();
-		SpawnLootAsync();
+		SpawnLootAsync( origin );
+
+		if ( smash )
+			BeginSmashDestroy();
+
 		return true;
 	}
 
 	void PlayOpenFeedback()
 	{
+		EnsureOpenFeedback();
 		if ( onOpenFeedback == null )
 			return;
 
@@ -304,7 +363,7 @@ public class ChestInteractable : InteractableBase
 
 	bool TryUnlockWithHeldKey( PlayerController player )
 	{
-		if ( ChestProgress.DisableKeys )
+		if ( ChestProgress.DisableKeys || IsSmashable() )
 			return false;
 
 		if ( !TryGetUsableKey( player, out TreasureItem keyItem ) )
@@ -394,7 +453,7 @@ public class ChestInteractable : InteractableBase
 		RefreshInteractionName();
 	}
 
-	async void SpawnLootAsync()
+	async void SpawnLootAsync( Vector3 origin )
 	{
 		if ( _spawningLoot )
 			return;
@@ -406,12 +465,10 @@ public class ChestInteractable : InteractableBase
 			if ( chest == null || chest.contents == null || chest.contents.Length == 0 )
 				return;
 
-			Transform self = transform;
-			Vector3 origin = self.position + Vector3.up * LootUpBias;
-
-			for ( int i = 0; i < chest.contents.Length; i++ )
+			ChestContentEntry[] contents = chest.contents;
+			for ( int i = 0; i < contents.Length; i++ )
 			{
-				ChestContentEntry entry = chest.contents[ i ];
+				ChestContentEntry entry = contents[ i ];
 				if ( entry.treasure == null || entry.count <= 0 )
 					continue;
 
@@ -449,7 +506,10 @@ public class ChestInteractable : InteractableBase
 		if ( chest == null )
 			return;
 
-		if ( state == ChestState.Locked && !chest.startsLocked )
+		if ( state == ChestState.Opened )
+			return;
+
+		if ( IsSmashable() || !chest.startsLocked )
 			state = ChestState.Unlocked;
 	}
 
@@ -480,6 +540,12 @@ public class ChestInteractable : InteractableBase
 	{
 		string label = ResolveChestLabel();
 
+		if ( IsSmashable() && state != ChestState.Opened )
+		{
+			SetInteractionName( "Bash open " + label );
+			return;
+		}
+
 		switch ( state )
 		{
 			case ChestState.Locked:
@@ -504,6 +570,78 @@ public class ChestInteractable : InteractableBase
 	{
 		ChestDefinition chest = Definition;
 		return chest != null ? chest.ResolveDisplayName() : "Chest";
+	}
+
+	bool IsSmashable()
+	{
+		ChestDefinition chest = Definition;
+		return chest != null && chest.destroyOnOpen;
+	}
+
+	void EnsureOpenFeedback()
+	{
+		if ( onOpenFeedback == null )
+		{
+			Transform child = transform.Find( "OnOpenFeedbacks" );
+			if ( child != null )
+				onOpenFeedback = child.GetComponent<Feedbacks>();
+		}
+
+		if ( onOpenFeedback != null || !IsSmashable() || _smashFeedbackEnsured )
+			return;
+
+		_smashFeedbackEnsured = true;
+		GameObject host = new GameObject( "OnOpenFeedbacks" );
+		host.transform.SetParent( transform, false );
+		Feedbacks feedbacks = host.AddComponent<Feedbacks>();
+
+		PunchScaleFeedback punch = new PunchScaleFeedback();
+		punch.Target = transform;
+		punch.Punch = new Vector3( 0.18f, -0.28f, 0.18f );
+		punch.Duration = SmashDestroyDelay;
+
+		ShakeTransformFeedback shake = new ShakeTransformFeedback();
+		shake.Target = transform;
+		shake.Duration = SmashDestroyDelay;
+		shake.Strength = 0.06f;
+
+		ParallelFeedback parallel = new ParallelFeedback();
+		if ( parallel.Feedbacks == null )
+			parallel.Feedbacks = new List<Feedback>();
+		parallel.Feedbacks.Add( punch );
+		parallel.Feedbacks.Add( shake );
+		feedbacks.AddFeedback( parallel );
+		onOpenFeedback = feedbacks;
+	}
+
+	void BeginSmashDestroy()
+	{
+		if ( _pendingDestroy )
+			return;
+
+		_pendingDestroy = true;
+		_destroyAt = Time.time + SmashDestroyDelay;
+		SetInteractionName( ResolveChestLabel() );
+
+		Collider[] colliders = GetComponentsInChildren<Collider>( true );
+		for ( int i = 0; i < colliders.Length; i++ )
+		{
+			if ( colliders[ i ] != null )
+				colliders[ i ].enabled = false;
+		}
+	}
+
+	void FinishSmashDestroy()
+	{
+		_destroyAt = -1f;
+		if ( onOpenFeedback != null )
+			onOpenFeedback.Stop();
+
+		TreasureItem item = Item;
+		if ( item != null )
+			TreasureItemFactory.Despawn( item );
+		else if ( gameObject != null )
+			Destroy( gameObject );
 	}
 
 	static bool IsBuried( TreasureItem item )

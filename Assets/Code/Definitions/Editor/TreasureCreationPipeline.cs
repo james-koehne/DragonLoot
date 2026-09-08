@@ -55,6 +55,7 @@ public static class TreasureCreationPipeline
 
 		public string ChestType = "Wood";
 		public bool ChestStartsLocked = true;
+		public bool ChestDestroyOnOpen;
 		public float ChestLockpickDuration = 8f;
 		public ChestContentEntry[] ChestContents;
 
@@ -322,6 +323,7 @@ public static class TreasureCreationPipeline
 			ChestDefinition chest = source.chestDefinition;
 			request.ChestType = chest.chestType;
 			request.ChestStartsLocked = chest.startsLocked;
+			request.ChestDestroyOnOpen = chest.destroyOnOpen;
 			request.ChestLockpickDuration = chest.lockpickDuration;
 			request.ChestContents = chest.contents;
 		}
@@ -554,6 +556,7 @@ public static class TreasureCreationPipeline
 		def.chestType = request.ChestType;
 		def.keyType = request.KeyType;
 		def.startsLocked = request.ChestStartsLocked;
+		def.destroyOnOpen = request.ChestDestroyOnOpen;
 		def.lockpickDuration = request.ChestLockpickDuration;
 		def.contents = request.ChestContents ?? Array.Empty<ChestContentEntry>();
 

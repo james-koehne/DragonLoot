@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 /// <summary>
-/// Bottom-middle look-at prompts for every currently actionable situational control.
+/// Bottom-left prompts for look-at interactions and available carry controls.
 /// </summary>
 public class InteractionContextUI : MonoBehaviour
 {
@@ -50,6 +50,7 @@ public class InteractionContextUI : MonoBehaviour
 		PlayerCarry carry = player.Carry;
 		PlayerSorterReposition sorter = player.SorterReposition;
 		PlayerMinecartPush minecartPush = player.MinecartPush;
+		PlayerMinecartDrive minecartDrive = player.MinecartDrive;
 		PlayerWholeStackInteraction wholeStack = player.WholeStack;
 
 		InputController inputController = InputController.Instance;
@@ -71,34 +72,47 @@ public class InteractionContextUI : MonoBehaviour
 
 		if ( minecartPush != null && minecartPush.IsPushing )
 		{
-			AppendBound( gameInput.Interact, "Pushing (release to stop)" );
+			AppendBound( gameInput.ContextualInteract, "Pushing (release to stop)" );
+			FinishRefresh();
+			return;
+		}
+
+		if ( minecartDrive != null && minecartDrive.IsDriving )
+		{
+			AppendBound( gameInput.ContextualInteract, "Exit minecart" );
+			AppendPlain( "W accelerate · S brake / reverse" );
 			FinishRefresh();
 			return;
 		}
 
 		IInteractable focus = interaction.Current;
 		if ( focus is CoinSortingCrankInteractable crankFocus && crankFocus.CanInteract( player ) )
-			AppendBound( gameInput.Interact, FormatCrankPrompt( crankFocus ) );
+			AppendBound( gameInput.ContextualInteract, FormatCrankPrompt( crankFocus ) );
 		else if ( focus is CoinSortingStationMoveInteractable )
-			AppendBound( gameInput.Interact, "Hold to move sorter" );
+			AppendBound( gameInput.ContextualInteract, "Hold to move sorter" );
 		else if ( focus is DoorInteractable doorFocus && doorFocus.ShowsLockedPrompt )
-			AppendBound( gameInput.Interact, "Locked" );
+			AppendBound( gameInput.ContextualInteract, "Locked" );
 		else if ( focus != null && focus.CanInteract( player ) )
 		{
-			string primary = FormatPrimaryPrompt( focus, carry );
+			string primary = FormatPrimaryPrompt( focus );
 			if ( !string.IsNullOrEmpty( primary ) )
-				AppendBound( gameInput.Interact, primary );
+			{
+				InputAction action = InteractableBase.IsPickupInteract( focus )
+					? gameInput.Interact
+					: gameInput.ContextualInteract;
+				AppendBound( action, primary );
+			}
 		}
 
 		bool offerWholePickup = wholeStack != null && wholeStack.CanOfferWholeStackPickup;
 		if ( offerWholePickup )
-			AppendBound( gameInput.WholeStackPickup, "Hold to pick up stack" );
+			AppendBound( gameInput.ContextualInteract, "Hold to pick up stack" );
 
 		bool carrying = carry != null && carry.Count > 0;
 		if ( carrying && placement != null )
 		{
 			if ( wholeStack != null && wholeStack.CanOfferWholeStackPlace )
-				AppendBound( gameInput.WholeStackPlace, "Hold to place stack" );
+				AppendBound( gameInput.ContextualInteract, "Hold to place stack" );
 
 			AppendSecondaryLines( gameInput, placement );
 		}
@@ -107,8 +121,8 @@ public class InteractionContextUI : MonoBehaviour
 		if ( carrying && !sorterBusy && carry.Count > 1 )
 			AppendBound( gameInput.ScrollWheel, "Cycle held" );
 
-		if ( carrying && !sorterBusy && HasOtherBucketItems( carry ) )
-			AppendCategorySwitchLine( gameInput );
+		if ( !sorterBusy && HasOtherBucketItems( carry ) )
+			AppendCategorySwitchLine( gameInput, carry );
 
 		if ( carrying && IsCleanBound( gameInput ) && TryGetDirtyActive( carry, out _ ) )
 			AppendBound( gameInput.Clean, "Hold to polish" );
@@ -164,16 +178,19 @@ public class InteractionContextUI : MonoBehaviour
 		return "Hold to crank · " + station.ReserveSeconds.ToString( "0.0" ) + "s";
 	}
 
-	static string FormatPrimaryPrompt( IInteractable focus, PlayerCarry carry )
+	static string FormatPrimaryPrompt( IInteractable focus )
 	{
 		if ( focus == null )
 			return null;
 
+		if ( focus is MinecartCallPost )
+			return "Call minecart";
+
+		if ( focus is MinecartInteractable driveCart && driveCart.IsDriveCart )
+			return "Ride minecart";
+
 		if ( focus is MinecartInteractable )
-		{
-			bool carrying = carry != null && carry.Count > 0;
-			return carrying ? "Load & push" : "Hold to push";
-		}
+			return "Shove / hold to push";
 
 		if ( focus is MinecartUnloadPoint )
 			return "Unload minecart";
@@ -212,9 +229,9 @@ public class InteractionContextUI : MonoBehaviour
 		return focus.InteractionName;
 	}
 
-	void AppendCategorySwitchLine( GameInput gameInput )
+	void AppendCategorySwitchLine( GameInput gameInput, PlayerCarry carry )
 	{
-		if ( gameInput.CategorySlots == null || gameInput.CategorySlots.Length == 0 )
+		if ( gameInput.CategorySlots == null || gameInput.CategorySlots.Length == 0 || carry == null )
 			return;
 
 		int startLength = _builder.Length;
@@ -222,11 +239,20 @@ public class InteractionContextUI : MonoBehaviour
 			_builder.Append( '\n' );
 
 		bool any = false;
-		for ( int i = 0; i < gameInput.CategorySlots.Length; i++ )
+		CarryBucketKind selected = carry.SelectedBucket;
+		int slotCount = gameInput.CategorySlots.Length;
+		if ( slotCount > PlayerCarry.BucketCount )
+			slotCount = PlayerCarry.BucketCount;
+
+		for ( int i = 0; i < slotCount; i++ )
 		{
+			CarryBucketKind kind = (CarryBucketKind)i;
+			if ( kind == selected || carry.GetBucketCount( kind ) <= 0 )
+				continue;
+
 			string display = FormatBindingDisplay( gameInput.CategorySlots[ i ] );
 			if ( string.IsNullOrEmpty( display ) )
-				continue;
+				display = ( i + 1 ).ToString();
 
 			if ( any )
 				_builder.Append( ' ' );

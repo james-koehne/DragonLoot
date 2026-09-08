@@ -26,14 +26,14 @@ MonoBehaviour:
   minCarriedCoinsToShow: 50
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
+  minHeightY: 30
   prerequisiteTutorialIds: []
   highlightMapLabel: Artifact Museum
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
   body: Take artifacts to the Artifact Museum and place them on a presentation stand.
-    Open the map (M) and look for the highlighted Artifact Museum. Dirty artifacts
-    may need polishing first.
-  keybindHint: '[{SecondaryInteract}] Place  [{Clean}] Clean / Polish  [M] Open map'
+    Open the map (M) and look for the highlighted Artifact Museum.
+  keybindHint: '[{SecondaryInteract}] Place  [M] Open map'
   tasks:
   - id: reach_artifact_museum
     label: Go to the Artifact Museum

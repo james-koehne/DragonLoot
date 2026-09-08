@@ -15,6 +15,7 @@ public class LightFlickerEditor : Editor
 	SerializedProperty _speedScale;
 	SerializedProperty _playInEditMode;
 	SerializedProperty _light;
+	SerializedProperty _emissiveMode;
 	SerializedProperty _emissiveRenderers;
 	SerializedProperty _emissiveMaterialIndex;
 
@@ -29,6 +30,7 @@ public class LightFlickerEditor : Editor
 		_speedScale = serializedObject.FindProperty( "_speedScale" );
 		_playInEditMode = serializedObject.FindProperty( "_playInEditMode" );
 		_light = serializedObject.FindProperty( "_light" );
+		_emissiveMode = serializedObject.FindProperty( "_emissiveMode" );
 		_emissiveRenderers = serializedObject.FindProperty( "_emissiveRenderers" );
 		_emissiveMaterialIndex = serializedObject.FindProperty( "_emissiveMaterialIndex" );
 
@@ -71,7 +73,7 @@ public class LightFlickerEditor : Editor
 		EditorGUILayout.PropertyField( _preset );
 		bool showCustomPreset = _customPresetName.hasMultipleDifferentValues
 			|| ( !_preset.hasMultipleDifferentValues
-				&& (LightFlickerPresetKind)_preset.enumValueIndex == LightFlickerPresetKind.Custom );
+				&& (LightFlickerPresetKind)_preset.intValue == LightFlickerPresetKind.Custom );
 		if ( showCustomPreset )
 			EditorGUILayout.PropertyField( _customPresetName );
 		bool presetChanged = EditorGUI.EndChangeCheck();
@@ -128,16 +130,46 @@ public class LightFlickerEditor : Editor
 		EditorGUILayout.LabelField( "References", EditorStyles.boldLabel );
 		EditorGUILayout.PropertyField( _definition );
 		EditorGUILayout.PropertyField( _light );
-		EditorGUILayout.PropertyField( _emissiveRenderers, true );
-		EditorGUILayout.PropertyField( _emissiveMaterialIndex );
+
+		EditorGUILayout.Space( 4f );
+		EditorGUILayout.LabelField( "Emissive Mesh", EditorStyles.boldLabel );
+		EditorGUI.BeginChangeCheck();
+		EditorGUILayout.PropertyField( _emissiveMode, new GUIContent( "Emissive Mode" ) );
+		LightFlickerEmissiveMode mode = (LightFlickerEmissiveMode)_emissiveMode.intValue;
+		if ( _emissiveMode.hasMultipleDifferentValues )
+		{
+			DrawExactEmissiveRendererList();
+		}
+		else if ( mode == LightFlickerEmissiveMode.None )
+		{
+			EditorGUILayout.HelpBox( "Light flickers only. No mesh emission is applied.", MessageType.None );
+		}
+		else if ( mode == LightFlickerEmissiveMode.Manual )
+		{
+			DrawExactEmissiveRendererList();
+			EditorGUILayout.HelpBox( "Assign the glow object's MeshRenderer. Drag that child — not the parent — or Unity will pick the first mesh (usually the base).", MessageType.None );
+		}
+		else
+		{
+			DrawExactEmissiveRendererList();
+			EditorGUILayout.HelpBox( "Empty: find nearby emissive meshes. Assigned: use only those renderers and skip the base light mesh.", MessageType.None );
+		}
+
+		if ( mode != LightFlickerEmissiveMode.None || _emissiveMode.hasMultipleDifferentValues )
+			EditorGUILayout.PropertyField( _emissiveMaterialIndex, new GUIContent( "Emissive Material Index", "Slot with the emissive material. -1 picks the first emissive slot on each renderer." ) );
+
+		if ( !_emissiveMode.hasMultipleDifferentValues && targets.Length == 1 )
+			DrawResolvedEmissiveReadout( (LightFlicker)target );
+
+		bool emissiveChanged = EditorGUI.EndChangeCheck();
 
 		serializedObject.ApplyModifiedProperties();
 
-		if ( presetChanged || previewToggleChanged )
+		if ( presetChanged || previewToggleChanged || emissiveChanged )
 		{
 			ForEachTarget( flicker =>
 			{
-				if ( previewToggleChanged && !flicker.PlayInEditMode )
+				if ( !Application.isPlaying && !flicker.PlayInEditMode )
 					flicker.RestoreAuthoredState();
 				else
 					flicker.RefreshEditorPreview();
@@ -168,6 +200,69 @@ public class LightFlickerEditor : Editor
 		}
 
 		DrawIntensityReadoutSingle( (LightFlicker)target );
+	}
+
+	void DrawExactEmissiveRendererList()
+	{
+		EditorGUI.indentLevel++;
+		int size = Mathf.Max( 0, _emissiveRenderers.arraySize );
+		int newSize = EditorGUILayout.IntField( "Emissive Renderers", size );
+		if ( newSize != size )
+			_emissiveRenderers.arraySize = newSize;
+
+		for ( int i = 0; i < _emissiveRenderers.arraySize; i++ )
+		{
+			SerializedProperty element = _emissiveRenderers.GetArrayElementAtIndex( i );
+			MeshRenderer current = element.objectReferenceValue as MeshRenderer;
+			GameObject currentObject = current != null ? current.gameObject : null;
+
+			EditorGUI.BeginChangeCheck();
+			GameObject picked = (GameObject)EditorGUILayout.ObjectField( "Element " + i, currentObject, typeof( GameObject ), true );
+			if ( !EditorGUI.EndChangeCheck() )
+				continue;
+
+			if ( picked == null )
+			{
+				element.objectReferenceValue = null;
+				continue;
+			}
+
+			MeshRenderer exact = picked.GetComponent<MeshRenderer>();
+			element.objectReferenceValue = exact;
+			if ( exact == null )
+				Debug.LogWarning( "LightFlicker: '" + picked.name + "' has no MeshRenderer on that object. Assign the glow child, not a parent." );
+		}
+
+		EditorGUI.indentLevel--;
+	}
+
+	static void DrawResolvedEmissiveReadout( LightFlicker flicker )
+	{
+		if ( flicker == null )
+			return;
+
+		int count = flicker.ResolvedEmissiveRendererCount;
+		if ( count <= 0 )
+		{
+			if ( flicker.EmissiveMode != LightFlickerEmissiveMode.None )
+				EditorGUILayout.HelpBox( "No emissive renderer is active.", MessageType.Info );
+			return;
+		}
+
+		System.Text.StringBuilder builder = new System.Text.StringBuilder();
+		builder.Append( "Active emissive renderer" );
+		if ( count != 1 )
+			builder.Append( 's' );
+		builder.Append( ": " );
+		for ( int i = 0; i < count; i++ )
+		{
+			MeshRenderer renderer = flicker.GetResolvedEmissiveRenderer( i );
+			if ( i > 0 )
+				builder.Append( ", " );
+			builder.Append( renderer != null ? renderer.name : "(missing)" );
+		}
+
+		EditorGUILayout.HelpBox( builder.ToString(), MessageType.None );
 	}
 
 	static void DrawIntensityReadoutSingle( LightFlicker flicker )

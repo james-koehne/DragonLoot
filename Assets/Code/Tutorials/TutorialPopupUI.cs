@@ -26,6 +26,7 @@ public class TutorialPopupUI : MonoBehaviour
 	[SerializeField] Text hintText;
 	[SerializeField] Text tasksText;
 	[SerializeField] Text stepText;
+	[SerializeField] Text cycleHintText;
 	[SerializeField] Button dismissButton;
 	[SerializeField] Feedbacks showFeedback;
 	[SerializeField] Feedbacks hideFeedback;
@@ -85,9 +86,43 @@ public class TutorialPopupUI : MonoBehaviour
 		ConfigureTextOverflow( hintText );
 		ConfigureTextOverflow( tasksText );
 		ConfigureTextOverflow( stepText );
+		EnsureCycleHint();
+		ConfigureTextOverflow( cycleHintText );
 
 		HideImmediate();
 		_ready = true;
+	}
+
+	void EnsureCycleHint()
+	{
+		if ( cycleHintText != null )
+			return;
+
+		Transform existing = transform.Find( "CycleHint" );
+		GameObject go = existing != null
+			? existing.gameObject
+			: new GameObject( "CycleHint", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
+		if ( existing == null )
+			go.transform.SetParent( transform, false );
+
+		RectTransform rt = go.GetComponent<RectTransform>();
+		rt.anchorMin = new Vector2( 0.5f, 1f );
+		rt.anchorMax = new Vector2( 0.5f, 1f );
+		rt.pivot = new Vector2( 0.5f, 1f );
+		rt.sizeDelta = new Vector2( 480f, 28f );
+
+		cycleHintText = go.GetComponent<Text>();
+		if ( cycleHintText == null )
+			cycleHintText = go.AddComponent<Text>();
+		cycleHintText.font = titleText != null ? titleText.font : Resources.GetBuiltinResource<Font>( "Arial.ttf" );
+		cycleHintText.fontSize = 18;
+		cycleHintText.fontStyle = FontStyle.Bold;
+		cycleHintText.alignment = TextAnchor.MiddleRight;
+		cycleHintText.color = new Color( 0.75f, 0.82f, 0.95f, 0.9f );
+		cycleHintText.raycastTarget = false;
+		cycleHintText.horizontalOverflow = HorizontalWrapMode.Wrap;
+		cycleHintText.verticalOverflow = VerticalWrapMode.Overflow;
+		go.SetActive( false );
 	}
 
 	static void ConfigureTextOverflow( Text text )
@@ -152,6 +187,17 @@ public class TutorialPopupUI : MonoBehaviour
 			showFeedback.Play();
 		else if ( group != null )
 			group.alpha = 1f;
+	}
+
+	public void SetCycleHint( bool visible, string text )
+	{
+		if ( cycleHintText == null )
+			return;
+
+		cycleHintText.text = text ?? string.Empty;
+		cycleHintText.gameObject.SetActive( visible && !string.IsNullOrEmpty( text ) );
+		if ( _visible )
+			LayoutContent();
 	}
 
 	public void SetTasks( string tasksFormatted )
@@ -302,6 +348,7 @@ public class TutorialPopupUI : MonoBehaviour
 		y = PlaceTextBlock( tasksText, contentWidth, y, ContentGap );
 		y = PlaceTextBlock( hintText, contentWidth, y, ContentGap );
 		y = PlaceTextBlock( stepText, contentWidth, y, ContentGap );
+		y = PlaceTextBlock( cycleHintText, contentWidth, y, ContentGap );
 
 		float height = Mathf.Max( MinPopupHeight, -y + ContentPadBottom );
 		root.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );

@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TutorialCatalogDefinition
   tutorials:
   - {fileID: 11400000, guid: a1b2c3d4e5f64789a0b1c2d3e4f50617, type: 2}
+  - {fileID: 11400000, guid: b2c3d4e5f6a74890b1c2d3e4f5061728, type: 2}
+  - {fileID: 11400000, guid: c3d4e5f6a7b84901c2d3e4f506172839, type: 2}
   - {fileID: 11400000, guid: 17383ff19e9d2c44d90477e2e7babb35, type: 2}
   - {fileID: 11400000, guid: 0e36de9894f42754c85414265ec9d09d, type: 2}
   - {fileID: 11400000, guid: fd5f2763346453044bef98520d30e472, type: 2}
@@ -24,3 +26,4 @@ MonoBehaviour:
   - {fileID: 11400000, guid: d0e1f2a3b4c5566778899aabbccdde01, type: 2}
   - {fileID: 11400000, guid: c6e4fe03af085db4da446f8e74b27fea, type: 2}
   - {fileID: 11400000, guid: cc1919bd7aa33f745ae018723d02b8a6, type: 2}
+  - {fileID: 11400000, guid: a4b5c6d7e8f9012233445566778899aa, type: 2}

@@ -576,11 +576,10 @@ public class PauseMenuUI : MonoBehaviour
 		AppendControl( gameInput.Jump, "Jump" );
 		AppendGlideControl( gameInput.Jump );
 		AppendControl( gameInput.Sprint, "Sprint / Slide" );
-		AppendControl( gameInput.Interact, "Interact" );
+		AppendControl( gameInput.Interact, "Pick up / Dig" );
+		AppendControl( gameInput.ContextualInteract, "Use / Hold for stack" );
 		AppendControl( gameInput.SecondaryInteract, "Place / Throw" );
 		AppendControl( gameInput.Clean, "Clean / Polish" );
-		AppendControl( gameInput.WholeStackPickup, "Pick up stack (hold)" );
-		AppendControl( gameInput.WholeStackPlace, "Place stack (hold)" );
 		AppendControl( gameInput.ScrollWheel, "Cycle held item" );
 
 		if ( gameInput.CategorySlots != null )

@@ -8,7 +8,8 @@ public enum WorldEventConditionType
 	EnterVolume = 1,
 	PickupTreasure = 2,
 	PlayerGameplayInput = 3,
-	ElapsedUnscaledSeconds = 4
+	ElapsedUnscaledSeconds = 4,
+	TutorialCompleted = 5
 }
 
 public enum WorldEventActionType
@@ -46,7 +47,7 @@ public class WorldEventCondition
 {
 	public WorldEventConditionType type;
 
-	[Tooltip( "EventVolume id for EnterVolume. Ignored by other types." )]
+	[Tooltip( "EventVolume id for EnterVolume, or tutorial id for TutorialCompleted (e.g. tut_movement). Ignored by other types." )]
 	public string targetId;
 
 	[Tooltip( "Optional treasure filter for PickupTreasure. Null = any treasure." )]

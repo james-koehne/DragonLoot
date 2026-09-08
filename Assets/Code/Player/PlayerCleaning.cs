@@ -33,7 +33,7 @@ public class PlayerCleaning : MonoBehaviour
 
 	void Update()
 	{
-		// Clean is unbound this pass (E is whole-stack pickup). Manual polish disabled until rebound.
+		// Clean is unbound this pass (E is Interact). Manual polish disabled until rebound.
 		if ( !_inputEnabled || _player == null )
 			return;
 		if ( !TreasureCleaningDefinition.IsCleaningEnabled() )

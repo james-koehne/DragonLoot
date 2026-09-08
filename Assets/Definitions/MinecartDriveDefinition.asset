@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 104a8db62d51f8140b7331cd1590bcd0, type: 3}
+  m_Name: MinecartDriveDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::MinecartDefinition
+  kind: 1
+  pushAttachRadius: 5
+  pushHoldThreshold: 0.18
+  shoveSpeed: 7
+  shoveDrag: 8
+  mouseSteerScale: 0
+  rideHeight: 0.37
+  wheelRadius: 0.21
+  blockingHalfLength: 1
+  trackSnapRadius: 4
+  attachPlayerWhenStanding: 0
+  riderSpeedMultiplier: 2
+  recallSpeed: 8
+  recallStopDistance: 0.2
+  driveMaxSpeed: 10
+  driveAcceleration: 12
+  driveBrake: 18
+  gridColumns: 4
+  gridRows: 3
+  cellSpacing: 0.22
+  maxStackPerCell: 0
+  unloadDetectRadius: 3
+  unloadScatterRadius: 0.35

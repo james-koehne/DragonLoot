@@ -11,8 +11,13 @@ public static class ChestPrefabSetup
 {
 	const string IronPath = "Assets/Addressables/Treasure/Chests/IronChest.prefab";
 	const string GoldPath = "Assets/Addressables/Treasure/Chests/GoldChest.prefab";
+	const string BarrelPath = "Assets/Addressables/Treasure/Artifacts/Barrel_01Visual.prefab";
+	const string Crate1Path = "Assets/Addressables/Treasure/Artifacts/Crate_01Visual.prefab";
+	const string Crate2Path = "Assets/Addressables/Treasure/Artifacts/Crate_02Visual.prefab";
 	const string IronDefPath = "Assets/Definitions/Treasure/Chests/ChestDefs/IronChestDefinition.asset";
 	const string GoldDefPath = "Assets/Definitions/Treasure/Chests/ChestDefs/GoldChestDefinition.asset";
+	const string BarrelDefPath = "Assets/Definitions/Treasure/Chests/ChestDefs/BarrelChestDefinition.asset";
+	const string CrateDefPath = "Assets/Definitions/Treasure/Chests/ChestDefs/CrateChestDefinition.asset";
 	const string OpenFeedbackChildName = "OnOpenFeedbacks";
 
 	[MenuItem( DragonLootMenus.Root + "/Treasure/Setup Chest Prefab Feedbacks" )]
@@ -22,6 +27,12 @@ public static class ChestPrefabSetup
 		if ( SetupPrefab( IronPath, IronDefPath ) )
 			count++;
 		if ( SetupPrefab( GoldPath, GoldDefPath ) )
+			count++;
+		if ( SetupSmashPrefab( BarrelPath, BarrelDefPath ) )
+			count++;
+		if ( SetupSmashPrefab( Crate1Path, CrateDefPath ) )
+			count++;
+		if ( SetupSmashPrefab( Crate2Path, CrateDefPath ) )
 			count++;
 
 		AssetDatabase.SaveAssets();
@@ -72,6 +83,46 @@ public static class ChestPrefabSetup
 		}
 	}
 
+	public static bool SetupSmashPrefab( string prefabPath, string chestDefinitionPath )
+	{
+		GameObject root = PrefabUtility.LoadPrefabContents( prefabPath );
+		if ( root == null )
+		{
+			Debug.LogError( "ChestPrefabSetup: missing smash prefab at " + prefabPath );
+			return false;
+		}
+
+		try
+		{
+			TreasureItem item = root.GetComponent<TreasureItem>();
+			if ( item == null )
+				item = root.AddComponent<TreasureItem>();
+
+			ChestInteractable chest = root.GetComponent<ChestInteractable>();
+			if ( chest == null )
+				chest = root.AddComponent<ChestInteractable>();
+
+			ChestDefinition def = AssetDatabase.LoadAssetAtPath<ChestDefinition>( chestDefinitionPath );
+			if ( def != null )
+			{
+				SerializedObject so = new SerializedObject( chest );
+				so.FindProperty( "chestDefinition" ).objectReferenceValue = def;
+				so.ApplyModifiedPropertiesWithoutUndo();
+			}
+
+			Feedbacks openFeedback = EnsureSmashFeedbacks( root );
+			chest.EditorSetOpenFeedback( openFeedback );
+			Debug.Log( "ChestPrefabSetup: smash feedbacks on '" + prefabPath + "'" );
+
+			PrefabUtility.SaveAsPrefabAsset( root, prefabPath );
+			return true;
+		}
+		finally
+		{
+			PrefabUtility.UnloadPrefabContents( root );
+		}
+	}
+
 	static Feedbacks EnsureOpenFeedbacks( GameObject root, out Transform lid )
 	{
 		lid = FindLikelyLid( root.transform );
@@ -104,6 +155,38 @@ public static class ChestPrefabSetup
 
 		ParallelFeedback parallel = new ParallelFeedback();
 		parallel.Feedbacks.Add( rotate );
+		parallel.Feedbacks.Add( shake );
+		feedbacks.AddFeedback( parallel );
+
+		EditorUtility.SetDirty( feedbacks );
+		return feedbacks;
+	}
+
+	static Feedbacks EnsureSmashFeedbacks( GameObject root )
+	{
+		Transform existing = root.transform.Find( OpenFeedbackChildName );
+		GameObject host = existing != null ? existing.gameObject : new GameObject( OpenFeedbackChildName );
+		if ( existing == null )
+			host.transform.SetParent( root.transform, false );
+
+		Feedbacks feedbacks = host.GetComponent<Feedbacks>();
+		if ( feedbacks == null )
+			feedbacks = host.AddComponent<Feedbacks>();
+
+		feedbacks.FeedbackList.Clear();
+
+		PunchScaleFeedback punch = new PunchScaleFeedback();
+		punch.Target = root.transform;
+		punch.Punch = new Vector3( 0.18f, -0.28f, 0.18f );
+		punch.Duration = 0.22f;
+
+		ShakeTransformFeedback shake = new ShakeTransformFeedback();
+		shake.Target = root.transform;
+		shake.Duration = 0.22f;
+		shake.Strength = 0.06f;
+
+		ParallelFeedback parallel = new ParallelFeedback();
+		parallel.Feedbacks.Add( punch );
 		parallel.Feedbacks.Add( shake );
 		feedbacks.AddFeedback( parallel );
 

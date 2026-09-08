@@ -284,6 +284,9 @@ public class TreasureCreationWindow : EditorWindow
 				_request.ChestType = EditorGUILayout.TextField( "Chest Type", _request.ChestType );
 				_request.KeyType = (KeyType)EditorGUILayout.EnumPopup( "Required Key", _request.KeyType );
 				_request.ChestStartsLocked = EditorGUILayout.Toggle( "Starts Locked", _request.ChestStartsLocked );
+				_request.ChestDestroyOnOpen = EditorGUILayout.Toggle(
+					"Destroy On Open (barrel / crate)",
+					_request.ChestDestroyOnOpen );
 				_request.ChestLockpickDuration = EditorGUILayout.FloatField(
 					"Lockpick Duration",
 					_request.ChestLockpickDuration );

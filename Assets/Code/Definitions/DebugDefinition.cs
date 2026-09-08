@@ -12,8 +12,8 @@ public class DebugDefinition : ScriptableObject
 	[Tooltip( "Skip spawning coins, gems, and artifacts for all treasure piles in play mode." )]
 	public bool disableTreasureSpawning = false;
 
-	[Tooltip( "Skip contextual tutorial popups from gameplay triggers. Debug overlay force-show and pause replay still work." )]
-	public bool disableTutorials = true;
+	[Tooltip( "Skip contextual tutorial popups from gameplay triggers. Debug overlay force-show and pause replay still work. Honored in player builds." )]
+	public bool disableTutorials = false;
 
 	public static bool TreasureSpawningDisabled
 	{

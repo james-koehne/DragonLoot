@@ -16,8 +16,8 @@ MonoBehaviour:
   tags:
   - intro
   conditions:
-  - type: 0
-    targetId: 
+  - type: 5
+    targetId: tut_movement
     requiredTreasure: {fileID: 0}
     filterByCategory: 0
     requiredCategory: 0

@@ -159,6 +159,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4804e9dcb9b2588449a73e9075e4dcdf
+    m_Address: Minecart/Minecart
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 48e26d872c8daa0448f6a0d9026f0b88
     m_Address: Assets/Addressables/Treasure/Artifacts/BrassCandelabrumVisual.prefab
     m_ReadOnly: 0
@@ -226,6 +231,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6920cdadd1e6e6a4a838bdbde5894bd7
+    m_Address: Assets/Addressables/Treasure/Artifacts/Crate_02Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 69908667866a374478d5b530c22aedd9
     m_Address: Assets/Definitions/WorldEventCatalogDefinition.asset
     m_ReadOnly: 0
@@ -248,6 +258,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 83a3d21643b327b41a9b0ccfab599fd3
+    m_Address: Minecart/CallPost
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 84ce32da0d1fb184e9c2d264f955ee4a
     m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_06Visual.prefab
     m_ReadOnly: 0
@@ -265,6 +280,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 8edf2ac77769e2449a9d58424686fada
     m_Address: Assets/Addressables/Treasure/Chests/IronChest.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8ee0ecfd9ebb93a4dae90671cf568338
+    m_Address: Assets/Addressables/Treasure/Artifacts/Barrel_01Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -345,6 +365,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b459264e2e0000745bffd817b9b3687f
+    m_Address: Minecart/MinecartDrive
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: b6c0e81f3d2a5139d0b4c897f2a5e136
     m_Address: Tables/MixedDisplayTable
@@ -503,6 +528,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: eec7108b5ef517048bef02f1c5a82182
+    m_Address: Assets/Addressables/Treasure/Artifacts/Crate_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: eedfcfef417e10c4eb34affe9b184e7c
     m_Address: Assets/Addressables/Treasure/Gems/AmethystVisual.prefab

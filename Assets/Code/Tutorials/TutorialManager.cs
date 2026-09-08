@@ -13,6 +13,8 @@ public class TutorialManager : MonoBehaviour
 	const float TaskCompleteHoldPadding = 0.15f;
 	const float TutorialCompleteDwellSeconds = 1.1f;
 	const float PostHideGapSeconds = 0.55f;
+	const float PrecompletedRevealSeconds = 0.55f;
+	const string JumpTutorialId = "tut_jumping";
 
 	enum CeremonyPhase
 	{
@@ -20,7 +22,8 @@ public class TutorialManager : MonoBehaviour
 		TaskLock = 1,
 		TutorialComplete = 2,
 		Hiding = 3,
-		Cooldown = 4
+		Cooldown = 4,
+		PrecompletedReveal = 5
 	}
 
 	static TutorialManager _instance;
@@ -28,7 +31,10 @@ public class TutorialManager : MonoBehaviour
 	readonly HashSet<string> _insideVolumes = new HashSet<string>();
 	readonly HashSet<string> _sessionCompletedTaskKeys = new HashSet<string>();
 	readonly HashSet<string> _completedThisSession = new HashSet<string>();
+	readonly HashSet<string> _hadContextIds = new HashSet<string>();
+	readonly HashSet<string> _deferredUncheckedTaskIds = new HashSet<string>();
 	readonly List<TutorialDefinition> _matchingScratch = new List<TutorialDefinition>( 8 );
+	readonly List<TutorialDefinition> _cycleScratch = new List<TutorialDefinition>( 8 );
 
 	TutorialCatalogDefinition _catalog;
 	TutorialPopupUI _popup;
@@ -38,17 +44,26 @@ public class TutorialManager : MonoBehaviour
 	bool _subscribed;
 	bool _aimingTreasurePile;
 	bool _aimingCoinStack;
+	bool _aimingMinecart;
 	bool _playerAboveHeight;
 	bool _wasPlayerGliding;
-	int _sorterCoinsSortedWhileActive;
-	bool _sorterStackLoadedWhileActive;
+	int _sorterCoinsSorted;
+	bool _sorterStackLoaded;
 	TreasureCategory _heldCategory;
 	bool _isHolding;
 	string _lastShownId;
 	string _lastActivatedId;
+	bool _cyclePinned;
 	CeremonyPhase _phase;
 	float _phaseUntil;
 	bool _finishMarkedComplete;
+	string _endedCinematicPresentationId;
+	float _cinematicEndedUnscaledTime = -1f;
+	bool _afterCinematicContext;
+	bool _hasTriedSprint;
+	bool _walkWithoutSprintReady;
+	float _walkWithoutSprintSeconds;
+	bool _walkWithoutSprintContext;
 
 	public static TutorialManager Instance => _instance;
 
@@ -110,14 +125,26 @@ public class TutorialManager : MonoBehaviour
 		_insideVolumes.Clear();
 		_aimingTreasurePile = false;
 		_aimingCoinStack = false;
+		_aimingMinecart = false;
 		_playerAboveHeight = false;
 		_wasPlayerGliding = false;
-		_sorterCoinsSortedWhileActive = 0;
-		_sorterStackLoadedWhileActive = false;
+		_sorterCoinsSorted = 0;
+		_sorterStackLoaded = false;
 		_isHolding = false;
+		_cyclePinned = false;
+		_endedCinematicPresentationId = null;
+		_cinematicEndedUnscaledTime = -1f;
+		_afterCinematicContext = false;
+		_hasTriedSprint = false;
+		_walkWithoutSprintReady = false;
+		_walkWithoutSprintSeconds = 0f;
+		_walkWithoutSprintContext = false;
+		_deferredUncheckedTaskIds.Clear();
+		_hadContextIds.Clear();
 		HydrateCompletedFromSave();
 		RefreshFromPlayerState();
 		EvaluateContext( force: true );
+		RefreshCycleHint();
 	}
 
 	void HydrateCompletedFromSave()
@@ -126,13 +153,23 @@ public class TutorialManager : MonoBehaviour
 		if ( save == null )
 			return;
 		save.EnsureTutorialProgress();
-		if ( save.completedTutorialIds == null )
-			return;
-		for ( int i = 0; i < save.completedTutorialIds.Count; i++ )
+		if ( save.completedTutorialIds != null )
 		{
-			string id = save.completedTutorialIds[ i ];
+			for ( int i = 0; i < save.completedTutorialIds.Count; i++ )
+			{
+				string id = save.completedTutorialIds[ i ];
+				if ( !string.IsNullOrEmpty( id ) )
+					_completedThisSession.Add( id );
+			}
+		}
+
+		if ( save.discoveredTutorialIds == null )
+			return;
+		for ( int i = 0; i < save.discoveredTutorialIds.Count; i++ )
+		{
+			string id = save.discoveredTutorialIds[ i ];
 			if ( !string.IsNullOrEmpty( id ) )
-				_completedThisSession.Add( id );
+				_hadContextIds.Add( id );
 		}
 	}
 
@@ -170,6 +207,10 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<CoinSorterUsedEvent>( OnCoinSorterUsed );
 		EventBus.Subscribe<CoinSorterStackLoadedEvent>( OnCoinSorterStackLoaded );
 		EventBus.Subscribe<ChestOpenedEvent>( OnChestOpened );
+		EventBus.Subscribe<MinecartShovedEvent>( OnMinecartShoved );
+		EventBus.Subscribe<MinecartHoldPushStartedEvent>( OnMinecartHoldPushStarted );
+		EventBus.Subscribe<MinecartCargoLoadedEvent>( OnMinecartCargoLoaded );
+		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		_subscribed = true;
 	}
 
@@ -195,6 +236,10 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<CoinSorterUsedEvent>( OnCoinSorterUsed );
 		EventBus.Unsubscribe<CoinSorterStackLoadedEvent>( OnCoinSorterStackLoaded );
 		EventBus.Unsubscribe<ChestOpenedEvent>( OnChestOpened );
+		EventBus.Unsubscribe<MinecartShovedEvent>( OnMinecartShoved );
+		EventBus.Unsubscribe<MinecartHoldPushStartedEvent>( OnMinecartHoldPushStarted );
+		EventBus.Unsubscribe<MinecartCargoLoadedEvent>( OnMinecartCargoLoaded );
+		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		_subscribed = false;
 	}
 
@@ -207,12 +252,19 @@ public class TutorialManager : MonoBehaviour
 
 		if ( _activeIsReplay )
 			return;
-		if ( _phase != CeremonyPhase.None )
-			return;
 
 		RefreshFromPlayerState();
 		PollMoveLookTasks();
 		PollGlideTask();
+		PollJumpSprintTasks();
+		TickWalkWithoutSprint();
+		TickAfterCinematicActivation();
+		TickWalkWithoutSprintActivation();
+
+		if ( _phase != CeremonyPhase.None )
+			return;
+
+		PollTutorialCycle();
 		EvaluateContext( force: false );
 	}
 
@@ -228,6 +280,10 @@ public class TutorialManager : MonoBehaviour
 			case CeremonyPhase.TaskLock:
 				_phase = CeremonyPhase.None;
 				EvaluateContext( force: true );
+				break;
+
+			case CeremonyPhase.PrecompletedReveal:
+				RevealPrecompletedTasks();
 				break;
 
 			case CeremonyPhase.TutorialComplete:
@@ -262,7 +318,8 @@ public class TutorialManager : MonoBehaviour
 	bool IsCeremonyBlocking =>
 		_phase == CeremonyPhase.TutorialComplete
 		|| _phase == CeremonyPhase.Hiding
-		|| _phase == CeremonyPhase.Cooldown;
+		|| _phase == CeremonyPhase.Cooldown
+		|| _phase == CeremonyPhase.PrecompletedReveal;
 
 	void RefreshFromPlayerState()
 	{
@@ -286,11 +343,16 @@ public class TutorialManager : MonoBehaviour
 			if ( aimingStack && !_aimingCoinStack )
 				NoteActivationForAimCoinStack();
 			_aimingCoinStack = aimingStack;
+			bool aimingCart = interaction.Current is MinecartInteractable;
+			if ( aimingCart && !_aimingMinecart )
+				NoteActivationForAimMinecart();
+			_aimingMinecart = aimingCart;
 		}
 		else
 		{
 			_aimingTreasurePile = false;
 			_aimingCoinStack = false;
+			_aimingMinecart = false;
 		}
 
 		bool above = player != null && IsPlayerAboveAnyHeightTrigger( player.transform.position.y );
@@ -358,11 +420,6 @@ public class TutorialManager : MonoBehaviour
 
 	void PollMoveLookTasks()
 	{
-		if ( _active == null || _active.tasks == null )
-			return;
-		if ( IsCeremonyBlocking )
-			return;
-
 		GameInput input = InputController.Instance != null ? InputController.Instance.GameInput : null;
 		if ( input == null )
 			return;
@@ -371,34 +428,104 @@ public class TutorialManager : MonoBehaviour
 		if ( player != null && !player.GameplayInputEnabled )
 			return;
 
-		bool needMove = false;
-		bool needLook = false;
-		for ( int i = 0; i < _active.tasks.Length; i++ )
-		{
-			TutorialTask task = _active.tasks[ i ];
-			if ( task == null || string.IsNullOrEmpty( task.id ) )
-				continue;
-			if ( IsTaskCompleted( _active.id, task.id ) )
-				continue;
-			if ( task.completeTrigger == TutorialTaskCompleteType.Move )
-				needMove = true;
-			else if ( task.completeTrigger == TutorialTaskCompleteType.Look )
-				needLook = true;
-		}
-
-		if ( needMove && input.Move != null )
+		if ( input.Move != null )
 		{
 			Vector2 move = input.Move.ReadValue<Vector2>();
 			if ( move.sqrMagnitude > 0.04f )
 				TryCompleteTask( TutorialTaskCompleteType.Move );
 		}
 
-		if ( needLook && input.CameraDelta != null )
+		if ( input.CameraDelta != null )
 		{
 			Vector2 look = input.CameraDelta.ReadValue<Vector2>();
 			if ( look.sqrMagnitude > 0.25f )
 				TryCompleteTask( TutorialTaskCompleteType.Look );
 		}
+	}
+
+	void PollTutorialCycle()
+	{
+		if ( _activeIsReplay )
+			return;
+		if ( _phase != CeremonyPhase.None )
+			return;
+		if ( PauseMenuUI.IsOpen || MapUI.IsOpen || DebugOverlay.IsOpen )
+			return;
+
+		Keyboard keyboard = Keyboard.current;
+		if ( keyboard == null || !keyboard.tabKey.wasPressedThisFrame )
+			return;
+
+		TryCycleNextTutorial();
+	}
+
+	void TryCycleNextTutorial()
+	{
+		CollectCycleCandidates( _cycleScratch );
+		if ( _cycleScratch.Count <= 1 )
+			return;
+
+		int currentIndex = -1;
+		string currentId = _active != null ? _active.id : _lastShownId;
+		if ( !string.IsNullOrEmpty( currentId ) )
+		{
+			for ( int i = 0; i < _cycleScratch.Count; i++ )
+			{
+				if ( _cycleScratch[ i ] != null && _cycleScratch[ i ].id == currentId )
+				{
+					currentIndex = i;
+					break;
+				}
+			}
+		}
+
+		int nextIndex = currentIndex < 0 ? 0 : ( currentIndex + 1 ) % _cycleScratch.Count;
+		TutorialDefinition next = _cycleScratch[ nextIndex ];
+		if ( next == null || ( _active != null && _active.id == next.id ) )
+			return;
+
+		_cyclePinned = true;
+		_lastActivatedId = next.id;
+		RequestShow( next );
+	}
+
+	void CollectCycleCandidates( List<TutorialDefinition> into )
+	{
+		into.Clear();
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( !_hadContextIds.Contains( def.id ) && !IsDiscovered( def.id ) )
+				continue;
+			into.Add( def );
+		}
+	}
+
+	void RefreshCycleHint()
+	{
+		if ( _popup == null )
+			return;
+
+		CollectCycleCandidates( _cycleScratch );
+		bool canCycle = _popup.IsVisible && _cycleScratch.Count > 1;
+		_popup.SetCycleHint( canCycle, canCycle ? "[Tab] Next tutorial" : string.Empty );
+	}
+
+	void NoteHadContext( TutorialDefinition def )
+	{
+		if ( def == null || string.IsNullOrEmpty( def.id ) )
+			return;
+		if ( !IsEligible( def ) )
+			return;
+		if ( !_hadContextIds.Add( def.id ) )
+			return;
+		MarkDiscovered( def.id );
+		RefreshCycleHint();
 	}
 
 	void PollGlideTask()
@@ -408,6 +535,147 @@ public class TutorialManager : MonoBehaviour
 		if ( gliding && !_wasPlayerGliding )
 			TryCompleteTask( TutorialTaskCompleteType.Glide );
 		_wasPlayerGliding = gliding;
+	}
+
+	void PollJumpSprintTasks()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		GameInput input = InputController.Instance != null ? InputController.Instance.GameInput : null;
+		if ( player != null && player.GameplayInputEnabled && input != null && input.Sprint != null && input.Sprint.WasPressedThisFrame() )
+			_hasTriedSprint = true;
+
+		if ( player != null && player.WasJumpThisFrame )
+			TryCompleteTask( TutorialTaskCompleteType.Jump );
+
+		if ( player != null && player.MovementState == PlayerMovementState.Sprinting )
+			TryCompleteTask( TutorialTaskCompleteType.Sprint );
+	}
+
+	void TickWalkWithoutSprint()
+	{
+		if ( _hasTriedSprint || _walkWithoutSprintReady )
+		{
+			_walkWithoutSprintSeconds = 0f;
+			return;
+		}
+
+		if ( !CanCountSprintWalkTimer() )
+		{
+			_walkWithoutSprintSeconds = 0f;
+			return;
+		}
+
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		GameInput input = InputController.Instance != null ? InputController.Instance.GameInput : null;
+		if ( player == null || input == null || input.Move == null )
+		{
+			_walkWithoutSprintSeconds = 0f;
+			return;
+		}
+
+		if ( !player.GameplayInputEnabled || player.IsPlanarMovementLocked || !player.IsGrounded )
+		{
+			_walkWithoutSprintSeconds = 0f;
+			return;
+		}
+
+		if ( player.WasJumpThisFrame || player.MovementState != PlayerMovementState.Walking )
+		{
+			_walkWithoutSprintSeconds = 0f;
+			return;
+		}
+
+		Vector2 move = input.Move.ReadValue<Vector2>();
+		if ( move.sqrMagnitude <= 0.04f )
+		{
+			_walkWithoutSprintSeconds = 0f;
+			return;
+		}
+
+		_walkWithoutSprintSeconds += Time.unscaledDeltaTime;
+		float need = ResolveWalkSecondsToShow();
+		if ( _walkWithoutSprintSeconds >= need )
+			_walkWithoutSprintReady = true;
+	}
+
+	bool CanCountSprintWalkTimer()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return IsCompleted( JumpTutorialId );
+
+		TutorialDefinition jump = null;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def != null && def.id == JumpTutorialId )
+			{
+				jump = def;
+				break;
+			}
+		}
+
+		if ( jump == null )
+			return true;
+
+		return IsCompleted( JumpTutorialId );
+	}
+
+	float ResolveWalkSecondsToShow()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return 5f;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || def.trigger != TutorialTriggerType.WalkWithoutSprint )
+				continue;
+			return def.walkSecondsToShow > 0f ? def.walkSecondsToShow : 5f;
+		}
+
+		return 5f;
+	}
+
+	void TickAfterCinematicActivation()
+	{
+		bool after = IsAnyAfterCinematicContext();
+		if ( after && !_afterCinematicContext )
+			NoteActivationForTrigger( TutorialTriggerType.AfterCinematic );
+		_afterCinematicContext = after;
+	}
+
+	void TickWalkWithoutSprintActivation()
+	{
+		bool ready = _walkWithoutSprintReady && !_hasTriedSprint;
+		if ( ready && !_walkWithoutSprintContext )
+			NoteActivationForTrigger( TutorialTriggerType.WalkWithoutSprint );
+		_walkWithoutSprintContext = ready;
+	}
+
+	bool IsAnyAfterCinematicContext()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return false;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.AfterCinematic )
+				continue;
+			if ( IsAfterCinematicContext( def ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	void OnCinematicPresentationEnded( CinematicPresentationEndedEvent evt )
+	{
+		if ( string.IsNullOrEmpty( evt.PresentationId ) )
+			return;
+		_endedCinematicPresentationId = evt.PresentationId;
+		_cinematicEndedUnscaledTime = Time.unscaledTime;
 	}
 
 	void OnVolumeEntered( VolumeEnteredEvent evt )
@@ -536,29 +804,67 @@ public class TutorialManager : MonoBehaviour
 		TryCompleteTask( TutorialTaskCompleteType.OpenChest );
 	}
 
+	void OnMinecartShoved( MinecartShovedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.PushMinecartTap );
+	}
+
+	void OnMinecartHoldPushStarted( MinecartHoldPushStartedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.HoldMinecart );
+	}
+
+	void OnMinecartCargoLoaded( MinecartCargoLoadedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.LoadMinecart );
+	}
+
 	void OnCoinSorterUsed( CoinSorterUsedEvent evt )
 	{
-		if ( _active == null )
-			return;
-		_sorterCoinsSortedWhileActive++;
-		int need = _active.sorterCoinsToComplete > 0 ? _active.sorterCoinsToComplete : 30;
-		if ( _sorterStackLoadedWhileActive || _sorterCoinsSortedWhileActive >= need )
-			TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
+		_sorterCoinsSorted++;
+		TryCompleteSorterIfReady();
 	}
 
 	void OnCoinSorterStackLoaded( CoinSorterStackLoadedEvent evt )
 	{
 		if ( evt.CoinCount < 2 )
 			return;
-		_sorterStackLoadedWhileActive = true;
-		// Completes on the next sorted coin (or immediately if already sorting).
-		if ( _sorterCoinsSortedWhileActive > 0 )
-			TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
+		_sorterStackLoaded = true;
+		if ( _sorterCoinsSorted > 0 )
+			TryCompleteSorterIfReady();
+	}
+
+	void TryCompleteSorterIfReady()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+		{
+			if ( _sorterStackLoaded || _sorterCoinsSorted >= 30 )
+				TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
+			return;
+		}
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || IsCompleted( def.id ) )
+				continue;
+			int need = def.sorterCoinsToComplete > 0 ? def.sorterCoinsToComplete : 30;
+			if ( _sorterStackLoaded || _sorterCoinsSorted >= need )
+			{
+				TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
+				return;
+			}
+		}
 	}
 
 	void TryCompleteEnterVolumeTasks( string volumeId )
 	{
-		if ( _active == null || _active.tasks == null || string.IsNullOrEmpty( volumeId ) )
+		if ( string.IsNullOrEmpty( volumeId ) )
+			return;
+
+		RecordMatchingTasks( TutorialTaskCompleteType.EnterVolume, volumeId );
+
+		if ( _active == null || _active.tasks == null )
 			return;
 		if ( IsCeremonyBlocking )
 			return;
@@ -584,49 +890,30 @@ public class TutorialManager : MonoBehaviour
 			return;
 		}
 
-		CompleteMatchingEnterVolumeTasks( volumeId );
+		PlayActiveTaskCompleteCeremony();
 	}
 
 	void CompleteMatchingEnterVolumeTasks( string volumeId )
 	{
-		if ( _active == null || _active.tasks == null || string.IsNullOrEmpty( volumeId ) )
+		RecordMatchingTasks( TutorialTaskCompleteType.EnterVolume, volumeId );
+		PlayActiveTaskCompleteCeremony();
+	}
+
+	void NoteActivationForTrigger( TutorialTriggerType trigger )
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
 			return;
-
-		bool any = false;
-		for ( int i = 0; i < _active.tasks.Length; i++ )
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
-			TutorialTask task = _active.tasks[ i ];
-			if ( task == null || task.completeTrigger != TutorialTaskCompleteType.EnterVolume )
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
 				continue;
-			if ( string.IsNullOrEmpty( task.id ) || task.completeVolumeId != volumeId )
+			if ( def.trigger != trigger )
 				continue;
-			if ( IsTaskCompleted( _active.id, task.id ) )
+			if ( !IsContextActive( def ) )
 				continue;
-
-			MarkTaskCompleted( _active.id, task.id );
-			any = true;
+			MarkRecentlyActivated( def.id );
 		}
-
-		if ( !any )
-			return;
-
-		if ( _popup != null )
-		{
-			_popup.SetTasks( TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive ) );
-			_popup.PlayTaskComplete();
-		}
-
-		if ( AreAllTasksComplete( _active ) )
-		{
-			BeginTutorialCompleteCeremony();
-			return;
-		}
-
-		_phase = CeremonyPhase.TaskLock;
-		float lockSeconds = 0.35f;
-		if ( _popup != null )
-			lockSeconds = _popup.TaskCompleteFeedbackDuration + TaskCompleteHoldPadding;
-		_phaseUntil = Time.unscaledTime + lockSeconds;
 	}
 
 	void NoteActivationForVolume( string volumeId )
@@ -685,6 +972,20 @@ public class TutorialManager : MonoBehaviour
 		}
 	}
 
+	void NoteActivationForAimMinecart()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger == TutorialTriggerType.AimMinecart )
+				MarkRecentlyActivated( def.id );
+		}
+	}
+
 	void NoteActivationForManyCoinsIfReady()
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
@@ -707,6 +1008,8 @@ public class TutorialManager : MonoBehaviour
 		if ( string.IsNullOrEmpty( id ) )
 			return;
 		_lastActivatedId = id;
+		if ( _active == null || _active.id != id )
+			_cyclePinned = false;
 	}
 
 	void EvaluateContext( bool force )
@@ -732,6 +1035,7 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( !IsContextActive( def ) )
 				continue;
+			NoteHadContext( def );
 			_matchingScratch.Add( def );
 		}
 
@@ -741,7 +1045,8 @@ public class TutorialManager : MonoBehaviour
 		// activated context (e.g. picking up a gem) to take priority.
 		if ( _active != null && IsEligible( _active ) )
 		{
-			if ( best != null
+			if ( !_cyclePinned
+			     && best != null
 			     && best.id != _active.id
 			     && best.id == _lastActivatedId
 			     && IsContextActive( best ) )
@@ -752,6 +1057,7 @@ public class TutorialManager : MonoBehaviour
 
 			if ( force )
 				RefreshActivePopup();
+			RefreshCycleHint();
 			return;
 		}
 
@@ -762,10 +1068,12 @@ public class TutorialManager : MonoBehaviour
 		{
 			if ( force )
 				RefreshActivePopup();
+			RefreshCycleHint();
 			return;
 		}
 
 		RequestShow( best );
+		RefreshCycleHint();
 	}
 
 	TutorialDefinition PickBestMatch( List<TutorialDefinition> matches )
@@ -832,6 +1140,15 @@ public class TutorialManager : MonoBehaviour
 			case TutorialTriggerType.AboveHeight:
 				primary = IsAboveHeightContext( def );
 				break;
+			case TutorialTriggerType.AimMinecart:
+				primary = _aimingMinecart;
+				break;
+			case TutorialTriggerType.AfterCinematic:
+				primary = IsAfterCinematicContext( def );
+				break;
+			case TutorialTriggerType.WalkWithoutSprint:
+				primary = _walkWithoutSprintReady && !_hasTriedSprint;
+				break;
 			default:
 				primary = false;
 				break;
@@ -873,6 +1190,21 @@ public class TutorialManager : MonoBehaviour
 			return false;
 		float minY = def != null && def.minHeightY > 0f ? def.minHeightY : 30f;
 		return player.transform.position.y >= minY;
+	}
+
+	bool IsAfterCinematicContext( TutorialDefinition def )
+	{
+		if ( _cinematicEndedUnscaledTime < 0f || string.IsNullOrEmpty( _endedCinematicPresentationId ) )
+			return false;
+
+		string want = def != null && !string.IsNullOrEmpty( def.cinematicPresentationId )
+			? def.cinematicPresentationId
+			: CinematicPresentationController.IntroLedgePresentationId;
+		if ( _endedCinematicPresentationId != want )
+			return false;
+
+		float delay = def != null && def.showDelaySeconds > 0f ? def.showDelaySeconds : 0.75f;
+		return Time.unscaledTime >= _cinematicEndedUnscaledTime + delay;
 	}
 
 	static int CountWorldGroundCoins()
@@ -982,13 +1314,15 @@ public class TutorialManager : MonoBehaviour
 		_lastShownId = def.id;
 		_finishMarkedComplete = false;
 		_phase = CeremonyPhase.None;
-		_sorterCoinsSortedWhileActive = 0;
-		_sorterStackLoadedWhileActive = false;
+		_deferredUncheckedTaskIds.Clear();
 
 		if ( isReplay )
 			ClearSessionTasksFor( def );
 		else
 			MarkDiscovered( def.id );
+
+		if ( !isReplay )
+			CollectDeferredUncheckedTasks( def );
 
 		ApplyMapHighlight( def );
 
@@ -998,7 +1332,49 @@ public class TutorialManager : MonoBehaviour
 			TutorialKeybindFormatter.Format( def.keybindHint ),
 			TutorialPopupUI.FormatTasks( def.tasks, IsTaskCompleteInActive ) );
 
+		_hadContextIds.Add( def.id );
+		RefreshCycleHint();
+
+		if ( _deferredUncheckedTaskIds.Count > 0 )
+		{
+			_phase = CeremonyPhase.PrecompletedReveal;
+			_phaseUntil = Time.unscaledTime + PrecompletedRevealSeconds;
+			return;
+		}
+
 		TryCompleteVolumeTasksIfAlreadyInside();
+	}
+
+	void CollectDeferredUncheckedTasks( TutorialDefinition def )
+	{
+		_deferredUncheckedTaskIds.Clear();
+		if ( def == null || def.tasks == null )
+			return;
+
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( !IsTaskCompleted( def.id, task.id ) )
+				continue;
+			_deferredUncheckedTaskIds.Add( task.id );
+		}
+	}
+
+	void RevealPrecompletedTasks()
+	{
+		if ( _active == null )
+		{
+			_phase = CeremonyPhase.None;
+			_deferredUncheckedTaskIds.Clear();
+			EvaluateContext( force: true );
+			return;
+		}
+
+		_deferredUncheckedTaskIds.Clear();
+		_phase = CeremonyPhase.None;
+		PlayActiveTaskCompleteCeremony();
 	}
 
 	void TryCompleteVolumeTasksIfAlreadyInside()
@@ -1076,11 +1452,13 @@ public class TutorialManager : MonoBehaviour
 		_active = null;
 		_activeIsReplay = false;
 		_finishMarkedComplete = false;
+		_deferredUncheckedTaskIds.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
 		if ( _popup != null && _popup.IsVisible )
 			_popup.HideImmediate();
 
+		RefreshCycleHint();
 		_phase = CeremonyPhase.Cooldown;
 		_phaseUntil = Time.unscaledTime + 0.05f;
 	}
@@ -1121,6 +1499,8 @@ public class TutorialManager : MonoBehaviour
 	{
 		if ( _active == null )
 			return false;
+		if ( _deferredUncheckedTaskIds.Contains( taskId ) )
+			return false;
 		return IsTaskCompleted( _active.id, taskId );
 	}
 
@@ -1128,27 +1508,113 @@ public class TutorialManager : MonoBehaviour
 	{
 		if ( completeType == TutorialTaskCompleteType.None )
 			return;
+		if ( _activeIsReplay )
+		{
+			TryCompleteActiveTaskOnly( completeType );
+			return;
+		}
+
+		bool activeHit = RecordMatchingTasks( completeType, null );
+		if ( !activeHit )
+			return;
+		if ( IsCeremonyBlocking )
+			return;
+
+		PlayActiveTaskCompleteCeremony();
+	}
+
+	void TryCompleteActiveTaskOnly( TutorialTaskCompleteType completeType )
+	{
 		if ( _active == null || _active.tasks == null )
 			return;
 		if ( IsCeremonyBlocking )
 			return;
 
-		bool any = false;
-		for ( int i = 0; i < _active.tasks.Length; i++ )
+		bool any = RecordTasksOnDefinition( _active, completeType, null );
+		if ( !any )
+			return;
+
+		PlayActiveTaskCompleteCeremony();
+	}
+
+	bool RecordMatchingTasks( TutorialTaskCompleteType completeType, string volumeId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return RecordTasksOnDefinition( _active, completeType, volumeId );
+
+		bool activeHit = false;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
-			TutorialTask task = _active.tasks[ i ];
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || string.IsNullOrEmpty( def.id ) )
+				continue;
+			if ( IsCompleted( def.id ) )
+				continue;
+
+			bool any = RecordTasksOnDefinition( def, completeType, volumeId );
+			if ( !any )
+				continue;
+
+			if ( completeType == TutorialTaskCompleteType.EnterVolume && def.completeAllTasksOnVolumeEnter )
+				MarkAllTasksCompleted( def );
+
+			if ( _active != null && def.id == _active.id )
+				activeHit = true;
+		}
+
+		return activeHit;
+	}
+
+	bool RecordTasksOnDefinition( TutorialDefinition def, TutorialTaskCompleteType completeType, string volumeId )
+	{
+		if ( def == null || def.tasks == null || completeType == TutorialTaskCompleteType.None )
+			return false;
+
+		bool any = false;
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
 			if ( task == null || task.completeTrigger != completeType )
 				continue;
 			if ( string.IsNullOrEmpty( task.id ) )
 				continue;
-			if ( IsTaskCompleted( _active.id, task.id ) )
+			if ( completeType == TutorialTaskCompleteType.EnterVolume )
+			{
+				if ( string.IsNullOrEmpty( volumeId ) || task.completeVolumeId != volumeId )
+					continue;
+			}
+
+			if ( IsTaskCompleted( def.id, task.id ) )
 				continue;
 
-			MarkTaskCompleted( _active.id, task.id );
+			MarkTaskCompleted( def.id, task.id );
 			any = true;
 		}
 
-		if ( !any )
+		return any;
+	}
+
+	void MarkAllTasksCompleted( TutorialDefinition def )
+	{
+		if ( def == null || def.tasks == null )
+			return;
+
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( IsTaskCompleted( def.id, task.id ) )
+				continue;
+			MarkTaskCompleted( def.id, task.id );
+		}
+	}
+
+	void PlayActiveTaskCompleteCeremony()
+	{
+		if ( _active == null || _active.tasks == null )
+			return;
+		if ( IsCeremonyBlocking )
 			return;
 
 		if ( _popup != null )
@@ -1387,9 +1853,21 @@ public class TutorialManager : MonoBehaviour
 		_finishMarkedComplete = false;
 		_lastShownId = null;
 		_lastActivatedId = null;
+		_cyclePinned = false;
 		_sessionCompletedTaskKeys.Clear();
 		_completedThisSession.Clear();
+		_hadContextIds.Clear();
 		_insideVolumes.Clear();
+		_deferredUncheckedTaskIds.Clear();
+		_endedCinematicPresentationId = null;
+		_cinematicEndedUnscaledTime = -1f;
+		_afterCinematicContext = false;
+		_hasTriedSprint = false;
+		_walkWithoutSprintReady = false;
+		_walkWithoutSprintSeconds = 0f;
+		_walkWithoutSprintContext = false;
+		_sorterCoinsSorted = 0;
+		_sorterStackLoaded = false;
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
 		if ( _popup != null )
@@ -1428,13 +1906,15 @@ public static class TutorialKeybindFormatter
 
 		string result = template;
 		result = ReplaceToken( result, "Interact", gameInput.Interact );
+		result = ReplaceToken( result, "ContextualInteract", gameInput.ContextualInteract );
 		result = ReplaceToken( result, "SecondaryInteract", gameInput.SecondaryInteract );
-		result = ReplaceToken( result, "WholeStackPickup", gameInput.WholeStackPickup );
-		result = ReplaceToken( result, "WholeStackPlace", gameInput.WholeStackPlace );
+		result = ReplaceToken( result, "WholeStackPickup", gameInput.ContextualInteract );
+		result = ReplaceToken( result, "WholeStackPlace", gameInput.ContextualInteract );
 		result = ReplaceToken( result, "RotateLeft", gameInput.RotateLeft );
 		result = ReplaceToken( result, "RotateRight", gameInput.RotateRight );
 		result = ReplaceToken( result, "Clean", gameInput.Clean );
 		result = ReplaceToken( result, "Jump", gameInput.Jump );
+		result = ReplaceToken( result, "Sprint", gameInput.Sprint );
 		return result;
 	}
 
