@@ -42,6 +42,14 @@ public static class HoverOutlineTargetUtility
 		if ( door != null )
 			return door.CanOutlineFocus( player );
 
+		MinecartInteractable cart = interactable as MinecartInteractable;
+		if ( cart != null )
+			return cart.CanInteract( player );
+
+		MinecartCallPost callPost = interactable as MinecartCallPost;
+		if ( callPost != null )
+			return callPost.CanInteract( player );
+
 		return false;
 	}
 
@@ -158,6 +166,18 @@ public static class HoverOutlineTargetUtility
 		DoorInteractable door = focus as DoorInteractable;
 		if ( door != null )
 			return CollectFromBehaviour( door );
+
+		MinecartInteractable cart = focus as MinecartInteractable;
+		if ( cart != null )
+		{
+			Buffer.Clear();
+			cart.AppendOutlineRenderers( Buffer );
+			return Buffer;
+		}
+
+		MinecartCallPost callPost = focus as MinecartCallPost;
+		if ( callPost != null )
+			return CollectFromBehaviour( callPost );
 
 		return Buffer;
 	}

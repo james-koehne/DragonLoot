@@ -242,27 +242,43 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		int cellsTouched = 0;
 		int cellsChanged = 0;
 
+		if ( _world == null || !_world.IsInitialized )
+		{
+			GoldPileEditTiming.End();
+			return;
+		}
+
+		TreasureSurfaceDefinition def = _world.Definition;
+		if ( def == null || radius <= 0f )
+		{
+			GoldPileEditTiming.End();
+			return;
+		}
+
 		// Cache pile sampling contexts once per stamp (not per cell).
 		GoldPileHeightfield thisHf = _visual != null ? _visual.Heightfield : null;
 		Transform thisRoot = _visual != null ? _visual.transform : null;
 		Matrix4x4 thisW2L = Matrix4x4.identity;
-		Matrix4x4 thisL2W = Matrix4x4.identity;
 		float thisHalf = 0f;
 		float thisMaxH = 0f;
 		float thisRootY = 0f;
+		float thisYScale = 1f;
 		bool hasThisPile = thisHf != null && thisHf.IsInitialized && thisRoot != null;
 		if ( hasThisPile )
 		{
 			thisW2L = thisRoot.worldToLocalMatrix;
-			thisL2W = thisRoot.localToWorldMatrix;
 			thisHalf = thisHf.WorldSize * 0.5f;
 			thisMaxH = thisHf.MaxHeight;
 			thisRootY = thisRoot.position.y;
+			thisYScale = Mathf.Abs( thisRoot.lossyScale.y );
+			if ( thisYScale < 1e-6f )
+				thisYScale = 1f;
 		}
 
 		s_sampleScratch.Clear();
 		if ( sampleAllPiles )
 		{
+			float stampR = Mathf.Max( 0.05f, radius );
 			for ( int b = 0; b < ActiveBridges.Count; b++ )
 			{
 				TreasurePileSurfaceBridge bridge = ActiveBridges[ b ];
@@ -273,14 +289,26 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 				if ( hf == null || !hf.IsInitialized || root == null )
 					continue;
 
+				float half = hf.WorldSize * 0.5f;
+				float pileReach = half * 1.42f;
+				Vector3 delta = worldCenter - root.position;
+				delta.y = 0f;
+				float reach = stampR + pileReach;
+				if ( delta.sqrMagnitude > reach * reach )
+					continue;
+
+				float yScale = Mathf.Abs( root.lossyScale.y );
+				if ( yScale < 1e-6f )
+					yScale = 1f;
+
 				s_sampleScratch.Add( new PileSampleCtx
 				{
 					Heightfield = hf,
 					WorldToLocal = root.worldToLocalMatrix,
-					LocalToWorld = root.localToWorldMatrix,
-					Half = hf.WorldSize * 0.5f,
+					Half = half,
 					MaxHeight = hf.MaxHeight,
-					RootY = root.position.y
+					RootY = root.position.y,
+					YScale = yScale
 				} );
 			}
 		}
@@ -292,64 +320,125 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		int dMaxZ = 0;
 		bool anyDirty = false;
 
-		_world.ForEachCellInRadius( worldCenter, radius, ( chunk, x, z, wx, wz, distSq, radiusSq ) =>
+		float radiusSq = radius * radius;
+		float halfX = def.worldSizeX * 0.5f;
+		float halfZ = def.worldSizeZ * 0.5f;
+		float cell = def.CellSize;
+		float minLocalX = worldCenter.x - def.worldOrigin.x + halfX - radius;
+		float maxLocalX = worldCenter.x - def.worldOrigin.x + halfX + radius;
+		float minLocalZ = worldCenter.z - def.worldOrigin.z + halfZ - radius;
+		float maxLocalZ = worldCenter.z - def.worldOrigin.z + halfZ + radius;
+
+		int minChunkX = Mathf.Clamp( Mathf.FloorToInt( minLocalX / def.chunkSize ), 0, def.ChunkCountX - 1 );
+		int maxChunkX = Mathf.Clamp( Mathf.FloorToInt( maxLocalX / def.chunkSize ), 0, def.ChunkCountX - 1 );
+		int minChunkZ = Mathf.Clamp( Mathf.FloorToInt( minLocalZ / def.chunkSize ), 0, def.ChunkCountZ - 1 );
+		int maxChunkZ = Mathf.Clamp( Mathf.FloorToInt( maxLocalZ / def.chunkSize ), 0, def.ChunkCountZ - 1 );
+
+		for ( int cz = minChunkZ; cz <= maxChunkZ; cz++ )
 		{
-			cellsTouched++;
-			float pileY = sampleAllPiles
-				? SampleMaxPileWorldYCached( wx, wz, s_sampleScratch )
-				: SampleThisPileWorldY( wx, wz, thisHf, thisW2L, thisL2W, thisHalf, thisMaxH, thisRootY, hasThisPile );
-
-			int i = chunk.Index( x, z );
-			float baseH = chunk.BaseHeight[ i ];
-			// Assign Max(base, piles) — not Max(current, piles) — so digs lower Height when pileY drops.
-			float desired = pileY > baseH ? pileY : baseH;
-			if ( Mathf.Abs( chunk.Height[ i ] - desired ) <= 1e-5f )
-				return;
-
-			chunk.Height[ i ] = desired;
-			chunk.PaintTraversable[ i ] = 1;
-			if ( chunk.PaintMaterial[ i ] == ( byte )TreasureSurfaceMaterial.Stone )
-				chunk.PaintMaterial[ i ] = ( byte )TreasureSurfaceMaterial.Gold;
-
-			if ( chunk != dirtyChunk )
+			for ( int cx = minChunkX; cx <= maxChunkX; cx++ )
 			{
-				if ( anyDirty && dirtyChunk != null )
+				TreasureChunkCoord coord = new TreasureChunkCoord( cx, cz );
+				TreasureChunk chunk = _world.EnsureChunkLoaded( coord );
+				if ( chunk == null || !chunk.Loaded )
+					continue;
+
+				float chunkOriginX = cx * def.chunkSize;
+				float chunkOriginZ = cz * def.chunkSize;
+				float chunkWorldMinX = def.worldOrigin.x - halfX + chunkOriginX;
+				float chunkWorldMinZ = def.worldOrigin.z - halfZ + chunkOriginZ;
+				int res = chunk.Resolution;
+
+				int minX = Mathf.Clamp(
+					Mathf.FloorToInt( ( worldCenter.x - radius - chunkWorldMinX ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int maxX = Mathf.Clamp(
+					Mathf.CeilToInt( ( worldCenter.x + radius - chunkWorldMinX ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int minZ = Mathf.Clamp(
+					Mathf.FloorToInt( ( worldCenter.z - radius - chunkWorldMinZ ) / cell - 0.5f ),
+					0,
+					res - 1 );
+				int maxZ = Mathf.Clamp(
+					Mathf.CeilToInt( ( worldCenter.z + radius - chunkWorldMinZ ) / cell - 0.5f ),
+					0,
+					res - 1 );
+
+				if ( minX > maxX || minZ > maxZ )
+					continue;
+
+				// Flush previous chunk dirty rect when entering a new chunk.
+				if ( anyDirty && dirtyChunk != null && dirtyChunk != chunk )
 				{
 					dirtyChunk.ExpandDirtyRect( dMinX, dMaxX, dMinZ, dMaxZ );
-					dirtyChunk.Dirty = true;
+					dirtyChunk = null;
+					anyDirty = false;
 				}
 
-				dirtyChunk = chunk;
-				dMinX = dMaxX = x;
-				dMinZ = dMaxZ = z;
-				anyDirty = true;
-			}
-			else if ( !anyDirty )
-			{
-				dMinX = dMaxX = x;
-				dMinZ = dMaxZ = z;
-				anyDirty = true;
-			}
-			else
-			{
-				if ( x < dMinX )
-					dMinX = x;
-				if ( x > dMaxX )
-					dMaxX = x;
-				if ( z < dMinZ )
-					dMinZ = z;
-				if ( z > dMaxZ )
-					dMaxZ = z;
-			}
+				float[] height = chunk.Height;
+				float[] baseHeight = chunk.BaseHeight;
+				byte[] paintTraversable = chunk.PaintTraversable;
+				byte[] paintMaterial = chunk.PaintMaterial;
 
-			cellsChanged++;
-		} );
+				for ( int z = minZ; z <= maxZ; z++ )
+				{
+					float wz = chunkWorldMinZ + ( z + 0.5f ) * cell;
+					float dz = wz - worldCenter.z;
+					int row = z * res;
+					for ( int x = minX; x <= maxX; x++ )
+					{
+						float wx = chunkWorldMinX + ( x + 0.5f ) * cell;
+						float dx = wx - worldCenter.x;
+						float distSq = dx * dx + dz * dz;
+						if ( distSq > radiusSq )
+							continue;
+
+						cellsTouched++;
+						float pileY = sampleAllPiles
+							? SampleMaxPileWorldYCached( wx, wz, s_sampleScratch )
+							: SampleThisPileWorldY( wx, wz, thisHf, thisW2L, thisHalf, thisMaxH, thisRootY, thisYScale, hasThisPile );
+
+						int i = row + x;
+						float baseH = baseHeight[ i ];
+						// Assign Max(base, piles) — not Max(current, piles) — so digs lower Height when pileY drops.
+						float desired = pileY > baseH ? pileY : baseH;
+						if ( Mathf.Abs( height[ i ] - desired ) <= 1e-5f )
+							continue;
+
+						height[ i ] = desired;
+						paintTraversable[ i ] = 1;
+						if ( paintMaterial[ i ] == ( byte )TreasureSurfaceMaterial.Stone )
+							paintMaterial[ i ] = ( byte )TreasureSurfaceMaterial.Gold;
+
+						if ( !anyDirty || dirtyChunk != chunk )
+						{
+							dirtyChunk = chunk;
+							dMinX = dMaxX = x;
+							dMinZ = dMaxZ = z;
+							anyDirty = true;
+						}
+						else
+						{
+							if ( x < dMinX )
+								dMinX = x;
+							if ( x > dMaxX )
+								dMaxX = x;
+							if ( z < dMinZ )
+								dMinZ = z;
+							if ( z > dMaxZ )
+								dMaxZ = z;
+						}
+
+						cellsChanged++;
+					}
+				}
+			}
+		}
 
 		if ( anyDirty && dirtyChunk != null )
-		{
 			dirtyChunk.ExpandDirtyRect( dMinX, dMaxX, dMinZ, dMaxZ );
-			dirtyChunk.Dirty = true;
-		}
 
 		if ( sw != null )
 		{
@@ -367,10 +456,10 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 	{
 		public GoldPileHeightfield Heightfield;
 		public Matrix4x4 WorldToLocal;
-		public Matrix4x4 LocalToWorld;
 		public float Half;
 		public float MaxHeight;
 		public float RootY;
+		public float YScale;
 	}
 
 	static float SampleThisPileWorldY(
@@ -378,10 +467,10 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		float wz,
 		GoldPileHeightfield hf,
 		Matrix4x4 worldToLocal,
-		Matrix4x4 localToWorld,
 		float half,
 		float maxHeight,
 		float rootY,
+		float yScale,
 		bool valid )
 	{
 		if ( !valid )
@@ -392,7 +481,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 			return float.NegativeInfinity;
 
 		float localH = hf.SampleNormalized( local.x, local.z ) * maxHeight;
-		return localToWorld.MultiplyPoint3x4( new Vector3( local.x, localH, local.z ) ).y;
+		return rootY + localH * yScale;
 	}
 
 	static float SampleMaxPileWorldYCached( float wx, float wz, List<PileSampleCtx> ctx )
@@ -406,7 +495,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 				continue;
 
 			float localH = c.Heightfield.SampleNormalized( local.x, local.z ) * c.MaxHeight;
-			float pileY = c.LocalToWorld.MultiplyPoint3x4( new Vector3( local.x, localH, local.z ) ).y;
+			float pileY = c.RootY + localH * c.YScale;
 			if ( pileY > best )
 				best = pileY;
 		}

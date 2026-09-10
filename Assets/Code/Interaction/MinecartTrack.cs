@@ -63,6 +63,8 @@ public class MinecartTrack : MonoBehaviour
 	Mesh bakedMesh;
 
 	SplineContainer _container;
+	float _cachedLength;
+	bool _lengthDirty = true;
 
 	public static IReadOnlyList<MinecartTrack> ActiveTracks => All;
 
@@ -109,10 +111,19 @@ public class MinecartTrack : MonoBehaviour
 		get
 		{
 			EnsureContainer();
-			if ( _container == null || _container.Spline == null || _container.Spline.Count < 2 )
-				return 0f;
+			if ( !_lengthDirty )
+				return _cachedLength;
 
-			return _container.CalculateLength();
+			if ( _container == null || _container.Spline == null || _container.Spline.Count < 2 )
+			{
+				_cachedLength = 0f;
+				_lengthDirty = false;
+				return 0f;
+			}
+
+			_cachedLength = _container.CalculateLength();
+			_lengthDirty = false;
+			return _cachedLength;
 		}
 	}
 
@@ -135,6 +146,7 @@ public class MinecartTrack : MonoBehaviour
 		if ( !All.Contains( this ) )
 			All.Add( this );
 
+		InvalidateLength();
 		RebuildWalkCollider();
 	}
 
@@ -154,6 +166,12 @@ public class MinecartTrack : MonoBehaviour
 		sleeperSize.y = Mathf.Max( 0.02f, sleeperSize.y );
 		sleeperSize.z = Mathf.Max( 0.04f, sleeperSize.z );
 		colliderSampleStep = Mathf.Max( 0.2f, colliderSampleStep );
+		InvalidateLength();
+	}
+
+	void InvalidateLength()
+	{
+		_lengthDirty = true;
 	}
 
 	void EnsureContainer()
@@ -189,6 +207,7 @@ public class MinecartTrack : MonoBehaviour
 
 	public void RebuildWalkCollider()
 	{
+		InvalidateLength();
 		StripVisualMeshCollider();
 		if ( !IsUsable )
 			return;

@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasureDefinition
   id: Crate_02
   displayName: Crate
-  category: 7
+  category: 8
   variant: Wood
   suppressDiscoveryPopup: 0
   value: 150

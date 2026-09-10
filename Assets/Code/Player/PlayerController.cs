@@ -13,6 +13,8 @@ public enum PlayerMovementState
 [RequireComponent( typeof( CharacterController ) )]
 public class PlayerController : MonoBehaviour
 {
+	public const string GlideAbilityId = "glide";
+
 	const float SlideExitSpeedThreshold = 1.5f;
 	const float MinDownhillSqr = 0.0001f;
 
@@ -38,6 +40,7 @@ public class PlayerController : MonoBehaviour
 	PlayerWholeStackInteraction _wholeStack;
 	CharacterController _characterController;
 	bool gameplayInputEnabled = true;
+	bool _cinematicInputLock;
 	float _verticalVelocity;
 	bool _wasGrounded;
 	Vector3 _planarVelocity;
@@ -230,6 +233,17 @@ public class PlayerController : MonoBehaviour
 	public bool IsDrivingMinecart => _minecartDrive != null && _minecartDrive.IsDriving;
 
 	public bool IsSliding => _isSliding;
+	public bool IsSlideTutorialContext
+	{
+		get
+		{
+			if ( _isSliding )
+				return true;
+			if ( !IsGrounded || !_hasGroundHit || _groundAngle < SlideAngle )
+				return false;
+			return _cameraLook != null && _cameraLook.Pitch >= SlideEnterMinPitch;
+		}
+	}
 	public bool IsClimbing => _isClimbing;
 	public bool IsClimbingEnabled => ClimbingEnabled;
 	public SlideInputMode CurrentSlideInputMode => ActiveSlideInputMode;
@@ -237,7 +251,7 @@ public class PlayerController : MonoBehaviour
 	public float SlideExitBoostSpeed => _slideExitBoostSpeed;
 	public bool IsGliding => _isGliding;
 	public float GroundAngle => _groundAngle;
-	public bool GameplayInputEnabled => gameplayInputEnabled;
+	public bool GameplayInputEnabled => gameplayInputEnabled && !_cinematicInputLock;
 	public bool IsPlanarBraking => _planarBrakeActive;
 	public bool IsPlanarMovementLocked => _planarMovementLockRemaining > 0f || _cinematicPlanarMovementLock;
 	bool IsPlanarMovementRestricted => _planarBrakeActive || IsPlanarMovementLocked;
@@ -290,6 +304,107 @@ public class PlayerController : MonoBehaviour
 		_cinematicPlanarMovementLock = locked;
 		if ( locked )
 			ApplyPlanarMovementLockSideEffects();
+	}
+
+	/// <summary>
+	/// Blocks move, look, jump, interact, and abilities until cleared. Does not unlock the cursor.
+	/// Independent of pause / map / debug overlay <see cref="SetGameplayInputEnabled"/>.
+	/// </summary>
+	public void SetCinematicInputLock( bool locked )
+	{
+		_cinematicInputLock = locked;
+		SetCinematicPlanarMovementLock( locked );
+		if ( _characterController != null )
+			_characterController.enabled = !locked;
+		ApplyGameplayInputEnabled();
+		if ( !locked )
+			SettleStationary();
+	}
+
+	/// <summary>
+	/// Places the body without clearing movement locks. Used to finish a cinematic at a camera pose.
+	/// </summary>
+	public void SnapToWorldPose( Vector3 position, Quaternion rotation )
+	{
+		bool controllerEnabled = _characterController != null && _characterController.enabled;
+		if ( _characterController != null )
+			_characterController.enabled = false;
+
+		transform.SetPositionAndRotation( position, rotation );
+		ClearMovementVelocity();
+		WasLandingThisFrame = false;
+
+		if ( _characterController != null )
+			_characterController.enabled = controllerEnabled;
+	}
+
+	/// <summary>
+	/// Feeds cinematic translation into planar speed / ground probe so footsteps and carry bob still run.
+	/// </summary>
+	public void NotifyCinematicTravel( Vector3 worldDelta, float dt )
+	{
+		Vector3 planar = worldDelta;
+		planar.y = 0f;
+		_planarVelocity = dt > 0.0001f ? planar / dt : Vector3.zero;
+		_verticalVelocity = 0f;
+		GetFlatAxes( out Vector3 flatForward, out Vector3 flatRight );
+		UpdateLocalPlanarVelocity( flatForward, flatRight );
+		_debugFlatMoveIntent = planar.sqrMagnitude > 0.0001f ? planar.normalized : Vector3.zero;
+		_debugMoveVelocity = _planarVelocity;
+		WasJumpThisFrame = false;
+		WasLandingThisFrame = false;
+		_isSliding = false;
+		_isGliding = false;
+		ClearClimb();
+		ProbeGround( planar, _groundNormal, _hasGroundHit );
+		IsGrounded = true;
+		_wasGrounded = true;
+		MovementState = PlayerMovementState.Walking;
+	}
+
+	/// <summary>
+	/// Zeros residual move/slide/glide velocity and plants the body so control returns from a standstill.
+	/// </summary>
+	public void SettleStationary()
+	{
+		ClearMovementVelocity();
+		_isSliding = false;
+		_slideEnterCharge = 0f;
+		ClearSlideExitBoost();
+		ClearClimb();
+		_isGliding = false;
+		_wantsSprint = false;
+		_ignoreGrounding = false;
+		_coyoteTimer = 0f;
+		WasJumpThisFrame = false;
+		WasLandingThisFrame = false;
+		_lastSlideTravelDirection = Vector3.zero;
+		_debugMoveVelocity = Vector3.zero;
+
+		if ( _characterController != null && _characterController.enabled )
+			_characterController.Move( Vector3.zero );
+
+		bool grounded = _characterController != null && _characterController.isGrounded;
+		if ( !grounded && _characterController != null && _characterController.enabled )
+			grounded = ProbeGround( Vector3.zero, _groundNormal, _hasGroundHit );
+
+		IsGrounded = grounded;
+		_wasGrounded = grounded;
+		if ( grounded )
+			_verticalVelocity = GroundStickVelocity;
+
+		UpdateMovementState();
+	}
+
+	void ClearMovementVelocity()
+	{
+		_verticalVelocity = 0f;
+		_planarVelocity = Vector3.zero;
+		_localPlanarVelocity = Vector3.zero;
+		_planarBrakeActive = false;
+		_planarBrakeElapsed = 0f;
+		_planarBrakeDuration = 0f;
+		_planarBrakeStartVelocity = Vector3.zero;
 	}
 
 	void ApplyPlanarMovementLockSideEffects()
@@ -680,6 +795,7 @@ public class PlayerController : MonoBehaviour
 	void Update()
 	{
 		ApplyGravityAndMove();
+		TickMovementFov();
 	}
 
 	bool ProbeGround( Vector3 flatMoveIntent, Vector3 priorGroundNormal, bool hadPriorGround )
@@ -756,6 +872,8 @@ public class PlayerController : MonoBehaviour
 	void ApplyGravityAndMove()
 	{
 		TickPlanarMovementLock( Time.deltaTime );
+		if ( _cinematicInputLock )
+			return;
 
 		if ( IsDrivingMinecart )
 		{
@@ -774,7 +892,7 @@ public class PlayerController : MonoBehaviour
 		bool jumpHeld = false;
 		bool jumpPressed = false;
 
-		if ( gameplayInputEnabled )
+		if ( GameplayInputEnabled )
 		{
 			GameInput input = GetGameInput();
 			if ( input != null )
@@ -827,7 +945,7 @@ public class PlayerController : MonoBehaviour
 		else if ( grounded )
 			_coyoteTimer = 0f;
 
-		if ( gameplayInputEnabled )
+		if ( GameplayInputEnabled )
 		{
 			GameInput input = GetGameInput();
 			if ( input != null )
@@ -867,7 +985,8 @@ public class PlayerController : MonoBehaviour
 				{
 					_isGliding = false;
 				}
-				else if ( _doubleJumpAvailable
+				else if ( HasGlideAbility()
+				          && _doubleJumpAvailable
 				          && !_jumpAvailable
 				          && !IsGrounded
 				          && !_isSliding
@@ -875,13 +994,15 @@ public class PlayerController : MonoBehaviour
 				{
 					_verticalVelocity = DoubleJumpForce;
 					_doubleJumpAvailable = false;
-					_isGliding = true;
-					_ignoreGrounding = true;
-					_isSliding = false;
-					ClearClimb();
-					ClearSlideExitBoost();
-					_hasGroundHit = false;
-					_groundCollider = null;
+					BeginGlide();
+				}
+				else if ( HasGlideAbility()
+				          && !_doubleJumpAvailable
+				          && !IsGrounded
+				          && !_isSliding
+				          && jumpPressed )
+				{
+					BeginGlide();
 				}
 			}
 		}
@@ -984,6 +1105,23 @@ public class PlayerController : MonoBehaviour
 		UpdateLocalPlanarVelocity( flatForward, flatRight );
 		_wasGrounded = grounded;
 		UpdateMovementState();
+	}
+
+	public static bool HasGlideAbility()
+	{
+		AbilitySystem system = AbilitySystem.Instance;
+		return system != null && system.IsUnlocked( GlideAbilityId );
+	}
+
+	void BeginGlide()
+	{
+		_isGliding = true;
+		_ignoreGrounding = true;
+		_isSliding = false;
+		ClearClimb();
+		ClearSlideExitBoost();
+		_hasGroundHit = false;
+		_groundCollider = null;
 	}
 
 	void ResolveJumpGroundingSuppress( CollisionFlags collisionFlags )
@@ -1683,6 +1821,15 @@ public class PlayerController : MonoBehaviour
 		MovementState = PlayerMovementState.Walking;
 	}
 
+	void TickMovementFov()
+	{
+		if ( _cameraLook == null )
+			return;
+
+		bool boost = !_cinematicInputLock && !IsDrivingMinecart && ( _isGliding || _isSliding );
+		_cameraLook.SetMovementFovActive( boost );
+	}
+
 	public void ResetForNewRun()
 	{
 		_verticalVelocity = 0f;
@@ -1696,6 +1843,7 @@ public class PlayerController : MonoBehaviour
 		_planarBrakeStartVelocity = Vector3.zero;
 		_planarMovementLockRemaining = 0f;
 		_cinematicPlanarMovementLock = false;
+		_cinematicInputLock = false;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;
@@ -1712,9 +1860,15 @@ public class PlayerController : MonoBehaviour
 		_hasGroundHit = false;
 		_groundCollider = null;
 		UpdateMovementState();
+		TickMovementFov();
 
 		if ( _carry != null )
 			_carry.Clear();
+
+		if ( _characterController != null )
+			_characterController.enabled = true;
+
+		ApplyGameplayInputEnabled();
 	}
 
 	public void TeleportTo( Vector3 position, Quaternion rotation )
@@ -1735,6 +1889,7 @@ public class PlayerController : MonoBehaviour
 		_planarBrakeStartVelocity = Vector3.zero;
 		_planarMovementLockRemaining = 0f;
 		_cinematicPlanarMovementLock = false;
+		_cinematicInputLock = false;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;
@@ -1751,32 +1906,44 @@ public class PlayerController : MonoBehaviour
 		_hasGroundHit = false;
 		_groundCollider = null;
 		MovementState = PlayerMovementState.Airborne;
+		TickMovementFov();
 
 		if ( _characterController != null )
 			_characterController.enabled = true;
+
+		ApplyGameplayInputEnabled();
 	}
 
 	public void SetGameplayInputEnabled( bool enabled )
 	{
 		gameplayInputEnabled = enabled;
+		ApplyGameplayInputEnabled();
+	}
+
+	void ApplyGameplayInputEnabled()
+	{
+		bool gameplay = gameplayInputEnabled && !_cinematicInputLock;
 
 		if ( _cameraLook != null )
-			_cameraLook.SetInputEnabled( enabled );
+		{
+			_cameraLook.SetInputEnabled( gameplayInputEnabled );
+			_cameraLook.SetLookLocked( _cinematicInputLock );
+		}
 
 		if ( _interaction != null )
-			_interaction.SetInputEnabled( enabled );
+			_interaction.SetInputEnabled( gameplay );
 
 		if ( _placement != null )
-			_placement.SetInputEnabled( enabled );
+			_placement.SetInputEnabled( gameplay );
 
 		if ( _abilities != null )
-			_abilities.SetInputEnabled( enabled );
+			_abilities.SetInputEnabled( gameplay );
 
 		if ( _cleaning != null )
-			_cleaning.SetInputEnabled( enabled );
+			_cleaning.SetInputEnabled( gameplay );
 
 		if ( _wholeStack != null )
-			_wholeStack.SetInputEnabled( enabled );
+			_wholeStack.SetInputEnabled( gameplay );
 	}
 
 	static GameInput GetGameInput()

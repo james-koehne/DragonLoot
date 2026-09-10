@@ -12,7 +12,10 @@ public class TreasureItem : MonoBehaviour
 
 	static readonly int DirtStrengthId = Shader.PropertyToID( "_DirtStrength" );
 	static readonly int ConnectedGlowId = Shader.PropertyToID( "_ConnectedGlow" );
+	static readonly int ReflectionFloorId = Shader.PropertyToID( "_ReflectionFloor" );
 	static MaterialPropertyBlock s_PropertyBlock;
+	static int s_collectableLayer = int.MinValue;
+	static CarryDefinition s_carryDefinitionCache;
 
 	Rigidbody _body;
 	Collider[] _colliders;
@@ -25,11 +28,13 @@ public class TreasureItem : MonoBehaviour
 	bool _distanceForcedSleep;
 	bool _reclaiming;
 	bool _inFlight;
+	bool _streamingHidden;
 	float _stableTimer;
 	bool _usingContinuous;
 	float _cleanProgress = 1f;
 	float _connectedGlow;
 	int _artifactSurfaceBouncesRemaining;
+	bool _heldLightingActive;
 
 	public TreasureDefinition Definition => definition;
 	public TreasureItemState State => _state;
@@ -39,6 +44,14 @@ public class TreasureItem : MonoBehaviour
 	public TreasurePileVisual PileOwner => _owner as TreasurePileVisual;
 	public CoinStackInteractable StackOwner => _owner as CoinStackInteractable;
 	public Rigidbody Body => _body;
+	public Collider[] CachedColliders
+	{
+		get
+		{
+			RefreshColliderCache();
+			return _colliders;
+		}
+	}
 	public bool IsReclaiming => _reclaiming;
 	/// <summary>True while a pickup/place tween owns this item's transform.</summary>
 	public bool IsInFlight => _inFlight;
@@ -102,6 +115,8 @@ public class TreasureItem : MonoBehaviour
 				previous.ReleaseTreasure( this );
 		}
 
+		LooseTreasureManager.Unregister( this );
+		TreasureProximitySleep.Unregister( this );
 		_owner = stackOwner;
 	}
 
@@ -129,9 +144,14 @@ public class TreasureItem : MonoBehaviour
 
 	public void Bind( TreasureDefinition treasure, bool viaAddressables )
 	{
+		bool sameDefinition = definition == treasure;
 		definition = treasure;
 		_releasedViaAddressables = viaAddressables;
-		_renderers = null;
+		if ( !sameDefinition )
+		{
+			_renderers = null;
+			_colliders = null;
+		}
 		_meshVisibilityState = null;
 		if ( definition != null )
 			definition.EnsurePhysicsDefaults();
@@ -206,9 +226,49 @@ public class TreasureItem : MonoBehaviour
 		_originPile = null;
 		_reclaiming = false;
 		_inFlight = false;
-		_renderers = null;
 		_meshVisibilityState = null;
+		_streamingHidden = false;
 		_cleanProgress = 1f;
+	}
+
+	public bool IsSettledForWorldStream
+	{
+		get
+		{
+			if ( _inFlight || _reclaiming )
+				return false;
+			if ( !IsWorldLoose )
+				return false;
+			if ( _owner != null )
+				return false;
+			if ( _state == TreasureItemState.Physics )
+			{
+				if ( _body == null || _body.isKinematic )
+					return true;
+				return _body.IsSleeping();
+			}
+
+			return _state == TreasureItemState.SurfaceRolling;
+		}
+	}
+
+	public void SetStreamingHidden( bool hidden )
+	{
+		_streamingHidden = hidden;
+		SetMeshVisible( !hidden );
+		if ( _colliders == null )
+			EnsureComponents();
+		if ( _colliders != null )
+		{
+			for ( int i = 0; i < _colliders.Length; i++ )
+			{
+				if ( _colliders[ i ] != null )
+					_colliders[ i ].enabled = !hidden;
+			}
+		}
+
+		if ( _body != null )
+			_body.detectCollisions = !hidden;
 	}
 
 	/// <summary>True when loose in the world (physics or surface rolling).</summary>
@@ -243,6 +303,7 @@ public class TreasureItem : MonoBehaviour
 		LooseTreasureManager.Unregister( this );
 		TreasureProximitySleep.Unregister( this );
 		UnregisterFromSurface();
+		SetHeldLighting( enabled: false );
 
 		_owner = pileOwner;
 		_state = TreasureItemState.InPile;
@@ -277,6 +338,7 @@ public class TreasureItem : MonoBehaviour
 		UnregisterFromSurface();
 		CoinColumnCylinderBinder.StripFromItem( this );
 		SetConnectedGlow( 0f );
+		SetHeldLighting( enabled: false );
 
 		_owner = playerOwner;
 		_state = TreasureItemState.Held;
@@ -308,6 +370,7 @@ public class TreasureItem : MonoBehaviour
 		UnregisterFromSurface();
 		CoinColumnCylinderBinder.StripFromItem( this );
 		SetConnectedGlow( 0f );
+		SetHeldLighting( enabled: false );
 
 		_owner = null;
 		_state = TreasureItemState.Physics;
@@ -406,6 +469,7 @@ public class TreasureItem : MonoBehaviour
 		LeavePreviousOwner();
 		TreasureProximitySleep.Unregister( this );
 		UnregisterFromSurface();
+		SetHeldLighting( enabled: false );
 
 		_owner = null;
 		_state = TreasureItemState.SurfaceRolling;
@@ -572,6 +636,7 @@ public class TreasureItem : MonoBehaviour
 		Quaternion worldRotation )
 	{
 		_inFlight = false;
+		SetHeldLighting( enabled: false );
 		if ( _owner != displayOwner )
 		{
 			LeavePreviousOwner();
@@ -606,6 +671,7 @@ public class TreasureItem : MonoBehaviour
 	public void EnterStacked( ITreasureOwner stackOwner, Transform stackRoot, Vector3 localPosition, Quaternion localRotation )
 	{
 		_inFlight = false;
+		SetHeldLighting( enabled: false );
 
 		// Re-asserting the same owner must not ReleaseTreasure — that removes the slot and can DestroyStack.
 		if ( _owner != stackOwner )
@@ -790,7 +856,7 @@ public class TreasureItem : MonoBehaviour
 		if ( GetComponent<TreasureItemInteractable>() == null )
 			gameObject.AddComponent<TreasureItemInteractable>();
 
-		if ( definition != null && definition.category == TreasureCategory.Chest )
+		if ( definition != null && definition.UsesChestInteract() )
 		{
 			ChestInteractable chest = GetComponent<ChestInteractable>();
 			if ( chest == null )
@@ -810,8 +876,19 @@ public class TreasureItem : MonoBehaviour
 	/// </summary>
 	public void EnsureGemSphereCollider()
 	{
-		RefreshColliderCache();
 		float radius = definition != null ? Mathf.Max( 0.05f, definition.pickupRadius ) : 0.35f;
+		if ( _colliders != null && _colliders.Length == 1 )
+		{
+			SphereCollider existing = _colliders[ 0 ] as SphereCollider;
+			if ( existing != null && existing.gameObject == gameObject )
+			{
+				existing.radius = radius;
+				existing.center = Vector3.zero;
+				return;
+			}
+		}
+
+		RefreshColliderCache( force: true );
 
 		SphereCollider sphere = null;
 		if ( _colliders != null )
@@ -841,7 +918,8 @@ public class TreasureItem : MonoBehaviour
 
 		sphere.radius = radius;
 		sphere.center = Vector3.zero;
-		RefreshColliderCache();
+		_colliders = null;
+		RefreshColliderCache( force: true );
 	}
 
 	void LeavePreviousOwner()
@@ -875,6 +953,22 @@ public class TreasureItem : MonoBehaviour
 	}
 
 	/// <summary>
+	/// Raises treasure shader <c>_ReflectionFloor</c> while held so hand loot stays readable in darkness.
+	/// </summary>
+	public void SetHeldLighting( bool enabled )
+	{
+		if ( _heldLightingActive == enabled )
+		{
+			if ( enabled )
+				ApplyDirtVisual();
+			return;
+		}
+
+		_heldLightingActive = enabled;
+		ApplyDirtVisual();
+	}
+
+	/// <summary>
 	/// Shows or hides mesh renderers without touching colliders (used when a column cylinder replaces bulk visuals).
 	/// </summary>
 	public void SetMeshVisible( bool visible )
@@ -895,8 +989,18 @@ public class TreasureItem : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Combined world AABB of all child renderers. Collider hulls are often smaller than the mesh
+	/// Combined world AABB of cached child renderers. Collider hulls are often smaller than the mesh
 	/// (convex statue colliders), so visibility / occupancy should use this instead.
+	/// </summary>
+	public Bounds GetRendererWorldBounds()
+	{
+		EnsureRendererCache();
+		return CombineRendererBounds( _renderers, transform.position );
+	}
+
+	/// <summary>
+	/// Combined world AABB of all child renderers. Allocates; prefer <see cref="GetRendererWorldBounds"/>
+	/// on a live <see cref="TreasureItem"/>.
 	/// </summary>
 	public static Bounds GetCombinedRendererWorldBounds( Transform root, Vector3 fallbackCenter )
 	{
@@ -904,21 +1008,29 @@ public class TreasureItem : MonoBehaviour
 			return new Bounds( fallbackCenter, Vector3.one * 0.5f );
 
 		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
+		return CombineRendererBounds( renderers, fallbackCenter );
+	}
+
+	static Bounds CombineRendererBounds( Renderer[] renderers, Vector3 fallbackCenter )
+	{
 		bool any = false;
 		Bounds bounds = default;
-		for ( int i = 0; i < renderers.Length; i++ )
+		if ( renderers != null )
 		{
-			Renderer renderer = renderers[ i ];
-			if ( renderer == null )
-				continue;
-
-			if ( !any )
+			for ( int i = 0; i < renderers.Length; i++ )
 			{
-				bounds = renderer.bounds;
-				any = true;
+				Renderer renderer = renderers[ i ];
+				if ( renderer == null )
+					continue;
+
+				if ( !any )
+				{
+					bounds = renderer.bounds;
+					any = true;
+				}
+				else
+					bounds.Encapsulate( renderer.bounds );
 			}
-			else
-				bounds.Encapsulate( renderer.bounds );
 		}
 
 		if ( !any )
@@ -926,6 +1038,19 @@ public class TreasureItem : MonoBehaviour
 
 		bounds.Expand( 0.05f );
 		return bounds;
+	}
+
+	public void SetChildCollidersEnabled( bool enabled )
+	{
+		RefreshColliderCache();
+		if ( _colliders == null )
+			return;
+
+		for ( int i = 0; i < _colliders.Length; i++ )
+		{
+			if ( _colliders[ i ] != null )
+				_colliders[ i ].enabled = enabled;
+		}
 	}
 
 	void EnsureRendererCache()
@@ -971,11 +1096,18 @@ public class TreasureItem : MonoBehaviour
 
 	void ApplyCollectableLayer()
 	{
-		int layer = LayerMask.NameToLayer( "Collectable" );
+		int layer = ResolveCollectableLayer();
 		if ( layer < 0 )
 			return;
 
 		SetLayerRecursive( gameObject, layer );
+	}
+
+	static int ResolveCollectableLayer()
+	{
+		if ( s_collectableLayer == int.MinValue )
+			s_collectableLayer = LayerMask.NameToLayer( "Collectable" );
+		return s_collectableLayer;
 	}
 
 	/// <summary>
@@ -1050,9 +1182,17 @@ public class TreasureItem : MonoBehaviour
 			dirtStrength = ( 1f - Mathf.Clamp01( _cleanProgress ) ) * maxDirt;
 		}
 
+		float heldFloor = 0f;
+		if ( _heldLightingActive )
+		{
+			CarryDefinition carry = RuntimeDefinition.Resolve( ref s_carryDefinitionCache );
+			heldFloor = carry != null ? carry.heldReflectionFloor : 0.28f;
+		}
+
 		bool applyDirt = dirtStrength > 0.0001f;
 		bool applyGlow = _connectedGlow > 0.0001f;
-		if ( ( applyDirt || applyGlow ) && s_PropertyBlock == null )
+		bool applyHeldFloor = heldFloor > 0.0001f;
+		if ( ( applyDirt || applyGlow || applyHeldFloor ) && s_PropertyBlock == null )
 			s_PropertyBlock = new MaterialPropertyBlock();
 
 		for ( int i = 0; i < _renderers.Length; i++ )
@@ -1063,11 +1203,13 @@ public class TreasureItem : MonoBehaviour
 
 			bool supportsDirt = RendererSupportsDirt( renderer );
 			bool supportsGlow = RendererSupportsConnectedGlow( renderer );
+			bool supportsFloor = RendererSupportsReflectionFloor( renderer );
 			bool useDirt = applyDirt && supportsDirt;
 			bool useGlow = applyGlow && supportsGlow;
+			bool useHeldFloor = applyHeldFloor && supportsFloor;
 
 			// Clear MPB when idle so SRP Batcher can share the material.
-			if ( !useDirt && !useGlow )
+			if ( !useDirt && !useGlow && !useHeldFloor )
 			{
 				renderer.SetPropertyBlock( null );
 				continue;
@@ -1083,6 +1225,11 @@ public class TreasureItem : MonoBehaviour
 				s_PropertyBlock.SetFloat( ConnectedGlowId, _connectedGlow );
 			else if ( supportsGlow )
 				s_PropertyBlock.SetFloat( ConnectedGlowId, 0f );
+
+			if ( useHeldFloor )
+				s_PropertyBlock.SetFloat( ReflectionFloorId, heldFloor );
+			else if ( supportsFloor )
+				RestoreReflectionFloor( renderer, s_PropertyBlock );
 
 			renderer.SetPropertyBlock( s_PropertyBlock );
 		}
@@ -1136,6 +1283,36 @@ public class TreasureItem : MonoBehaviour
 	static bool MaterialSupportsConnectedGlow( Material material )
 	{
 		return material != null && material.HasProperty( ConnectedGlowId );
+	}
+
+	static bool RendererSupportsReflectionFloor( Renderer renderer )
+	{
+		Material[] mats = renderer.sharedMaterials;
+		if ( mats == null || mats.Length == 0 )
+			return MaterialSupportsReflectionFloor( renderer.sharedMaterial );
+
+		for ( int i = 0; i < mats.Length; i++ )
+		{
+			if ( MaterialSupportsReflectionFloor( mats[ i ] ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool MaterialSupportsReflectionFloor( Material material )
+	{
+		return material != null && material.HasProperty( ReflectionFloorId );
+	}
+
+	static void RestoreReflectionFloor( Renderer renderer, MaterialPropertyBlock block )
+	{
+		if ( renderer == null || block == null )
+			return;
+
+		Material mat = renderer.sharedMaterial;
+		if ( mat != null && mat.HasProperty( ReflectionFloorId ) )
+			block.SetFloat( ReflectionFloorId, mat.GetFloat( ReflectionFloorId ) );
 	}
 
 	static TreasureCleaningDefinition s_cleaningDefinitionCache;
@@ -1193,8 +1370,11 @@ public class TreasureItem : MonoBehaviour
 			ForceSleep();
 	}
 
-	void RefreshColliderCache()
+	void RefreshColliderCache( bool force = false )
 	{
+		if ( !force && _colliders != null && _colliders.Length > 0 )
+			return;
+
 		_colliders = GetComponentsInChildren<Collider>( true );
 	}
 

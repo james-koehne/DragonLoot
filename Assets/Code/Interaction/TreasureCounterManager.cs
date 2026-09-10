@@ -243,7 +243,24 @@ public class TreasureCounterManager : MonoBehaviour
 
 	void SeedCoinTable( CoinDisplayTableInteractable table )
 	{
-		SeedTypedDisplayTable( table != null ? table.AcceptedCoin : null, table != null ? table.CurrentCount : 0 );
+		if ( table == null )
+			return;
+
+		if ( !table.UsesMixedColumnRequirements )
+		{
+			SeedTypedDisplayTable( table.AcceptedCoin, table.CurrentCount );
+			return;
+		}
+
+		int slotCount = table.SlotCount;
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			TreasureDefinition required = table.GetRequiredTreasure( i );
+			int amount = table.GetSlotCount( i );
+			if ( required == null || amount <= 0 )
+				continue;
+			SeedTypedDisplayTable( required, amount );
+		}
 	}
 
 	void SeedMixedTable( MixedDisplayTableInteractable table )

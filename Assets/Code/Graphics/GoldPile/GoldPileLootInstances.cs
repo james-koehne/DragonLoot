@@ -232,6 +232,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	List<int> _eligibleScratch;
 	List<int> _streamRebuildDirtyScratch;
 	HashSet<int> _streamMatrixDirtyChunks;
+	HashSet<int> _streamRebuildDirtySet;
 	List<int> _stickPatchScratch;
 	System.Comparison<int> _coverageComparison;
 	bool[] _cellUsedScratch;
@@ -256,6 +257,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	List<int>[] _mixByEntryScratch;
 	int[] _mixQuotaScratch;
 	int[] _lod0MixQuotas;
+	int[] _lod1MixQuotas;
+	int[] _lod2MixQuotas;
+	int[] _mixQuotaTargetsScratch;
+	float[] _mixRemaindersScratch;
 	int[] _defRankInChunkScratch;
 	int[] _entryRankRunningScratch;
 	int[][] _lodMixAssignedByChunk;
@@ -2526,12 +2531,17 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	void CollectStreamRebuildDirtyChunks( List<int> outDirty )
 	{
 		outDirty.Clear();
+		if ( _streamRebuildDirtySet == null )
+			_streamRebuildDirtySet = new HashSet<int>();
+		else
+			_streamRebuildDirtySet.Clear();
+
 		if ( _streamMatrixDirtyChunks != null )
 		{
 			foreach ( int c in _streamMatrixDirtyChunks )
 			{
-				if ( c >= 0 && !outDirty.Contains( c ) )
-					outDirty.Add( c );
+				if ( c >= 0 )
+					_streamRebuildDirtySet.Add( c );
 			}
 		}
 
@@ -2541,10 +2551,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			for ( int i = 0; i < fromTick.Count; i++ )
 			{
 				int c = fromTick[ i ];
-				if ( c >= 0 && !outDirty.Contains( c ) )
-					outDirty.Add( c );
+				if ( c >= 0 )
+					_streamRebuildDirtySet.Add( c );
 			}
 		}
+
+		foreach ( int c in _streamRebuildDirtySet )
+			outDirty.Add( c );
 	}
 
 	/// <summary>
@@ -2593,18 +2606,69 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			_ditherFadeWidth = Mathf.Max( 0.1f, streamSettings.ditherFadeWidth );
 		}
 
-		CacheLod0MixQuotas();
+		CacheLodMixQuotaCaches();
 	}
 
-	void CacheLod0MixQuotas()
+	void CacheLodMixQuotaCaches()
 	{
 		if ( _definition == null )
 		{
 			_lod0MixQuotas = null;
+			_lod1MixQuotas = null;
+			_lod2MixQuotas = null;
 			return;
 		}
 
-		_lod0MixQuotas = _definition.ComputeMixQuotas( Mathf.Max( 1, _budgetLod0 ) );
+		int entryCount = MixEntryCount();
+		EnsureMixQuotaScratch( entryCount );
+		EnsureMixQuotaArray( ref _lod0MixQuotas, entryCount );
+		EnsureMixQuotaArray( ref _lod1MixQuotas, entryCount );
+		EnsureMixQuotaArray( ref _lod2MixQuotas, entryCount );
+
+		_definition.ComputeMixQuotasInto( Mathf.Max( 1, _budgetLod0 ), _lod0MixQuotas, _mixRemaindersScratch );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 0, _budgetLod1 ), _lod1MixQuotas, _mixRemaindersScratch );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 0, _budgetLod2 ), _lod2MixQuotas, _mixRemaindersScratch );
+	}
+
+	static void EnsureMixQuotaArray( ref int[] array, int entryCount )
+	{
+		if ( entryCount <= 0 )
+		{
+			array = null;
+			return;
+		}
+
+		if ( array == null || array.Length != entryCount )
+			array = new int[ entryCount ];
+	}
+
+	void EnsureMixQuotaScratch( int entryCount )
+	{
+		if ( entryCount <= 0 )
+			return;
+
+		if ( _mixQuotaTargetsScratch == null || _mixQuotaTargetsScratch.Length != entryCount )
+			_mixQuotaTargetsScratch = new int[ entryCount ];
+		if ( _mixRemaindersScratch == null || _mixRemaindersScratch.Length < entryCount )
+			_mixRemaindersScratch = new float[ entryCount ];
+	}
+
+	int[] ResolveMixQuotasForBudget( int budget )
+	{
+		int entryCount = MixEntryCount();
+		if ( entryCount <= 0 || _definition == null )
+			return null;
+
+		if ( budget == _budgetLod0 && _lod0MixQuotas != null )
+			return _lod0MixQuotas;
+		if ( budget == _budgetLod1 && _lod1MixQuotas != null )
+			return _lod1MixQuotas;
+		if ( budget == _budgetLod2 && _lod2MixQuotas != null )
+			return _lod2MixQuotas;
+
+		EnsureMixQuotaScratch( entryCount );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 0, budget ), _mixQuotaTargetsScratch, _mixRemaindersScratch );
+		return _mixQuotaTargetsScratch;
 	}
 
 	int GetLod0InstancesPerChunk()
@@ -2857,8 +2921,6 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_drawCacheDirty = false;
 		CacheRebuildCount++;
 		CacheLodBudgetsForRebuild();
-		CacheLodMixAssigned();
-		RecountChunkDrawnPoolStats();
 
 		int chunkCount = _chunkGrid.ChunkCount;
 		bool filter = _streamingEnabled && streamSettings != null && chunkCount > 0;
@@ -2889,6 +2951,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 		}
 
+		List<int> mixRankChunks = incremental ? _streamRebuildDirtyScratch : null;
+		CacheLodMixAssigned( mixRankChunks );
+		CacheDefinitionRanksInChunkDrawn( mixRankChunks );
+
+		bool overlayStats = streamSettings != null && streamSettings.drawOverlayStats;
+		if ( overlayStats )
+			RecountChunkDrawnPoolStats();
+
 		LastDirtyChunkRebuildCount = incremental ? _streamRebuildDirtyScratch.Count : chunkCount;
 
 		if ( incremental )
@@ -2897,7 +2967,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			RebuildStreamDrawCacheFull( filter, chunkCount );
 
 		_drawCacheFullRebuild = false;
-		RecountDrawnPool();
+		if ( overlayStats )
+			RecountDrawnPool();
 	}
 
 	void RecountDrawnPool()
@@ -3591,7 +3662,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return -1;
 	}
 
-	void CacheLodMixAssigned()
+	void CacheLodMixAssigned( List<int> dirtyChunksOrNull )
 	{
 		int chunkCount = _chunkGrid.ChunkCount;
 		int entryCount = MixEntryCount();
@@ -3611,76 +3682,91 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				_lodMixAssignedByChunk[ c ] = new int[ entryCount ];
 		}
 
-		IReadOnlyList<GoldPileChunk> chunks = _chunkGrid.Chunks;
-		for ( int c = 0; c < chunkCount; c++ )
+		if ( dirtyChunksOrNull == null )
 		{
-			int[] assigned = _lodMixAssignedByChunk[ c ];
+			for ( int c = 0; c < chunkCount; c++ )
+				FillLodMixAssignedForChunk( c, entryCount );
+			return;
+		}
+
+		for ( int d = 0; d < dirtyChunksOrNull.Count; d++ )
+		{
+			int c = dirtyChunksOrNull[ d ];
+			if ( c < 0 || c >= chunkCount )
+				continue;
+			FillLodMixAssignedForChunk( c, entryCount );
+		}
+	}
+
+	void FillLodMixAssignedForChunk( int c, int entryCount )
+	{
+		int[] assigned = _lodMixAssignedByChunk[ c ];
+		for ( int e = 0; e < entryCount; e++ )
+			assigned[ e ] = 0;
+
+		IReadOnlyList<GoldPileChunk> chunks = _chunkGrid.Chunks;
+		GoldPileChunk chunk = c < chunks.Count ? chunks[ c ] : null;
+		int budget = SoftBudgetForChunk( chunk );
+		if ( budget <= 0 || _chunkDrawnSlots == null || c >= _chunkDrawnSlots.Length )
+			return;
+
+		List<int> drawn = _chunkDrawnSlots[ c ];
+		if ( drawn == null || drawn.Count == 0 )
+			return;
+
+		int[] available = _mixQuotaScratch;
+		if ( available == null || available.Length != entryCount )
+		{
+			available = new int[ entryCount ];
+			_mixQuotaScratch = available;
+		}
+		else
+		{
 			for ( int e = 0; e < entryCount; e++ )
-				assigned[ e ] = 0;
+				available[ e ] = 0;
+		}
 
-			GoldPileChunk chunk = c < chunks.Count ? chunks[ c ] : null;
-			int budget = SoftBudgetForChunk( chunk );
-			if ( budget <= 0 || _chunkDrawnSlots == null || c >= _chunkDrawnSlots.Length )
+		for ( int i = 0; i < drawn.Count; i++ )
+		{
+			int idx = drawn[ i ];
+			if ( idx < 0 || idx >= _slotCount )
 				continue;
+			int entry = _slots[ idx ].EntryIndex;
+			if ( entry >= 0 && entry < entryCount )
+				available[ entry ]++;
+		}
 
-			List<int> drawn = _chunkDrawnSlots[ c ];
-			if ( drawn == null || drawn.Count == 0 )
-				continue;
+		int[] quotas = ResolveMixQuotasForBudget( budget );
+		int leftover = budget;
+		for ( int e = 0; e < entryCount; e++ )
+		{
+			int want = quotas != null && e < quotas.Length ? quotas[ e ] : 0;
+			int take = Mathf.Min( want, available[ e ] );
+			assigned[ e ] = take;
+			leftover -= take;
+		}
 
-			int[] available = _mixQuotaScratch;
-			if ( available == null || available.Length != entryCount )
+		while ( leftover > 0 )
+		{
+			int best = -1;
+			int bestSpare = 0;
+			for ( int e = 0; e < entryCount; e++ )
 			{
-				available = new int[ entryCount ];
-				_mixQuotaScratch = available;
-			}
-			else
-			{
-				for ( int e = 0; e < entryCount; e++ )
-					available[ e ] = 0;
-			}
-
-			for ( int i = 0; i < drawn.Count; i++ )
-			{
-				int idx = drawn[ i ];
-				if ( idx < 0 || idx >= _slotCount )
+				int spare = available[ e ] - assigned[ e ];
+				if ( spare <= 0 )
 					continue;
-				int entry = _slots[ idx ].EntryIndex;
-				if ( entry >= 0 && entry < entryCount )
-					available[ entry ]++;
-			}
-
-			int[] quotas = _definition.ComputeMixQuotas( budget );
-			int leftover = budget;
-			for ( int e = 0; e < entryCount; e++ )
-			{
-				int want = e < quotas.Length ? quotas[ e ] : 0;
-				int take = Mathf.Min( want, available[ e ] );
-				assigned[ e ] = take;
-				leftover -= take;
-			}
-
-			while ( leftover > 0 )
-			{
-				int best = -1;
-				int bestSpare = 0;
-				for ( int e = 0; e < entryCount; e++ )
+				if ( spare > bestSpare )
 				{
-					int spare = available[ e ] - assigned[ e ];
-					if ( spare <= 0 )
-						continue;
-					if ( spare > bestSpare )
-					{
-						bestSpare = spare;
-						best = e;
-					}
+					bestSpare = spare;
+					best = e;
 				}
-
-				if ( best < 0 )
-					break;
-
-				assigned[ best ]++;
-				leftover--;
 			}
+
+			if ( best < 0 )
+				break;
+
+			assigned[ best ]++;
+			leftover--;
 		}
 	}
 
@@ -3714,6 +3800,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	int RankOfDefinitionInChunkDrawn( int slotIndex, Slot slot )
 	{
+		if ( _defRankInChunkScratch != null && slotIndex >= 0 && slotIndex < _defRankInChunkScratch.Length )
+		{
+			int cached = _defRankInChunkScratch[ slotIndex ];
+			if ( cached >= 0 )
+				return cached;
+		}
+
 		if ( _chunkDrawnSlots == null || _chunkGrid.ChunkCount <= 0 )
 			return -1;
 
@@ -6978,7 +7071,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _pileRoot == null || _batches == null )
 			return;
 
-		CacheDefinitionRanksInChunkDrawn();
+		CacheDefinitionRanksInChunkDrawn( null );
 
 		for ( int b = 0; b < _batches.Length; b++ )
 		{
@@ -7334,7 +7427,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return Mathf.Clamp01( rank / ( float )quota );
 	}
 
-	void CacheDefinitionRanksInChunkDrawn()
+	void CacheDefinitionRanksInChunkDrawn( List<int> dirtyChunksOrNull )
 	{
 		if ( _slots == null )
 			return;
@@ -7348,43 +7441,81 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			while ( cap < slotCount )
 				cap *= 2;
 			_defRankInChunkScratch = new int[ cap ];
+			// New buffer: must fill everything once.
+			dirtyChunksOrNull = null;
 		}
 
-		for ( int i = 0; i < slotCount; i++ )
-			_defRankInChunkScratch[ i ] = -1;
-
 		if ( _chunkDrawnSlots == null || _chunkGrid.ChunkCount <= 0 )
+		{
+			for ( int i = 0; i < slotCount; i++ )
+				_defRankInChunkScratch[ i ] = -1;
 			return;
+		}
 
 		int entryCount = MixEntryCount();
 		if ( entryCount <= 0 )
+		{
+			for ( int i = 0; i < slotCount; i++ )
+				_defRankInChunkScratch[ i ] = -1;
 			return;
+		}
 
 		if ( _entryRankRunningScratch == null || _entryRankRunningScratch.Length < entryCount )
 			_entryRankRunningScratch = new int[ entryCount ];
 
-		for ( int c = 0; c < _chunkDrawnSlots.Length; c++ )
+		if ( dirtyChunksOrNull == null )
 		{
-			List<int> drawn = _chunkDrawnSlots[ c ];
-			if ( drawn == null || drawn.Count == 0 )
+			for ( int i = 0; i < slotCount; i++ )
+				_defRankInChunkScratch[ i ] = -1;
+
+			for ( int c = 0; c < _chunkDrawnSlots.Length; c++ )
+				FillDefinitionRanksForChunk( c, entryCount );
+			return;
+		}
+
+		for ( int d = 0; d < dirtyChunksOrNull.Count; d++ )
+		{
+			int c = dirtyChunksOrNull[ d ];
+			if ( c < 0 || c >= _chunkDrawnSlots.Length )
 				continue;
 
-			for ( int e = 0; e < entryCount; e++ )
-				_entryRankRunningScratch[ e ] = 0;
-
-			for ( int i = 0; i < drawn.Count; i++ )
+			List<int> drawn = _chunkDrawnSlots[ c ];
+			if ( drawn != null )
 			{
-				int idx = drawn[ i ];
-				if ( idx < 0 || idx >= slotCount )
-					continue;
-
-				int entry = _slots[ idx ].EntryIndex;
-				if ( entry < 0 || entry >= entryCount )
-					continue;
-
-				_defRankInChunkScratch[ idx ] = _entryRankRunningScratch[ entry ];
-				_entryRankRunningScratch[ entry ]++;
+				for ( int i = 0; i < drawn.Count; i++ )
+				{
+					int idx = drawn[ i ];
+					if ( idx >= 0 && idx < slotCount )
+						_defRankInChunkScratch[ idx ] = -1;
+				}
 			}
+
+			FillDefinitionRanksForChunk( c, entryCount );
+		}
+	}
+
+	void FillDefinitionRanksForChunk( int c, int entryCount )
+	{
+		List<int> drawn = _chunkDrawnSlots[ c ];
+		if ( drawn == null || drawn.Count == 0 )
+			return;
+
+		for ( int e = 0; e < entryCount; e++ )
+			_entryRankRunningScratch[ e ] = 0;
+
+		int slotCount = _slotCount;
+		for ( int i = 0; i < drawn.Count; i++ )
+		{
+			int idx = drawn[ i ];
+			if ( idx < 0 || idx >= slotCount )
+				continue;
+
+			int entry = _slots[ idx ].EntryIndex;
+			if ( entry < 0 || entry >= entryCount )
+				continue;
+
+			_defRankInChunkScratch[ idx ] = _entryRankRunningScratch[ entry ];
+			_entryRankRunningScratch[ entry ]++;
 		}
 	}
 

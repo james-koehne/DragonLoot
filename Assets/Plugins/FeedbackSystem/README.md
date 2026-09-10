@@ -93,7 +93,7 @@ Lifecycle you may override: `Initialize()`, `Play()`, `Stop()`, `Reset()`, `GetH
 - **Animation:** Play Animation, Set Animator Trigger
 - **Visual:** Set Renderer Enabled, Set Color (`MaterialPropertyBlock`, configurable property name)
 - **Utility:** Delay, Unity Event
-- **Composition:** Parallel, Sequence
+- **Composition:** Parallel, Sequence, Play Feedbacks (play/stop/reset another `Feedbacks`)
 
 ## Performance notes
 

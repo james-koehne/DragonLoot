@@ -16,18 +16,35 @@ public class DiscoveryToastUI : MonoBehaviour
 	const float TopInset = 72f;
 	const float ToastWidth = 720f;
 	const float ToastHeight = 64f;
+	const float IconSize = 40f;
+	const float IconPadding = 12f;
+
+	struct ToastEntry
+	{
+		public string Message;
+		public CarryBucketKind Pouch;
+		public bool ShowPouchIcon;
+	}
 
 	public static DiscoveryToastUI Instance { get; private set; }
 
-	static readonly Queue<string> s_pendingBeforeInstance = new Queue<string>( 8 );
+	/// <summary>True while a toast is visible or more are queued.</summary>
+	public bool IsBusy => _visible || _routine != null || _queue.Count > 0;
+
+	static readonly Queue<ToastEntry> s_pendingBeforeInstance = new Queue<ToastEntry>( 8 );
 
 	[SerializeField] CanvasGroup group;
 	[SerializeField] Text label;
+	[SerializeField] Image pouchIcon;
+	[SerializeField] Sprite coinPouchSprite;
+	[SerializeField] Sprite gemPouchSprite;
+	[SerializeField] Sprite artifactPouchSprite;
+	[SerializeField] Sprite generalPouchSprite;
 	[SerializeField] Feedbacks showFeedback;
 	[SerializeField] Feedbacks hideFeedback;
 	[SerializeField] float holdDuration = HoldSeconds;
 
-	readonly Queue<string> _queue = new Queue<string>( 4 );
+	readonly Queue<ToastEntry> _queue = new Queue<ToastEntry>( 4 );
 	bool _ready;
 	bool _subscribed;
 	bool _visible;
@@ -89,27 +106,36 @@ public class DiscoveryToastUI : MonoBehaviour
 		if ( treasure == null )
 			return;
 
-		EnqueueStatic( "New Discovery: " + ResolveName( treasure ) );
+		EnqueueStatic( new ToastEntry
+		{
+			Message = "New Discovery: " + ResolveName( treasure ),
+			Pouch = PlayerCarry.ResolveBucket( treasure ),
+			ShowPouchIcon = true
+		} );
 	}
 
 	public static void NotifyMessage( string message )
 	{
-		EnqueueStatic( message );
+		EnqueueStatic( new ToastEntry
+		{
+			Message = message,
+			ShowPouchIcon = false
+		} );
 	}
 
-	static void EnqueueStatic( string message )
+	static void EnqueueStatic( ToastEntry entry )
 	{
-		if ( string.IsNullOrEmpty( message ) )
+		if ( string.IsNullOrEmpty( entry.Message ) )
 			return;
 
 		DiscoveryToastUI ui = Instance;
 		if ( ui != null && ui._ready )
 		{
-			ui.Enqueue( message );
+			ui.Enqueue( entry );
 			return;
 		}
 
-		s_pendingBeforeInstance.Enqueue( message );
+		s_pendingBeforeInstance.Enqueue( entry );
 	}
 
 	void FlushPending()
@@ -147,16 +173,19 @@ public class DiscoveryToastUI : MonoBehaviour
 			name = evt.Table.InteractionName;
 		if ( string.IsNullOrEmpty( name ) )
 			name = "Coins";
-		Enqueue( "Display Complete: " + name );
+		Enqueue( MessageOnly( "Display Complete: " + name ) );
 	}
 
 	void OnArtifactDisplayCompleted( ArtifactPresentationTableCompletedEvent evt )
 	{
-		Enqueue( "Display Complete: Artifacts" );
+		Enqueue( MessageOnly( "Display Complete: Artifacts" ) );
 	}
 
 	void OnConstellationCompleted( GemConstellationCompletedEvent evt )
 	{
+		if ( !evt.FromPlayer )
+			return;
+
 		string name = "Constellation";
 		if ( evt.Constellation != null )
 		{
@@ -167,7 +196,16 @@ public class DiscoveryToastUI : MonoBehaviour
 				name = evt.Constellation.InteractionName;
 		}
 
-		Enqueue( "Constellation Complete: " + name );
+		Enqueue( MessageOnly( "Constellation Complete: " + name ) );
+	}
+
+	static ToastEntry MessageOnly( string message )
+	{
+		return new ToastEntry
+		{
+			Message = message,
+			ShowPouchIcon = false
+		};
 	}
 
 	static string ResolveName( TreasureDefinition definition )
@@ -181,12 +219,12 @@ public class DiscoveryToastUI : MonoBehaviour
 		return definition.name;
 	}
 
-	void Enqueue( string message )
+	void Enqueue( ToastEntry entry )
 	{
 		if ( !_ready )
 			Setup();
 
-		if ( string.IsNullOrEmpty( message ) )
+		if ( string.IsNullOrEmpty( entry.Message ) )
 			return;
 
 		if ( !isActiveAndEnabled )
@@ -194,11 +232,11 @@ public class DiscoveryToastUI : MonoBehaviour
 
 		if ( !isActiveAndEnabled )
 		{
-			s_pendingBeforeInstance.Enqueue( message );
+			s_pendingBeforeInstance.Enqueue( entry );
 			return;
 		}
 
-		_queue.Enqueue( message );
+		_queue.Enqueue( entry );
 		if ( _routine == null )
 			_routine = StartCoroutine( ToastRoutine() );
 	}
@@ -207,8 +245,8 @@ public class DiscoveryToastUI : MonoBehaviour
 	{
 		while ( _queue.Count > 0 )
 		{
-			string message = _queue.Dequeue();
-			Show( message );
+			ToastEntry entry = _queue.Dequeue();
+			Show( entry );
 
 			float hold = holdDuration > 0.1f ? holdDuration : HoldSeconds;
 			float elapsed = 0f;
@@ -233,16 +271,17 @@ public class DiscoveryToastUI : MonoBehaviour
 		_routine = null;
 	}
 
-	void Show( string message )
+	void Show( ToastEntry entry )
 	{
 		transform.SetAsLastSibling();
 		_visible = true;
 
 		StopFeedbacks();
 		RestoreRest();
+		ApplyPouchIcon( entry );
 
 		if ( label != null )
-			label.text = message ?? string.Empty;
+			label.text = entry.Message ?? string.Empty;
 
 		if ( group != null )
 		{
@@ -290,6 +329,8 @@ public class DiscoveryToastUI : MonoBehaviour
 			group.blocksRaycasts = false;
 			group.interactable = false;
 		}
+
+		ApplyPouchIcon( default );
 	}
 
 	void StopFeedbacks()
@@ -351,6 +392,8 @@ public class DiscoveryToastUI : MonoBehaviour
 		backdrop.color = new Color( 0f, 0f, 0f, 0.55f );
 		backdrop.raycastTarget = false;
 
+		EnsurePouchIcon();
+
 		if ( label == null )
 		{
 			Transform existing = transform.Find( "Label" );
@@ -362,11 +405,6 @@ public class DiscoveryToastUI : MonoBehaviour
 		{
 			GameObject labelGo = new GameObject( "Label", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
 			labelGo.transform.SetParent( transform, false );
-			RectTransform labelRect = labelGo.transform as RectTransform;
-			labelRect.anchorMin = Vector2.zero;
-			labelRect.anchorMax = Vector2.one;
-			labelRect.offsetMin = new Vector2( 16f, 8f );
-			labelRect.offsetMax = new Vector2( -16f, -8f );
 			label = labelGo.GetComponent<Text>();
 		}
 
@@ -375,12 +413,103 @@ public class DiscoveryToastUI : MonoBehaviour
 			label.font = Resources.GetBuiltinResource<Font>( "Arial.ttf" );
 		label.fontSize = 28;
 		label.fontStyle = FontStyle.Bold;
-		label.alignment = TextAnchor.MiddleCenter;
 		label.color = Color.white;
 		label.horizontalOverflow = HorizontalWrapMode.Overflow;
 		label.verticalOverflow = VerticalWrapMode.Overflow;
 		label.raycastTarget = false;
 		label.supportRichText = false;
+		ApplyLabelLayout( false );
+	}
+
+	void EnsurePouchIcon()
+	{
+		if ( pouchIcon == null )
+		{
+			Transform existing = transform.Find( "PouchIcon" );
+			if ( existing != null )
+				pouchIcon = existing.GetComponent<Image>();
+		}
+
+		if ( pouchIcon == null )
+		{
+			GameObject iconGo = new GameObject( "PouchIcon", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+			iconGo.transform.SetParent( transform, false );
+			pouchIcon = iconGo.GetComponent<Image>();
+		}
+
+		RectTransform iconRect = pouchIcon.transform as RectTransform;
+		iconRect.anchorMin = new Vector2( 0f, 0.5f );
+		iconRect.anchorMax = new Vector2( 0f, 0.5f );
+		iconRect.pivot = new Vector2( 0f, 0.5f );
+		iconRect.anchoredPosition = new Vector2( IconPadding, 0f );
+		iconRect.sizeDelta = new Vector2( IconSize, IconSize );
+
+		pouchIcon.color = Color.white;
+		pouchIcon.raycastTarget = false;
+		pouchIcon.preserveAspect = true;
+		pouchIcon.enabled = false;
+		pouchIcon.gameObject.SetActive( false );
+	}
+
+	void ApplyPouchIcon( ToastEntry entry )
+	{
+		if ( pouchIcon == null )
+		{
+			ApplyLabelLayout( false );
+			return;
+		}
+
+		Sprite sprite = entry.ShowPouchIcon ? ResolvePouchSprite( entry.Pouch ) : null;
+		bool show = sprite != null;
+		pouchIcon.sprite = sprite;
+		pouchIcon.enabled = show;
+		pouchIcon.gameObject.SetActive( show );
+		ApplyLabelLayout( show );
+	}
+
+	Sprite ResolvePouchSprite( CarryBucketKind pouch )
+	{
+		Sprite assigned = SpriteForPouch( pouch );
+		if ( assigned != null )
+			return assigned;
+
+		PouchBarUI bar = PouchBarUI.Instance;
+		if ( bar != null )
+			return bar.GetSlotIcon( pouch );
+
+		return null;
+	}
+
+	Sprite SpriteForPouch( CarryBucketKind pouch )
+	{
+		switch ( pouch )
+		{
+			case CarryBucketKind.Gem:
+				return gemPouchSprite;
+			case CarryBucketKind.Artifact:
+				return artifactPouchSprite;
+			case CarryBucketKind.General:
+				return generalPouchSprite;
+			default:
+				return coinPouchSprite;
+		}
+	}
+
+	void ApplyLabelLayout( bool iconVisible )
+	{
+		if ( label == null )
+			return;
+
+		RectTransform labelRect = label.transform as RectTransform;
+		if ( labelRect == null )
+			return;
+
+		float left = iconVisible ? IconPadding + IconSize + IconPadding : 16f;
+		labelRect.anchorMin = Vector2.zero;
+		labelRect.anchorMax = Vector2.one;
+		labelRect.offsetMin = new Vector2( left, 8f );
+		labelRect.offsetMax = new Vector2( -16f, -8f );
+		label.alignment = iconVisible ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
 	}
 
 	void EnsureFeedbacks()

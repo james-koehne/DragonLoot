@@ -20,6 +20,9 @@ public class AbilityDefinition : ScriptableObject
 	[Tooltip( "Designer kill-switch. Disabled abilities never activate." )]
 	public bool enabled = true;
 
+	[Tooltip( "Passive abilities are unlock flags only — never equipped or activated." )]
+	public bool isPassive;
+
 	[Header( "Behaviour" )]
 	public AbilityBehaviour behaviour;
 

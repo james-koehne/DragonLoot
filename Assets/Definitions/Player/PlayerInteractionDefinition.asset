@@ -31,13 +31,13 @@ MonoBehaviour:
   throwPlaceRepeatInterval: 0.1
   pickableOutline:
     outlineColor: {r: 1.2, g: 1.02, b: 0.35, a: 1}
-    outlineIntensity: 2
-    hdrBoost: 3
+    outlineIntensity: 1
+    hdrBoost: 1.5
     scalePixels: 2
     maskDilatePixels: 2
     depthThreshold: 1.5
     normalThreshold: 0.4
-    depthNormalThreshold: 0.5
+    depthNormalThreshold: 0
     depthNormalThresholdScale: 7
     normalEdgeWeight: 0
     pulseSpeed: 1.1

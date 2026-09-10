@@ -4,16 +4,18 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Typed coin display: accepts one coin <see cref="TreasureDefinition"/> and snaps matching
-/// carried coins into a generated horizontal slot grid (Displayed state).
+/// Typed coin display: accepts matching carried coins into a generated horizontal slot grid
+/// (Displayed state). Default mode uses one accepted coin type for every slot.
+/// Mixed-column mode assigns a required coin type per column (every row in that column shares it).
 /// Coins are stackable, so they pile vertically in each slot. Pickup takes from the top down.
-/// Aim at an existing pile to stack onto it; aim at the table body fills the shortest pile
-/// (left-to-right, top-left wins ties).
+/// Aim at an existing pile to stack onto it; aim at the table body fills the shortest matching
+/// pile (left-to-right, top-left wins ties).
 /// Hold-R whole-stack place lands on the aimed pile when stacking, otherwise the shortest
-/// pile, then peels excess coins from player-placed piles (or every column when
-/// autoLevelAllStacks is on) and flips them into shorter columns.
+/// matching pile, then peels excess coins from player-placed piles (or every column when
+/// autoLevelAllStacks is on) and flips them into shorter columns of the same coin type.
 /// Each display levels independently; placing on another table does not interrupt this one.
-/// Setup: collider on root, child DisplayArea, assign accepted treasure + grid settings.
+/// Setup: collider on root, child DisplayArea, assign accepted treasure + grid settings
+/// (or enable mixed column requirements and assign one coin per column).
 /// </summary>
 public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 {
@@ -24,6 +26,15 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		public int FromSlot;
 		public int ToSlot;
 	}
+
+	[Header( "Mixed Column Requirements" )]
+	[Tooltip( "When enabled, each column uses Column Required Coins instead of the shared Accepted Treasure." )]
+	[SerializeField]
+	bool useMixedColumnRequirements;
+
+	[Tooltip( "Required coin per column, left to right. Size matches Columns. Every row in a column shares that coin." )]
+	[SerializeField]
+	TreasureDefinition[] columnRequiredCoins;
 
 	[Header( "Start Fill" )]
 	[Tooltip( "When enabled, slots are pre-filled on play using Perlin noise amounts with optional random gaps." )]
@@ -80,6 +91,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 	readonly List<LevelMove> _levelMoves = new List<LevelMove>( 128 );
 	readonly HashSet<int> _levelSourceSlots = new HashSet<int>();
+	readonly List<int> _levelTypeGroup = new List<int>( 32 );
+	readonly HashSet<TreasureDefinition> _seenLevelTypes = new HashSet<TreasureDefinition>();
 
 	Coroutine _levelRoutine;
 	bool _levelPending;
@@ -93,13 +106,46 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 	protected override bool UsesLowestPilePlacement => true;
 
+	public override bool UsesPerSlotRequirements => useMixedColumnRequirements;
+
+	public override bool AllowsVerticalStack => true;
+
 	public TreasureDefinition AcceptedCoin => AcceptedTreasure;
 
 	public IReadOnlyList<TreasureItem> DisplayedCoins => DisplayedItems;
 
 	public bool IsAutoLeveling => _levelRoutine != null;
 
+	public bool UsesMixedColumnRequirements => useMixedColumnRequirements;
+
 	public static IReadOnlyList<CoinDisplayTableInteractable> ActiveTables => All;
+
+	public override TreasureDefinition GetRequiredTreasure( int slotIndex )
+	{
+		if ( !useMixedColumnRequirements )
+			return acceptedTreasure;
+
+		int column = SlotIndexToColumn( slotIndex );
+		return GetRequiredCoinForColumn( column );
+	}
+
+	public TreasureDefinition GetRequiredCoinForColumn( int column )
+	{
+		if ( !useMixedColumnRequirements )
+			return acceptedTreasure;
+
+		if ( columnRequiredCoins == null || column < 0 || column >= columnRequiredCoins.Length )
+			return null;
+
+		return columnRequiredCoins[ column ];
+	}
+
+	int SlotIndexToColumn( int slotIndex )
+	{
+		if ( slotIndex < 0 || columns <= 0 )
+			return -1;
+		return slotIndex % columns;
+	}
 
 	public static int CountAllDisplayedCoins()
 	{
@@ -130,17 +176,12 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	}
 
 	/// <summary>
-	/// Hold-F whole-stack place: every carried coin must match this table's accepted definition.
+	/// Hold ContextualInteract whole-stack place: Active (right hand) must match this table.
+	/// Deposits Active plus contiguous same-type coins from the left-hand held bottom only.
 	/// </summary>
-	public bool CanAcceptWholeCarriedCoinStack( IReadOnlyList<TreasureDefinition> definitions )
+	public bool CanAcceptActiveConnectedCoinStack( TreasureDefinition activeDefinition )
 	{
-		if ( definitions == null || definitions.Count == 0 || AcceptedCoin == null )
-			return false;
-
-		if ( !PlayerCarry.AreCoinDefinitionsUniform( definitions, out TreasureDefinition uniform ) )
-			return false;
-
-		return uniform == AcceptedCoin;
+		return Accepts( activeDefinition );
 	}
 
 	/// <summary>
@@ -190,6 +231,41 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		levelCoinStagger = Mathf.Max( 0f, levelCoinStagger );
 		levelStartDelay = Mathf.Max( 0f, levelStartDelay );
 		levelCrossSlotArcHeight = Mathf.Max( 0.05f, levelCrossSlotArcHeight );
+		SyncColumnRequiredCoins();
+	}
+
+	void SyncColumnRequiredCoins()
+	{
+		int count = Mathf.Max( 1, columns );
+		if ( columnRequiredCoins != null && columnRequiredCoins.Length == count )
+			return;
+
+		TreasureDefinition[] next = new TreasureDefinition[ count ];
+		int copy = columnRequiredCoins != null ? Mathf.Min( count, columnRequiredCoins.Length ) : 0;
+		for ( int i = 0; i < copy; i++ )
+			next[ i ] = columnRequiredCoins[ i ];
+
+		for ( int i = copy; i < count; i++ )
+			next[ i ] = acceptedTreasure;
+
+		columnRequiredCoins = next;
+	}
+
+	protected override bool HasConfiguredAcceptance()
+	{
+		if ( !useMixedColumnRequirements )
+			return acceptedTreasure != null;
+
+		if ( columnRequiredCoins == null )
+			return false;
+
+		for ( int i = 0; i < columnRequiredCoins.Length; i++ )
+		{
+			if ( columnRequiredCoins[ i ] != null )
+				return true;
+		}
+
+		return false;
 	}
 
 	void Start()
@@ -199,7 +275,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 	void TryFillSlotsOnStart()
 	{
-		if ( !fillSlotsOnStart || AcceptedCoin == null || Slots == null )
+		if ( !fillSlotsOnStart || Slots == null || !HasConfiguredAcceptance() )
 			return;
 
 		int min = Mathf.Max( 0, minCoinsPerSlot );
@@ -213,6 +289,12 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 		for ( int i = 0; i < slotCount; i++ )
 		{
+			if ( GetRequiredTreasure( i ) == null )
+			{
+				amounts[ i ] = 0;
+				continue;
+			}
+
 			int row = i / columns;
 			int col = i % columns;
 			float noise = Mathf.PerlinNoise( col * 0.41f + noiseOrigin, row * 0.41f + noiseOrigin * 1.37f );
@@ -229,7 +311,12 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 
 		int totalAdded = 0;
 		for ( int i = 0; i < slotCount; i++ )
-			totalAdded += SpawnDisplayedStack( i, AcceptedCoin, amounts[ i ] );
+		{
+			TreasureDefinition required = GetRequiredTreasure( i );
+			if ( required == null )
+				continue;
+			totalAdded += SpawnDisplayedStack( i, required, amounts[ i ] );
+		}
 
 		if ( totalAdded > 0 )
 			FinishStartFill();
@@ -405,32 +492,86 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		for ( int i = 0; i < slotCount; i++ )
 			counts[ i ] = GetSlotCount( i );
 
-		int total = 0;
-		for ( int i = 0; i < slotCount; i++ )
-			total += counts[ i ];
+		if ( !useMixedColumnRequirements )
+		{
+			BuildLevelMovesForGroup( moves, slotCount, sourceSlots, counts, targets, groupFilter: null );
+			return;
+		}
 
-		if ( total <= 0 )
+		// Level each required coin type independently so copper never flies into silver columns.
+		_seenLevelTypes.Clear();
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			TreasureDefinition required = GetRequiredTreasure( i );
+			if ( required == null || !_seenLevelTypes.Add( required ) )
+				continue;
+
+			_levelTypeGroup.Clear();
+			for ( int j = 0; j < slotCount; j++ )
+			{
+				if ( GetRequiredTreasure( j ) == required )
+					_levelTypeGroup.Add( j );
+			}
+
+			BuildLevelMovesForGroup( moves, slotCount, sourceSlots, counts, targets, _levelTypeGroup );
+		}
+	}
+
+	void BuildLevelMovesForGroup(
+		List<LevelMove> moves,
+		int slotCount,
+		HashSet<int> sourceSlots,
+		int[] counts,
+		int[] targets,
+		List<int> groupFilter )
+	{
+		int total = 0;
+		int groupSize = 0;
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			if ( groupFilter != null && !groupFilter.Contains( i ) )
+			{
+				targets[ i ] = counts[ i ];
+				continue;
+			}
+
+			total += counts[ i ];
+			groupSize++;
+		}
+
+		if ( groupSize <= 0 || total <= 0 )
 			return;
 
-		int baseCount = total / slotCount;
-		int remainder = total % slotCount;
+		int baseCount = total / groupSize;
+		int remainder = total % groupSize;
+		int groupOrdinal = 0;
 		for ( int i = 0; i < slotCount; i++ )
-			targets[ i ] = baseCount + ( i < remainder ? 1 : 0 );
+		{
+			if ( groupFilter != null && !groupFilter.Contains( i ) )
+				continue;
+
+			targets[ i ] = baseCount + ( groupOrdinal < remainder ? 1 : 0 );
+			groupOrdinal++;
+		}
 
 		int maxPerSlot = MaxStackPerSlotLimit;
 		if ( maxPerSlot > 0 )
 		{
 			for ( int i = 0; i < slotCount; i++ )
+			{
+				if ( groupFilter != null && !groupFilter.Contains( i ) )
+					continue;
 				targets[ i ] = Mathf.Min( targets[ i ], maxPerSlot );
+			}
 		}
 
 		while ( true )
 		{
-			int fromSlot = FindBestLevelSource( slotCount, sourceSlots, counts, targets );
+			int fromSlot = FindBestLevelSource( slotCount, sourceSlots, counts, targets, groupFilter );
 			if ( fromSlot < 0 )
 				break;
 
-			int toSlot = FindBestLevelDestination( slotCount, fromSlot, counts, targets, maxPerSlot );
+			int toSlot = FindBestLevelDestination( slotCount, fromSlot, counts, targets, maxPerSlot, groupFilter );
 			if ( toSlot < 0 )
 				break;
 
@@ -444,7 +585,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		int slotCount,
 		HashSet<int> sourceSlots,
 		int[] counts,
-		int[] targets )
+		int[] targets,
+		List<int> groupFilter )
 	{
 		int fromSlot = -1;
 		int bestExcess = 0;
@@ -452,6 +594,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		for ( int i = 0; i < slotCount; i++ )
 		{
 			if ( !sourceSlots.Contains( i ) )
+				continue;
+			if ( groupFilter != null && !groupFilter.Contains( i ) )
 				continue;
 
 			int excess = counts[ i ] - targets[ i ];
@@ -473,7 +617,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		int sourceSlot,
 		int[] counts,
 		int[] targets,
-		int maxPerSlot )
+		int maxPerSlot,
+		List<int> groupFilter )
 	{
 		int toSlot = -1;
 		int bestDeficit = 0;
@@ -481,6 +626,8 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		for ( int i = 0; i < slotCount; i++ )
 		{
 			if ( i == sourceSlot )
+				continue;
+			if ( groupFilter != null && !groupFilter.Contains( i ) )
 				continue;
 
 			if ( maxPerSlot > 0 && counts[ i ] >= maxPerSlot )
@@ -521,7 +668,80 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		EventBus.Publish( new CoinDisplayTableCompletedEvent
 		{
 			Table = this,
-			AcceptedCoin = AcceptedTreasure
+			AcceptedCoin = useMixedColumnRequirements ? null : AcceptedTreasure
 		} );
+	}
+
+	protected override string GetSlotGizmoLabel( int slotIndex )
+	{
+		if ( !useMixedColumnRequirements )
+			return slotIndex.ToString();
+
+		int column = SlotIndexToColumn( slotIndex );
+		int row = columns > 0 ? slotIndex / columns : 0;
+		TreasureDefinition required = GetRequiredCoinForColumn( column );
+		string typeLabel = required == null
+			? "?"
+			: ( !string.IsNullOrEmpty( required.displayName ) ? required.displayName : required.name );
+
+		// Label the front of each column with the coin type; deeper rows keep a light index.
+		if ( row == 0 )
+			return "C" + column + "\n" + typeLabel;
+
+		return slotIndex.ToString();
+	}
+
+	protected override void DrawLayoutGizmos()
+	{
+		if ( !useMixedColumnRequirements )
+		{
+			base.DrawLayoutGizmos();
+			return;
+		}
+
+		Transform area = displayArea != null ? displayArea : transform;
+		if ( area == null )
+			return;
+
+		int count = SlotCount;
+		float markerRadius = Mathf.Clamp( slotSpacing * 0.18f, 0.02f, 0.08f );
+
+		DisplayTableSlotLayout.DrawLayoutGizmos(
+			area,
+			rows,
+			columns,
+			slotSpacing,
+			margin,
+			new Color( 0.35f, 1f, 0.55f, 0.15f ),
+			new Color( 0.35f, 1f, 0.55f, 0.35f ) );
+
+		for ( int i = 0; i < count; i++ )
+		{
+			TreasureDefinition required = GetRequiredTreasure( i );
+			Vector3 world = area.TransformPoint(
+				DisplayTableSlotLayout.GetSlotLocalPosition( i, rows, columns, slotSpacing, margin ) );
+			Gizmos.color = ResolveSlotGizmoColor( required );
+			Gizmos.DrawWireSphere( world, markerRadius );
+			Gizmos.DrawLine( world, world + area.up * ( markerRadius * 2f ) );
+
+#if UNITY_EDITOR
+			int row = columns > 0 ? i / columns : 0;
+			if ( row == 0 )
+			{
+				UnityEditor.Handles.color = Gizmos.color;
+				UnityEditor.Handles.Label( world + area.up * 0.05f, GetSlotGizmoLabel( i ) );
+			}
+#endif
+		}
+	}
+
+	static Color ResolveSlotGizmoColor( TreasureDefinition required )
+	{
+		if ( required == null )
+			return new Color( 1f, 0.35f, 0.35f, 0.9f );
+
+		int hash = required.GetInstanceID();
+		float hue = Mathf.Abs( hash % 360 ) / 360f;
+		return Color.HSVToRGB( hue, 0.65f, 1f );
 	}
 }

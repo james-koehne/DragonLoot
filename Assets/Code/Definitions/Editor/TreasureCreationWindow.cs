@@ -281,7 +281,10 @@ public class TreasureCreationWindow : EditorWindow
 				break;
 
 			case TreasureCategory.Chest:
-				_request.ChestType = EditorGUILayout.TextField( "Chest Type", _request.ChestType );
+			case TreasureCategory.Container:
+				_request.ChestType = EditorGUILayout.TextField(
+					_request.Category == TreasureCategory.Container ? "Container Type" : "Chest Type",
+					_request.ChestType );
 				_request.KeyType = (KeyType)EditorGUILayout.EnumPopup( "Required Key", _request.KeyType );
 				_request.ChestStartsLocked = EditorGUILayout.Toggle( "Starts Locked", _request.ChestStartsLocked );
 				_request.ChestDestroyOnOpen = EditorGUILayout.Toggle(
@@ -501,7 +504,7 @@ public class TreasureCreationWindow : EditorWindow
 		EditorGUI.BeginChangeCheck();
 		_request.VisualPathOverride = EditorGUILayout.TextField( "Visual Path", ResolveVisualPath() );
 		_request.DefinitionPathOverride = EditorGUILayout.TextField( "Definition Path", ResolveDefinitionPath() );
-		if ( _request.Category == TreasureCategory.Chest )
+		if ( TreasureCreationPipeline.UsesChestDefinition( _request.Category ) )
 		{
 			_request.ChestDefinitionPathOverride = EditorGUILayout.TextField(
 				"Chest Def Path",
@@ -540,7 +543,7 @@ public class TreasureCreationWindow : EditorWindow
 	{
 		_request.VisualPathOverride = ResolveVisualPath();
 		_request.DefinitionPathOverride = ResolveDefinitionPath();
-		if ( _request.Category == TreasureCategory.Chest )
+		if ( TreasureCreationPipeline.UsesChestDefinition( _request.Category ) )
 			_request.ChestDefinitionPathOverride = ResolveChestDefinitionPath();
 		_request.ChestContents = _chestContents.ToArray();
 

@@ -42,6 +42,8 @@ Sort Index:
 - Shared feel pass: `slideMaxSpeed` terminal velocity (asset 32); exit boost only when exit speed is above walk+0.5 (slow exits keep residual velocity, no ice coast); asset `slideExitHysteresis` raised to 10.
 - `PlayerController.CancelSlideVelocity()` still plants after successful primary interact / secondary place/throw.
 - Debug overlay: `Slide: Sprint Hold (off = Charge)`; charge % only in Charge mode while charging.
+- Sliding (and gliding) eases FOV up by `CameraDefinition.speedFovBoost` (default +8°) over `speedFovBlendTime` (0.2s).
+- Contextual tutorial `tut_sliding` shows on a slideable slope while looking down (after sprinting tutorial). Completes when a slide starts.
 
 ## Files Modified
 
@@ -50,6 +52,14 @@ Sort Index:
 - Assets/Definitions/Player/PlayerControllerDefinition.asset
 - Assets/Code/Debug/Sections/DebugPlayerSection.cs
 - Assets/Code/Interaction/PlayerInteraction.cs
+- Assets/Code/Camera/FirstPersonCameraController.cs
+- Assets/Code/Definitions/CameraDefinition.cs
+- Assets/Definitions/CameraDefinition.asset
+- Assets/Code/Graphics/Cinematic/CinematicPresentationController.cs
+- Assets/Code/Definitions/TutorialDefinition.cs
+- Assets/Code/Tutorials/TutorialManager.cs
+- Assets/Definitions/Tutorials/Tutorial_Sliding.asset
+- Assets/Definitions/TutorialCatalogDefinition.asset
 
 ## Testing Instructions
 
@@ -60,12 +70,15 @@ Sort Index:
 5. While sliding in SprintHold, press W downhill — speed builds (capped by `slideMaxSpeed`). Strafe steers. S soft-brakes but does not plant.
 6. Charge mode: W + look downhill charges; Shift does not start/stop. Uphill commit / reverse brake still plant.
 7. Interact while sliding still plants via `CancelSlideVelocity`.
+8. While sliding, confirm FOV widens slightly and eases back when the slide ends.
+9. After completing the sprinting tutorial, look down a steep slope. Confirm the Sliding tutorial appears. Start a slide — the Slide task completes and the popup dismisses.
 
 ## Cursor Notes
 
 - Tune: `slideMaxSpeed` (32), `slideMinDownhillSpeed` (1.5), `slideExitHysteresis` (10), `slideGravityScale`, exit boost (`slideExitBoostMaxSpeed` / `Decay` / `Steer`).
 - SprintHold enter still needs Shift + look down + downhill move; Shift is only for entry, not hold-to-slide.
 - Cancel does not run on failed/invalid place aims.
+- Tune glide/slide FOV on `CameraDefinition`: `speedFovBoost` (8), `speedFovBlendTime` (0.2).
 
 ## Developer Verification
 

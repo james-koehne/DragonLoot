@@ -2,67 +2,28 @@ using System.Collections.Generic;
 using System.Text;
 
 using UnityEngine;
-using UnityEngine.UI;
 
 /// <summary>
-/// Bottom-middle HUD showing display / constellation fill requirements while looking at or placing onto them.
+/// Builds display / constellation / artifact fill requirement text for the look-at HUD.
 /// </summary>
-public class DisplayRequirementUI : MonoBehaviour
+public class DisplayRequirementUI
 {
-	[Header( "Layout" )]
-	[SerializeField] float bottomOffset = 90f;
-	[SerializeField] int fontSize = 20;
-
-	Text _label;
-	bool _ready;
-	readonly StringBuilder _builder = new StringBuilder( 256 );
 	readonly List<TreasureDefinition> _reqDefs = new List<TreasureDefinition>( 8 );
 	readonly List<int> _reqNeeded = new List<int>( 8 );
 	readonly List<int> _reqFilled = new List<int>( 8 );
 
-	public void Setup()
+	public bool TryAppendSummary( PlayerController player, StringBuilder builder )
 	{
-		EnsureUi();
-		_ready = true;
-		SetVisible( false );
-	}
+		if ( builder == null || !TryResolveDisplay( player, out Component display ) )
+			return false;
 
-	void Update()
-	{
-		if ( !_ready )
-			return;
+		int start = builder.Length;
+		if ( !TryAppendSummary( display, builder ) )
+			return false;
 
-		Refresh();
-	}
-
-	void Refresh()
-	{
-		EnsureUi();
-		if ( _label == null )
-			return;
-
-		if ( GameMode.Instance == null || GameMode.Instance.Player == null )
-		{
-			SetVisible( false );
-			return;
-		}
-
-		PlayerController player = GameMode.Instance.Player;
-		if ( !TryResolveDisplay( player, out Component display ) )
-		{
-			SetVisible( false );
-			return;
-		}
-
-		_builder.Length = 0;
-		if ( !TryAppendSummary( display, _builder ) )
-		{
-			SetVisible( false );
-			return;
-		}
-
-		_label.text = _builder.ToString();
-		SetVisible( true );
+		if ( start > 0 )
+			builder.Insert( start, '\n' );
+		return true;
 	}
 
 	static bool TryResolveDisplay( PlayerController player, out Component display )
@@ -160,10 +121,13 @@ public class DisplayRequirementUI : MonoBehaviour
 		return false;
 	}
 
-	static bool AppendTypedTable( TypedDisplayTableInteractable table, StringBuilder builder )
+	bool AppendTypedTable( TypedDisplayTableInteractable table, StringBuilder builder )
 	{
 		if ( table == null )
 			return false;
+
+		if ( table.UsesPerSlotRequirements )
+			return AppendPerSlotTypedTable( table, builder );
 
 		TreasureDefinition accepted = table.AcceptedTreasure;
 		string label = accepted != null && !string.IsNullOrEmpty( accepted.displayName )
@@ -175,6 +139,67 @@ public class DisplayRequirementUI : MonoBehaviour
 		builder.Append( table.Capacity );
 		builder.Append( ' ' );
 		builder.Append( label );
+		return true;
+	}
+
+	bool AppendPerSlotTypedTable( TypedDisplayTableInteractable table, StringBuilder builder )
+	{
+		int slotCount = table.SlotCount;
+		ClearRequirementBuckets();
+
+		int configuredSlots = 0;
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			if ( table.GetRequiredTreasure( i ) != null )
+				configuredSlots++;
+		}
+
+		int perSlotTarget = 1;
+		if ( table.AllowsVerticalStack && configuredSlots > 0 )
+		{
+			int capacity = table.Capacity;
+			if ( capacity > configuredSlots )
+				perSlotTarget = capacity / configuredSlots;
+		}
+
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			TreasureDefinition required = table.GetRequiredTreasure( i );
+			if ( required == null )
+				continue;
+
+			int filled = table.GetSlotCount( i );
+			int needed = perSlotTarget;
+			int index = _reqDefs.IndexOf( required );
+			if ( index < 0 )
+			{
+				_reqDefs.Add( required );
+				_reqNeeded.Add( needed );
+				_reqFilled.Add( Mathf.Min( filled, needed ) );
+				continue;
+			}
+
+			_reqNeeded[ index ] += needed;
+			_reqFilled[ index ] += Mathf.Min( filled, needed );
+		}
+
+		if ( _reqDefs.Count == 0 )
+		{
+			builder.Append( table.CurrentCount );
+			builder.Append( '/' );
+			builder.Append( table.Capacity );
+			builder.Append( ' ' );
+			builder.Append( table.InteractionName );
+			return true;
+		}
+
+		for ( int i = 0; i < _reqDefs.Count; i++ )
+		{
+			if ( i > 0 )
+				builder.Append( '\n' );
+			AppendRequirementLine( builder, _reqFilled[ i ], _reqNeeded[ i ], RequirementLabel( _reqDefs[ i ] ) );
+		}
+
 		return true;
 	}
 
@@ -328,86 +353,5 @@ public class DisplayRequirementUI : MonoBehaviour
 		if ( !string.IsNullOrEmpty( definition.displayName ) )
 			return definition.displayName;
 		return definition.name;
-	}
-
-	void SetVisible( bool visible )
-	{
-		EnsureUi();
-		if ( _label != null )
-			_label.enabled = visible;
-	}
-
-	void EnsureUi()
-	{
-		if ( _label != null )
-			return;
-
-		Transform labelTransform = transform.Find( "Label" );
-		if ( labelTransform != null )
-			_label = labelTransform.GetComponent<Text>();
-
-		if ( _label == null && transform.name == "DisplayRequirements" )
-			_label = GetComponentInChildren<Text>( true );
-
-		if ( _label != null )
-		{
-			ApplyLabelStyle( _label );
-			return;
-		}
-
-		RectTransform root = transform as RectTransform;
-		if ( root == null || transform.name != "DisplayRequirements" )
-		{
-			Transform existing = transform.Find( "DisplayRequirements" );
-			if ( existing != null )
-			{
-				root = existing as RectTransform;
-			}
-			else
-			{
-				GameObject go = new GameObject( "DisplayRequirements", typeof( RectTransform ) );
-				go.transform.SetParent( transform, false );
-				root = go.GetComponent<RectTransform>();
-				root.anchorMin = new Vector2( 0f, 0f );
-				root.anchorMax = new Vector2( 1f, 0f );
-				root.pivot = new Vector2( 0.5f, 0f );
-				root.anchoredPosition = new Vector2( 0f, bottomOffset );
-				root.sizeDelta = new Vector2( -40f, 160f );
-			}
-		}
-
-		GameObject labelGo = new GameObject( "Label", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
-		labelGo.transform.SetParent( root, false );
-
-		RectTransform labelRect = labelGo.GetComponent<RectTransform>();
-		labelRect.anchorMin = Vector2.zero;
-		labelRect.anchorMax = Vector2.one;
-		labelRect.offsetMin = Vector2.zero;
-		labelRect.offsetMax = Vector2.zero;
-
-		_label = labelGo.GetComponent<Text>();
-		ApplyLabelStyle( _label );
-	}
-
-	void ApplyLabelStyle( Text label )
-	{
-		if ( label == null )
-			return;
-
-		if ( label.font == null )
-		{
-			label.font = Resources.GetBuiltinResource<Font>( "LegacyRuntime.ttf" );
-			if ( label.font == null )
-				label.font = Resources.GetBuiltinResource<Font>( "Arial.ttf" );
-		}
-
-		label.fontSize = fontSize;
-		label.fontStyle = FontStyle.Bold;
-		label.alignment = TextAnchor.LowerCenter;
-		label.color = new Color( 1f, 1f, 1f, 0.92f );
-		label.raycastTarget = false;
-		label.horizontalOverflow = HorizontalWrapMode.Overflow;
-		label.verticalOverflow = VerticalWrapMode.Overflow;
-		label.supportRichText = false;
 	}
 }

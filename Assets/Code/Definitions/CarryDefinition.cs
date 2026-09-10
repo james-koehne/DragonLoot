@@ -145,10 +145,19 @@ public class CarryDefinition : ScriptableObject
 	[Min( 0f )]
 	public float pouchSummaryFadeOut = 0.35f;
 
+	[Tooltip( "Seconds you must stay on a pouch before its new-item star clears. Pickup that lands in the already-selected pouch never shows a star." )]
+	[Min( 0f )]
+	public float pouchNewItemAcknowledgeSeconds = 1.5f;
+
 	[Header( "Held Coin Visual" )]
 	[Tooltip( "Max coins represented by the left-hand cylinder height. Logical count may exceed this." )]
 	[Min( 1 )]
 	public int heldVisualMaxCoins = 40;
+
+	[Header( "Held Lighting" )]
+	[Tooltip( "Absolute _ReflectionFloor applied via MPB while treasure is held so hand loot stays readable in darkness." )]
+	[Range( 0f, 1f )]
+	public float heldReflectionFloor = 0.28f;
 
 	[Header( "Whole-Stack Interaction" )]
 	[Tooltip( "Legacy flat hold duration (used only if the curve has no keys)." )]
@@ -302,6 +311,7 @@ public class CarryDefinition : ScriptableObject
 		pouchSummaryHold = Mathf.Max( 0f, pouchSummaryHold );
 		pouchSummaryFadeOut = Mathf.Max( 0f, pouchSummaryFadeOut );
 		heldVisualMaxCoins = Mathf.Max( 1, heldVisualMaxCoins );
+		heldReflectionFloor = Mathf.Clamp01( heldReflectionFloor );
 		wholeStackHoldSeconds = Mathf.Max( 0.1f, wholeStackHoldSeconds );
 		wholeStackHoldMaxSeconds = Mathf.Max( 0.1f, wholeStackHoldMaxSeconds );
 		wholeStackProgressRingSize = Mathf.Max( 8f, wholeStackProgressRingSize );

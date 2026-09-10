@@ -45,6 +45,12 @@ public class DebugGroundCoinStackSection : DebugOverlaySection
 		string selectedLabel = FormatLabel( selected );
 
 		GUILayout.Label( $"Active stacks: {GroundCoinStack.ActiveStacks.Count}" );
+		GUILayout.Label(
+			$"Stream resident {WorldTreasureStreamer.ResidentCoinStackCount}  hidden {WorldTreasureStreamer.HiddenCoinStackCount}  pool {WorldTreasureStreamer.CoinPoolFreeCount}" );
+		GUILayout.Label(
+			$"Bars resident {WorldTreasureStreamer.ResidentBarStackCount}  hidden {WorldTreasureStreamer.HiddenBarStackCount}" );
+		GUILayout.Label(
+			$"Loose hidden {WorldTreasureStreamer.HiddenLooseCount}  wake {WorldTreasureStreamer.WakesLastTick} evict {WorldTreasureStreamer.EvictsLastTick} extract {WorldTreasureStreamer.ExtractsLastTick} cells {WorldTreasureStreamer.CellsTicked}" );
 
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "◀", GUILayout.Width( 28f ) ) )

@@ -34,9 +34,9 @@ MonoBehaviour:
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
   body: Tap to shove the cart along the track. Hold to push or pull it with you. Place
-    treasure into the cart to haul it around.
+    treasure into a cargo cart to haul it around. Sit in a drive cart to ride the rails.
   keybindHint: '[{ContextualInteract}] Tap to shove  Hold [{ContextualInteract}] Push
-    [{SecondaryInteract}] Place in cart'
+    [{ContextualInteract}] Ride  [{SecondaryInteract}] Place in cart'
   tasks:
   - id: shove_cart
     label: Tap to shove the cart
@@ -49,4 +49,8 @@ MonoBehaviour:
   - id: load_cart
     label: Put something in the cart
     completeTrigger: 20
+    completeVolumeId: 
+  - id: ride_cart
+    label: Sit in a drive cart
+    completeTrigger: 23
     completeVolumeId: 

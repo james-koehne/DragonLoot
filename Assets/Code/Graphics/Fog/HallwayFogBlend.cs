@@ -290,6 +290,16 @@ public class HallwayFogBlend : MonoBehaviour
 		ApplyFromPlayer( allowLock: true );
 	}
 
+	public void DebugLockAtBase()
+	{
+		_playerPlaced = true;
+		_completingFade = false;
+		if ( _locked )
+			return;
+
+		LockAtBase();
+	}
+
 	public void DebugReset()
 	{
 		_locked = false;

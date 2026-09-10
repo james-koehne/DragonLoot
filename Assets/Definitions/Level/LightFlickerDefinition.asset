@@ -25,8 +25,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 1
-    tintA: {r: 1, g: 0.7451615, b: 0.56700003, a: 1}
-    tintB: {r: 1, g: 0.5800675, b: 0.28400004, a: 1}
+    tintA: {r: 1, g: 0.8156364, b: 0.68799996, a: 1}
+    tintB: {r: 1, g: 0.7181749, b: 0.518, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 1
     emissionTintA: {r: 3.9999995, g: 2.1091888, b: 1.0052353, a: 1}
@@ -46,8 +46,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 0.12
-    tintA: {r: 0.99607843, g: 0.99607843, b: 0.57254905, a: 1}
-    tintB: {r: 0.99607843, g: 0.99607843, b: 0.4731373, a: 1}
+    tintA: {r: 0.99607843, g: 0.99607843, b: 0.71319216, a: 1}
+    tintB: {r: 0.99607843, g: 0.99607843, b: 0.6713569, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 0.4
     emissionTintA: {r: 3.9999998, g: 3.3999999, b: 0.6999999, a: 1}
@@ -67,8 +67,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 0.12
-    tintA: {r: 0.99607843, g: 0.6601678, b: 0.57254905, a: 1}
-    tintB: {r: 0.99607843, g: 0.56667626, b: 0.47450975, a: 1}
+    tintA: {r: 0.99607843, g: 0.75416046, b: 0.6922745, a: 1}
+    tintB: {r: 0.99607843, g: 0.7185246, b: 0.65741175, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 0.4
     emissionTintA: {r: 3.9999998, g: 1.2651597, b: 0.71204174, a: 1}
@@ -88,8 +88,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 0.12
-    tintA: {r: 0.7201647, g: 0.9679761, b: 0.99607843, a: 1}
-    tintB: {r: 0.65741175, g: 0.89422387, b: 0.99607843, a: 1}
+    tintA: {r: 0.79785883, g: 0.9762565, b: 0.99607843, a: 1}
+    tintB: {r: 0.7699686, g: 0.9277197, b: 0.99607843, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 0.4
     emissionTintA: {r: 0.71204174, g: 3.0348423, b: 3.9999995, a: 1}
@@ -214,8 +214,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 0.55
-    tintA: {r: 0.55, g: 0.85, b: 1.4, a: 1}
-    tintB: {r: 1.1, g: 0.45, b: 1.35, a: 1}
+    tintA: {r: 0.8441999, g: 1.0375216, b: 1.3999999, a: 1}
+    tintB: {r: 1.2205276, g: 0.8802001, b: 1.3500001, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 0.7
     emissionTintA: {r: 0.35, g: 1.4, b: 2.4, a: 1}

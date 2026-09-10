@@ -6,23 +6,38 @@ using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 
 /// <summary>
-/// Addressables spawn/despawn seam for treasure items, plus a sync visual pool for coin flights.
+/// Addressables spawn/despawn seam for treasure items, plus sync pools for coin flights and pile props.
 /// </summary>
 public static class TreasureItemFactory
 {
 	const int DefaultCoinPoolSize = 24;
+	const int DefaultPropPoolSize = 32;
 
 	static readonly Dictionary<TreasureDefinition, Stack<TreasureItem>> CoinPools =
+		new Dictionary<TreasureDefinition, Stack<TreasureItem>>();
+	static readonly Dictionary<TreasureDefinition, Stack<TreasureItem>> PropPools =
 		new Dictionary<TreasureDefinition, Stack<TreasureItem>>();
 	static readonly Dictionary<TreasureDefinition, GameObject> PrefabCache =
 		new Dictionary<TreasureDefinition, GameObject>();
 	static readonly HashSet<TreasureItem> PooledVisualCoins = new HashSet<TreasureItem>();
+	static readonly HashSet<TreasureItem> PooledProps = new HashSet<TreasureItem>();
 	static Transform _poolRoot;
 	static int _poolCap = DefaultCoinPoolSize;
+	static int _propPoolCap = DefaultPropPoolSize;
 
 	public static void SetCoinVisualPoolCapacity( int capacity )
 	{
 		_poolCap = Mathf.Max( 4, capacity );
+	}
+
+	public static void SetPropPoolCapacity( int capacity )
+	{
+		_propPoolCap = Mathf.Max( 4, capacity );
+	}
+
+	static bool ShouldPoolProp( TreasureDefinition definition )
+	{
+		return Application.isPlaying && definition != null && definition.category != TreasureCategory.Coin;
 	}
 
 	/// <summary>
@@ -34,6 +49,9 @@ public static class TreasureItemFactory
 		Quaternion rotation )
 	{
 		if ( definition == null || definition.category != TreasureCategory.Coin )
+			return SpawnFallback( definition, position, rotation, null );
+
+		if ( !Application.isPlaying )
 			return SpawnFallback( definition, position, rotation, null );
 
 		EnsurePoolRoot();
@@ -59,6 +77,19 @@ public static class TreasureItemFactory
 		return created;
 	}
 
+	/// <summary>
+	/// Stops treating <paramref name="item"/> as a pooled visual so it can become a world physics coin.
+	/// No-op when the item is not pooled.
+	/// </summary>
+	public static void DetachFromPool( TreasureItem item )
+	{
+		if ( item == null )
+			return;
+
+		PooledVisualCoins.Remove( item );
+		PooledProps.Remove( item );
+	}
+
 	/// <summary>Return a visual coin to the pool (or destroy if not pooled / pool full).</summary>
 	public static void ReturnVisualCoin( TreasureItem item )
 	{
@@ -74,6 +105,13 @@ public static class TreasureItemFactory
 		TreasureDefinition def = item.Definition;
 		item.OnDespawned();
 		item.EndFlight();
+		if ( !Application.isPlaying || _poolRoot == null )
+		{
+			PooledVisualCoins.Remove( item );
+			Object.Destroy( item.gameObject );
+			return;
+		}
+
 		item.transform.SetParent( _poolRoot, false );
 		item.gameObject.SetActive( false );
 
@@ -100,6 +138,34 @@ public static class TreasureItemFactory
 		stack.Push( item );
 	}
 
+	public static TreasureItem TryRentPooled(
+		TreasureDefinition definition,
+		Vector3 position,
+		Quaternion rotation,
+		Transform parent = null )
+	{
+		if ( !ShouldPoolProp( definition ) )
+			return null;
+
+		EnsurePoolRoot();
+		if ( _poolRoot == null )
+			return null;
+		if ( !PropPools.TryGetValue( definition, out Stack<TreasureItem> stack ) )
+			return null;
+
+		while ( stack.Count > 0 )
+		{
+			TreasureItem rented = stack.Pop();
+			if ( rented == null )
+				continue;
+
+			PrepareRentedProp( rented, definition, position, rotation, parent );
+			return rented;
+		}
+
+		return null;
+	}
+
 	public static async Task<TreasureItem> SpawnAsync(
 		TreasureDefinition definition,
 		Vector3 position,
@@ -108,6 +174,10 @@ public static class TreasureItemFactory
 	{
 		if ( definition == null )
 			return CreateFallback( null, position, rotation, parent );
+
+		TreasureItem rented = TryRentPooled( definition, position, rotation, parent );
+		if ( rented != null )
+			return rented;
 
 		GameObject instance = null;
 		bool viaAddressables = false;
@@ -133,6 +203,7 @@ public static class TreasureItemFactory
 		TreasureItem item = EnsureItem( instance, definition, viaAddressables );
 		LooseTreasureManager.EnsureExists();
 		item.OnSpawned();
+		TrackPooledProp( item, definition );
 		return item;
 	}
 
@@ -147,6 +218,10 @@ public static class TreasureItemFactory
 	{
 		if ( definition == null )
 			return CreateFallback( null, position, rotation, parent );
+
+		TreasureItem rented = TryRentPooled( definition, position, rotation, parent );
+		if ( rented != null )
+			return rented;
 
 		GameObject instance = null;
 		bool viaAddressables = false;
@@ -171,6 +246,7 @@ public static class TreasureItemFactory
 		TreasureItem item = EnsureItem( instance, definition, viaAddressables );
 		LooseTreasureManager.EnsureExists();
 		item.OnSpawned();
+		TrackPooledProp( item, definition );
 		return item;
 	}
 
@@ -191,6 +267,12 @@ public static class TreasureItemFactory
 		if ( PooledVisualCoins.Contains( item ) )
 		{
 			ReturnVisualCoin( item );
+			return;
+		}
+
+		if ( PooledProps.Contains( item ) )
+		{
+			ReturnPooledProp( item );
 			return;
 		}
 
@@ -280,9 +362,94 @@ public static class TreasureItemFactory
 		item.OnSpawned();
 	}
 
+	static void TrackPooledProp( TreasureItem item, TreasureDefinition definition )
+	{
+		if ( item == null || !ShouldPoolProp( definition ) )
+			return;
+
+		PooledProps.Add( item );
+	}
+
+	static void PrepareRentedProp(
+		TreasureItem item,
+		TreasureDefinition definition,
+		Vector3 position,
+		Quaternion rotation,
+		Transform parent )
+	{
+		GameObject go = item.gameObject;
+		go.SetActive( true );
+		if ( parent != null )
+			go.transform.SetParent( parent, false );
+		else
+			go.transform.SetParent( null, false );
+		go.transform.SetPositionAndRotation( position, rotation );
+		item.EnsureComponents();
+		item.Bind( definition, item.ReleasedViaAddressables );
+		item.ApplyWorldScale();
+		item.SetMeshVisible( true );
+		item.OnSpawned();
+	}
+
+	static void ReturnPooledProp( TreasureItem item )
+	{
+		if ( item == null )
+			return;
+
+		TreasureDefinition def = item.Definition;
+		bool viaAddressables = item.ReleasedViaAddressables;
+		item.OnDespawned();
+		item.EndFlight();
+		if ( !Application.isPlaying )
+		{
+			PooledProps.Remove( item );
+			DestroyPooledInstance( item.gameObject, viaAddressables );
+			return;
+		}
+
+		EnsurePoolRoot();
+		item.transform.SetParent( _poolRoot, false );
+		item.gameObject.SetActive( false );
+
+		if ( !ShouldPoolProp( def ) )
+		{
+			PooledProps.Remove( item );
+			DestroyPooledInstance( item.gameObject, viaAddressables );
+			return;
+		}
+
+		if ( !PropPools.TryGetValue( def, out Stack<TreasureItem> stack ) )
+		{
+			stack = new Stack<TreasureItem>( 8 );
+			PropPools[ def ] = stack;
+		}
+
+		if ( stack.Count >= _propPoolCap )
+		{
+			PooledProps.Remove( item );
+			DestroyPooledInstance( item.gameObject, viaAddressables );
+			return;
+		}
+
+		stack.Push( item );
+	}
+
+	static void DestroyPooledInstance( GameObject go, bool viaAddressables )
+	{
+		if ( go == null )
+			return;
+
+		if ( viaAddressables )
+			Addressables.ReleaseInstance( go );
+		else
+			Object.Destroy( go );
+	}
+
 	static void EnsurePoolRoot()
 	{
 		if ( _poolRoot != null )
+			return;
+		if ( !Application.isPlaying )
 			return;
 
 		GameObject root = new GameObject( "CoinVisualPool" );

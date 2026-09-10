@@ -173,6 +173,8 @@ public class TreasureGroundCoverageZone : MonoBehaviour
 			remaining += stack.Count;
 		}
 
+		remaining += WorldTreasureStreamer.CountHiddenGoldBarsInBounds( bounds );
+
 		TreasureItem[] items = Object.FindObjectsByType<TreasureItem>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
 		for ( int i = 0; i < items.Length; i++ )
 		{
@@ -274,15 +276,12 @@ public class TreasureGroundCoverageZone : MonoBehaviour
 				if ( stackPlacement.slots == null || stackPlacement.Count <= 0 )
 					continue;
 
-				GroundCoinStack stack = GroundCoinStack.CreateAt( stackPlacement.worldPosition, Quaternion.identity );
-				if ( stack == null )
-					continue;
-
-				stack.name = BuildStackName( stackPlacement, createdStacks );
-				if ( stack.DebugFillSlots( stackPlacement.slots ) )
-					createdStacks++;
-				else
-					stack.DebugDespawn();
+				WorldTreasureStreamer.SpawnOrRecordCoinStack(
+					stackPlacement.worldPosition,
+					Quaternion.identity,
+					stackPlacement.slots,
+					BuildStackName( stackPlacement, createdStacks ) );
+				createdStacks++;
 			}
 		}
 

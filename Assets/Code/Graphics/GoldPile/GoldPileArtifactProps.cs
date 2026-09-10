@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 using UnityEngine;
+using UnityEngine.Profiling;
 
 /// <summary>
 /// Real MeshRenderer treasure objects for large pile props (artifacts, crowns, gems, etc.).
@@ -16,6 +17,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 	const int MaxStreamLatentChecksPerFrame = 64;
 	const float StreamPlayerMoveEpsilon = 0.25f;
 	const float StreamPlayerMoveEpsilonSqr = StreamPlayerMoveEpsilon * StreamPlayerMoveEpsilon;
+	const float CullCameraMoveEpsilonSqr = 0.0025f;
+	const float CullCameraForwardDotMin = 0.9995f;
 
 	struct LatentEntry
 	{
@@ -30,6 +33,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 		public bool IsAuthored;
 		public int PropIndex;
 		public bool LoggedMissingSpawn;
+		public int ChunkX;
+		public int ChunkZ;
+		public float WorldCenterX;
+		public float WorldCenterZ;
+		public bool SurfaceOk;
+		public bool HasWorldCenter;
 	}
 
 	public struct LatentFillReport
@@ -91,6 +100,20 @@ public class GoldPileArtifactProps : MonoBehaviour
 	readonly List<TreasureItem> _pendingWorldReleases = new List<TreasureItem>( 8 );
 	readonly List<TreasurePileAuthoredItem> _authoredScratch = new List<TreasurePileAuthoredItem>( 16 );
 	readonly List<GameObject> _disabledAuthoredProxies = new List<GameObject>( 16 );
+	readonly HashSet<int> _seatingInFlight = new HashSet<int>();
+	bool _cullDirty = true;
+	bool _hasLastCullCamera;
+	Vector3 _lastCullCameraPos;
+	Vector3 _lastCullCameraForward;
+	List<int>[] _latentByChunk;
+	int _latentChunkCountX;
+	int _latentChunkCountZ;
+	readonly List<int> _streamChunkScratch = new List<int>( 64 );
+	readonly HashSet<int> _streamChunkSet = new HashSet<int>();
+	readonly List<int> _streamCandidateScratch = new List<int>( 128 );
+	bool _hasLatentWorldCacheRoot;
+	Vector3 _latentWorldCacheRootPos;
+	Quaternion _latentWorldCacheRootRot;
 
 	public int PropCount => _props.Count;
 	public int LatentCount => _latent.Count;
@@ -119,6 +142,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( !appliedBake )
 			PlaceDefinitionContents( settings, occupiedBounds, occupancyGrid );
 
+		RebuildLatentSpatialIndex();
 		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
 	}
 
@@ -152,6 +176,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( !IsBindStillValid( bindId ) )
 			return;
 
+		RebuildLatentSpatialIndex();
 		StartReveal( bindId, spatialFilter: false, default, 0f, startIndex: 0 );
 	}
 
@@ -330,7 +355,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return true;
 
 		becameVisible = true;
-		_ = SeatLatentAsync( latentIndex, null );
+		RequestSeat( latentIndex, null );
 		return true;
 	}
 
@@ -365,7 +390,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return true;
 		}
 
-		_ = SeatLatentAsync( latentIndex, item );
+		RequestSeat( latentIndex, item );
 		return true;
 	}
 
@@ -489,6 +514,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 			LatentEntry latent = _latent[ latentIndex ];
 			latent.Exposed = true;
+			latent.SurfaceOk = true;
 			_latent[ latentIndex ] = latent;
 
 			await SeatLatentAsync( latentIndex, null );
@@ -531,6 +557,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 			attempted++;
 			latent.Exposed = true;
+			latent.SurfaceOk = true;
 			_latent[ i ] = latent;
 			await SeatLatentAsync( i, null );
 			if ( this == null || bindId != _bindSerial )
@@ -643,15 +670,20 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 		_props.Clear();
 		_latent.Clear();
+		ClearLatentSpatialIndex();
 		_visibleByDef.Clear();
 		_pendingReveal = false;
 		_revealCursor = 0;
 		_streamLatentCursor = 0;
 		_streamResidencyDirty = true;
 		_hasLastStreamPlayerPos = false;
+		_hasLatentWorldCacheRoot = false;
 		ExposedLatentCount = 0;
 		StreamedOutCount = 0;
 		_pendingWorldReleases.Clear();
+		_seatingInFlight.Clear();
+		_cullDirty = true;
+		_hasLastCullCamera = false;
 		// Authored scene proxies are never despawned here — only re-enabled when rebinding.
 		RestoreDisabledAuthoredProxies();
 	}
@@ -1334,11 +1366,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		GoldPileEditTiming.Begin( "GoldPile.ArtifactReveal" );
 		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
 
-		int spawnsThisPass = 0;
-		// Dig frames budget a few spawns; full bind refresh is uncapped.
-		int maxSpawns = spatialFilter ? 3 : int.MaxValue;
+		int exposedThisPass = 0;
 		int i = Mathf.Max( 0, startIndex );
-		bool budgetHit = false;
 
 		try
 		{
@@ -1404,40 +1433,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 					continue;
 
 				latent.Exposed = true;
+				latent.SurfaceOk = true;
 				_latent[ i ] = latent;
 				_streamResidencyDirty = true;
-
-				if ( !IsLatentInStreamRange( i, currentlyResident: false ) )
-					continue;
-
-				// Exposed gems/artifacts spawn when in stream range — no maxVisible cap.
-				if ( spawnsThisPass >= maxSpawns )
-				{
-					budgetHit = true;
-					_streamResidencyDirty = true;
-					break;
-				}
-
-				await SeatLatentAsync( i, null );
-
-				if ( !IsRevealStillValid( bindId, generation ) )
-				{
-					FlushPendingWorldReleases();
-					return;
-				}
-
-				spawnsThisPass++;
-
-				// Freshly seated props may already qualify for pick / world release.
-				latent = _latent[ i ];
-				if ( latent.Spawned && TryResolveProp( i, out int seatedPropIndex, out PropEntry seatedProp ) )
-				{
-					outsideFraction = GoldPileTreasurePlacement.OutsideFractionAabb(
-						_heightfield,
-						latent.LocalBounds );
-					if ( outsideFraction >= _treasureReleaseOutsideFraction && seatedProp.Item != null )
-						_pendingWorldReleases.Add( seatedProp.Item );
-				}
+				exposedThisPass++;
 			}
 
 			if ( !IsRevealStillValid( bindId, generation ) )
@@ -1447,16 +1446,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			}
 
 			FlushPendingWorldReleases();
-
-			if ( budgetHit )
-			{
-				_revealCursor = i;
-				_pendingRevealWorld = worldCenter;
-				_pendingRevealRadius = radius;
-				_pendingReveal = true;
-			}
-			else
-				_revealCursor = 0;
+			_revealCursor = 0;
 		}
 		finally
 		{
@@ -1466,7 +1456,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 				GoldPileEditTiming.Record(
 					"artifacts.reveal",
 					sw.Elapsed.TotalMilliseconds,
-					$"spawns={spawnsThisPass} budgetHit={budgetHit} spatial={spatialFilter}" );
+					$"exposed={exposedThisPass} spatial={spatialFilter}" );
 			}
 
 			GoldPileEditTiming.End();
@@ -1555,8 +1545,60 @@ public class GoldPileArtifactProps : MonoBehaviour
 			_owner.NotifyPropReleasedToWorld( worldPos );
 	}
 
+	void RequestSeat( int latentIndex, TreasureItem reuse )
+	{
+		TryRequestSeat( latentIndex, reuse );
+	}
+
+	bool TryRequestSeat( int latentIndex, TreasureItem reuse )
+	{
+		if ( latentIndex < 0 || latentIndex >= _latent.Count )
+			return false;
+		if ( _seatingInFlight.Contains( latentIndex ) )
+			return false;
+
+		LatentEntry latent = _latent[ latentIndex ];
+		if ( latent.Taken || latent.Definition == null )
+			return false;
+		if ( latent.Spawned && reuse == null )
+			return false;
+
+		if ( _seatingInFlight.Count >= MaxStreamSpawnsPerFrame && reuse == null )
+			return false;
+
+		_seatingInFlight.Add( latentIndex );
+
+		if ( reuse == null )
+		{
+			Vector3 worldPos = _pileRoot != null
+				? _pileRoot.TransformPoint( latent.LocalPos )
+				: latent.LocalPos;
+			Quaternion worldRot = _pileRoot != null
+				? _pileRoot.rotation * latent.LocalRot
+				: latent.LocalRot;
+			TreasureItem rented = TreasureItemFactory.TryRentPooled( latent.Definition, worldPos, worldRot, transform );
+			if ( rented != null )
+			{
+				try
+				{
+					RegisterProp( rented, latent.Definition, latentIndex );
+				}
+				finally
+				{
+					_seatingInFlight.Remove( latentIndex );
+				}
+
+				return true;
+			}
+		}
+
+		_ = SeatLatentAsync( latentIndex, reuse );
+		return true;
+	}
+
 	async Task SeatLatentAsync( int latentIndex, TreasureItem reuse )
 	{
+		_seatingInFlight.Add( latentIndex );
 		try
 		{
 			await SeatLatentAsyncCore( latentIndex, reuse );
@@ -1564,6 +1606,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 		catch ( MissingReferenceException )
 		{
 			// Destroyed mid-spawn (play-mode exit / ClearAll).
+		}
+		finally
+		{
+			_seatingInFlight.Remove( latentIndex );
 		}
 	}
 
@@ -1662,7 +1708,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		LatentEntry latent = _latent[ latentIndex ];
 		latent.Taken = false;
 		_latent[ latentIndex ] = latent;
-		_ = SeatLatentAsync( latentIndex, item );
+		RequestSeat( latentIndex, item );
 	}
 
 	void RegisterProp( TreasureItem item, TreasureDefinition definition, int latentIndex )
@@ -1672,31 +1718,44 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( latentIndex < 0 || latentIndex >= _latent.Count )
 			return;
 
-		LatentEntry latent = _latent[ latentIndex ];
-		bool touchesOutside = _heightfield != null
-			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
-		float outsideFraction = _heightfield != null
-			? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
-			: 0f;
-		bool pickable = IsNewlyPickable( definition, touchesOutside, outsideFraction );
+		Profiler.BeginSample( "GoldPile.RegisterProp" );
+		try
+		{
+			RegisterPropCore( item, definition, latentIndex );
+		}
+		finally
+		{
+			Profiler.EndSample();
+		}
+	}
 
+	void RegisterPropCore( TreasureItem item, TreasureDefinition definition, int latentIndex )
+	{
+		LatentEntry latent = _latent[ latentIndex ];
 		int existing = FindPropIndex( item );
 		if ( existing >= 0 )
 		{
+			bool existingTouches = _heightfield != null
+				&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+			float existingOutside = _heightfield != null
+				? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
+				: 0f;
 			PropEntry updated = _props[ existing ];
 			updated.LocalPos = latent.LocalPos;
 			updated.LocalRot = latent.LocalRot;
 			updated.LatentIndex = latentIndex;
-			updated.Pickable = pickable;
+			updated.Pickable = IsNewlyPickable( definition, existingTouches, existingOutside );
 			AssignChunk( ref updated );
 			ApplyFixedPose( item, latent );
-			CachePropCullData( ref updated, item );
+			Bounds existingBounds = GetItemBounds( item );
+			CachePropCullData( ref updated, item, existingBounds );
 			_props[ existing ] = updated;
 			ApplyInteractableState( updated );
 			latent.Spawned = true;
 			latent.Exposed = true;
 			latent.PropIndex = existing;
 			_latent[ latentIndex ] = latent;
+			_cullDirty = true;
 			return;
 		}
 
@@ -1707,7 +1766,6 @@ public class GoldPileArtifactProps : MonoBehaviour
 			item.EnsureGemSphereCollider();
 		ApplyFixedPose( item, latent );
 
-		// Refine latent AABB from the real prop for carve reveal / pick thresholds.
 		Bounds worldBounds = GetItemBounds( item );
 		latent.LocalBounds = WorldBoundsToLocal( worldBounds );
 		float probe = Mathf.Max( 0.08f, latent.Scale * 0.35f );
@@ -1718,22 +1776,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 				_heightfield.LootGroundLevel,
 				maxEmbed ) )
 		{
-			if ( TryResampleLatentSeat( latentIndex, probe ) )
-				latent = _latent[ latentIndex ];
-			else
-			{
-				Vector3 seatedPos = latent.LocalPos;
-				Bounds seatedBounds = latent.LocalBounds;
-				GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
-					_heightfield,
-					ref seatedPos,
-					ref seatedBounds,
-					probe,
-					maxEmbed );
-				latent.LocalPos = seatedPos;
-				latent.LocalBounds = seatedBounds;
-			}
-
+			Vector3 seatedPos = latent.LocalPos;
+			Bounds seatedBounds = latent.LocalBounds;
+			GoldPileTreasurePlacement.LiftBoundsIntoPileColumn(
+				_heightfield,
+				ref seatedPos,
+				ref seatedBounds,
+				probe,
+				maxEmbed );
+			latent.LocalPos = seatedPos;
+			latent.LocalBounds = seatedBounds;
 			ApplyFixedPose( item, latent );
 			worldBounds = GetItemBounds( item );
 			latent.LocalBounds = WorldBoundsToLocal( worldBounds );
@@ -1752,15 +1804,17 @@ public class GoldPileArtifactProps : MonoBehaviour
 				latent.LocalPos = seatedPos;
 				latent.LocalBounds = seatedBounds;
 				ApplyFixedPose( item, latent );
+				worldBounds = GetItemBounds( item );
+				latent.LocalBounds = WorldBoundsToLocal( worldBounds );
 			}
 		}
 
-		touchesOutside = _heightfield != null
+		bool touchesOutside = _heightfield != null
 			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
-		outsideFraction = _heightfield != null
+		float outsideFraction = _heightfield != null
 			? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
 			: 0f;
-		pickable = IsNewlyPickable( definition, touchesOutside, outsideFraction );
+		bool pickable = IsNewlyPickable( definition, touchesOutside, outsideFraction );
 
 		PropEntry entry = new PropEntry
 		{
@@ -1773,7 +1827,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			Pickable = pickable
 		};
 		AssignChunk( ref entry );
-		CachePropCullData( ref entry, item );
+		CachePropCullData( ref entry, item, worldBounds );
 		_props.Add( entry );
 		_visibleByDef[ definition ] = GetVisibleCount( definition ) + 1;
 
@@ -1782,6 +1836,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		latent.PropIndex = _props.Count - 1;
 		_latent[ latentIndex ] = latent;
 		ApplyInteractableState( entry );
+		_cullDirty = true;
 	}
 
 	bool TryResampleLatentSeat( int latentIndex, float probe )
@@ -1851,13 +1906,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return true;
 	}
 
-	void CachePropCullData( ref PropEntry entry, TreasureItem item )
+	void CachePropCullData( ref PropEntry entry, TreasureItem item, Bounds worldBounds )
 	{
 		if ( item == null )
 			return;
 
 		entry.CachedCollider = item.GetComponent<Collider>();
-		entry.WorldBounds = GetItemBounds( item );
+		entry.WorldBounds = worldBounds;
 	}
 
 	void RefreshPropWorldBoundsIfNeeded()
@@ -1906,12 +1961,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		// Pickup still waits for outside-fraction; frustum hide must not drop player collision.
 		bool solidOnPile = prop.Definition != null && prop.Definition.collideWithPlayerOnPile;
 		bool enabled = solidOnPile || ( prop.RenderVisible && prop.Pickable );
-		Collider[] cols = prop.Item.GetComponentsInChildren<Collider>( true );
-		for ( int i = 0; i < cols.Length; i++ )
-		{
-			if ( cols[ i ] != null )
-				cols[ i ].enabled = enabled;
-		}
+		prop.Item.SetChildCollidersEnabled( enabled );
 	}
 
 	int FindUnusedLatent( TreasureDefinition definition )
@@ -1956,7 +2006,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 		PlaceLatentUnit( definition, unitSalt, settings, occupiedBounds, occupancyGrid );
 		if ( _latent.Count <= before )
 			return -1;
-		return _latent.Count - 1;
+		int index = _latent.Count - 1;
+		RegisterLatentSpatial( index );
+		return index;
 	}
 
 	int AppendLatentFromWorld( TreasureDefinition definition, Vector3 preferredWorld )
@@ -2132,7 +2184,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 			IsAuthored = false,
 			PropIndex = -1
 		} );
-		return _latent.Count - 1;
+		int index = _latent.Count - 1;
+		RegisterLatentSpatial( index );
+		return index;
 	}
 
 	void AssignChunk( ref PropEntry entry )
@@ -2149,9 +2203,24 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	void RefreshCulling()
 	{
+		Camera camera = ResolveCamera();
+		Vector3 cameraPos = camera != null ? camera.transform.position : Vector3.zero;
+		Vector3 cameraForward = camera != null ? camera.transform.forward : Vector3.forward;
+		if ( !_cullDirty && _hasLastCullCamera )
+		{
+			float cameraDeltaSqr = ( cameraPos - _lastCullCameraPos ).sqrMagnitude;
+			float forwardDot = Vector3.Dot( cameraForward, _lastCullCameraForward );
+			if ( cameraDeltaSqr < CullCameraMoveEpsilonSqr && forwardDot >= CullCameraForwardDotMin )
+				return;
+		}
+
+		_cullDirty = false;
+		_hasLastCullCamera = true;
+		_lastCullCameraPos = cameraPos;
+		_lastCullCameraForward = cameraForward;
+
 		RefreshPropWorldBoundsIfNeeded();
 
-		Camera camera = ResolveCamera();
 		bool hasFrustum = GoldPileFrustumCache.TryGet( camera, out Plane[] frustumPlanes );
 		bool useChunkFrustum = _loot != null
 			&& _loot.StreamingEnabled
@@ -2171,7 +2240,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( useChunkFrustum && !PropBoundsExceedChunk( entry ) )
 			{
 				GoldPileChunk chunk = _loot.ChunkGrid.GetChunk( entry.ChunkX, entry.ChunkZ );
-				if ( chunk != null && !chunk.FrustumVisible )
+				// Only trust chunk frustum for coin-rendered LOD; out-of-window LOD3 flags may be stale.
+				if ( chunk != null && chunk.Lod < 3 && !chunk.FrustumVisible )
 					visible = false;
 			}
 
@@ -2203,7 +2273,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( item == null )
 			return new Bounds( Vector3.zero, Vector3.one * 0.5f );
 
-		return TreasureItem.GetCombinedRendererWorldBounds( item.transform, item.transform.position );
+		return item.GetRendererWorldBounds();
 	}
 
 	Bounds WorldBoundsToLocal( Bounds worldBounds )
@@ -2300,13 +2370,19 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 		bool playerMoved = !_hasLastStreamPlayerPos
 			|| PlanarDistanceSqr( playerPos, _lastStreamPlayerPos ) >= StreamPlayerMoveEpsilonSqr;
+		if ( playerMoved )
+			_streamResidencyDirty = true;
 		if ( !playerMoved && !_streamResidencyDirty )
 			return;
 
 		_lastStreamPlayerPos = playerPos;
 		_hasLastStreamPlayerPos = true;
 
-		// Stream out live props past distance.
+		EnsureLatentWorldCaches();
+
+		float enterRadius = GetMaxPropStreamEnterRadius();
+
+		// Stream out live props past distance (live count is small vs latents).
 		bool despawnBudgetHit = false;
 		for ( int i = _props.Count - 1; i >= 0 && _streamDespawnBudget > 0; i-- )
 		{
@@ -2338,54 +2414,389 @@ public class GoldPileArtifactProps : MonoBehaviour
 			_streamLatentCursor = 0;
 			ExposedLatentCount = 0;
 			StreamedOutCount = 0;
-			_streamResidencyDirty = despawnBudgetHit;
+			_streamResidencyDirty = despawnBudgetHit || _seatingInFlight.Count > 0;
 			return;
 		}
 
-		int cursor = _streamLatentCursor;
-		if ( cursor < 0 || cursor >= latentCount )
-			cursor = 0;
-
-		int checks = Mathf.Min( MaxStreamLatentChecksPerFrame, latentCount );
+		CollectStreamCandidateLatents( playerPos, enterRadius );
+		int candidateCount = _streamCandidateScratch.Count;
 		int seatsAttempted = 0;
+		bool spawnBudgetHit = false;
 		bool wrapped = false;
 
-		for ( int checkedCount = 0; checkedCount < checks && _streamSpawnBudget > 0; checkedCount++ )
+		if ( candidateCount > 0 && _streamSpawnBudget > 0 )
 		{
-			int i = cursor;
-			cursor++;
-			if ( cursor >= latentCount )
-			{
+			int cursor = _streamLatentCursor;
+			if ( cursor < 0 || cursor >= candidateCount )
 				cursor = 0;
-				wrapped = true;
+
+			int checks = Mathf.Min( MaxStreamLatentChecksPerFrame, candidateCount );
+			for ( int checkedCount = 0; checkedCount < checks && _streamSpawnBudget > 0; checkedCount++ )
+			{
+				int i = _streamCandidateScratch[ cursor ];
+				cursor++;
+				if ( cursor >= candidateCount )
+				{
+					cursor = 0;
+					wrapped = true;
+				}
+
+				if ( i < 0 || i >= _latent.Count )
+					continue;
+
+				LatentEntry latent = _latent[ i ];
+				if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+					continue;
+				if ( _seatingInFlight.Contains( i ) )
+					continue;
+				if ( !latent.SurfaceOk && !CanSpawnBakedLatent( latent ) )
+					continue;
+
+				float spawnDistSqr = LatentPlanarDistanceSqr( latent, playerPos );
+				if ( !IsCategoryInStreamRange( latent.Definition.category, spawnDistSqr, currentlyResident: false ) )
+					continue;
+
+				if ( !TryRequestSeat( i, null ) )
+					continue;
+
+				_streamSpawnBudget--;
+				seatsAttempted++;
+				if ( _streamSpawnBudget <= 0 )
+					spawnBudgetHit = true;
 			}
 
-			LatentEntry latent = _latent[ i ];
-			if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
-				continue;
-
-			if ( !CanSpawnBakedLatent( latent ) )
-				continue;
-
-			Vector3 worldCenter = _pileRoot.TransformPoint( latent.LocalBounds.center );
-			float spawnDistSqr = PlanarDistanceSqr( playerPos, worldCenter );
-			if ( !IsCategoryInStreamRange( latent.Definition.category, spawnDistSqr, currentlyResident: false ) )
-				continue;
-
-			_ = SeatLatentAsync( i, null );
-			_streamSpawnBudget--;
-			seatsAttempted++;
+			_streamLatentCursor = cursor;
+		}
+		else
+		{
+			_streamLatentCursor = 0;
+			wrapped = true;
 		}
 
-		_streamLatentCursor = cursor;
-
-		if ( wrapped )
+		if ( _streamSettings != null && _streamSettings.drawOverlayStats )
 			RecountStreamCounters( playerPos );
 
-		if ( wrapped && seatsAttempted == 0 && !despawnBudgetHit )
+		bool seatingBusy = _seatingInFlight.Count > 0;
+		if ( ( wrapped || candidateCount == 0 )
+			&& seatsAttempted == 0
+			&& !despawnBudgetHit
+			&& !spawnBudgetHit
+			&& !seatingBusy )
+		{
 			_streamResidencyDirty = false;
+		}
 		else
+		{
 			_streamResidencyDirty = true;
+		}
+	}
+
+	float GetMaxPropStreamEnterRadius()
+	{
+		if ( _streamSettings == null )
+			return 64f;
+
+		float max = 0f;
+		if ( !_streamSettings.gemNeverCull )
+			max = Mathf.Max( max, _streamSettings.gemMaxStreamDistance );
+		if ( !_streamSettings.artifactNeverCull )
+			max = Mathf.Max( max, _streamSettings.artifactMaxStreamDistance );
+
+		// Both never-cull: still wake nearby seats; use the larger authored distance as a soft window.
+		if ( max < 0.1f )
+			max = Mathf.Max( _streamSettings.gemMaxStreamDistance, _streamSettings.artifactMaxStreamDistance );
+		return Mathf.Max( 0.1f, max );
+	}
+
+	void CollectStreamCandidateLatents( Vector3 playerPos, float enterRadius )
+	{
+		_streamCandidateScratch.Clear();
+		if ( _latent.Count == 0 )
+			return;
+
+		if ( _latentByChunk == null || _latentByChunk.Length == 0 )
+		{
+			for ( int i = 0; i < _latent.Count; i++ )
+			{
+				LatentEntry latent = _latent[ i ];
+				if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+					continue;
+				_streamCandidateScratch.Add( i );
+			}
+
+			return;
+		}
+
+		CollectChunkIndicesInRadius( playerPos, enterRadius, _streamChunkScratch, _streamChunkSet );
+		for ( int c = 0; c < _streamChunkScratch.Count; c++ )
+		{
+			int chunkIndex = _streamChunkScratch[ c ];
+			if ( chunkIndex < 0 || chunkIndex >= _latentByChunk.Length )
+				continue;
+
+			List<int> list = _latentByChunk[ chunkIndex ];
+			if ( list == null )
+				continue;
+
+			for ( int i = 0; i < list.Count; i++ )
+			{
+				int latentIndex = list[ i ];
+				if ( latentIndex < 0 || latentIndex >= _latent.Count )
+					continue;
+
+				LatentEntry latent = _latent[ latentIndex ];
+				if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+					continue;
+
+				_streamCandidateScratch.Add( latentIndex );
+			}
+		}
+	}
+
+	void CollectChunkIndicesInRadius(
+		Vector3 playerPos,
+		float radius,
+		List<int> outChunks,
+		HashSet<int> scratchSet )
+	{
+		outChunks.Clear();
+		scratchSet.Clear();
+
+		GoldPileChunkGrid grid = _loot != null ? _loot.ChunkGrid : null;
+		if ( grid == null || grid.ChunkCount == 0 || _latentChunkCountX <= 0 )
+		{
+			if ( _latentByChunk != null )
+			{
+				for ( int i = 0; i < _latentByChunk.Length; i++ )
+				{
+					if ( _latentByChunk[ i ] != null && _latentByChunk[ i ].Count > 0 )
+						outChunks.Add( i );
+				}
+			}
+
+			return;
+		}
+
+		float chunkSize = Mathf.Max( 1f, grid.ChunkSize );
+		float chunkDiagonal = chunkSize * 1.41421356f;
+		float evalRadius = radius + chunkDiagonal;
+		float evalRadiusSqr = evalRadius * evalRadius;
+
+		if ( !grid.TryWorldToChunk( playerPos, out int playerCx, out int playerCz ) )
+		{
+			IReadOnlyList<GoldPileChunk> chunks = grid.Chunks;
+			for ( int i = 0; i < chunks.Count; i++ )
+			{
+				if ( PlanarDistanceToBoundsSqr( playerPos, chunks[ i ].WorldBounds ) > evalRadiusSqr )
+					continue;
+				if ( scratchSet.Add( i ) )
+					outChunks.Add( i );
+			}
+
+			return;
+		}
+
+		int radiusChunks = Mathf.Max( 1, Mathf.CeilToInt( evalRadius / chunkSize ) + 1 );
+		int minX = Mathf.Max( 0, playerCx - radiusChunks );
+		int maxX = Mathf.Min( _latentChunkCountX - 1, playerCx + radiusChunks );
+		int minZ = Mathf.Max( 0, playerCz - radiusChunks );
+		int maxZ = Mathf.Min( _latentChunkCountZ - 1, playerCz + radiusChunks );
+		IReadOnlyList<GoldPileChunk> gridChunks = grid.Chunks;
+
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			int row = z * _latentChunkCountX;
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				int i = row + x;
+				if ( i < 0 || i >= gridChunks.Count )
+					continue;
+				if ( PlanarDistanceToBoundsSqr( playerPos, gridChunks[ i ].WorldBounds ) > evalRadiusSqr )
+					continue;
+				if ( scratchSet.Add( i ) )
+					outChunks.Add( i );
+			}
+		}
+	}
+
+	static float PlanarDistanceToBoundsSqr( Vector3 worldPos, Bounds bounds )
+	{
+		Vector3 min = bounds.min;
+		Vector3 max = bounds.max;
+		float cx = worldPos.x < min.x ? min.x : ( worldPos.x > max.x ? max.x : worldPos.x );
+		float cz = worldPos.z < min.z ? min.z : ( worldPos.z > max.z ? max.z : worldPos.z );
+		float dx = cx - worldPos.x;
+		float dz = cz - worldPos.z;
+		return dx * dx + dz * dz;
+	}
+
+	float LatentPlanarDistanceSqr( LatentEntry latent, Vector3 playerPos )
+	{
+		float lx = latent.HasWorldCenter ? latent.WorldCenterX : ( _pileRoot != null
+			? _pileRoot.TransformPoint( latent.LocalBounds.center ).x
+			: latent.LocalBounds.center.x );
+		float lz = latent.HasWorldCenter ? latent.WorldCenterZ : ( _pileRoot != null
+			? _pileRoot.TransformPoint( latent.LocalBounds.center ).z
+			: latent.LocalBounds.center.z );
+		float dx = playerPos.x - lx;
+		float dz = playerPos.z - lz;
+		return dx * dx + dz * dz;
+	}
+
+	void ClearLatentSpatialIndex()
+	{
+		if ( _latentByChunk != null )
+		{
+			for ( int i = 0; i < _latentByChunk.Length; i++ )
+			{
+				if ( _latentByChunk[ i ] != null )
+					_latentByChunk[ i ].Clear();
+			}
+		}
+
+		_latentChunkCountX = 0;
+		_latentChunkCountZ = 0;
+		_streamCandidateScratch.Clear();
+		_streamChunkScratch.Clear();
+		_streamChunkSet.Clear();
+		_hasLatentWorldCacheRoot = false;
+	}
+
+	void RebuildLatentSpatialIndex()
+	{
+		ClearLatentSpatialIndex();
+		if ( _latent.Count == 0 )
+			return;
+
+		GoldPileChunkGrid grid = _loot != null ? _loot.ChunkGrid : null;
+		if ( grid != null && grid.ChunkCount > 0 )
+		{
+			_latentChunkCountX = grid.CountX;
+			_latentChunkCountZ = grid.CountZ;
+		}
+		else if ( _heightfield != null )
+		{
+			float bucket = 8f;
+			int count = Mathf.Max( 1, Mathf.CeilToInt( _heightfield.WorldSize / bucket ) );
+			_latentChunkCountX = count;
+			_latentChunkCountZ = count;
+		}
+		else
+		{
+			_latentChunkCountX = 1;
+			_latentChunkCountZ = 1;
+		}
+
+		int chunkCount = _latentChunkCountX * _latentChunkCountZ;
+		if ( _latentByChunk == null || _latentByChunk.Length != chunkCount )
+		{
+			_latentByChunk = new List<int>[ chunkCount ];
+			for ( int i = 0; i < chunkCount; i++ )
+				_latentByChunk[ i ] = new List<int>( 8 );
+		}
+
+		_hasLatentWorldCacheRoot = false;
+		for ( int i = 0; i < _latent.Count; i++ )
+			RegisterLatentSpatial( i );
+		EnsureLatentWorldCaches();
+	}
+
+	void RegisterLatentSpatial( int latentIndex )
+	{
+		if ( latentIndex < 0 || latentIndex >= _latent.Count )
+			return;
+
+		LatentEntry latent = _latent[ latentIndex ];
+		AssignLatentChunk( ref latent );
+		CacheLatentWorldCenter( ref latent );
+		latent.SurfaceOk = latent.IsAuthored || CanSpawnBakedLatent( latent );
+		_latent[ latentIndex ] = latent;
+
+		if ( _latentByChunk == null || _latentChunkCountX <= 0 )
+			return;
+
+		int chunkIndex = latent.ChunkZ * _latentChunkCountX + latent.ChunkX;
+		if ( chunkIndex < 0 || chunkIndex >= _latentByChunk.Length )
+			return;
+
+		List<int> list = _latentByChunk[ chunkIndex ];
+		if ( list == null )
+		{
+			list = new List<int>( 8 );
+			_latentByChunk[ chunkIndex ] = list;
+		}
+
+		list.Add( latentIndex );
+	}
+
+	void AssignLatentChunk( ref LatentEntry latent )
+	{
+		GoldPileChunkGrid grid = _loot != null ? _loot.ChunkGrid : null;
+		if ( grid != null && grid.ChunkCount > 0 )
+		{
+			grid.LocalToChunk( latent.LocalPos.x, latent.LocalPos.z, out latent.ChunkX, out latent.ChunkZ );
+			return;
+		}
+
+		if ( _heightfield != null && _latentChunkCountX > 0 )
+		{
+			float half = _heightfield.WorldSize * 0.5f;
+			float bucket = _heightfield.WorldSize / _latentChunkCountX;
+			latent.ChunkX = Mathf.Clamp(
+				Mathf.FloorToInt( ( latent.LocalPos.x + half ) / Mathf.Max( 0.01f, bucket ) ),
+				0,
+				_latentChunkCountX - 1 );
+			latent.ChunkZ = Mathf.Clamp(
+				Mathf.FloorToInt( ( latent.LocalPos.z + half ) / Mathf.Max( 0.01f, bucket ) ),
+				0,
+				_latentChunkCountZ - 1 );
+			return;
+		}
+
+		latent.ChunkX = 0;
+		latent.ChunkZ = 0;
+	}
+
+	void CacheLatentWorldCenter( ref LatentEntry latent )
+	{
+		if ( _pileRoot == null )
+		{
+			latent.WorldCenterX = latent.LocalBounds.center.x;
+			latent.WorldCenterZ = latent.LocalBounds.center.z;
+			latent.HasWorldCenter = true;
+			return;
+		}
+
+		Vector3 world = _pileRoot.TransformPoint( latent.LocalBounds.center );
+		latent.WorldCenterX = world.x;
+		latent.WorldCenterZ = world.z;
+		latent.HasWorldCenter = true;
+	}
+
+	void EnsureLatentWorldCaches()
+	{
+		if ( _pileRoot == null || _latent.Count == 0 )
+			return;
+
+		Vector3 pos = _pileRoot.position;
+		Quaternion rot = _pileRoot.rotation;
+		if ( _hasLatentWorldCacheRoot
+			&& ( pos - _latentWorldCacheRootPos ).sqrMagnitude < 1e-8f
+			&& Quaternion.Dot( rot, _latentWorldCacheRootRot ) > 0.999999f )
+		{
+			return;
+		}
+
+		_latentWorldCacheRootPos = pos;
+		_latentWorldCacheRootRot = rot;
+		_hasLatentWorldCacheRoot = true;
+
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			LatentEntry latent = _latent[ i ];
+			CacheLatentWorldCenter( ref latent );
+			_latent[ i ] = latent;
+		}
 	}
 
 	void RecountStreamCounters( Vector3 playerPos )
@@ -2403,10 +2814,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( latent.Spawned || latent.Definition == null )
 				continue;
 
-			Vector3 worldCenter = _pileRoot != null
-				? _pileRoot.TransformPoint( latent.LocalBounds.center )
-				: latent.LocalBounds.center;
-			float distSqr = PlanarDistanceSqr( playerPos, worldCenter );
+			float distSqr = LatentPlanarDistanceSqr( latent, playerPos );
 			if ( !IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident: false ) )
 				streamedOut++;
 		}
@@ -2436,6 +2844,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		DecrementVisible( prop.Definition );
 		RemovePropSwap( propIndex );
 		_streamResidencyDirty = true;
+		_cullDirty = true;
 
 		if ( item != null )
 			TreasureItemFactory.Despawn( item );
@@ -2497,9 +2906,11 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( latent.Definition == null )
 			return false;
 
-		Vector3 worldCenter = _pileRoot != null
-			? _pileRoot.TransformPoint( latent.LocalBounds.center )
-			: latent.LocalBounds.center;
+		Vector3 worldCenter = latent.HasWorldCenter
+			? new Vector3( latent.WorldCenterX, 0f, latent.WorldCenterZ )
+			: ( _pileRoot != null
+				? _pileRoot.TransformPoint( latent.LocalBounds.center )
+				: latent.LocalBounds.center );
 		float distSqr = PlanarDistanceSqr( playerPos, worldCenter );
 		return IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident );
 	}
@@ -2534,7 +2945,38 @@ public class GoldPileArtifactProps : MonoBehaviour
 		latent.LocalPos = localPos;
 		latent.LocalRot = localRot;
 		latent.LocalBounds = new Bounds( localPos, size );
+		int oldChunkX = latent.ChunkX;
+		int oldChunkZ = latent.ChunkZ;
+		AssignLatentChunk( ref latent );
+		CacheLatentWorldCenter( ref latent );
 		_latent[ latentIndex ] = latent;
+		RelocateLatentSpatial( latentIndex, oldChunkX, oldChunkZ, latent.ChunkX, latent.ChunkZ );
+	}
+
+	void RelocateLatentSpatial( int latentIndex, int oldChunkX, int oldChunkZ, int newChunkX, int newChunkZ )
+	{
+		if ( _latentByChunk == null || _latentChunkCountX <= 0 )
+			return;
+		if ( oldChunkX == newChunkX && oldChunkZ == newChunkZ )
+			return;
+
+		int oldIndex = oldChunkZ * _latentChunkCountX + oldChunkX;
+		if ( oldIndex >= 0 && oldIndex < _latentByChunk.Length && _latentByChunk[ oldIndex ] != null )
+			_latentByChunk[ oldIndex ].Remove( latentIndex );
+
+		int newIndex = newChunkZ * _latentChunkCountX + newChunkX;
+		if ( newIndex < 0 || newIndex >= _latentByChunk.Length )
+			return;
+
+		List<int> list = _latentByChunk[ newIndex ];
+		if ( list == null )
+		{
+			list = new List<int>( 8 );
+			_latentByChunk[ newIndex ] = list;
+		}
+
+		if ( !list.Contains( latentIndex ) )
+			list.Add( latentIndex );
 	}
 
 	void DecrementVisible( TreasureDefinition definition )

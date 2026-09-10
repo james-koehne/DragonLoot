@@ -593,6 +593,13 @@ public class SceneTreasureInventoryWindow : EditorWindow
 			return;
 
 		_typedDisplayCount++;
+
+		if ( table.UsesPerSlotRequirements )
+		{
+			CollectPerSlotTypedDisplay( table );
+			return;
+		}
+
 		TreasureDefinition accepted = table.AcceptedTreasure;
 		if ( accepted == null )
 		{
@@ -613,6 +620,45 @@ public class SceneTreasureInventoryWindow : EditorWindow
 			Capacity = capacity,
 			Uncapped = uncapped
 		} );
+	}
+
+	void CollectPerSlotTypedDisplay( TypedDisplayTableInteractable table )
+	{
+		ResolveTypedCapacity( table, out int totalCapacity, out bool uncapped );
+		int slotCount = table.SlotCount;
+		int configuredSlots = 0;
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			if ( table.GetRequiredTreasure( i ) != null )
+				configuredSlots++;
+		}
+
+		int perSlotCapacity = configuredSlots > 0 ? Mathf.Max( 1, totalCapacity / configuredSlots ) : 1;
+		bool anyRequired = false;
+
+		for ( int i = 0; i < slotCount; i++ )
+		{
+			TreasureDefinition required = table.GetRequiredTreasure( i );
+			if ( required == null )
+				continue;
+
+			anyRequired = true;
+			InventoryRow row = GetOrCreateRow( required );
+			row.DisplayCapacity += perSlotCapacity;
+			if ( uncapped )
+				row.HasUncappedDisplay = true;
+
+			row.Displays.Add( new DisplayHit
+			{
+				Label = table.name + " slot " + i,
+				Target = table,
+				Capacity = perSlotCapacity,
+				Uncapped = uncapped
+			} );
+		}
+
+		if ( !anyRequired )
+			_warnings.Add( $"Display '{table.name}' has mixed column requirements but no required treasures." );
 	}
 
 	void CollectArtifactTable( ArtifactPresentationTableInteractable table )

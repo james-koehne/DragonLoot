@@ -21,6 +21,8 @@ public sealed class MapSystem : MonoBehaviour
 	}
 
 	static MapSystem _instance;
+	static readonly List<TreasurePileVisual> RegisteredPiles = new List<TreasurePileVisual>( 16 );
+	static int _pileRevision;
 
 	[SerializeField]
 	MapDefinition _definition;
@@ -33,6 +35,7 @@ public sealed class MapSystem : MonoBehaviour
 	Color32[] _basePixels;
 	byte[] _discovery;
 	Color32[] _displayPixels;
+	Color32[] _uploadScratch;
 	Texture2D _displayTexture;
 
 	int _resolution;
@@ -40,24 +43,50 @@ public sealed class MapSystem : MonoBehaviour
 	bool _hasBounds;
 	bool _baseReady;
 	bool _displayDirty;
+	bool _gpuUploadPending;
 
 	BakePhase _phase = BakePhase.Idle;
 	int _bakeRow;
 	int _bakePileIndex;
+	int _bakeVolumeIndex;
 	int _lastPaintRevision = -1;
-	int _lastOverlayRevision = -1;
-	int _cachedPileCount = -1;
+	int _lastVolumeRevision = -1;
+	int _lastPileRevision = -1;
 	bool _forceImmediateBake;
-	float _nextPileRefreshTime;
 	bool _debugIgnoreDiscovery;
 	float _lastBakeElapsedMs;
+	float _bakeAccumulatedMs;
 	string _bakePhaseName = "Idle";
 
-	int _lastDiscoveryMinX;
-	int _lastDiscoveryMaxX;
-	int _lastDiscoveryMinY;
-	int _lastDiscoveryMaxY;
-	bool _hasLastDiscoveryRect;
+	int _dirtyMinX;
+	int _dirtyMaxX;
+	int _dirtyMinY;
+	int _dirtyMaxY;
+	bool _hasDirtyRect;
+
+	int _lastDiscoveryCx = int.MinValue;
+	int _lastDiscoveryCy = int.MinValue;
+	float _lastDiscoveryRadius = -1f;
+	float _lastDiscoverySoftness = -1f;
+
+	bool _coverageDirty = true;
+	float _cachedDiscoveryCoverage;
+
+	byte[] _fillTrav;
+	int _fillCellsX;
+	int _fillCellsZ;
+	float _fillOriginX;
+	float _fillOriginZ;
+	float _fillHalfX;
+	float _fillHalfZ;
+	float _fillWorldSizeX;
+	float _fillWorldSizeZ;
+	float _fillInvCell;
+	float _fillMapMinX;
+	float _fillMapMinZ;
+	float _fillMppX;
+	float _fillMppZ;
+	bool _fillHasPaint;
 
 	public static MapSystem Instance => _instance;
 	public Texture2D DisplayTexture => _displayTexture;
@@ -78,6 +107,30 @@ public sealed class MapSystem : MonoBehaviour
 		GameObject go = new GameObject( "MapSystem" );
 		_instance = go.AddComponent<MapSystem>();
 		return _instance;
+	}
+
+	public static void RegisterPile( TreasurePileVisual pile )
+	{
+		if ( pile == null )
+			return;
+
+		for ( int i = 0; i < RegisteredPiles.Count; i++ )
+		{
+			if ( RegisteredPiles[ i ] == pile )
+				return;
+		}
+
+		RegisteredPiles.Add( pile );
+		_pileRevision++;
+	}
+
+	public static void UnregisterPile( TreasurePileVisual pile )
+	{
+		if ( pile == null )
+			return;
+
+		if ( RegisteredPiles.Remove( pile ) )
+			_pileRevision++;
 	}
 
 	void Awake()
@@ -104,16 +157,11 @@ public sealed class MapSystem : MonoBehaviour
 		if ( def == null )
 			return;
 
-		def.EnsureDefaults();
 		EnsureBuffers( def.resolution );
-
-		bool mapOpen = MapUI.IsOpen;
-		if ( mapOpen )
-			_forceImmediateBake = true;
 
 		TickDiscovery( def );
 		TickBake( def );
-		FlushDisplayIfNeeded();
+		FlushDisplayIfNeeded( def, forceUpload: false );
 	}
 
 	public void RequestImmediateBake()
@@ -134,7 +182,13 @@ public sealed class MapSystem : MonoBehaviour
 		while ( _phase != BakePhase.Idle && sw.Elapsed.TotalMilliseconds < budgetMs )
 			TickBake( def );
 
-		FlushDisplayIfNeeded();
+		if ( _gpuUploadPending )
+		{
+			RebuildFullDisplay( def );
+			_gpuUploadPending = false;
+		}
+
+		FlushDisplayIfNeeded( def, forceUpload: true );
 	}
 
 	public bool TryWorldToUv( Vector3 worldPos, out Vector2 uv )
@@ -195,10 +249,11 @@ public sealed class MapSystem : MonoBehaviour
 		for ( int i = 0; i < _discovery.Length; i++ )
 			_discovery[ i ] = 255;
 
+		_coverageDirty = true;
 		MapDefinition def = Definition;
 		if ( def != null )
 			RebuildFullDisplay( def );
-		FlushDisplayIfNeeded();
+		FlushDisplayIfNeeded( def, forceUpload: true );
 	}
 
 	public void DebugClearDiscovery()
@@ -207,12 +262,14 @@ public sealed class MapSystem : MonoBehaviour
 			return;
 
 		System.Array.Clear( _discovery, 0, _discovery.Length );
-		_hasLastDiscoveryRect = false;
+		_lastDiscoveryCx = int.MinValue;
+		_lastDiscoveryCy = int.MinValue;
+		_coverageDirty = true;
 
 		MapDefinition def = Definition;
 		if ( def != null )
 			RebuildFullDisplay( def );
-		FlushDisplayIfNeeded();
+		FlushDisplayIfNeeded( def, forceUpload: true );
 	}
 
 	public void DebugSetIgnoreDiscovery( bool ignore )
@@ -224,15 +281,14 @@ public sealed class MapSystem : MonoBehaviour
 		MapDefinition def = Definition;
 		if ( def != null )
 			RebuildFullDisplay( def );
-		FlushDisplayIfNeeded();
+		FlushDisplayIfNeeded( def, forceUpload: true );
 	}
 
 	public void DebugForceRebuild()
 	{
 		_lastPaintRevision = -1;
-		_lastOverlayRevision = -1;
-		_cachedPileCount = -1;
-		_nextPileRefreshTime = 0f;
+		_lastVolumeRevision = -1;
+		_lastPileRevision = -1;
 		RequestImmediateBake();
 	}
 
@@ -241,6 +297,9 @@ public sealed class MapSystem : MonoBehaviour
 		if ( _discovery == null || _discovery.Length == 0 )
 			return 0f;
 
+		if ( !_coverageDirty )
+			return _cachedDiscoveryCoverage;
+
 		int discovered = 0;
 		for ( int i = 0; i < _discovery.Length; i++ )
 		{
@@ -248,7 +307,9 @@ public sealed class MapSystem : MonoBehaviour
 				discovered++;
 		}
 
-		return discovered / ( float )_discovery.Length;
+		_cachedDiscoveryCoverage = discovered / ( float )_discovery.Length;
+		_coverageDirty = false;
+		return _cachedDiscoveryCoverage;
 	}
 
 	void EnsureBuffers( int resolution )
@@ -263,6 +324,7 @@ public sealed class MapSystem : MonoBehaviour
 		_basePixels = new Color32[ count ];
 		_discovery = new byte[ count ];
 		_displayPixels = new Color32[ count ];
+		_uploadScratch = null;
 		_displayTexture = new Texture2D( _resolution, _resolution, TextureFormat.RGBA32, false, false );
 		_displayTexture.name = "MapDisplay";
 		_displayTexture.filterMode = FilterMode.Bilinear;
@@ -271,7 +333,11 @@ public sealed class MapSystem : MonoBehaviour
 		_hasBounds = false;
 		_phase = BakePhase.Idle;
 		_bakeRow = 0;
-		_hasLastDiscoveryRect = false;
+		_hasDirtyRect = false;
+		_gpuUploadPending = false;
+		_coverageDirty = true;
+		_lastDiscoveryCx = int.MinValue;
+		_lastDiscoveryCy = int.MinValue;
 		FillArray( _basePixels, Color32From( Color.black ) );
 		System.Array.Clear( _discovery, 0, _discovery.Length );
 		FillArray( _displayPixels, Color32From( Color.black ) );
@@ -280,16 +346,27 @@ public sealed class MapSystem : MonoBehaviour
 		_displayDirty = false;
 	}
 
+	void SyncPileCache()
+	{
+		_piles.Clear();
+		for ( int i = 0; i < RegisteredPiles.Count; i++ )
+		{
+			TreasurePileVisual pile = RegisteredPiles[ i ];
+			if ( pile != null && pile.isActiveAndEnabled )
+				_piles.Add( pile );
+		}
+	}
+
 	void TickBake( MapDefinition def )
 	{
 		TreasureSurfaceAuthoring authoring = TreasureSurfaceAuthoring.Instance;
 		int paintRevision = authoring != null ? authoring.PaintRevision : -1;
-		int overlayRevision = MapOverlayRegistrar.Revision;
-		RefreshPileCacheIfNeeded();
+		int volumeRevision = MapOverlayRegistrar.VolumeRevision;
+		SyncPileCache();
 
 		bool needsRebuild = paintRevision != _lastPaintRevision
-			|| overlayRevision != _lastOverlayRevision
-			|| _piles.Count != _cachedPileCount
+			|| volumeRevision != _lastVolumeRevision
+			|| _pileRevision != _lastPileRevision
 			|| !_baseReady;
 
 		if ( _phase == BakePhase.Idle )
@@ -322,10 +399,11 @@ public sealed class MapSystem : MonoBehaviour
 					_lastPaintRevision = paintRevision;
 					_phase = BakePhase.FillBase;
 					_bakeRow = 0;
+					CacheFillPaint( authoring );
 					break;
 
 				case BakePhase.FillBase:
-					FillBaseRows( authoring, def, sw, budgetMs );
+					FillBaseRows( def, sw, budgetMs );
 					break;
 
 				case BakePhase.StampGold:
@@ -333,25 +411,30 @@ public sealed class MapSystem : MonoBehaviour
 					break;
 
 				case BakePhase.StampRegions:
-					StampRegions( def );
-					_phase = BakePhase.UploadBase;
+					StampRegions( def, sw, budgetMs );
 					break;
 
 				case BakePhase.UploadBase:
-					_lastOverlayRevision = overlayRevision;
-					_cachedPileCount = _piles.Count;
+					_lastVolumeRevision = volumeRevision;
+					_lastPileRevision = _pileRevision;
 					_baseReady = true;
 					RebuildFullDisplay( def );
 					_phase = BakePhase.Idle;
 					_bakePhaseName = "Idle";
-					_lastBakeElapsedMs = ( float )sw.Elapsed.TotalMilliseconds;
+					_bakeAccumulatedMs += ( float )sw.Elapsed.TotalMilliseconds;
+					_lastBakeElapsedMs = _bakeAccumulatedMs;
 					_forceImmediateBake = false;
 					return;
 			}
 
 			if ( !_forceImmediateBake && sw.Elapsed.TotalMilliseconds >= budgetMs )
+			{
+				_bakeAccumulatedMs += ( float )sw.Elapsed.TotalMilliseconds;
 				return;
+			}
 		}
+
+		_bakeAccumulatedMs += ( float )sw.Elapsed.TotalMilliseconds;
 	}
 
 	void BeginBake( bool force )
@@ -362,6 +445,8 @@ public sealed class MapSystem : MonoBehaviour
 		_bakePhaseName = "ScanBounds";
 		_bakeRow = 0;
 		_bakePileIndex = 0;
+		_bakeVolumeIndex = 0;
+		_bakeAccumulatedMs = 0f;
 	}
 
 	bool TryScanWalkableBounds( TreasureSurfaceAuthoring authoring, MapDefinition def )
@@ -387,29 +472,79 @@ public sealed class MapSystem : MonoBehaviour
 		return true;
 	}
 
-	void FillBaseRows( TreasureSurfaceAuthoring authoring, MapDefinition def, Stopwatch sw, float budgetMs )
+	void CacheFillPaint( TreasureSurfaceAuthoring authoring )
+	{
+		_fillHasPaint = false;
+		_fillTrav = null;
+		if ( authoring == null )
+			return;
+
+		if ( !authoring.TryGetPaintTraversable( out _fillTrav, out _fillCellsX, out _fillCellsZ ) )
+			return;
+
+		_fillHasPaint = true;
+		_fillOriginX = authoring.WorldOrigin.x;
+		_fillOriginZ = authoring.WorldOrigin.z;
+		_fillWorldSizeX = authoring.WorldSizeX;
+		_fillWorldSizeZ = authoring.WorldSizeZ;
+		_fillHalfX = _fillWorldSizeX * 0.5f;
+		_fillHalfZ = _fillWorldSizeZ * 0.5f;
+		float cell = authoring.CellSize;
+		_fillInvCell = 1f / Mathf.Max( 0.01f, cell );
+		_fillMapMinX = _mapBounds.min.x;
+		_fillMapMinZ = _mapBounds.min.z;
+		_fillMppX = _mapBounds.size.x / _resolution;
+		_fillMppZ = _mapBounds.size.z / _resolution;
+	}
+
+	void FillBaseRows( MapDefinition def, Stopwatch sw, float budgetMs )
 	{
 		Color32 empty = Color32From( def.emptyColor );
 		Color32 walkable = Color32From( def.walkableColor );
-		if ( _bakeRow == 0 )
-			FillArray( _basePixels, empty );
-
 		int res = _resolution;
+		byte[] trav = _fillTrav;
+		int cellsX = _fillCellsX;
+		int cellsZ = _fillCellsZ;
+		bool hasPaint = _fillHasPaint && trav != null;
+		float originX = _fillOriginX;
+		float originZ = _fillOriginZ;
+		float halfX = _fillHalfX;
+		float halfZ = _fillHalfZ;
+		float worldSizeX = _fillWorldSizeX;
+		float worldSizeZ = _fillWorldSizeZ;
+		float invCell = _fillInvCell;
+		float mapMinX = _fillMapMinX;
+		float mapMinZ = _fillMapMinZ;
+		float mppX = _fillMppX;
+		float mppZ = _fillMppZ;
+
 		while ( _bakeRow < res )
 		{
 			int y = _bakeRow;
+			int row = y * res;
+			float wz = mapMinZ + ( y + 0.5f ) * mppZ;
+			float localZ = wz - originZ + halfZ;
+			bool rowInZ = hasPaint && localZ >= 0f && localZ < worldSizeZ;
+			int cellZ = rowInZ ? ( int )( localZ * invCell ) : -1;
+			if ( cellZ < 0 || cellZ >= cellsZ )
+				rowInZ = false;
+
 			for ( int x = 0; x < res; x++ )
 			{
-				Vector3 world = PixelToWorld( x, y );
 				bool traversable = false;
-				if ( authoring != null
-					&& authoring.TryWorldToCell( world, out int cellX, out int cellZ )
-					&& authoring.TryGetPaint( cellX, cellZ, out bool paintTrav, out _ ) )
+				if ( rowInZ )
 				{
-					traversable = paintTrav;
+					float wx = mapMinX + ( x + 0.5f ) * mppX;
+					float localX = wx - originX + halfX;
+					if ( localX >= 0f && localX < worldSizeX )
+					{
+						int cellX = ( int )( localX * invCell );
+						if ( cellX >= 0 && cellX < cellsX )
+							traversable = trav[ cellZ * cellsX + cellX ] != 0;
+					}
 				}
 
-				_basePixels[ y * res + x ] = traversable ? walkable : empty;
+				_basePixels[ row + x ] = traversable ? walkable : empty;
 			}
 
 			_bakeRow++;
@@ -438,6 +573,8 @@ public sealed class MapSystem : MonoBehaviour
 				return;
 		}
 
+		_bakeVolumeIndex = 0;
+		MapOverlayRegistrar.CollectVolumes( _volumes );
 		_phase = BakePhase.StampRegions;
 	}
 
@@ -455,19 +592,19 @@ public sealed class MapSystem : MonoBehaviour
 		if ( worldSize < 0.01f || hfRes < 2 )
 			return;
 
-		float cell = worldSize / ( hfRes - 1 );
+		float maxHeight = Mathf.Max( 0.01f, heightfield.MaxHeight );
+		float groundNorm = heightfield.GroundLevel / maxHeight;
 		float half = worldSize * 0.5f;
 		Transform root = pile.transform;
 
 		for ( int z = 0; z < hfRes; z++ )
 		{
-			float localZ = -half + z * cell;
 			for ( int x = 0; x < hfRes; x++ )
 			{
-				float localX = -half + x * cell;
-				if ( !heightfield.ExistsAtLocal( localX, localZ ) )
+				if ( heightfield.GetCellNormalizedHeight( x, z ) < groundNorm )
 					continue;
 
+				heightfield.CellCenterLocal( x, z, out float localX, out float localZ );
 				Vector3 world = root.TransformPoint( new Vector3( localX, 0f, localZ ) );
 				if ( !TryWorldToPixel( world, out int px, out int py ) )
 					continue;
@@ -505,38 +642,127 @@ public sealed class MapSystem : MonoBehaviour
 		}
 	}
 
-	void StampRegions( MapDefinition def )
+	void StampRegions( MapDefinition def, Stopwatch sw, float budgetMs )
 	{
-		MapOverlayRegistrar.CollectVolumes( _volumes );
 		if ( _volumes.Count == 0 )
+		{
+			_phase = BakePhase.UploadBase;
 			return;
+		}
 
 		Color32 empty = Color32From( def.emptyColor );
 		int res = _resolution;
+		float mapMinX = _mapBounds.min.x;
+		float mapMinZ = _mapBounds.min.z;
+		float mppX = _mapBounds.size.x / res;
+		float mppZ = _mapBounds.size.z / res;
+		float mapY = _mapBounds.center.y;
 
-		for ( int y = 0; y < res; y++ )
+		while ( _bakeVolumeIndex < _volumes.Count )
 		{
-			for ( int x = 0; x < res; x++ )
+			MapRegionVolume volume = _volumes[ _bakeVolumeIndex ];
+			_bakeVolumeIndex++;
+			if ( volume == null )
+				continue;
+
+			if ( !TryGetVolumePixelBounds( volume, out int vminX, out int vmaxX, out int vminY, out int vmaxY ) )
+				continue;
+
+			Color32 tint = Color32From( volume.Color );
+			bool fillEmpty = volume.FillEmpty;
+			Matrix4x4 worldToLocal = volume.transform.worldToLocalMatrix;
+			Vector3 size = volume.Size;
+			float halfX = Mathf.Max( 0.01f, size.x ) * 0.5f;
+			float halfZ = Mathf.Max( 0.01f, size.z ) * 0.5f;
+
+			for ( int y = vminY; y <= vmaxY; y++ )
 			{
-				int i = y * res + x;
-				Vector3 world = PixelToWorld( x, y );
-				Color32 current = _basePixels[ i ];
-				bool isEmpty = ColorsClose( current, empty );
-
-				for ( int v = 0; v < _volumes.Count; v++ )
+				int row = y * res;
+				float wz = mapMinZ + ( y + 0.5f ) * mppZ;
+				for ( int x = vminX; x <= vmaxX; x++ )
 				{
-					MapRegionVolume volume = _volumes[ v ];
-					if ( volume == null || !volume.ContainsWorldXZ( world ) )
+					float wx = mapMinX + ( x + 0.5f ) * mppX;
+					Vector3 local = worldToLocal.MultiplyPoint3x4( new Vector3( wx, mapY, wz ) );
+					if ( local.x < -halfX || local.x > halfX || local.z < -halfZ || local.z > halfZ )
 						continue;
 
-					if ( isEmpty && !volume.FillEmpty )
+					int i = row + x;
+					if ( !fillEmpty && ColorsClose( _basePixels[ i ], empty ) )
 						continue;
 
-					_basePixels[ i ] = Color32From( volume.Color );
-					break;
+					_basePixels[ i ] = tint;
 				}
 			}
+
+			if ( !_forceImmediateBake && sw.Elapsed.TotalMilliseconds >= budgetMs )
+				return;
 		}
+
+		_phase = BakePhase.UploadBase;
+	}
+
+	bool TryGetVolumePixelBounds( MapRegionVolume volume, out int minX, out int maxX, out int minY, out int maxY )
+	{
+		minX = 0;
+		maxX = 0;
+		minY = 0;
+		maxY = 0;
+		if ( !_hasBounds )
+			return false;
+
+		Transform t = volume.transform;
+		Vector3 size = volume.Size;
+		float hx = Mathf.Max( 0.01f, size.x ) * 0.5f;
+		float hz = Mathf.Max( 0.01f, size.z ) * 0.5f;
+
+		float minWx = float.MaxValue;
+		float maxWx = float.MinValue;
+		float minWz = float.MaxValue;
+		float maxWz = float.MinValue;
+		ExpandCorner( t, -hx, -hz, ref minWx, ref maxWx, ref minWz, ref maxWz );
+		ExpandCorner( t, hx, -hz, ref minWx, ref maxWx, ref minWz, ref maxWz );
+		ExpandCorner( t, -hx, hz, ref minWx, ref maxWx, ref minWz, ref maxWz );
+		ExpandCorner( t, hx, hz, ref minWx, ref maxWx, ref minWz, ref maxWz );
+
+		float sizeX = _mapBounds.size.x;
+		float sizeZ = _mapBounds.size.z;
+		if ( sizeX < 1e-4f || sizeZ < 1e-4f )
+			return false;
+
+		float mapMinX = _mapBounds.min.x;
+		float mapMaxX = _mapBounds.max.x;
+		float mapMinZ = _mapBounds.min.z;
+		float mapMaxZ = _mapBounds.max.z;
+		if ( maxWx < mapMinX || minWx > mapMaxX || maxWz < mapMinZ || minWz > mapMaxZ )
+			return false;
+
+		minX = Mathf.Clamp( Mathf.FloorToInt( ( minWx - mapMinX ) / sizeX * _resolution ), 0, _resolution - 1 );
+		maxX = Mathf.Clamp( Mathf.FloorToInt( ( maxWx - mapMinX ) / sizeX * _resolution ), 0, _resolution - 1 );
+		minY = Mathf.Clamp( Mathf.FloorToInt( ( minWz - mapMinZ ) / sizeZ * _resolution ), 0, _resolution - 1 );
+		maxY = Mathf.Clamp( Mathf.FloorToInt( ( maxWz - mapMinZ ) / sizeZ * _resolution ), 0, _resolution - 1 );
+		if ( minX > maxX || minY > maxY )
+			return false;
+		return true;
+	}
+
+	static void ExpandCorner(
+		Transform t,
+		float localX,
+		float localZ,
+		ref float minWx,
+		ref float maxWx,
+		ref float minWz,
+		ref float maxWz )
+	{
+		Vector3 world = t.TransformPoint( new Vector3( localX, 0f, localZ ) );
+		if ( world.x < minWx )
+			minWx = world.x;
+		if ( world.x > maxWx )
+			maxWx = world.x;
+		if ( world.z < minWz )
+			minWz = world.z;
+		if ( world.z > maxWz )
+			maxWz = world.z;
 	}
 
 	void TickDiscovery( MapDefinition def )
@@ -553,15 +779,33 @@ public sealed class MapSystem : MonoBehaviour
 			return;
 
 		float radius = def.discoveryRadius;
+		float soft = Mathf.Clamp01( def.discoverySoftness );
+		if ( cx == _lastDiscoveryCx
+			&& cy == _lastDiscoveryCy
+			&& Mathf.Approximately( radius, _lastDiscoveryRadius )
+			&& Mathf.Approximately( soft, _lastDiscoverySoftness ) )
+			return;
+
+		_lastDiscoveryCx = cx;
+		_lastDiscoveryCy = cy;
+		_lastDiscoveryRadius = radius;
+		_lastDiscoverySoftness = soft;
+
 		float sizeX = _mapBounds.size.x;
 		float sizeZ = _mapBounds.size.z;
-		float metersPerPixelX = sizeX / _resolution;
-		float metersPerPixelZ = sizeZ / _resolution;
-		float metersPerPixel = Mathf.Max( metersPerPixelX, metersPerPixelZ );
+		float mppX = sizeX / _resolution;
+		float mppZ = sizeZ / _resolution;
+		float metersPerPixel = Mathf.Max( mppX, mppZ );
 		int pixelRadius = Mathf.CeilToInt( radius / Mathf.Max( 0.001f, metersPerPixel ) ) + 1;
-		float soft = Mathf.Clamp01( def.discoverySoftness );
 		float softStart = radius * ( 1f - soft );
 		float softRange = Mathf.Max( 0.001f, radius - softStart );
+		float radiusSq = radius * radius;
+		float softStartSq = softStart * softStart;
+
+		float mapMinX = _mapBounds.min.x;
+		float mapMinZ = _mapBounds.min.z;
+		float posX = pos.x;
+		float posZ = pos.z;
 
 		int minX = Mathf.Max( 0, cx - pixelRadius );
 		int maxX = Mathf.Min( _resolution - 1, cx + pixelRadius );
@@ -569,55 +813,75 @@ public sealed class MapSystem : MonoBehaviour
 		int maxY = Mathf.Min( _resolution - 1, cy + pixelRadius );
 
 		bool changed = false;
+		int dirtyMinX = maxX;
+		int dirtyMaxX = minX;
+		int dirtyMinY = maxY;
+		int dirtyMaxY = minY;
+
 		for ( int y = minY; y <= maxY; y++ )
 		{
+			float wz = mapMinZ + ( y + 0.5f ) * mppZ;
+			float dz = wz - posZ;
+			float dzSq = dz * dz;
+			int row = y * _resolution;
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				Vector3 world = PixelToWorld( x, y );
-				float dx = world.x - pos.x;
-				float dz = world.z - pos.z;
-				float dist = Mathf.Sqrt( dx * dx + dz * dz );
-				if ( dist > radius )
+				float wx = mapMinX + ( x + 0.5f ) * mppX;
+				float dx = wx - posX;
+				float distSq = dx * dx + dzSq;
+				if ( distSq > radiusSq )
 					continue;
 
-				float visibility = 1f;
-				if ( dist > softStart )
-					visibility = 1f - Mathf.Clamp01( ( dist - softStart ) / softRange );
+				byte value;
+				if ( soft <= 0f || distSq <= softStartSq )
+					value = 255;
+				else
+				{
+					float dist = Mathf.Sqrt( distSq );
+					float visibility = 1f - Mathf.Clamp01( ( dist - softStart ) / softRange );
+					value = ( byte )Mathf.Clamp( Mathf.RoundToInt( visibility * 255f ), 0, 255 );
+				}
 
-				byte value = ( byte )Mathf.Clamp( Mathf.RoundToInt( visibility * 255f ), 0, 255 );
-				int i = y * _resolution + x;
+				int i = row + x;
 				if ( value <= _discovery[ i ] )
 					continue;
 
 				_discovery[ i ] = value;
 				changed = true;
+				if ( x < dirtyMinX )
+					dirtyMinX = x;
+				if ( x > dirtyMaxX )
+					dirtyMaxX = x;
+				if ( y < dirtyMinY )
+					dirtyMinY = y;
+				if ( y > dirtyMaxY )
+					dirtyMaxY = y;
 			}
 		}
 
 		if ( !changed )
 			return;
 
-		CompositeDisplayRect( def, minX, maxX, minY, maxY );
-		if ( _hasLastDiscoveryRect )
-		{
-			minX = Mathf.Min( minX, _lastDiscoveryMinX );
-			maxX = Mathf.Max( maxX, _lastDiscoveryMaxX );
-			minY = Mathf.Min( minY, _lastDiscoveryMinY );
-			maxY = Mathf.Max( maxY, _lastDiscoveryMaxY );
-		}
+		_coverageDirty = true;
 
-		_lastDiscoveryMinX = minX;
-		_lastDiscoveryMaxX = maxX;
-		_lastDiscoveryMinY = minY;
-		_lastDiscoveryMaxY = maxY;
-		_hasLastDiscoveryRect = true;
-		_displayDirty = true;
+		if ( MapUI.IsOpen )
+		{
+			CompositeDisplayRect( def, dirtyMinX, dirtyMaxX, dirtyMinY, dirtyMaxY );
+			MarkDirtyRect( dirtyMinX, dirtyMaxX, dirtyMinY, dirtyMaxY );
+			_displayDirty = true;
+		}
+		else
+		{
+			_gpuUploadPending = true;
+		}
 	}
 
 	void RebuildFullDisplay( MapDefinition def )
 	{
 		CompositeDisplayRect( def, 0, _resolution - 1, 0, _resolution - 1 );
+		MarkDirtyRect( 0, _resolution - 1, 0, _resolution - 1 );
 		_displayDirty = true;
+		_gpuUploadPending = false;
 	}
 
 	void CompositeDisplayRect( MapDefinition def, int minX, int maxX, int minY, int maxY )
@@ -645,45 +909,78 @@ public sealed class MapSystem : MonoBehaviour
 		}
 	}
 
-	void FlushDisplayIfNeeded()
+	void MarkDirtyRect( int minX, int maxX, int minY, int maxY )
 	{
+		if ( !_hasDirtyRect )
+		{
+			_dirtyMinX = minX;
+			_dirtyMaxX = maxX;
+			_dirtyMinY = minY;
+			_dirtyMaxY = maxY;
+			_hasDirtyRect = true;
+			return;
+		}
+
+		if ( minX < _dirtyMinX )
+			_dirtyMinX = minX;
+		if ( maxX > _dirtyMaxX )
+			_dirtyMaxX = maxX;
+		if ( minY < _dirtyMinY )
+			_dirtyMinY = minY;
+		if ( maxY > _dirtyMaxY )
+			_dirtyMaxY = maxY;
+	}
+
+	void FlushDisplayIfNeeded( MapDefinition def, bool forceUpload )
+	{
+		if ( ( MapUI.IsOpen || forceUpload ) && _gpuUploadPending && def != null )
+		{
+			RebuildFullDisplay( def );
+			_gpuUploadPending = false;
+		}
+
 		if ( !_displayDirty || _displayTexture == null || _displayPixels == null )
 			return;
 
+		if ( !MapUI.IsOpen && !forceUpload )
+			return;
+
+		if ( _hasDirtyRect
+			&& _dirtyMinX <= _dirtyMaxX
+			&& _dirtyMinY <= _dirtyMaxY )
+		{
+			int minX = Mathf.Clamp( _dirtyMinX, 0, _resolution - 1 );
+			int maxX = Mathf.Clamp( _dirtyMaxX, 0, _resolution - 1 );
+			int minY = Mathf.Clamp( _dirtyMinY, 0, _resolution - 1 );
+			int maxY = Mathf.Clamp( _dirtyMaxY, 0, _resolution - 1 );
+			int width = maxX - minX + 1;
+			int height = maxY - minY + 1;
+			int needed = width * height;
+			if ( needed > 0 && ( width != _resolution || height != _resolution ) )
+			{
+				if ( _uploadScratch == null || _uploadScratch.Length != needed )
+					_uploadScratch = new Color32[ needed ];
+
+				int dst = 0;
+				for ( int y = minY; y <= maxY; y++ )
+				{
+					int srcRow = y * _resolution + minX;
+					for ( int x = 0; x < width; x++ )
+						_uploadScratch[ dst++ ] = _displayPixels[ srcRow + x ];
+				}
+
+				_displayTexture.SetPixels32( minX, minY, width, height, _uploadScratch );
+				_displayTexture.Apply( false, false );
+				_hasDirtyRect = false;
+				_displayDirty = false;
+				return;
+			}
+		}
+
 		_displayTexture.SetPixels32( _displayPixels );
 		_displayTexture.Apply( false, false );
+		_hasDirtyRect = false;
 		_displayDirty = false;
-	}
-
-	void RefreshPileCacheIfNeeded()
-	{
-		if ( Time.unscaledTime < _nextPileRefreshTime && _piles.Count > 0 )
-			return;
-
-		_nextPileRefreshTime = Time.unscaledTime + 1f;
-
-		TreasurePileVisual[] found = Object.FindObjectsByType<TreasurePileVisual>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
-		_piles.Clear();
-		if ( found == null )
-			return;
-
-		for ( int i = 0; i < found.Length; i++ )
-		{
-			if ( found[ i ] != null )
-				_piles.Add( found[ i ] );
-		}
-	}
-
-	Vector3 PixelToWorld( int px, int py )
-	{
-		float u = ( px + 0.5f ) / _resolution;
-		float v = ( py + 0.5f ) / _resolution;
-		return new Vector3(
-			Mathf.Lerp( _mapBounds.min.x, _mapBounds.max.x, u ),
-			_mapBounds.center.y,
-			Mathf.Lerp( _mapBounds.min.z, _mapBounds.max.z, v ) );
 	}
 
 	bool TryWorldToPixel( Vector3 worldPos, out int px, out int py )
@@ -719,6 +1016,8 @@ public sealed class MapSystem : MonoBehaviour
 		_basePixels = null;
 		_discovery = null;
 		_displayPixels = null;
+		_uploadScratch = null;
+		_fillTrav = null;
 	}
 
 	static Color32 Color32From( Color color )

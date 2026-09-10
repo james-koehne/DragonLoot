@@ -122,7 +122,9 @@ public class PlayerMinecartDrive : MonoBehaviour
 		_hasCartYaw = false;
 		_lastCartYaw = PlanarYaw( cart.transform );
 		_heldForwardSign = ResolveForwardSign();
+		cart.SetDriveSeatCollidersEnabled( false );
 		cart.PlayDriveEnterFeedback();
+		EventBus.Publish( new MinecartDriveEnteredEvent { Cart = cart } );
 
 		PlayerMinecartPush push = _player != null ? _player.MinecartPush : null;
 		if ( push != null )
@@ -152,6 +154,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 		if ( _controller != null && _controller.enabled )
 			_controller.Move( side );
 
+		_cart.SetDriveSeatCollidersEnabled( true );
 		_cart.SetDriveSpeed( _signedSpeed, false );
 
 		_cart = null;

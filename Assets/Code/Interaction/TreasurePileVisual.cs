@@ -1916,8 +1916,19 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		Gizmos.matrix = Matrix4x4.identity;
 	}
 
+	void OnEnable()
+	{
+		MapSystem.RegisterPile( this );
+	}
+
+	void OnDisable()
+	{
+		MapSystem.UnregisterPile( this );
+	}
+
 	void OnDestroy()
 	{
+		MapSystem.UnregisterPile( this );
 		if ( _heightfield != null )
 		{
 			_heightfield.Release();

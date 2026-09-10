@@ -56,6 +56,9 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Door ids currently in an open pose.</summary>
 	public List<string> openDoorIds;
 
+	/// <summary>Highest unlocked Coin Hall expansion level by hall id.</summary>
+	public Dictionary<string, int> coinHallExpansionLevels;
+
 	/// <summary>User master volume (0–1). Combined with <see cref="AudioDefinition.masterVolume"/>.</summary>
 	public float masterVolume = 1f;
 
@@ -97,6 +100,7 @@ public class ProfileSaveData : IGameStats
 		EnsureTutorialProgress();
 		EnsureTreasureDiscoveryProgress();
 		EnsureDoorProgress();
+		EnsureCoinHallProgress();
 
 		if ( float.IsNaN( masterVolume ) || float.IsInfinity( masterVolume ) )
 			masterVolume = 1f;
@@ -134,6 +138,12 @@ public class ProfileSaveData : IGameStats
 			eventUnlockedDoorIds = new List<string>();
 		if ( openDoorIds == null )
 			openDoorIds = new List<string>();
+	}
+
+	public void EnsureCoinHallProgress()
+	{
+		if ( coinHallExpansionLevels == null )
+			coinHallExpansionLevels = new Dictionary<string, int>();
 	}
 
 	/// <summary>
@@ -200,6 +210,35 @@ public class ProfileSaveData : IGameStats
 
 		if ( MergeTreasureDiscoveryProgressFrom( other ) )
 			changed = true;
+
+		if ( MergeCoinHallProgressFrom( other ) )
+			changed = true;
+
+		return changed;
+	}
+
+	/// <summary>Take max Coin Hall expansion level per hall id from <paramref name="other"/>.</summary>
+	public bool MergeCoinHallProgressFrom( ProfileSaveData other )
+	{
+		if ( other == null )
+			return false;
+
+		EnsureCoinHallProgress();
+		other.EnsureCoinHallProgress();
+
+		bool changed = false;
+		foreach ( KeyValuePair<string, int> pair in other.coinHallExpansionLevels )
+		{
+			if ( string.IsNullOrEmpty( pair.Key ) )
+				continue;
+			int incoming = pair.Value;
+			if ( incoming < 0 )
+				continue;
+			if ( coinHallExpansionLevels.TryGetValue( pair.Key, out int existing ) && existing >= incoming )
+				continue;
+			coinHallExpansionLevels[ pair.Key ] = incoming;
+			changed = true;
+		}
 
 		return changed;
 	}

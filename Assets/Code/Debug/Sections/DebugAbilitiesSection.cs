@@ -76,6 +76,8 @@ public class DebugAbilitiesSection : DebugOverlaySection
 			AbilityDefinition def = catalog[ i ];
 			if ( def == null || string.IsNullOrEmpty( def.id ) )
 				continue;
+			if ( def.isPassive )
+				continue;
 			if ( !system.IsUnlocked( def.id ) )
 				continue;
 
@@ -98,7 +100,7 @@ public class DebugAbilitiesSection : DebugOverlaySection
 
 		GUILayout.BeginVertical( GUI.skin.box );
 		GUILayout.Label( $"{def.ResolveDisplayName()} ({id})" );
-		GUILayout.Label( $"Status: {status}" + ( slot >= 0 ? $"  Slot {slot + 1}" : string.Empty ) );
+		GUILayout.Label( $"Status: {status}" + ( slot >= 0 ? $"  Slot {slot + 1}" : string.Empty ) + ( def.isPassive ? "  [passive]" : string.Empty ) );
 		if ( cooldown > 0f )
 			GUILayout.Label( $"Cooldown: {cooldown:0.00}s" );
 

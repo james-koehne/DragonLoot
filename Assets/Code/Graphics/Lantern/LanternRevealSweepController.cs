@@ -190,6 +190,40 @@ public class LanternRevealSweepController : MonoBehaviour
 		}
 	}
 
+	public static void DebugSnapComplete()
+	{
+		foreach ( KeyValuePair<string, LanternRevealSweepController> pair in Controllers )
+		{
+			if ( pair.Value != null )
+				pair.Value.SnapComplete();
+		}
+	}
+
+	void SnapComplete()
+	{
+		if ( _revealRoutine != null )
+		{
+			StopCoroutine( _revealRoutine );
+			_revealRoutine = null;
+		}
+
+		_hasCompleted = true;
+		FinishSkylightReveal();
+		ResetPunchEffects();
+
+		IReadOnlyList<LanternActivator> activators = LanternActivatorRegistry.GetAll();
+		for ( int i = 0; i < activators.Count; i++ )
+		{
+			LanternActivator activator = activators[ i ];
+			if ( activator == null || activator.ActivationMode != LanternActivationMode.RevealOnly )
+				continue;
+			if ( activator.RevealId != _revealId )
+				continue;
+
+			activator.FadeToLit( true, 0f );
+		}
+	}
+
 	public void DebugResetReveal()
 	{
 		_hasCompleted = false;

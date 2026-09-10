@@ -35,6 +35,8 @@ public class TutorialManager : MonoBehaviour
 	readonly HashSet<string> _deferredUncheckedTaskIds = new HashSet<string>();
 	readonly List<TutorialDefinition> _matchingScratch = new List<TutorialDefinition>( 8 );
 	readonly List<TutorialDefinition> _cycleScratch = new List<TutorialDefinition>( 8 );
+	readonly List<TutorialDefinition> _openTutorials = new List<TutorialDefinition>( 8 );
+	readonly List<string> _minimizedTitleScratch = new List<string>( 8 );
 
 	TutorialCatalogDefinition _catalog;
 	TutorialPopupUI _popup;
@@ -47,13 +49,14 @@ public class TutorialManager : MonoBehaviour
 	bool _aimingMinecart;
 	bool _playerAboveHeight;
 	bool _wasPlayerGliding;
+	bool _wasPlayerSliding;
+	bool _playerOnSlideSlope;
 	int _sorterCoinsSorted;
 	bool _sorterStackLoaded;
 	TreasureCategory _heldCategory;
 	bool _isHolding;
 	string _lastShownId;
 	string _lastActivatedId;
-	bool _cyclePinned;
 	CeremonyPhase _phase;
 	float _phaseUntil;
 	bool _finishMarkedComplete;
@@ -128,10 +131,12 @@ public class TutorialManager : MonoBehaviour
 		_aimingMinecart = false;
 		_playerAboveHeight = false;
 		_wasPlayerGliding = false;
+		_wasPlayerSliding = false;
+		_playerOnSlideSlope = false;
 		_sorterCoinsSorted = 0;
 		_sorterStackLoaded = false;
 		_isHolding = false;
-		_cyclePinned = false;
+		_openTutorials.Clear();
 		_endedCinematicPresentationId = null;
 		_cinematicEndedUnscaledTime = -1f;
 		_afterCinematicContext = false;
@@ -210,7 +215,9 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<MinecartShovedEvent>( OnMinecartShoved );
 		EventBus.Subscribe<MinecartHoldPushStartedEvent>( OnMinecartHoldPushStarted );
 		EventBus.Subscribe<MinecartCargoLoadedEvent>( OnMinecartCargoLoaded );
+		EventBus.Subscribe<MinecartDriveEnteredEvent>( OnMinecartDriveEntered );
 		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
+		EventBus.Subscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
 		_subscribed = true;
 	}
 
@@ -239,7 +246,9 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<MinecartShovedEvent>( OnMinecartShoved );
 		EventBus.Unsubscribe<MinecartHoldPushStartedEvent>( OnMinecartHoldPushStarted );
 		EventBus.Unsubscribe<MinecartCargoLoadedEvent>( OnMinecartCargoLoaded );
+		EventBus.Unsubscribe<MinecartDriveEnteredEvent>( OnMinecartDriveEntered );
 		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
+		EventBus.Unsubscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
 		_subscribed = false;
 	}
 
@@ -255,11 +264,12 @@ public class TutorialManager : MonoBehaviour
 
 		RefreshFromPlayerState();
 		PollMoveLookTasks();
-		PollGlideTask();
+		PollGlideSlideTasks();
 		PollJumpSprintTasks();
 		TickWalkWithoutSprint();
 		TickAfterCinematicActivation();
 		TickWalkWithoutSprintActivation();
+		TickSteepSlopeActivation();
 
 		if ( _phase != CeremonyPhase.None )
 			return;
@@ -484,36 +494,125 @@ public class TutorialManager : MonoBehaviour
 		if ( next == null || ( _active != null && _active.id == next.id ) )
 			return;
 
-		_cyclePinned = true;
 		_lastActivatedId = next.id;
-		RequestShow( next );
+		ShowTutorialNow( next, isReplay: false, animate: false );
 	}
 
 	void CollectCycleCandidates( List<TutorialDefinition> into )
 	{
 		into.Clear();
-		if ( _catalog == null || _catalog.tutorials == null )
-			return;
-
-		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		PruneOpenTutorials();
+		for ( int i = 0; i < _openTutorials.Count; i++ )
 		{
-			TutorialDefinition def = _catalog.tutorials[ i ];
+			TutorialDefinition def = _openTutorials[ i ];
 			if ( def == null || !IsEligible( def ) )
-				continue;
-			if ( !_hadContextIds.Contains( def.id ) && !IsDiscovered( def.id ) )
 				continue;
 			into.Add( def );
 		}
 	}
 
+	void EnsureOpen( TutorialDefinition def )
+	{
+		if ( def == null || !IsEligible( def ) )
+			return;
+		for ( int i = 0; i < _openTutorials.Count; i++ )
+		{
+			TutorialDefinition existing = _openTutorials[ i ];
+			if ( existing != null && existing.id == def.id )
+				return;
+		}
+
+		_openTutorials.Add( def );
+	}
+
+	void RemoveOpen( TutorialDefinition def )
+	{
+		if ( def == null )
+			return;
+		for ( int i = _openTutorials.Count - 1; i >= 0; i-- )
+		{
+			TutorialDefinition existing = _openTutorials[ i ];
+			if ( existing != null && existing.id == def.id )
+				_openTutorials.RemoveAt( i );
+		}
+	}
+
+	void PruneOpenTutorials()
+	{
+		for ( int i = _openTutorials.Count - 1; i >= 0; i-- )
+		{
+			TutorialDefinition def = _openTutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				_openTutorials.RemoveAt( i );
+		}
+	}
+
+	TutorialDefinition PickNextOpen( TutorialDefinition excluding )
+	{
+		PruneOpenTutorials();
+		string excludeId = excluding != null ? excluding.id : null;
+		if ( !string.IsNullOrEmpty( _lastActivatedId ) && _lastActivatedId != excludeId )
+		{
+			for ( int i = 0; i < _openTutorials.Count; i++ )
+			{
+				TutorialDefinition def = _openTutorials[ i ];
+				if ( def != null && def.id == _lastActivatedId )
+					return def;
+			}
+		}
+
+		return FirstOpen( excluding );
+	}
+
+	TutorialDefinition FirstOpen( TutorialDefinition excluding )
+	{
+		PruneOpenTutorials();
+		string excludeId = excluding != null ? excluding.id : null;
+		for ( int i = 0; i < _openTutorials.Count; i++ )
+		{
+			TutorialDefinition def = _openTutorials[ i ];
+			if ( def == null )
+				continue;
+			if ( !string.IsNullOrEmpty( excludeId ) && def.id == excludeId )
+				continue;
+			return def;
+		}
+
+		return null;
+	}
+
 	void RefreshCycleHint()
+	{
+		RefreshStackUi();
+	}
+
+	void RefreshStackUi()
 	{
 		if ( _popup == null )
 			return;
 
+		PruneOpenTutorials();
+		_minimizedTitleScratch.Clear();
+		if ( !_activeIsReplay )
+		{
+			string activeId = _active != null ? _active.id : null;
+			for ( int i = 0; i < _openTutorials.Count; i++ )
+			{
+				TutorialDefinition def = _openTutorials[ i ];
+				if ( def == null )
+					continue;
+				if ( !string.IsNullOrEmpty( activeId ) && def.id == activeId )
+					continue;
+				string title = string.IsNullOrEmpty( def.title ) ? def.id : def.title;
+				_minimizedTitleScratch.Add( title );
+			}
+		}
+
+		_popup.SetMinimizedTutorials( _minimizedTitleScratch );
+
 		CollectCycleCandidates( _cycleScratch );
-		bool canCycle = _popup.IsVisible && _cycleScratch.Count > 1;
-		_popup.SetCycleHint( canCycle, canCycle ? "[Tab] Next tutorial" : string.Empty );
+		bool canCycle = _popup.IsVisible && !_activeIsReplay && _cycleScratch.Count > 1;
+		_popup.SetCycleHint( canCycle, "[Tab]", "Switch" );
 	}
 
 	void NoteHadContext( TutorialDefinition def )
@@ -528,13 +627,18 @@ public class TutorialManager : MonoBehaviour
 		RefreshCycleHint();
 	}
 
-	void PollGlideTask()
+	void PollGlideSlideTasks()
 	{
 		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
 		bool gliding = player != null && player.IsGliding;
 		if ( gliding && !_wasPlayerGliding )
 			TryCompleteTask( TutorialTaskCompleteType.Glide );
 		_wasPlayerGliding = gliding;
+
+		bool sliding = player != null && player.IsSliding;
+		if ( sliding && !_wasPlayerSliding )
+			TryCompleteTask( TutorialTaskCompleteType.Slide );
+		_wasPlayerSliding = sliding;
 	}
 
 	void PollJumpSprintTasks()
@@ -652,6 +756,15 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintContext = ready;
 	}
 
+	void TickSteepSlopeActivation()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		bool onSlope = player != null && player.IsSlideTutorialContext;
+		if ( onSlope && !_playerOnSlideSlope )
+			NoteActivationForTrigger( TutorialTriggerType.SteepSlope );
+		_playerOnSlideSlope = onSlope;
+	}
+
 	bool IsAnyAfterCinematicContext()
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
@@ -676,6 +789,31 @@ public class TutorialManager : MonoBehaviour
 			return;
 		_endedCinematicPresentationId = evt.PresentationId;
 		_cinematicEndedUnscaledTime = Time.unscaledTime;
+	}
+
+	void OnAbilityUnlocked( AbilityUnlockedEvent evt )
+	{
+		if ( string.IsNullOrEmpty( evt.AbilityId ) )
+			return;
+		NoteActivationForAbilityUnlocked( evt.AbilityId );
+		EvaluateContext( force: true );
+	}
+
+	void NoteActivationForAbilityUnlocked( string abilityId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null || string.IsNullOrEmpty( abilityId ) )
+			return;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.AbilityUnlocked )
+				continue;
+			if ( def.requiredAbilityId != abilityId )
+				continue;
+			MarkRecentlyActivated( def.id );
+		}
 	}
 
 	void OnVolumeEntered( VolumeEnteredEvent evt )
@@ -819,6 +957,11 @@ public class TutorialManager : MonoBehaviour
 		TryCompleteTask( TutorialTaskCompleteType.LoadMinecart );
 	}
 
+	void OnMinecartDriveEntered( MinecartDriveEnteredEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.EnterDriveMinecart );
+	}
+
 	void OnCoinSorterUsed( CoinSorterUsedEvent evt )
 	{
 		_sorterCoinsSorted++;
@@ -863,6 +1006,7 @@ public class TutorialManager : MonoBehaviour
 			return;
 
 		RecordMatchingTasks( TutorialTaskCompleteType.EnterVolume, volumeId );
+		CompleteFinishedOpenTutorials();
 
 		if ( _active == null || _active.tasks == null )
 			return;
@@ -1008,8 +1152,6 @@ public class TutorialManager : MonoBehaviour
 		if ( string.IsNullOrEmpty( id ) )
 			return;
 		_lastActivatedId = id;
-		if ( _active == null || _active.id != id )
-			_cyclePinned = false;
 	}
 
 	void EvaluateContext( bool force )
@@ -1022,8 +1164,11 @@ public class TutorialManager : MonoBehaviour
 			return;
 		if ( DebugDefinition.TutorialsDisabled )
 		{
+			_openTutorials.Clear();
 			if ( _active != null )
 				RequestHide( complete: false );
+			else
+				RefreshStackUi();
 			return;
 		}
 
@@ -1036,44 +1181,30 @@ public class TutorialManager : MonoBehaviour
 			if ( !IsContextActive( def ) )
 				continue;
 			NoteHadContext( def );
+			EnsureOpen( def );
 			_matchingScratch.Add( def );
 		}
 
+		PruneOpenTutorials();
 		TutorialDefinition best = PickBestMatch( _matchingScratch );
 
-		// Sticky incomplete tutorials: do not hide on context loss, but allow a freshly
-		// activated context (e.g. picking up a gem) to take priority.
 		if ( _active != null && IsEligible( _active ) )
 		{
-			if ( !_cyclePinned
-			     && best != null
-			     && best.id != _active.id
-			     && best.id == _lastActivatedId
-			     && IsContextActive( best ) )
-			{
-				RequestShow( best );
-				return;
-			}
-
 			if ( force )
 				RefreshActivePopup();
-			RefreshCycleHint();
+			RefreshStackUi();
 			return;
 		}
 
-		if ( best == null )
-			return;
-
-		if ( _active != null && _active.id == best.id )
-		{
-			if ( force )
-				RefreshActivePopup();
-			RefreshCycleHint();
-			return;
-		}
-
-		RequestShow( best );
-		RefreshCycleHint();
+		TutorialDefinition next = PickNextOpen( _active );
+		if ( next == null )
+			next = best;
+		if ( next != null )
+			RequestShow( next );
+		else if ( _active != null )
+			RequestHide( complete: false );
+		else
+			RefreshStackUi();
 	}
 
 	TutorialDefinition PickBestMatch( List<TutorialDefinition> matches )
@@ -1149,6 +1280,12 @@ public class TutorialManager : MonoBehaviour
 			case TutorialTriggerType.WalkWithoutSprint:
 				primary = _walkWithoutSprintReady && !_hasTriedSprint;
 				break;
+			case TutorialTriggerType.SteepSlope:
+				primary = IsSteepSlopeContext();
+				break;
+			case TutorialTriggerType.AbilityUnlocked:
+				primary = IsAbilityUnlockedContext( def );
+				break;
 			default:
 				primary = false;
 				break;
@@ -1183,6 +1320,12 @@ public class TutorialManager : MonoBehaviour
 		return CountWorldGroundCoins() >= minWorld;
 	}
 
+	static bool IsSteepSlopeContext()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		return player != null && player.IsSlideTutorialContext;
+	}
+
 	static bool IsAboveHeightContext( TutorialDefinition def )
 	{
 		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
@@ -1190,6 +1333,14 @@ public class TutorialManager : MonoBehaviour
 			return false;
 		float minY = def != null && def.minHeightY > 0f ? def.minHeightY : 30f;
 		return player.transform.position.y >= minY;
+	}
+
+	static bool IsAbilityUnlockedContext( TutorialDefinition def )
+	{
+		if ( def == null || string.IsNullOrEmpty( def.requiredAbilityId ) )
+			return false;
+		AbilitySystem system = AbilitySystem.Instance;
+		return system != null && system.IsUnlocked( def.requiredAbilityId );
 	}
 
 	bool IsAfterCinematicContext( TutorialDefinition def )
@@ -1288,8 +1439,19 @@ public class TutorialManager : MonoBehaviour
 		if ( def == null || IsCompleted( def.id ) )
 			return;
 
-		if ( _active != null && _active.id == def.id && _phase == CeremonyPhase.None )
+		EnsureOpen( def );
+
+		if ( _active != null && !IsEligible( _active ) && _phase == CeremonyPhase.None )
+		{
+			ShowTutorialNow( def, isReplay: false );
 			return;
+		}
+
+		if ( _active != null && _active.id == def.id && _phase == CeremonyPhase.None )
+		{
+			RefreshStackUi();
+			return;
+		}
 
 		if ( _active == null && _phase == CeremonyPhase.None )
 		{
@@ -1297,12 +1459,23 @@ public class TutorialManager : MonoBehaviour
 			return;
 		}
 
-		_pendingShow = def;
-		if ( _phase == CeremonyPhase.None || _phase == CeremonyPhase.TaskLock )
-			RequestHide( complete: false );
+		if ( _phase != CeremonyPhase.None )
+		{
+			if ( _pendingShow == null )
+				_pendingShow = def;
+			RefreshStackUi();
+			return;
+		}
+
+		RefreshStackUi();
 	}
 
 	void ShowTutorialNow( TutorialDefinition def, bool isReplay )
+	{
+		ShowTutorialNow( def, isReplay, animate: true );
+	}
+
+	void ShowTutorialNow( TutorialDefinition def, bool isReplay, bool animate )
 	{
 		if ( def == null || _popup == null )
 			return;
@@ -1315,6 +1488,9 @@ public class TutorialManager : MonoBehaviour
 		_finishMarkedComplete = false;
 		_phase = CeremonyPhase.None;
 		_deferredUncheckedTaskIds.Clear();
+
+		if ( !isReplay )
+			EnsureOpen( def );
 
 		if ( isReplay )
 			ClearSessionTasksFor( def );
@@ -1330,7 +1506,8 @@ public class TutorialManager : MonoBehaviour
 			def.title,
 			def.body,
 			TutorialKeybindFormatter.Format( def.keybindHint ),
-			TutorialPopupUI.FormatTasks( def.tasks, IsTaskCompleteInActive ) );
+			TutorialPopupUI.FormatTasks( def.tasks, IsTaskCompleteInActive ),
+			animate );
 
 		_hadContextIds.Add( def.id );
 		RefreshCycleHint();
@@ -1436,6 +1613,15 @@ public class TutorialManager : MonoBehaviour
 
 	void BeginHideAfterComplete()
 	{
+		bool keepStack = _pendingShow != null && !IsCompleted( _pendingShow.id );
+		if ( keepStack && _popup != null )
+		{
+			_phase = CeremonyPhase.Hiding;
+			_phaseUntil = Time.unscaledTime + _popup.HideFeedbackDuration + PostHideGapSeconds;
+			_popup.HideActiveCard();
+			return;
+		}
+
 		if ( _popup != null && _popup.IsVisible )
 		{
 			_phase = CeremonyPhase.Hiding;
@@ -1455,10 +1641,13 @@ public class TutorialManager : MonoBehaviour
 		_deferredUncheckedTaskIds.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
-		if ( _popup != null && _popup.IsVisible )
-			_popup.HideImmediate();
 
-		RefreshCycleHint();
+		bool keepStack = _pendingShow != null && !IsCompleted( _pendingShow.id );
+		if ( !keepStack && _openTutorials.Count == 0 && _popup != null )
+			_popup.HideImmediate();
+		else
+			RefreshStackUi();
+
 		_phase = CeremonyPhase.Cooldown;
 		_phaseUntil = Time.unscaledTime + 0.05f;
 	}
@@ -1515,6 +1704,7 @@ public class TutorialManager : MonoBehaviour
 		}
 
 		bool activeHit = RecordMatchingTasks( completeType, null );
+		CompleteFinishedOpenTutorials();
 		if ( !activeHit )
 			return;
 		if ( IsCeremonyBlocking )
@@ -1592,6 +1782,34 @@ public class TutorialManager : MonoBehaviour
 		}
 
 		return any;
+	}
+
+	void CompleteFinishedOpenTutorials()
+	{
+		bool changed = false;
+		string activeId = _active != null ? _active.id : null;
+		for ( int i = _openTutorials.Count - 1; i >= 0; i-- )
+		{
+			TutorialDefinition def = _openTutorials[ i ];
+			if ( def == null )
+			{
+				_openTutorials.RemoveAt( i );
+				changed = true;
+				continue;
+			}
+
+			if ( !string.IsNullOrEmpty( activeId ) && def.id == activeId )
+				continue;
+			if ( !AreAllTasksComplete( def ) )
+				continue;
+
+			MarkCompleted( def.id );
+			_openTutorials.RemoveAt( i );
+			changed = true;
+		}
+
+		if ( changed )
+			RefreshStackUi();
 	}
 
 	void MarkAllTasksCompleted( TutorialDefinition def )
@@ -1684,7 +1902,17 @@ public class TutorialManager : MonoBehaviour
 			_finishMarkedComplete = true;
 		}
 
-		_pendingShow = null;
+		if ( !_activeIsReplay )
+		{
+			RemoveOpen( _active );
+			_pendingShow = FirstOpen( null );
+		}
+		else
+		{
+			_pendingShow = null;
+		}
+
+		RefreshStackUi();
 		if ( _popup != null )
 			_popup.PlayTutorialComplete();
 
@@ -1853,7 +2081,7 @@ public class TutorialManager : MonoBehaviour
 		_finishMarkedComplete = false;
 		_lastShownId = null;
 		_lastActivatedId = null;
-		_cyclePinned = false;
+		_openTutorials.Clear();
 		_sessionCompletedTaskKeys.Clear();
 		_completedThisSession.Clear();
 		_hadContextIds.Clear();
@@ -1862,6 +2090,9 @@ public class TutorialManager : MonoBehaviour
 		_endedCinematicPresentationId = null;
 		_cinematicEndedUnscaledTime = -1f;
 		_afterCinematicContext = false;
+		_wasPlayerGliding = false;
+		_wasPlayerSliding = false;
+		_playerOnSlideSlope = false;
 		_hasTriedSprint = false;
 		_walkWithoutSprintReady = false;
 		_walkWithoutSprintSeconds = 0f;

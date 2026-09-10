@@ -18,10 +18,17 @@ public class FirstPersonCameraController : MonoBehaviour
 	bool _invertY;
 	float _pitch;
 	bool _inputEnabled = true;
+	bool _lookLocked;
 	float _baseFieldOfView;
 	bool _cinematicDetachedLook;
 	float _cinematicYawOffset;
 	float _cinematicPitchOffset;
+	bool _fovOverrideActive;
+	bool _wantMovementFov;
+	float _movementFovWeight;
+	Light _softFillLight;
+
+	const string SoftFillLightChildName = "PlayerSoftFillLight";
 
 	public float Pitch => _pitch;
 
@@ -55,6 +62,9 @@ public class FirstPersonCameraController : MonoBehaviour
 		}
 	}
 
+	float SpeedFovBoost => RuntimeDefinition.Get( Definition, d => d.speedFovBoost, 8f );
+	float SpeedFovBlendTime => RuntimeDefinition.Get( Definition, d => d.speedFovBlendTime, 0.2f );
+
 	void Awake()
 	{
 		Camera = GetComponent<Camera>();
@@ -63,10 +73,15 @@ public class FirstPersonCameraController : MonoBehaviour
 
 	void Update()
 	{
-		if ( !_inputEnabled || _body == null )
+		if ( !_inputEnabled || _lookLocked || _body == null )
 			return;
 
 		HandleLookInput();
+	}
+
+	void LateUpdate()
+	{
+		ApplyMovementFieldOfView();
 	}
 
 	public void Setup( Transform body )
@@ -75,6 +90,51 @@ public class FirstPersonCameraController : MonoBehaviour
 
 		if ( _body != null )
 			_pitch = Mathf.Clamp( NormalizePitch( transform.localEulerAngles.x ), MinPitch, MaxPitch );
+
+		EnsureSoftFillLight();
+	}
+
+	void EnsureSoftFillLight()
+	{
+		CameraDefinition def = Definition;
+		bool enabled = def == null || def.softFillLightEnabled;
+		Color color = def != null ? def.softFillLightColor : new Color( 1f, 0.5f, 0.15f, 1f );
+		float intensity = def != null ? def.softFillLightIntensity : 0.45f;
+		float range = def != null ? def.softFillLightRange : 4.5f;
+		Vector3 localOffset = def != null ? def.softFillLightLocalOffset : new Vector3( 0f, -0.15f, 0.25f );
+
+		if ( !enabled || intensity <= 0.0001f )
+		{
+			if ( _softFillLight != null )
+				_softFillLight.enabled = false;
+			return;
+		}
+
+		if ( _softFillLight == null )
+		{
+			Transform existing = transform.Find( SoftFillLightChildName );
+			if ( existing != null )
+				_softFillLight = existing.GetComponent<Light>();
+
+			if ( _softFillLight == null )
+			{
+				GameObject lightGo = new GameObject( SoftFillLightChildName );
+				lightGo.transform.SetParent( transform, false );
+				_softFillLight = lightGo.AddComponent<Light>();
+			}
+		}
+
+		Transform lightTransform = _softFillLight.transform;
+		lightTransform.localPosition = localOffset;
+		lightTransform.localRotation = Quaternion.identity;
+		lightTransform.localScale = Vector3.one;
+
+		_softFillLight.type = LightType.Point;
+		_softFillLight.color = color;
+		_softFillLight.intensity = intensity;
+		_softFillLight.range = range;
+		_softFillLight.shadows = LightShadows.None;
+		_softFillLight.enabled = true;
 	}
 
 	public Vector3 GetCameraForward()
@@ -86,6 +146,11 @@ public class FirstPersonCameraController : MonoBehaviour
 	{
 		_inputEnabled = enabled;
 		ApplyCursorState( enabled );
+	}
+
+	public void SetLookLocked( bool locked )
+	{
+		_lookLocked = locked;
 	}
 
 	public void SetPitch( float pitch )
@@ -123,7 +188,31 @@ public class FirstPersonCameraController : MonoBehaviour
 
 	public void ResetFieldOfView()
 	{
+		_wantMovementFov = false;
+		_movementFovWeight = 0f;
 		SetFieldOfView( _baseFieldOfView );
+	}
+
+	public void SetFieldOfViewOverride( bool active )
+	{
+		_fovOverrideActive = active;
+	}
+
+	public void SetMovementFovActive( bool active )
+	{
+		_wantMovementFov = active;
+	}
+
+	void ApplyMovementFieldOfView()
+	{
+		if ( _fovOverrideActive || Camera == null )
+			return;
+
+		float target = _wantMovementFov ? 1f : 0f;
+		float blendTime = SpeedFovBlendTime;
+		float step = blendTime > 0.0001f ? Time.deltaTime / blendTime : 1f;
+		_movementFovWeight = Mathf.MoveTowards( _movementFovWeight, target, step );
+		Camera.fieldOfView = _baseFieldOfView + SpeedFovBoost * _movementFovWeight;
 	}
 
 	public void SetLookSensitivityMultiplier( float multiplier )

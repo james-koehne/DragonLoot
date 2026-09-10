@@ -69,11 +69,11 @@ public class GemConstellationLineVisual : MonoBehaviour
 	[Header( "Complete Breathe" )]
 	[SerializeField]
 	[Min( 0f )]
-	float breatheGlowAmplitude = 0.12f;
+	float breatheGlowAmplitude = 0.28f;
 
 	[SerializeField]
 	[Min( 0.05f )]
-	float breatheSpeed = 0.85f;
+	float breatheSpeed = 0.7f;
 
 	readonly List<LineRenderer> _lines = new List<LineRenderer>();
 	readonly List<GemConstellationResolvedConnection> _connections = new List<GemConstellationResolvedConnection>();
@@ -154,6 +154,8 @@ public class GemConstellationLineVisual : MonoBehaviour
 		EnsureMaterial();
 		CacheBaseIntensities();
 		StopSurgeRoutine();
+		_breatheActive = false;
+		_breatheMul = 1f;
 		float surgeDuration = duration > 0.0001f ? duration : defaultSurgeDuration;
 		_surgeRoutine = StartCoroutine( SurgeRoutine( surgeDuration ) );
 	}
@@ -388,14 +390,16 @@ public class GemConstellationLineVisual : MonoBehaviour
 
 	void CacheBaseIntensities()
 	{
-		Material mat = ResolveMaterial();
-		if ( mat == null )
+		// Always read from the source asset. The runtime instance is written with
+		// surge/breathe multipliers, so recaching from it would lock in the flare.
+		Material source = lineMaterial != null ? lineMaterial : _runtimeMaterial;
+		if ( source == null )
 			return;
 
-		if ( mat.HasProperty( GlowIntensityId ) )
-			_baseGlowIntensity = mat.GetFloat( GlowIntensityId );
-		if ( mat.HasProperty( CoreIntensityId ) )
-			_baseCoreIntensity = mat.GetFloat( CoreIntensityId );
+		if ( source.HasProperty( GlowIntensityId ) )
+			_baseGlowIntensity = source.GetFloat( GlowIntensityId );
+		if ( source.HasProperty( CoreIntensityId ) )
+			_baseCoreIntensity = source.GetFloat( CoreIntensityId );
 	}
 
 	void ApplyMaterialProperties( Material mat )

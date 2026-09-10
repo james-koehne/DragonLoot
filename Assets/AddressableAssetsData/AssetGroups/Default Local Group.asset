@@ -57,6 +57,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1a4b0c7130be5ed439c2393098a807a2
+    m_Address: Assets/Addressables/Treasure/Resources/wood_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1b45042b9e8c93a45aa79fa446b6c7cf
     m_Address: GoldKey
     m_ReadOnly: 0
@@ -110,6 +115,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 3309a426476ddcf4d95d7f6d219a68c8
+    m_Address: Assets/Addressables/Treasure/Resources/metal_bar_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 338eed198e501bc4dbf3db8bba3f4e79
     m_Address: AreaLightingDefinition
@@ -488,6 +498,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d7bbc54db16435f48b8fc8d9b59dad62
     m_Address: Assets/Addressables/GameController.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d9c3fa99490bffa4487a5200b6403e44
+    m_Address: Assets/Addressables/Treasure/Resources/essence_01Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

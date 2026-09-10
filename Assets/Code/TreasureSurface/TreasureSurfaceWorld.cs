@@ -27,7 +27,6 @@ public class TreasureSurfaceWorld : MonoBehaviour
 	// Timing stats (ms, last frame)
 	public float LastChunkRebuildMs { get; private set; }
 	public float LastSurfaceUpdateMs { get; private set; }
-	public float LastGpuUploadMs { get; private set; }
 	public int ActiveChunkCount { get; private set; }
 	public int SleepingChunkCount { get; private set; }
 	public int DirtyChunkCount { get; private set; }
@@ -81,7 +80,6 @@ public class TreasureSurfaceWorld : MonoBehaviour
 			_streamer.Tick();
 
 		RebuildDirtyChunks();
-		UploadDirtyGpu();
 		LastSurfaceUpdateMs = ( float )sw.Elapsed.TotalMilliseconds;
 
 		if ( _simulator != null )
@@ -176,7 +174,7 @@ public class TreasureSurfaceWorld : MonoBehaviour
 			ApplyAuthoringPaint( chunk );
 			TreasureSurfaceRelax.CopyHeightToSmoothed( chunk );
 			TreasureSurfaceRebuild.RebuildDerived( chunk, definition, definition.CellSize );
-			chunk.Dirty = true;
+			chunk.MarkDirtyFull();
 		}
 	}
 
@@ -501,34 +499,24 @@ public class TreasureSurfaceWorld : MonoBehaviour
 
 		Stopwatch sw = Stopwatch.StartNew();
 		int rebuilt = 0;
+		float cellSize = definition.CellSize;
 		for ( int i = 0; i < _dirtyList.Count && rebuilt < budget; i++ )
 		{
 			TreasureChunk chunk = _dirtyList[ i ];
+			if ( !chunk.TryGetDirtyRect( out int minX, out int maxX, out int minZ, out int maxZ ) )
+				continue;
+
 			int iters = definition.relaxIterations;
 			if ( iters > 0 )
-				TreasureSurfaceRelax.Relax( chunk, iters );
+				TreasureSurfaceRelax.Relax( chunk, iters, minX, maxX, minZ, maxZ );
 			else
-				TreasureSurfaceRelax.CopyHeightToSmoothed( chunk );
+				TreasureSurfaceRelax.CopyHeightToSmoothed( chunk, minX, maxX, minZ, maxZ );
 
-			TreasureSurfaceRebuild.RebuildDerived( chunk, definition, definition.CellSize );
+			TreasureSurfaceRebuild.RebuildDerived( chunk, definition, cellSize, minX, maxX, minZ, maxZ );
 			rebuilt++;
 		}
 
 		LastChunkRebuildMs = ( float )sw.Elapsed.TotalMilliseconds;
-	}
-
-	void UploadDirtyGpu()
-	{
-		Stopwatch sw = Stopwatch.StartNew();
-		float encode = Mathf.Max( 1f, definition.maxWorldY - definition.minWorldY );
-		for ( int i = 0; i < _loadedList.Count; i++ )
-		{
-			TreasureChunk chunk = _loadedList[ i ];
-			if ( chunk != null && chunk.IsGpuDirty )
-				chunk.UploadGpuIfDirty( encode );
-		}
-
-		LastGpuUploadMs = ( float )sw.Elapsed.TotalMilliseconds;
 	}
 
 	void ReleaseAllChunks()

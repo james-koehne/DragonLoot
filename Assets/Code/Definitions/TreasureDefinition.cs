@@ -86,8 +86,8 @@ public class TreasureDefinition : ScriptableObject
 	[Tooltip( "When true, this key opens any chest key type and is not consumed on use." )]
 	public bool isSkeletonKey = false;
 
-	[Header( "Chest" )]
-	[Tooltip( "Used when category is Chest. Owns lock type, duration, and placeholder contents." )]
+	[Header( "Chest / Container" )]
+	[Tooltip( "Used when category is Chest or Container. Owns lock type, duration, and placeholder contents." )]
 	public ChestDefinition chestDefinition;
 
 	[Header( "Visuals" )]
@@ -163,6 +163,17 @@ public class TreasureDefinition : ScriptableObject
 
 	[Range( -3f, 3f )]
 	public float placePitchMax = 1f;
+
+	/// <summary>
+	/// True when this treasure opens or bashes like a chest (has a <see cref="ChestDefinition"/>).
+	/// </summary>
+	public bool UsesChestInteract()
+	{
+		if ( chestDefinition != null )
+			return true;
+
+		return category == TreasureCategory.Chest || category == TreasureCategory.Container;
+	}
 
 	/// <summary>
 	/// False when this treasure cannot be thrown (explicit flag or ground/slot-only placement).

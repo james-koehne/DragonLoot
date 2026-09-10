@@ -17,7 +17,7 @@ MonoBehaviour:
   tags:
   - movement
   - glide
-  trigger: 14
+  trigger: 19
   holdingCategory: 0
   volumeId: 
   fallbackVolumeId: 
@@ -28,13 +28,17 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: glide
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: You're high up! Jump again in the air to start gliding, then hold jump to
-    stay gliding.
-  keybindHint: '[{Jump}] Air jump to glide  Hold [{Jump}] Keep gliding'
+  body: Try getting up high, then jump again in the air to start gliding. Press jump
+    while gliding to cancel, then again to re-enter.
+  keybindHint: 'Get high  [{Jump}] then [{Jump}] in air to glide'
   tasks:
   - id: glide
     label: Glide

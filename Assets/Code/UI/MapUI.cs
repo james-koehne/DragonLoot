@@ -16,6 +16,7 @@ public sealed class MapUI : MonoBehaviour
 	[SerializeField] RectTransform panel;
 	[SerializeField] RawImage mapImage;
 	[SerializeField] RectTransform playerDot;
+	[SerializeField] RectTransform playerGlow;
 	[SerializeField] RectTransform aimCone;
 	[SerializeField] Transform labelsRoot;
 
@@ -344,6 +345,8 @@ public sealed class MapUI : MonoBehaviour
 		{
 			playerDot.gameObject.SetActive( false );
 			aimCone.gameObject.SetActive( false );
+			if ( playerGlow != null )
+				playerGlow.gameObject.SetActive( false );
 			return;
 		}
 
@@ -358,11 +361,34 @@ public sealed class MapUI : MonoBehaviour
 		// UI +Y is up (world +Z). Rotate so cone points along planar facing.
 		aimCone.localEulerAngles = new Vector3( 0f, 0f, -yaw );
 
-		float dotSize = def != null ? def.playerDotSize : 14f;
+		float pulseSpeed = def != null ? def.playerPulseSpeed : 4.5f;
+		float pulseAmount = def != null ? def.playerPulseAmount : 0.22f;
+		float pulse = 0.5f + 0.5f * Mathf.Sin( Time.unscaledTime * pulseSpeed );
+
+		float dotSize = def != null ? def.playerDotSize : 28f;
 		playerDot.sizeDelta = new Vector2( dotSize, dotSize );
+		playerDot.localScale = Vector3.one * ( 1f + pulseAmount * pulse );
+
+		Color baseDot = def != null ? def.playerDotColor : Color.white;
+		Color brightDot = Color.Lerp( baseDot, Color.white, 0.35f );
 		Image dotImage = playerDot.GetComponent<Image>();
-		if ( dotImage != null && def != null )
-			dotImage.color = def.playerDotColor;
+		if ( dotImage != null )
+			dotImage.color = Color.Lerp( baseDot, brightDot, pulse );
+
+		if ( playerGlow != null )
+		{
+			playerGlow.gameObject.SetActive( true );
+			playerGlow.anchoredPosition = panelPos;
+			float glowSize = dotSize * ( 1.8f + 0.55f * pulse );
+			playerGlow.sizeDelta = new Vector2( glowSize, glowSize );
+			Image glowImage = playerGlow.GetComponent<Image>();
+			if ( glowImage != null )
+			{
+				if ( glowImage.sprite == null )
+					glowImage.sprite = EnsureDotSprite();
+				glowImage.color = new Color( baseDot.r, baseDot.g, baseDot.b, 0.22f + 0.4f * pulse );
+			}
+		}
 
 		float coneLen = def != null ? def.aimConeLength : 48f;
 		float halfAngle = def != null ? def.aimConeHalfAngle : 28f;
@@ -371,9 +397,15 @@ public sealed class MapUI : MonoBehaviour
 			coneWidth = Mathf.Max( coneWidth, def.aimConeBaseWidth * 0.5f );
 		aimCone.sizeDelta = new Vector2( coneWidth, coneLen );
 		aimCone.pivot = new Vector2( 0.5f, 0f );
+		aimCone.localScale = Vector3.one * ( 1f + pulseAmount * pulse );
 		Image coneImage = aimCone.GetComponent<Image>();
-		if ( coneImage != null && def != null )
-			coneImage.color = def.aimConeColor;
+		if ( coneImage != null )
+		{
+			Color baseCone = def != null ? def.aimConeColor : new Color( 0.95f, 0.95f, 1f, 0.45f );
+			Color brightCone = Color.Lerp( baseCone, Color.white, 0.35f );
+			brightCone.a = Mathf.Lerp( baseCone.a, Mathf.Min( 1f, baseCone.a + 0.25f ), pulse );
+			coneImage.color = Color.Lerp( baseCone, brightCone, pulse );
+		}
 	}
 
 	void RefreshLabels( MapSystem map, MapDefinition def )
@@ -776,6 +808,27 @@ public sealed class MapUI : MonoBehaviour
 		aimCone.pivot = new Vector2( 0.5f, 0f );
 		aimCone.sizeDelta = new Vector2( 36f, 48f );
 
+		if ( playerGlow == null )
+		{
+			Transform existing = panel.Find( "PlayerGlow" );
+			GameObject glowGo = existing != null
+				? existing.gameObject
+				: new GameObject( "PlayerGlow", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+			if ( existing == null )
+				glowGo.transform.SetParent( panel, false );
+			playerGlow = glowGo.GetComponent<RectTransform>();
+		}
+
+		Image glowImage = playerGlow.GetComponent<Image>();
+		if ( glowImage == null )
+			glowImage = playerGlow.gameObject.AddComponent<Image>();
+		glowImage.sprite = EnsureDotSprite();
+		glowImage.raycastTarget = false;
+		playerGlow.anchorMin = new Vector2( 0.5f, 0.5f );
+		playerGlow.anchorMax = new Vector2( 0.5f, 0.5f );
+		playerGlow.pivot = new Vector2( 0.5f, 0.5f );
+		playerGlow.sizeDelta = new Vector2( 40f, 40f );
+
 		if ( playerDot == null )
 		{
 			Transform existing = panel.Find( "PlayerDot" );
@@ -796,7 +849,9 @@ public sealed class MapUI : MonoBehaviour
 		playerDot.anchorMin = new Vector2( 0.5f, 0.5f );
 		playerDot.anchorMax = new Vector2( 0.5f, 0.5f );
 		playerDot.pivot = new Vector2( 0.5f, 0.5f );
-		playerDot.sizeDelta = new Vector2( 14f, 14f );
+		playerDot.sizeDelta = new Vector2( 28f, 28f );
+
+		playerGlow.SetSiblingIndex( playerDot.GetSiblingIndex() );
 
 		Image dim = GetComponent<Image>();
 		if ( dim == null )

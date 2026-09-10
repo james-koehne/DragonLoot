@@ -53,6 +53,12 @@ MonoBehaviour:
   dimColor: {r: 0.45, g: 0.85, b: 1, a: 0}
   scrollSpeed: 1.35
   pulseCount: 3.5
+  surgeWidthMul: 1.22
+  surgeGlowMul: 5.8
+  surgeScrollMul: 1.55
+  defaultSurgeDuration: 1.8
+  breatheGlowAmplitude: 0.28
+  breatheSpeed: 0.7
 --- !u!1 &510186667776134999
 GameObject:
   m_ObjectHideFlags: 0
@@ -373,11 +379,27 @@ MonoBehaviour:
   randomGemPool: []
   fillSeed: 0
   snapDuration: 0.25
+  approachDuration: 0.18
+  approachHold: 0.06
+  placeSpinDuration: 0.28
+  approachDistance: 0.35
+  placeSpins: 1.1
   bounceScale: 1.15
   gemSocketRotation: {x: 0, y: 0, z: 0}
+  connectedGlowLerpSpeed: 4
+  cascadeStagger: 0.06
+  ignitionBoostDuration: 0.28
+  ignitionPeakGlow: 1.75
+  completedGlowBaseline: 1.15
+  breatheAmplitude: 0.12
+  breatheSpeed: 1.15
+  completeSurgeDuration: 0.7
   countLabel: {fileID: 0}
   completedHighlight: {fileID: 0}
   lineVisual: {fileID: 8665923289998800388}
+  placeFeedbacks: {fileID: 0}
+  connectionFeedbacks: {fileID: 0}
+  completeFeedbacks: {fileID: 0}
   drawGizmosAlways: 0
 --- !u!1 &3029930053029026672
 GameObject:

@@ -234,27 +234,64 @@ public class TreasurePileDefinition : ScriptableObject
 		return ComputeLargestRemainderQuotas( coinContents, budget );
 	}
 
+	/// <summary>
+	/// Non-allocating mix quotas into <paramref name="targets"/>.
+	/// Uses <paramref name="remaindersScratch"/> when provided (length &gt;= entries); otherwise allocates once.
+	/// </summary>
+	public void ComputeMixQuotasInto( int budget, int[] targets, float[] remaindersScratch = null )
+	{
+		ComputeLargestRemainderQuotasInto( coinContents, budget, targets, remaindersScratch );
+	}
+
 	public static int[] ComputeLargestRemainderQuotas( TreasurePileEntry[] entries, int budget )
 	{
 		if ( entries == null || entries.Length == 0 )
 			return Array.Empty<int>();
 
+		int[] targets = new int[ entries.Length ];
+		ComputeLargestRemainderQuotasInto( entries, budget, targets, null );
+		return targets;
+	}
+
+	public static void ComputeLargestRemainderQuotasInto(
+		TreasurePileEntry[] entries,
+		int budget,
+		int[] targets,
+		float[] remaindersScratch )
+	{
+		if ( targets == null )
+			return;
+
+		for ( int i = 0; i < targets.Length; i++ )
+			targets[ i ] = 0;
+
+		if ( entries == null || entries.Length == 0 )
+			return;
+
+		int n = Mathf.Min( entries.Length, targets.Length );
 		int cap = Mathf.Max( 0, budget );
 		int totalWeight = 0;
-		for ( int i = 0; i < entries.Length; i++ )
+		for ( int i = 0; i < n; i++ )
 		{
 			TreasurePileEntry entry = entries[ i ];
 			if ( entry.treasure != null && entry.count > 0 )
 				totalWeight += entry.count;
 		}
 
-		int[] targets = new int[ entries.Length ];
 		if ( totalWeight <= 0 || cap <= 0 )
-			return targets;
+			return;
+
+		float[] remainders = remaindersScratch;
+		if ( remainders == null || remainders.Length < n )
+			remainders = new float[ n ];
+		else
+		{
+			for ( int i = 0; i < n; i++ )
+				remainders[ i ] = 0f;
+		}
 
 		int assigned = 0;
-		float[] remainders = new float[ entries.Length ];
-		for ( int i = 0; i < entries.Length; i++ )
+		for ( int i = 0; i < n; i++ )
 		{
 			TreasurePileEntry entry = entries[ i ];
 			if ( entry.treasure == null || entry.count <= 0 )
@@ -272,7 +309,7 @@ public class TreasurePileDefinition : ScriptableObject
 		{
 			int best = -1;
 			float bestRem = -1f;
-			for ( int i = 0; i < entries.Length; i++ )
+			for ( int i = 0; i < n; i++ )
 			{
 				TreasurePileEntry entry = entries[ i ];
 				if ( entry.treasure == null || entry.count <= 0 )
@@ -291,8 +328,6 @@ public class TreasurePileDefinition : ScriptableObject
 			remainders[ best ] = -1f;
 			leftover--;
 		}
-
-		return targets;
 	}
 
 	public TreasureDefinition GetPrimaryTreasure()

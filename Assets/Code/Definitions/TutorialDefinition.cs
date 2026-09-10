@@ -22,7 +22,11 @@ public enum TutorialTriggerType
 	AboveHeight = 14,
 	AimMinecart = 15,
 	AfterCinematic = 16,
-	WalkWithoutSprint = 17
+	WalkWithoutSprint = 17,
+	/// <summary>Show while looking down a slideable slope, or while already sliding.</summary>
+	SteepSlope = 18,
+	/// <summary>Show while the required ability id is unlocked.</summary>
+	AbilityUnlocked = 19
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -50,7 +54,9 @@ public enum TutorialTaskCompleteType
 	HoldMinecart = 19,
 	LoadMinecart = 20,
 	Jump = 21,
-	Sprint = 22
+	Sprint = 22,
+	EnterDriveMinecart = 23,
+	Slide = 24
 }
 
 [Serializable]
@@ -110,6 +116,9 @@ public class TutorialDefinition : ScriptableObject
 
 	[Tooltip( "When trigger is AboveHeight: show while player world Y is at or above this value." )]
 	public float minHeightY = 30f;
+
+	[Tooltip( "When trigger is AbilityUnlocked: ability id that must be unlocked (e.g. glide)." )]
+	public string requiredAbilityId;
 
 	[Tooltip( "When trigger is AfterCinematic: presentation id that must finish (empty uses intro_ledge_cinematic)." )]
 	public string cinematicPresentationId;

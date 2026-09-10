@@ -7,5 +7,7 @@ public enum TreasureCategory
 	Helmet,
 	Artifact,
 	Key,
-	Chest
+	Chest,
+	Container,
+	Resource
 }

@@ -7,7 +7,6 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Escape opens a controls summary; Escape again resumes. Quit button exits the game.
-/// Tutorials page lists discovered tutorials with text-only replay.
 /// Wire references on the Interface prefab.
 /// </summary>
 public class PauseMenuUI : MonoBehaviour
@@ -36,7 +35,8 @@ public class PauseMenuUI : MonoBehaviour
 
 	public void Setup()
 	{
-		EnsureTutorialsUi();
+		EnsureControlsPanel();
+		HideTutorialsUi();
 		WireButtons();
 		RefreshControlsText();
 		ShowControlsPage();
@@ -44,16 +44,48 @@ public class PauseMenuUI : MonoBehaviour
 		_ready = true;
 	}
 
-	void EnsureTutorialsUi()
+	void HideTutorialsUi()
 	{
-		if ( tutorialsButton != null && tutorialsPanelGroup != null && tutorialsListRoot != null )
+		HideButton( tutorialsButton );
+
+		Transform panel = transform.Find( "Panel" );
+		if ( panel != null )
+		{
+			HideNamedChild( panel, "TutorialsButton" );
+			HideNamedChild( panel, "TutorialsPanel" );
+		}
+
+		if ( controlsPanelGroup != null )
+			HideNamedChild( controlsPanelGroup.transform, "TutorialsButton" );
+
+		if ( tutorialsPanelGroup != null )
+			tutorialsPanelGroup.gameObject.SetActive( false );
+	}
+
+	static void HideButton( Button button )
+	{
+		if ( button != null )
+			button.gameObject.SetActive( false );
+	}
+
+	static void HideNamedChild( Transform parent, string childName )
+	{
+		if ( parent == null )
+			return;
+
+		Transform child = parent.Find( childName );
+		if ( child != null )
+			child.gameObject.SetActive( false );
+	}
+
+	void EnsureControlsPanel()
+	{
+		if ( controlsPanelGroup != null )
 			return;
 
 		Transform panel = transform.Find( "Panel" );
 		if ( panel == null )
 			return;
-
-		Font font = ResolveFont();
 
 		if ( controlsPanelGroup == null )
 		{
@@ -96,75 +128,6 @@ public class PauseMenuUI : MonoBehaviour
 				if ( quitT != null )
 					quitButton = quitT.GetComponent<Button>();
 			}
-		}
-
-		if ( tutorialsButton == null )
-		{
-			Transform existing = controlsPanelGroup != null
-				? controlsPanelGroup.transform.Find( "TutorialsButton" )
-				: null;
-			if ( existing != null )
-				tutorialsButton = existing.GetComponent<Button>();
-			else if ( controlsPanelGroup != null )
-				tutorialsButton = CreateSimpleButton( controlsPanelGroup.transform, "TutorialsButton", "Tutorials", font, new Vector2( 0f, -520f ) );
-		}
-
-		if ( tutorialsPanelGroup == null )
-		{
-			Transform existingPanel = panel.Find( "TutorialsPanel" );
-			GameObject tutorialsGo = existingPanel != null
-				? existingPanel.gameObject
-				: new GameObject( "TutorialsPanel", typeof( RectTransform ), typeof( CanvasGroup ) );
-			if ( existingPanel == null )
-				tutorialsGo.transform.SetParent( panel, false );
-
-			RectTransform tutorialsRect = tutorialsGo.GetComponent<RectTransform>();
-			tutorialsRect.anchorMin = Vector2.zero;
-			tutorialsRect.anchorMax = Vector2.one;
-			tutorialsRect.offsetMin = Vector2.zero;
-			tutorialsRect.offsetMax = Vector2.zero;
-
-			tutorialsPanelGroup = tutorialsGo.GetComponent<CanvasGroup>();
-			if ( tutorialsPanelGroup == null )
-				tutorialsPanelGroup = tutorialsGo.AddComponent<CanvasGroup>();
-
-			if ( tutorialsGo.transform.Find( "Title" ) == null )
-				CreateSimpleText( tutorialsGo.transform, "Title", "Tutorials", font, new Vector2( 0f, 520f ), new Vector2( 920f, 64f ), 42, TextAnchor.MiddleCenter );
-
-			if ( tutorialsEmptyLabel == null )
-			{
-				Transform emptyT = tutorialsGo.transform.Find( "EmptyLabel" );
-				if ( emptyT != null )
-					tutorialsEmptyLabel = emptyT.GetComponent<Text>();
-				else
-					tutorialsEmptyLabel = CreateSimpleText( tutorialsGo.transform, "EmptyLabel", "No tutorials discovered yet.", font, new Vector2( 0f, 80f ), new Vector2( 860f, 200f ), 30, TextAnchor.MiddleCenter );
-			}
-
-			if ( tutorialsListRoot == null )
-			{
-				Transform listT = tutorialsGo.transform.Find( "List" );
-				GameObject listGo = listT != null ? listT.gameObject : new GameObject( "List", typeof( RectTransform ) );
-				if ( listT == null )
-					listGo.transform.SetParent( tutorialsGo.transform, false );
-				RectTransform listRect = listGo.GetComponent<RectTransform>();
-				listRect.anchorMin = new Vector2( 0.5f, 0.5f );
-				listRect.anchorMax = new Vector2( 0.5f, 0.5f );
-				listRect.pivot = new Vector2( 0.5f, 1f );
-				listRect.anchoredPosition = new Vector2( 0f, 420f );
-				listRect.sizeDelta = new Vector2( 900f, 860f );
-				tutorialsListRoot = listGo.transform;
-			}
-
-			if ( tutorialsBackButton == null )
-			{
-				Transform backT = tutorialsGo.transform.Find( "BackButton" );
-				if ( backT != null )
-					tutorialsBackButton = backT.GetComponent<Button>();
-				else
-					tutorialsBackButton = CreateSimpleButton( tutorialsGo.transform, "BackButton", "Back", font, new Vector2( 0f, -520f ) );
-			}
-
-			tutorialsGo.SetActive( false );
 		}
 	}
 
@@ -588,6 +551,8 @@ public class PauseMenuUI : MonoBehaviour
 			AppendControl( SlotOrNull( gameInput.CategorySlots, 1 ), "Gems" );
 			AppendControl( SlotOrNull( gameInput.CategorySlots, 2 ), "Artifacts" );
 		}
+
+		AppendControl( gameInput.CyclePouch, "Cycle pouch" );
 
 		if ( gameInput.AbilitySlots != null )
 		{

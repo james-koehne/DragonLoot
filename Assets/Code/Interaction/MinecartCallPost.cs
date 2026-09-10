@@ -26,8 +26,17 @@ public class MinecartCallPost : InteractableBase
 	[SerializeField]
 	Feedbacks onIdleFeedbacks;
 
+	static readonly int BaseColorId = Shader.PropertyToID( "_BaseColor" );
+	static readonly int EmissionColorId = Shader.PropertyToID( "_EmissionColor" );
+	static readonly Color PresentBaseColor = new Color( 0.18f, 0.85f, 0.22f, 1f );
+	static readonly Color PresentEmissionColor = new Color( 0.4f, 2.5f, 0.5f, 1f );
+
 	MinecartInteractable _inbound;
 	bool _bound;
+	bool _lampPresent;
+	bool _lampReady;
+	Renderer _lampRenderer;
+	MaterialPropertyBlock _lampBlock;
 
 	public MinecartTrack BoundTrack => track;
 
@@ -40,17 +49,32 @@ public class MinecartCallPost : InteractableBase
 	{
 		if ( string.IsNullOrEmpty( InteractionName ) || InteractionName == "Interactable" )
 			SetInteractionName( "Call minecart" );
+
+		Transform lamp = transform.Find( "Lamp" );
+		if ( lamp != null )
+			_lampRenderer = lamp.GetComponent<Renderer>();
 	}
 
 	void OnEnable()
 	{
-		if ( _inbound == null )
-			PlayFeedbacks( onIdleFeedbacks );
+		_inbound = null;
+		_lampReady = false;
+		_lampPresent = false;
+		PlayFeedbacks( onIdleFeedbacks );
 	}
 
 	void Start()
 	{
 		EnsureBoundTrack();
+		RefreshLamp( playArriveSfx: false );
+	}
+
+	void Update()
+	{
+		if ( _inbound != null )
+			return;
+
+		RefreshLamp( playArriveSfx: false );
 	}
 
 	public override bool CanInteract( PlayerController player )
@@ -82,6 +106,8 @@ public class MinecartCallPost : InteractableBase
 			return;
 
 		_inbound = lead;
+		_lampPresent = false;
+		_lampReady = true;
 		PlayFeedbacks( onCallFeedbacks );
 	}
 
@@ -91,16 +117,19 @@ public class MinecartCallPost : InteractableBase
 			return;
 
 		_inbound = null;
+		_lampPresent = true;
+		_lampReady = true;
 		PlayFeedbacks( onArriveFeedbacks );
 	}
 
 	public void NotifyRecallCancelled( MinecartInteractable lead )
 	{
-		if ( lead == _inbound )
-		{
-			_inbound = null;
-			PlayFeedbacks( onIdleFeedbacks );
-		}
+		if ( lead != _inbound )
+			return;
+
+		_inbound = null;
+		_lampReady = false;
+		RefreshLamp( playArriveSfx: false );
 	}
 
 	public void EditorSetTrack( MinecartTrack value )
@@ -119,6 +148,62 @@ public class MinecartCallPost : InteractableBase
 	{
 		if ( feedbacks != null )
 			feedbacks.Play();
+	}
+
+	void RefreshLamp( bool playArriveSfx )
+	{
+		bool present = IsAnyCartAtPost();
+		if ( _lampReady && present == _lampPresent )
+			return;
+
+		_lampReady = true;
+		_lampPresent = present;
+		if ( present )
+		{
+			if ( playArriveSfx )
+				PlayFeedbacks( onArriveFeedbacks );
+			else
+				ApplyPresentLamp();
+			return;
+		}
+
+		PlayFeedbacks( onIdleFeedbacks );
+	}
+
+	bool IsAnyCartAtPost()
+	{
+		if ( !EnsureBoundTrack() )
+			return false;
+
+		float postDistance = track.GetNearestDistance( transform.position );
+		IReadOnlyList<MinecartInteractable> carts = MinecartInteractable.ActiveCarts;
+		for ( int i = 0; i < carts.Count; i++ )
+		{
+			MinecartInteractable candidate = carts[ i ];
+			if ( candidate == null || candidate.BoundTrack != track || !candidate.IsConsistLead )
+				continue;
+
+			float stop = Mathf.Max( 0.2f, candidate.RecallStopDistance );
+			float sep = Mathf.Abs( track.SignedAlong( candidate.DistanceAlongTrack, postDistance ) );
+			if ( sep <= stop )
+				return true;
+		}
+
+		return false;
+	}
+
+	void ApplyPresentLamp()
+	{
+		if ( _lampRenderer == null )
+			return;
+
+		if ( _lampBlock == null )
+			_lampBlock = new MaterialPropertyBlock();
+
+		_lampRenderer.GetPropertyBlock( _lampBlock );
+		_lampBlock.SetColor( BaseColorId, PresentBaseColor );
+		_lampBlock.SetColor( EmissionColorId, PresentEmissionColor );
+		_lampRenderer.SetPropertyBlock( _lampBlock );
 	}
 
 	bool EnsureBoundTrack()

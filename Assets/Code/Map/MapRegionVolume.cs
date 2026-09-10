@@ -50,7 +50,7 @@ public sealed class MapRegionVolume : MonoBehaviour
 			|| _fillEmpty != _lastFillEmpty )
 		{
 			CacheTransform();
-			MapOverlayRegistrar.NotifyChanged();
+			MapOverlayRegistrar.NotifyVolumeChanged();
 		}
 	}
 
@@ -82,7 +82,7 @@ public sealed class MapRegionVolume : MonoBehaviour
 		_size.y = Mathf.Max( 0.01f, _size.y );
 		_size.z = Mathf.Max( 0.01f, _size.z );
 		CacheTransform();
-		MapOverlayRegistrar.NotifyChanged();
+		MapOverlayRegistrar.NotifyVolumeChanged();
 		UnityEditor.SceneView.RepaintAll();
 	}
 

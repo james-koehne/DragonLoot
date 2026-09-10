@@ -13,6 +13,15 @@ MonoBehaviour:
   m_Name: CameraDefinition
   m_EditorClassIdentifier: Assembly-CSharp::CameraDefinition
   lookSensitivity: 1
+  minLookSensitivity: 0.01
+  maxLookSensitivity: 5
   invertY: 0
   minPitch: -85
   maxPitch: 85
+  speedFovBoost: 8
+  speedFovBlendTime: 0.2
+  softFillLightEnabled: 1
+  softFillLightColor: {r: 1, g: 0.76765436, b: 0.603, a: 1}
+  softFillLightIntensity: 0.45
+  softFillLightRange: 4.5
+  softFillLightLocalOffset: {x: 0, y: -0.15, z: 0.25}

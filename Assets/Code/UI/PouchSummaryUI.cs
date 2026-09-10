@@ -238,6 +238,8 @@ public class PouchSummaryUI : MonoBehaviour
 				return "Gems";
 			case CarryBucketKind.Artifact:
 				return "Artifacts";
+			case CarryBucketKind.General:
+				return "General";
 			default:
 				return "Pouch";
 		}

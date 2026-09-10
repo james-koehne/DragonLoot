@@ -15,7 +15,7 @@ MonoBehaviour:
   authoredLayoutSeed: 188092
   effectivePileSeed: 868393125
   heightFingerprint: 1952498239
-  contentsFingerprint: -1807539494
+  contentsFingerprint: 777252815
   sourceDefinitionName: TreasurePileWideDefinition
   volumeMaxAttempts: 24
   usedSpatialHash: 1
@@ -348,11 +348,11 @@ MonoBehaviour:
     boundsCenter: {x: 9.725662, y: 1.3457458, z: -2.9256783}
     boundsSize: {x: 0.2293758, y: 0.20723896, z: 0.20872201}
   - definition: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
-    localPos: {x: -40.363335, y: 1.7575201, z: -9.495899}
-    localRot: {x: -0.23411413, y: 0.46002114, z: -0.10448761, w: 0.8500903}
+    localPos: {x: 7.203659, y: 0.9097673, z: -9.942219}
+    localRot: {x: -0.22733824, y: 0.7346282, z: -0.008618183, w: 0.6391905}
     scale: 0.5
-    boundsCenter: {x: -40.363335, y: 1.7575201, z: -9.495899}
-    boundsSize: {x: 0.2036216, y: 0.21759918, z: 0.23070067}
+    boundsCenter: {x: 7.203659, y: 0.9097673, z: -9.942219}
+    boundsSize: {x: 0.19580598, y: 0.21319842, z: 0.2033726}
   - definition: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
     localPos: {x: -29.955715, y: 5.7318144, z: -1.1785469}
     localRot: {x: -0.07206476, y: 0.6207236, z: 0.100035176, w: 0.77427506}
@@ -2358,11 +2358,11 @@ MonoBehaviour:
     boundsCenter: {x: -30.96294, y: 3.446539, z: -4.8064003}
     boundsSize: {x: 0.81056356, y: 0.7573576, z: 0.88173866}
   - definition: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
-    localPos: {x: -34.942284, y: 2.6855698, z: -7.0079}
-    localRot: {x: -0.042841643, y: 0.49485695, z: 0.24109569, w: 0.833759}
+    localPos: {x: -17.266445, y: 2.2931232, z: -8.338284}
+    localRot: {x: -0.0383438, y: 0.7330201, z: 0.094867006, w: -0.67246664}
     scale: 2
-    boundsCenter: {x: -34.942284, y: 2.6855698, z: -7.0079}
-    boundsSize: {x: 0.90217453, y: 0.86490417, z: 0.8528319}
+    boundsCenter: {x: -17.266445, y: 2.2931232, z: -8.338284}
+    boundsSize: {x: 0.7078604, y: 0.74514896, z: 0.7437257}
   - definition: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
     localPos: {x: 38.010178, y: 1.9232879, z: -5.392803}
     localRot: {x: 0.072931975, y: 0.9066688, z: 0.13092923, w: -0.39432237}

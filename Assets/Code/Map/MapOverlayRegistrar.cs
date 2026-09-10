@@ -13,12 +13,19 @@ public static class MapOverlayRegistrar
 	static readonly HashSet<string> HighlightedLabels = new HashSet<string>();
 	static readonly HashSet<string> ActiveTempMarkerIds = new HashSet<string>();
 	static int _revision;
+	static int _volumeRevision;
 
 	public static int Revision => _revision;
+	public static int VolumeRevision => _volumeRevision;
 
 	public static void NotifyChanged()
 	{
 		_revision++;
+	}
+
+	public static void NotifyVolumeChanged()
+	{
+		_volumeRevision++;
 	}
 
 	public static void SetLabelHighlighted( string label, bool highlighted )
@@ -79,7 +86,7 @@ public static class MapOverlayRegistrar
 		}
 
 		ActiveVolumes.Add( volume );
-		_revision++;
+		_volumeRevision++;
 	}
 
 	public static void UnregisterVolume( MapRegionVolume volume )
@@ -88,7 +95,7 @@ public static class MapOverlayRegistrar
 			return;
 
 		if ( ActiveVolumes.Remove( volume ) )
-			_revision++;
+			_volumeRevision++;
 	}
 
 	public static void RegisterLabel( MapLabelMarker label )

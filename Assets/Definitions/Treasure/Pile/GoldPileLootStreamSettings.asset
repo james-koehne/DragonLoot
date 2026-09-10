@@ -47,5 +47,15 @@ MonoBehaviour:
   artifactNeverCull: 0
   artifactMaxStreamDistance: 64
   propStreamHysteresisMeters: 2
+  coinNeverCull: 0
+  stackResidentDistance: 20
+  largeStackCountThreshold: 50
+  largeStackResidentDistance: 48
+  stackInstancePoolSize: 1024
+  coinResidentDistance: 20
+  coinVisualPoolSize: 128
+  streamEvictBudget: 16
+  streamWakeBudget: 32
+  streamExtractBudget: 8
   drawChunkGizmos: 1
   drawOverlayStats: 1

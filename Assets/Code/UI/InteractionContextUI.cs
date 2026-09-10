@@ -87,14 +87,14 @@ public class InteractionContextUI : MonoBehaviour
 
 		IInteractable focus = interaction.Current;
 		if ( focus is CoinSortingCrankInteractable crankFocus && crankFocus.CanInteract( player ) )
-			AppendBound( gameInput.ContextualInteract, FormatCrankPrompt( crankFocus ) );
+			AppendBound( gameInput.ContextualInteract, "Hold to crank" );
 		else if ( focus is CoinSortingStationMoveInteractable )
 			AppendBound( gameInput.ContextualInteract, "Hold to move sorter" );
 		else if ( focus is DoorInteractable doorFocus && doorFocus.ShowsLockedPrompt )
 			AppendBound( gameInput.ContextualInteract, "Locked" );
 		else if ( focus != null && focus.CanInteract( player ) )
 		{
-			string primary = FormatPrimaryPrompt( focus );
+			string primary = FormatPrimaryPrompt( focus, player );
 			if ( !string.IsNullOrEmpty( primary ) )
 			{
 				InputAction action = InteractableBase.IsPickupInteract( focus )
@@ -120,9 +120,6 @@ public class InteractionContextUI : MonoBehaviour
 		bool sorterBusy = sorter != null && sorter.IsBusy;
 		if ( carrying && !sorterBusy && carry.Count > 1 )
 			AppendBound( gameInput.ScrollWheel, "Cycle held" );
-
-		if ( !sorterBusy && HasOtherBucketItems( carry ) )
-			AppendCategorySwitchLine( gameInput, carry );
 
 		if ( carrying && IsCleanBound( gameInput ) && TryGetDirtyActive( carry, out _ ) )
 			AppendBound( gameInput.Clean, "Hold to polish" );
@@ -166,19 +163,7 @@ public class InteractionContextUI : MonoBehaviour
 		return "Place";
 	}
 
-	static string FormatCrankPrompt( CoinSortingCrankInteractable crank )
-	{
-		if ( crank == null )
-			return "Hold to crank";
-
-		CoinSortingStation station = crank.GetComponentInParent<CoinSortingStation>();
-		if ( station == null || station.ReserveSeconds < 0.05f )
-			return "Hold to crank";
-
-		return "Hold to crank · " + station.ReserveSeconds.ToString( "0.0" ) + "s";
-	}
-
-	static string FormatPrimaryPrompt( IInteractable focus )
+	static string FormatPrimaryPrompt( IInteractable focus, PlayerController player )
 	{
 		if ( focus == null )
 			return null;
@@ -187,7 +172,7 @@ public class InteractionContextUI : MonoBehaviour
 			return "Call minecart";
 
 		if ( focus is MinecartInteractable driveCart && driveCart.IsDriveCart )
-			return "Ride minecart";
+			return driveCart.WantsDriveEnter( player ) ? "Ride minecart" : "Shove / hold to push";
 
 		if ( focus is MinecartInteractable )
 			return "Shove / hold to push";
@@ -195,8 +180,8 @@ public class InteractionContextUI : MonoBehaviour
 		if ( focus is MinecartUnloadPoint )
 			return "Unload minecart";
 
-		if ( focus is CoinSortingCrankInteractable crankPrompt )
-			return FormatCrankPrompt( crankPrompt );
+		if ( focus is CoinSortingCrankInteractable )
+			return "Hold to crank";
 
 		if ( focus is CoinSortingStationMoveInteractable )
 			return "Hold to move sorter";
@@ -227,48 +212,6 @@ public class InteractionContextUI : MonoBehaviour
 		}
 
 		return focus.InteractionName;
-	}
-
-	void AppendCategorySwitchLine( GameInput gameInput, PlayerCarry carry )
-	{
-		if ( gameInput.CategorySlots == null || gameInput.CategorySlots.Length == 0 || carry == null )
-			return;
-
-		int startLength = _builder.Length;
-		if ( startLength > 0 )
-			_builder.Append( '\n' );
-
-		bool any = false;
-		CarryBucketKind selected = carry.SelectedBucket;
-		int slotCount = gameInput.CategorySlots.Length;
-		if ( slotCount > PlayerCarry.BucketCount )
-			slotCount = PlayerCarry.BucketCount;
-
-		for ( int i = 0; i < slotCount; i++ )
-		{
-			CarryBucketKind kind = (CarryBucketKind)i;
-			if ( kind == selected || carry.GetBucketCount( kind ) <= 0 )
-				continue;
-
-			string display = FormatBindingDisplay( gameInput.CategorySlots[ i ] );
-			if ( string.IsNullOrEmpty( display ) )
-				display = ( i + 1 ).ToString();
-
-			if ( any )
-				_builder.Append( ' ' );
-			_builder.Append( '[' );
-			_builder.Append( display );
-			_builder.Append( ']' );
-			any = true;
-		}
-
-		if ( !any )
-		{
-			_builder.Length = startLength;
-			return;
-		}
-
-		_builder.Append( "  Switch pouch" );
 	}
 
 	static string FormatRotateBinding( GameInput gameInput )
@@ -364,24 +307,6 @@ public class InteractionContextUI : MonoBehaviour
 	static bool IsCleanBound( GameInput gameInput )
 	{
 		return gameInput != null && HasBindings( gameInput.Clean );
-	}
-
-	static bool HasOtherBucketItems( PlayerCarry carry )
-	{
-		if ( carry == null )
-			return false;
-
-		CarryBucketKind selected = carry.SelectedBucket;
-		for ( int i = 0; i < PlayerCarry.BucketCount; i++ )
-		{
-			CarryBucketKind kind = (CarryBucketKind)i;
-			if ( kind == selected )
-				continue;
-			if ( carry.GetBucketCount( kind ) > 0 )
-				return true;
-		}
-
-		return false;
 	}
 
 	static bool TryGetDirtyActive( PlayerCarry carry, out TreasureItem item )

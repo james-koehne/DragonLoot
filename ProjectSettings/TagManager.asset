@@ -15,7 +15,7 @@ TagManager:
   - BowlPhysics
   - Player
   - Walkable
-  - 
+  - NonWalkable
   - 
   - 
   - 

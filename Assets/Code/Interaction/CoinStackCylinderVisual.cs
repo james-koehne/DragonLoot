@@ -17,6 +17,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	const string TypeFresnelProp = "_TypeFresnelColor";
 	const string UseBakedCoinIndexProp = "_UseBakedCoinIndex";
 	const string ChunkBaseIndexProp = "_ChunkBaseIndex";
+	static readonly int ReflectionFloorId = Shader.PropertyToID( "_ReflectionFloor" );
 
 	static readonly Vector4[] TypeFresnelScratch = new Vector4[CoinStackVisualDefinition.MaxTypeSlots];
 	static bool s_multiMaterialTypePropsApplied;
@@ -51,6 +52,8 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	Texture2D _typeMap;
 	Color[] _typeMapPixels;
 	int _typeMapBaseIndex;
+	float _heldReflectionFloor = -1f;
+	static CarryDefinition s_carryDefinitionCache;
 
 	public int DisplayedCount => _targetCount;
 
@@ -61,6 +64,54 @@ public class CoinStackCylinderVisual : MonoBehaviour
 	public void SetVariationSeed( float seed )
 	{
 		_variationSeed = Mathf.Abs( seed ) < 0.0001f ? 1f : seed;
+	}
+
+	/// <summary>
+	/// When enabled, raises <c>_ReflectionFloor</c> on the cylinder MPB for held-hand readability.
+	/// </summary>
+	public void SetHeldLighting( bool enabled )
+	{
+		float floor = -1f;
+		if ( enabled )
+		{
+			CarryDefinition carry = RuntimeDefinition.Resolve( ref s_carryDefinitionCache );
+			floor = carry != null ? carry.heldReflectionFloor : 0.28f;
+		}
+
+		if ( Mathf.Abs( _heldReflectionFloor - floor ) < 0.0001f )
+			return;
+
+		_heldReflectionFloor = floor;
+		ReapplyHeldFloorToCurrentMpb();
+	}
+
+	void ReapplyHeldFloorToCurrentMpb()
+	{
+		if ( meshRenderer == null )
+			return;
+
+		if ( _mpb == null )
+			_mpb = new MaterialPropertyBlock();
+
+		meshRenderer.GetPropertyBlock( _mpb );
+		ApplyHeldFloorToMpb( _mpb );
+		meshRenderer.SetPropertyBlock( _mpb );
+	}
+
+	void ApplyHeldFloorToMpb( MaterialPropertyBlock mpb )
+	{
+		if ( mpb == null )
+			return;
+
+		if ( _heldReflectionFloor >= 0f )
+		{
+			mpb.SetFloat( ReflectionFloorId, _heldReflectionFloor );
+			return;
+		}
+
+		Material mat = meshRenderer != null ? meshRenderer.sharedMaterial : null;
+		if ( mat != null && mat.HasProperty( ReflectionFloorId ) )
+			mpb.SetFloat( ReflectionFloorId, mat.GetFloat( ReflectionFloorId ) );
 	}
 
 	CoinStackVisualDefinition Definition
@@ -309,6 +360,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			_mpb = new MaterialPropertyBlock();
 
 		FillMultiMpb( _mpb, Mathf.Max( 1, chunkCoinCount ), useBakedCoinIndex: true, chunkBaseIndex );
+		ApplyHeldFloorToMpb( _mpb );
 		target.SetPropertyBlock( _mpb );
 	}
 
@@ -491,6 +543,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 		_mpb.SetFloat( MeshBoundsSizeYProp, _meshBoundsSizeY );
 		_mpb.SetFloat( UseBakedCoinIndexProp, 0f );
 		_mpb.SetFloat( ChunkBaseIndexProp, 0f );
+		ApplyHeldFloorToMpb( _mpb );
 		meshRenderer.SetPropertyBlock( _mpb );
 	}
 
@@ -503,6 +556,7 @@ public class CoinStackCylinderVisual : MonoBehaviour
 			_mpb = new MaterialPropertyBlock();
 
 		FillMultiMpb( _mpb, count, useBakedCoinIndex, chunkBaseIndex );
+		ApplyHeldFloorToMpb( _mpb );
 		meshRenderer.SetPropertyBlock( _mpb );
 	}
 

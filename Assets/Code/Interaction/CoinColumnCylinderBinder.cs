@@ -17,20 +17,13 @@ public static class CoinColumnCylinderBinder
 	public const int DefaultMinCountForCylinder = 2;
 
 	static readonly List<TreasureDefinition> MultiSlotBuffer = new List<TreasureDefinition>( 64 );
+	static CoinStackVisualDefinition _cachedVisualDef;
 
 	public static int MinCountForCylinder
 	{
 		get
 		{
-			CoinStackVisualDefinition def = null;
-			def = RuntimeDefinition.Resolve( ref def );
-#if UNITY_EDITOR
-			if ( def == null )
-			{
-				def = UnityEditor.AssetDatabase.LoadAssetAtPath<CoinStackVisualDefinition>(
-					"Assets/Definitions/CoinStackVisualDefinition.asset" );
-			}
-#endif
+			CoinStackVisualDefinition def = ResolveVisualDefinition();
 			if ( def != null )
 				return Mathf.Max( 1, def.minCountForCylinder );
 			return DefaultMinCountForCylinder;
@@ -488,16 +481,18 @@ public static class CoinColumnCylinderBinder
 
 	static CoinStackVisualDefinition ResolveVisualDefinition()
 	{
-		CoinStackVisualDefinition def = null;
-		def = RuntimeDefinition.Resolve( ref def );
+		if ( _cachedVisualDef != null )
+			return _cachedVisualDef;
+
+		RuntimeDefinition.Resolve( ref _cachedVisualDef );
 #if UNITY_EDITOR
-		if ( def == null )
+		if ( _cachedVisualDef == null )
 		{
-			def = UnityEditor.AssetDatabase.LoadAssetAtPath<CoinStackVisualDefinition>(
+			_cachedVisualDef = UnityEditor.AssetDatabase.LoadAssetAtPath<CoinStackVisualDefinition>(
 				"Assets/Definitions/CoinStackVisualDefinition.asset" );
 		}
 #endif
-		return def;
+		return _cachedVisualDef;
 	}
 
 	static void BindImperfectChunks(
@@ -757,6 +752,8 @@ public static class CoinColumnCylinderBinder
 		ShadowCastingMode mode = heldColumn ? ShadowCastingMode.Off : ShadowCastingMode.On;
 		if ( renderer.shadowCastingMode != mode )
 			renderer.shadowCastingMode = mode;
+
+		visual.SetHeldLighting( heldColumn );
 	}
 
 	/// <summary>

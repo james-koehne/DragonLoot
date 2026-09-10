@@ -47,7 +47,15 @@ public class MapDefinition : ScriptableObject
 
 	[Header( "Player Marker" )]
 	[Min( 4f )]
-	public float playerDotSize = 14f;
+	public float playerDotSize = 28f;
+
+	[Tooltip( "Unscaled pulse speed for the player icon (map is paused)." )]
+	[Min( 0.1f )]
+	public float playerPulseSpeed = 4.5f;
+
+	[Tooltip( "Extra scale at the pulse peak (0.22 = 22% larger)." )]
+	[Range( 0f, 0.6f )]
+	public float playerPulseAmount = 0.22f;
 
 	[Tooltip( "Aim cone half-angle in degrees." )]
 	[Range( 5f, 90f )]
@@ -86,6 +94,8 @@ public class MapDefinition : ScriptableObject
 		openDuration = Mathf.Max( 0.05f, openDuration );
 		openStartScale = Mathf.Clamp( openStartScale, 0.5f, 1f );
 		playerDotSize = Mathf.Max( 4f, playerDotSize );
+		playerPulseSpeed = Mathf.Max( 0.1f, playerPulseSpeed );
+		playerPulseAmount = Mathf.Clamp( playerPulseAmount, 0f, 0.6f );
 		aimConeHalfAngle = Mathf.Clamp( aimConeHalfAngle, 5f, 90f );
 		aimConeLength = Mathf.Max( 8f, aimConeLength );
 		aimConeBaseWidth = Mathf.Max( 8f, aimConeBaseWidth );

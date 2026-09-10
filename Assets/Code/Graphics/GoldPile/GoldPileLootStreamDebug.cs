@@ -193,6 +193,12 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 
 		GUILayout.Label( $"Streaming: {( anyStreaming ? "ON" : "OFF (draw all Drawn)" )}  Loot Inst: {( anyLoot ? "ON" : "OFF" )}" );
 		GUILayout.Label( $"World parked props: {WorldTreasurePersistence.ParkedCount}" );
+		GUILayout.Label(
+			$"World stream stacks live/hidden {WorldTreasureStreamer.ResidentCoinStackCount}/{WorldTreasureStreamer.HiddenCoinStackCount}  " +
+			$"bars {WorldTreasureStreamer.ResidentBarStackCount}/{WorldTreasureStreamer.HiddenBarStackCount}  " +
+			$"loose hidden {WorldTreasureStreamer.HiddenLooseCount}" );
+		GUILayout.Label(
+			$"    wake {WorldTreasureStreamer.WakesLastTick} evict {WorldTreasureStreamer.EvictsLastTick} extract {WorldTreasureStreamer.ExtractsLastTick} cells {WorldTreasureStreamer.CellsTicked}  coin pool {WorldTreasureStreamer.CoinPoolFreeCount}" );
 		GUILayout.Space( 4f );
 
 		for ( int i = 0; i < s_active.Count; i++ )

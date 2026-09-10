@@ -649,6 +649,14 @@ public class WorldEventSystem : MonoBehaviour
 		return ProfileManager.Instance.ProfileSaveData;
 	}
 
+	public void MarkFiredThisSessionOnly( string eventId )
+	{
+		if ( string.IsNullOrEmpty( eventId ) )
+			return;
+
+		_firedThisSession.Add( eventId );
+	}
+
 	public void DebugResetFiredEvents()
 	{
 		StopActionSequences();
@@ -737,7 +745,8 @@ public class WorldEventSystem : MonoBehaviour
 		     WasPressed( input.WholeStackPickup ) ||
 		     WasPressed( input.WholeStackPlace ) ||
 		     WasPressed( input.RotateLeft ) ||
-		     WasPressed( input.RotateRight ) )
+		     WasPressed( input.RotateRight ) ||
+		     WasPressed( input.CyclePouch ) )
 			return true;
 
 		if ( AnyPressed( input.AbilitySlots ) || AnyPressed( input.CategorySlots ) )

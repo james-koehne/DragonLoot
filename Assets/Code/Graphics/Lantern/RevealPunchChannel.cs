@@ -49,6 +49,21 @@ public struct RevealPunchChannel
 		return 0f;
 	}
 
+	/// <summary>
+	/// Same as <see cref="EvaluateWeight"/> through rise, then stays at 1 for hold and fall.
+	/// </summary>
+	public float EvaluateArriveWeight( float elapsed )
+	{
+		if ( elapsed < delay )
+			return 0f;
+
+		float local = elapsed - delay;
+		if ( rise > 0f && local < rise )
+			return SmoothStep( local / rise );
+
+		return 1f;
+	}
+
 	public float EvaluateScale( float elapsed, float restScale )
 	{
 		if ( !IsScaleActive )

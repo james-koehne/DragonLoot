@@ -12,9 +12,52 @@ public static class PhysicsLayers
 	const string CollectableLayerName = "Collectable";
 
 	static bool _applied;
+	static int _playerLayer = -1;
+	static int _collectableLayer = -1;
+	static int _defaultAndCollectableMask;
 
-	public static int PlayerLayer => LayerMask.NameToLayer( PlayerLayerName );
-	public static int CollectableLayer => LayerMask.NameToLayer( CollectableLayerName );
+	public static int PlayerLayer
+	{
+		get
+		{
+			EnsureCached();
+			return _playerLayer;
+		}
+	}
+
+	public static int CollectableLayer
+	{
+		get
+		{
+			EnsureCached();
+			return _collectableLayer;
+		}
+	}
+
+	/// <summary>
+	/// Default (layer 0) plus Collectable. Tall ground stacks move to Default when they block the player.
+	/// </summary>
+	public static int DefaultAndCollectableMask
+	{
+		get
+		{
+			EnsureCached();
+			return _defaultAndCollectableMask;
+		}
+	}
+
+	static void EnsureCached()
+	{
+		if ( _playerLayer >= 0 && _collectableLayer >= 0 )
+			return;
+
+		_playerLayer = LayerMask.NameToLayer( PlayerLayerName );
+		_collectableLayer = LayerMask.NameToLayer( CollectableLayerName );
+		int mask = 1 << 0;
+		if ( _collectableLayer >= 0 )
+			mask |= 1 << _collectableLayer;
+		_defaultAndCollectableMask = mask;
+	}
 
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.BeforeSceneLoad )]
 	static void Apply()
@@ -22,15 +65,14 @@ public static class PhysicsLayers
 		if ( _applied )
 			return;
 
-		int player = LayerMask.NameToLayer( PlayerLayerName );
-		int collectable = LayerMask.NameToLayer( CollectableLayerName );
-		if ( player < 0 || collectable < 0 )
+		EnsureCached();
+		if ( _playerLayer < 0 || _collectableLayer < 0 )
 		{
 			Debug.LogWarning( "PhysicsLayers: missing Player or Collectable layer." );
 			return;
 		}
 
-		Physics.IgnoreLayerCollision( player, collectable, true );
+		Physics.IgnoreLayerCollision( _playerLayer, _collectableLayer, true );
 		_applied = true;
 	}
 
@@ -39,7 +81,7 @@ public static class PhysicsLayers
 		if ( root == null )
 			return;
 
-		int player = LayerMask.NameToLayer( PlayerLayerName );
+		int player = PlayerLayer;
 		if ( player < 0 )
 			return;
 
@@ -55,7 +97,7 @@ public static class PhysicsLayers
 		if ( controller == null )
 			return;
 
-		int collectable = LayerMask.NameToLayer( CollectableLayerName );
+		int collectable = CollectableLayer;
 		if ( collectable < 0 )
 			return;
 

@@ -18,18 +18,24 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	static readonly List<GroundCoinStack> All = new List<GroundCoinStack>( 64 );
 	static readonly Collider[] MergeOverlap = new Collider[ 32 ];
-	static readonly List<TreasureItem> TakeBuffer = new List<TreasureItem>( 64 );
 	static readonly List<TreasureDefinition> MergeSlotBuffer = new List<TreasureDefinition>( 64 );
+	static readonly List<TreasureItem> MergeLiveBuffer = new List<TreasureItem>( 64 );
+	static readonly List<TreasureItem> ReclaimBuffer = new List<TreasureItem>( 8 );
 
 	static readonly List<TreasureDefinition> BindDefBuffer = new List<TreasureDefinition>( 32 );
 	static readonly List<int> BindIndexMap = new List<int>( 32 );
-	static readonly bool[] BindCoveredScratch = new bool[ 64 ];
+	static bool[] BindCoveredScratch = new bool[ 64 ];
+	static bool[] TakenScratch = new bool[ 64 ];
 
 	readonly List<TreasureDefinition> _slots = new List<TreasureDefinition>( 32 );
 	readonly List<TreasureItem> _settledLive = new List<TreasureItem>( 32 );
 	readonly List<TreasureItem> _inFlight = new List<TreasureItem>( 8 );
 	readonly List<int> _inFlightSlotIndices = new List<int>( 8 );
+	readonly List<float> _heightPrefix = new List<float>( 33 );
 	bool _absorbingNearby;
+	bool _joinDirty;
+	bool _registered;
+	bool _heightPrefixDirty = true;
 
 	CoinStackCylinderVisual _cylinderVisual;
 	CapsuleCollider _capsule;
@@ -42,9 +48,11 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	MinecartInteractable _cartHost;
 	int _maxCountOverride;
 	CoinSortingStation _machineStation;
-	int _visualGeneration;
+	CoinStackVisualDefinition _visualDef;
 	float _variationSeed;
 	bool _preferImperfectLod = true;
+	bool _streamingHidden;
+	bool _returningToPool;
 
 	[SerializeField]
 	Feedbacks onLandFeedback;
@@ -64,6 +72,16 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public MinecartInteractable CartHost => _cartHost;
 	public CoinSortingStation MachineStation => _machineStation;
 	bool ExcludedFromWorldJoin => _machineBuffer || _cartHosted;
+	public bool IsStreamPinned => ExcludedFromWorldJoin;
+	public bool IsReturningToPool => _returningToPool;
+	public bool CanWorldStream => !ExcludedFromWorldJoin
+		&& !_destroying
+		&& !_taking
+		&& !_absorbingNearby
+		&& !HasInFlight
+		&& Count > 0;
+	CoinStackVisualDefinition VisualDef => RuntimeDefinition.Resolve( ref _visualDef );
+
 	public int MaxHeight
 	{
 		get
@@ -71,8 +89,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			if ( _maxCountOverride > 0 )
 				return _maxCountOverride;
 
-			CoinStackVisualDefinition def = null;
-			def = RuntimeDefinition.Resolve( ref def );
+			CoinStackVisualDefinition def = VisualDef;
 			if ( def != null && def.groundMaxStackHeight > 0 )
 				return def.groundMaxStackHeight;
 			return DefaultMaxHeight;
@@ -89,8 +106,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	{
 		get
 		{
-			CoinStackVisualDefinition def = null;
-			def = RuntimeDefinition.Resolve( ref def );
+			CoinStackVisualDefinition def = VisualDef;
 			if ( def == null )
 				return 0;
 			return Mathf.Max( 0, def.minCoinsForPlayerCollision );
@@ -146,9 +162,15 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	public static GroundCoinStack CreateAt( Vector3 contactPosition, Quaternion rotation )
 	{
+		WorldTreasureStreamer.EnsureExists();
+		return WorldTreasureStreamer.AcquireCoinStack( contactPosition, rotation );
+	}
+
+	public static GroundCoinStack CreateUnpooled( Vector3 contactPosition, Quaternion rotation )
+	{
 		GameObject go = new GameObject( "GroundCoinStack" );
 		go.transform.SetPositionAndRotation( contactPosition, TreasureOrientation.FlattenUpright( rotation ) );
-		int layer = LayerMask.NameToLayer( "Collectable" );
+		int layer = PhysicsLayers.CollectableLayer;
 		if ( layer >= 0 )
 			go.layer = layer;
 		GroundCoinStack stack = go.AddComponent<GroundCoinStack>();
@@ -180,8 +202,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		else
 			stack.AbsorbSettledImmediate( incoming );
 
-		stack.TryMergeNearby();
-		stack.AbsorbNearbyLooseCoins();
+		stack.RequestJoinPass();
 		return stack;
 	}
 
@@ -195,6 +216,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			GroundCoinStack stack = All[ i ];
 			if ( stack == null || stack._destroying || stack.ExcludedFromWorldJoin || stack.IsFull )
 				continue;
+			if ( stack._streamingHidden || stack._returningToPool )
+				continue;
 
 			Vector3 delta = stack.ContactPosition - worldPos;
 			float sq = delta.x * delta.x + delta.z * delta.z;
@@ -204,6 +227,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			bestSq = sq;
 			best = stack;
 		}
+
+		if ( WorldTreasureStreamer.TryWakeNearestCoinStack( worldPos, radius, bestSq, out GroundCoinStack woken, out float wokenSq )
+			&& ( best == null || wokenSq < bestSq ) )
+			return woken;
 
 		return best;
 	}
@@ -227,6 +254,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			GroundCoinStack stack = All[ i ];
 			if ( stack == null || stack._destroying || stack.ExcludedFromWorldJoin || stack.IsFull )
 				continue;
+			if ( stack._streamingHidden || stack._returningToPool )
+				continue;
 
 			Vector3 contact = stack.ContactPosition;
 			Vector3 to = contact - origin;
@@ -244,6 +273,16 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			best = stack;
 		}
 
+		if ( WorldTreasureStreamer.TryWakeNearestCoinStackAlongRay(
+			ray,
+			radius,
+			maxDistance,
+			bestPerpSq,
+			out GroundCoinStack woken,
+			out float wokenPerpSq )
+			&& ( best == null || wokenPerpSq < bestPerpSq ) )
+			return woken;
+
 		return best;
 	}
 
@@ -258,6 +297,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_machineStation = station;
 		SetInteractionName( "Hopper" );
 		RefreshCollider();
+		WorldTreasureStreamer.NotifyCoinStackPinned( this );
 	}
 
 	/// <summary>
@@ -271,6 +311,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_maxCountOverride = maxCount > 0 ? maxCount : 0;
 		SetInteractionName( "Coin Stack" );
 		RefreshCollider();
+		WorldTreasureStreamer.NotifyCoinStackPinned( this );
 	}
 
 	public void DetachCartHost()
@@ -286,29 +327,41 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	void OnEnable()
 	{
-		if ( !All.Contains( this ) )
-			All.Add( this );
+		_returningToPool = false;
+		Register();
 		EnsureCollider();
 		EnsureVariationSeed();
 		EnsureCountFeedback();
 		SetInteractionName( "Coin Stack" );
 		_preferImperfectLod = EvaluatePreferImperfectLod( forceNear: true );
+		if ( !IsStreamPinned )
+			WorldTreasureStreamer.NotifyCoinStackEnabled( this );
+	}
+
+	void OnDisable()
+	{
+		Unregister();
+		WorldTreasureStreamer.NotifyCoinStackDisabled( this );
 	}
 
 	void LateUpdate()
 	{
-		bool wantImperfect = EvaluatePreferImperfectLod( forceNear: false );
-		if ( wantImperfect == _preferImperfectLod )
+		if ( _streamingHidden || _returningToPool )
 			return;
 
-		_preferImperfectLod = wantImperfect;
-		RefreshVisuals( snap: true );
+		bool wantImperfect = EvaluatePreferImperfectLod( forceNear: false );
+		if ( wantImperfect != _preferImperfectLod )
+		{
+			_preferImperfectLod = wantImperfect;
+			RefreshVisuals( snap: true );
+		}
+
+		FlushJoinPass();
 	}
 
 	bool EvaluatePreferImperfectLod( bool forceNear )
 	{
-		CoinStackVisualDefinition def = null;
-		def = RuntimeDefinition.Resolve( ref def );
+		CoinStackVisualDefinition def = VisualDef;
 		if ( !CoinStackImperfectLayout.IsImperfectEnabled( def ) )
 			return false;
 
@@ -359,17 +412,30 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			_cylinderVisual.SetVariationSeed( _variationSeed );
 	}
 
-	void OnDisable()
-	{
-		All.Remove( this );
-	}
-
 	void OnDestroy()
 	{
 		_destroying = true;
-		All.Remove( this );
+		Unregister();
 		ClearAllVisuals();
 		NotifyCartHostDestroyed();
+	}
+
+	void Register()
+	{
+		if ( _registered )
+			return;
+
+		All.Add( this );
+		_registered = true;
+	}
+
+	void Unregister()
+	{
+		if ( !_registered )
+			return;
+
+		All.Remove( this );
+		_registered = false;
 	}
 
 	public void ReleaseTreasure( TreasureItem item )
@@ -396,7 +462,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				continue;
 
 			if ( i < _slots.Count )
+			{
 				_slots.RemoveAt( i );
+				InvalidateHeightPrefix();
+			}
 			_settledLive.RemoveAt( i );
 			DecrementInFlightSlotIndicesAfter( i );
 			RefreshVisuals( snap: false );
@@ -495,11 +564,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		AbsorbSettledImmediate( item );
 		PlayLandFeedback();
-		if ( !ExcludedFromWorldJoin )
-		{
-			AbsorbNearbyLooseCoins();
-			TryMergeNearby();
-		}
+		RequestJoinPass();
 		return true;
 	}
 
@@ -518,7 +583,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				ContactPosition,
 				radius,
 				MergeOverlap,
-				Physics.DefaultRaycastLayers,
+				PhysicsLayers.DefaultAndCollectableMask,
 				QueryTriggerInteraction.Ignore );
 
 			for ( int i = 0; i < hits; i++ )
@@ -565,6 +630,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		int slotIndex = _slots.Count;
 		_slots.Add( item.Definition );
+		InvalidateHeightPrefix();
 		_settledLive.Add( null );
 		_inFlight.Add( item );
 		_inFlightSlotIndices.Add( slotIndex );
@@ -632,12 +698,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			spins: spins,
 			apexOffset: apexOffset ) );
 
-		if ( !ExcludedFromWorldJoin )
-		{
-			TryMergeNearby();
-			AbsorbNearbyLooseCoins();
-		}
-
+		RequestJoinPass();
 		PublishStackChanged( item.Definition );
 	}
 
@@ -667,20 +728,16 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		float spins,
 		Vector3 apexOffset )
 	{
-		List<TreasureItem> cluster = new List<TreasureItem>( 1 ) { item };
-		Vector3[] ends = { endPos };
-		Quaternion[] rots = { endRot };
-		yield return CoinFlipMotion.AnimateWorldFlips(
-			cluster,
-			ends,
-			rots,
+		yield return CoinFlipMotion.AnimateWorldFlip(
+			item,
+			endPos,
+			endRot,
 			duration,
-			hopHeight,
-			spins,
 			useHopThenArc,
 			hopHeight,
 			riseFraction,
 			secondaryArcHeight,
+			spins,
 			apexOffset );
 
 		if ( item == null || _destroying )
@@ -714,8 +771,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		TreasureInteractSfx.PlayPlace( item.Definition, endPos );
 
-		TryMergeNearby();
-		AbsorbNearbyLooseCoins();
+		RequestJoinPass();
 	}
 
 	void FinalizeSlot( int slotIndex, TreasureItem item )
@@ -733,10 +789,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			// Stale index — append as a new settled slot rather than orphaning the coin.
 			slotIndex = _slots.Count;
 			_slots.Add( item.Definition );
+			InvalidateHeightPrefix();
 			_settledLive.Add( null );
 		}
 
 		_slots[ slotIndex ] = item.Definition;
+		InvalidateHeightPrefix();
 		while ( _settledLive.Count <= slotIndex )
 			_settledLive.Add( null );
 
@@ -761,7 +819,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		}
 
 		if ( !ExcludedFromWorldJoin )
-			AbsorbNearbyLooseCoins();
+			RequestJoinPass();
 
 		PlayLandFeedback();
 	}
@@ -769,9 +827,6 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	IEnumerator DelayedDespawnCoveredLive( int slotIndex, TreasureItem expected )
 	{
 		float wait = 0.22f;
-		CarryDefinition carryDef = null;
-		carryDef = RuntimeDefinition.Resolve( ref carryDef );
-		_ = carryDef;
 		yield return new WaitForSeconds( wait );
 
 		if ( _destroying )
@@ -875,6 +930,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		}
 
 		_slots.RemoveAt( slotIndex );
+		InvalidateHeightPrefix();
 		if ( slotIndex < _settledLive.Count )
 			_settledLive.RemoveAt( slotIndex );
 
@@ -911,6 +967,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		int slotIndex = _slots.Count;
 		_slots.Add( item.Definition );
+		InvalidateHeightPrefix();
 		while ( _settledLive.Count <= slotIndex )
 			_settledLive.Add( null );
 
@@ -946,6 +1003,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return false;
 
 		_slots.Add( definition );
+		InvalidateHeightPrefix();
 		_settledLive.Add( null );
 		RefreshVisuals( snap: true );
 		RefreshCollider();
@@ -970,6 +1028,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				break;
 
 			_slots.Add( def );
+			InvalidateHeightPrefix();
 			_settledLive.Add( null );
 			added++;
 		}
@@ -979,8 +1038,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		RefreshVisuals( snap: false );
 		RefreshCollider();
-		if ( !ExcludedFromWorldJoin )
-			TryMergeNearby();
+		RequestJoinPass();
 		PlayLandFeedback();
 		if ( !ExcludedFromWorldJoin && added > 0 )
 			PublishStackChanged( definitions[ definitions.Count - 1 ] );
@@ -1019,6 +1077,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		DespawnCoveredLive( 0 );
 		_slots.RemoveAt( 0 );
+		InvalidateHeightPrefix();
 		if ( _settledLive.Count > 0 )
 			_settledLive.RemoveAt( 0 );
 		DecrementInFlightSlotIndicesAfter( 0 );
@@ -1065,8 +1124,16 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_inFlightSlotIndices.Clear();
 		ClearAllVisuals();
 		_slots.Clear();
+		InvalidateHeightPrefix();
 		_settledLive.Clear();
-		All.Remove( this );
+		Unregister();
+		if ( !IsStreamPinned )
+		{
+			WorldTreasureStreamer.EnsureExists();
+			WorldTreasureStreamer.ReleaseEmptyCoinHost( this );
+			return true;
+		}
+
 		Destroy( gameObject );
 		return true;
 	}
@@ -1089,6 +1156,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			_settledLive.Add( null );
 		}
 
+		InvalidateHeightPrefix();
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 		return true;
@@ -1118,6 +1186,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			_settledLive.Add( null );
 		}
 
+		InvalidateHeightPrefix();
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 		return true;
@@ -1167,7 +1236,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		// looking down at a thick capsule, which picks one coin below the crosshair.
 		if ( player.Interaction.TryGetLastHit( out RaycastHit hit ) && hit.collider != null )
 		{
-			GroundCoinStack hitStack = hit.collider.GetComponentInParent<GroundCoinStack>();
+			GroundCoinStack hitStack = ResolveStackFromCollider( hit.collider );
 			if ( hitStack == this )
 			{
 				aimY = hit.point.y;
@@ -1197,19 +1266,19 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( topY > bottomY + 0.0001f )
 			aimY = Mathf.Clamp( aimY, bottomY, topY );
 
-		float stacked = 0f;
+		EnsureHeightPrefix();
 		int last = _slots.Count - 1;
 		for ( int i = 0; i < _slots.Count; i++ )
 		{
-			float step = TreasureStackSpacing.GetStep( _slots[ i ] );
-			float yMin = bottomY + stacked;
-			float yMax = yMin + step;
+			float yMin = bottomY + GetOffsetForIndex( i );
+			float yMax = i + 1 < _heightPrefix.Count
+				? bottomY + _heightPrefix[ i + 1 ]
+				: yMin + TreasureStackSpacing.GetStep( _slots[ i ] );
 			bool inside = i == last
 				? aimY >= yMin && aimY <= yMax
 				: aimY >= yMin && aimY < yMax;
 			if ( inside )
 				return i;
-			stacked += step;
 		}
 
 		return Mathf.Max( 0, SettledCount - 1 );
@@ -1248,6 +1317,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		DespawnCoveredLive( index );
 		_slots.RemoveAt( index );
+		InvalidateHeightPrefix();
 		if ( index < _settledLive.Count )
 			_settledLive.RemoveAt( index );
 		DecrementInFlightSlotIndicesAfter( index );
@@ -1277,6 +1347,42 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		return TryTakeSingleAtIndex( player, startIndex );
 	}
 
+	void RequestJoinPass()
+	{
+		if ( _destroying || ExcludedFromWorldJoin )
+			return;
+
+		_joinDirty = true;
+	}
+
+	void FlushJoinPass()
+	{
+		if ( !_joinDirty || _destroying )
+			return;
+
+		_joinDirty = false;
+		if ( ExcludedFromWorldJoin || Count <= 0 )
+			return;
+
+		TryMergeNearby();
+		if ( _destroying || Count <= 0 )
+			return;
+
+		AbsorbNearbyLooseCoins();
+	}
+
+	static GroundCoinStack ResolveStackFromCollider( Collider col )
+	{
+		if ( col == null )
+			return null;
+
+		GroundCoinStack stack = col.GetComponent<GroundCoinStack>();
+		if ( stack != null )
+			return stack;
+
+		return col.GetComponentInParent<GroundCoinStack>();
+	}
+
 	public void TryMergeNearby()
 	{
 		if ( _destroying || ExcludedFromWorldJoin || Count <= 0 )
@@ -1287,7 +1393,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			ContactPosition,
 			radius,
 			MergeOverlap,
-			Physics.DefaultRaycastLayers,
+			PhysicsLayers.DefaultAndCollectableMask,
 			QueryTriggerInteraction.Ignore );
 
 		for ( int i = 0; i < hits; i++ )
@@ -1296,7 +1402,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			if ( col == null )
 				continue;
 
-			GroundCoinStack other = col.GetComponentInParent<GroundCoinStack>();
+			GroundCoinStack other = ResolveStackFromCollider( col );
 			if ( other == null || other == this || other._destroying || other.ExcludedFromWorldJoin )
 				continue;
 
@@ -1321,13 +1427,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 					continue;
 
 				other.MergeFrom( this );
-				other.AbsorbNearbyLooseCoins();
+				other.RequestJoinPass();
 				return;
 			}
 
 			// Absorb the other into this (keep this contact position).
 			MergeFrom( other );
-			AbsorbNearbyLooseCoins();
 			break;
 		}
 	}
@@ -1355,12 +1460,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		for ( int i = 0; i < other._slots.Count; i++ )
 			MergeSlotBuffer.Add( other._slots[ i ] );
 
-		// Capture live items before other clears.
-		List<TreasureItem> otherLive = new List<TreasureItem>( other._settledLive.Count );
+		MergeLiveBuffer.Clear();
 		for ( int i = 0; i < other._settledLive.Count; i++ )
-			otherLive.Add( other._settledLive[ i ] );
+			MergeLiveBuffer.Add( other._settledLive[ i ] );
 
 		other._slots.Clear();
+		other.InvalidateHeightPrefix();
 		other._settledLive.Clear();
 		other.ClearAllVisuals();
 		other.DestroyStack();
@@ -1371,31 +1476,37 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				break;
 
 			TreasureDefinition def = MergeSlotBuffer[ i ];
-			TreasureItem live = i < otherLive.Count ? otherLive[ i ] : null;
+			TreasureItem live = i < MergeLiveBuffer.Count ? MergeLiveBuffer[ i ] : null;
 			_slots.Add( def );
-			if ( live != null )
-			{
-				Vector3 localPos = GetSlotLocalPosition( _slots.Count - 1 );
-				live.EnterStacked( this, transform, localPos, Quaternion.identity );
-				_settledLive.Add( live );
-			}
-			else
-				_settledLive.Add( null );
+			_settledLive.Add( live );
 		}
 
-		for ( int i = MergeSlotBuffer.Count; i < otherLive.Count; i++ )
+		InvalidateHeightPrefix();
+
+		int posed = Mathf.Min( _slots.Count, _settledLive.Count );
+		for ( int i = 0; i < posed; i++ )
 		{
-			if ( otherLive[ i ] != null )
-				TreasureItemFactory.Despawn( otherLive[ i ] );
+			TreasureItem live = _settledLive[ i ];
+			if ( live == null )
+				continue;
+
+			Vector3 localPos = GetSlotLocalPosition( i );
+			live.EnterStacked( this, transform, localPos, Quaternion.identity );
 		}
 
+		for ( int i = MergeSlotBuffer.Count; i < MergeLiveBuffer.Count; i++ )
+		{
+			if ( MergeLiveBuffer[ i ] != null )
+				TreasureItemFactory.Despawn( MergeLiveBuffer[ i ] );
+		}
+
+		MergeLiveBuffer.Clear();
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 	}
 
 	void RefreshVisuals( bool snap )
 	{
-		_visualGeneration++;
 		EnsureCylinderCoverageBuffer();
 		for ( int i = 0; i < _cylinderCovered.Length; i++ )
 			_cylinderCovered[ i ] = false;
@@ -1412,10 +1523,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			BindDefBuffer.Add( _slots[ i ] );
 		}
 
-		bool[] bindCovered = BindCoveredScratch;
-		if ( bindCovered.Length < BindDefBuffer.Count )
-			bindCovered = new bool[ Mathf.Max( 64, BindDefBuffer.Count ) ];
+		if ( BindCoveredScratch.Length < BindDefBuffer.Count )
+			BindCoveredScratch = new bool[ Mathf.Max( 64, BindDefBuffer.Count ) ];
 
+		bool[] bindCovered = BindCoveredScratch;
 		for ( int i = 0; i < bindCovered.Length; i++ )
 			bindCovered[ i ] = false;
 
@@ -1453,13 +1564,11 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 			if ( live != null )
 			{
-				Vector3 localPos = GetSlotLocalPosition( i );
-				live.EnterStacked( this, transform, localPos, Quaternion.identity );
-				live.SetMeshVisible( true );
+				ApplySettledLivePose( live, i );
 				continue;
 			}
 
-			SpawnIndividualForSlot( i, _visualGeneration );
+			SpawnIndividualForSlot( i );
 		}
 
 		// Trim live list length to slots.
@@ -1481,7 +1590,23 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			_settledLive.Add( null );
 	}
 
-	async void SpawnIndividualForSlot( int index, int generation )
+	void ApplySettledLivePose( TreasureItem live, int index )
+	{
+		if ( live == null )
+			return;
+
+		Vector3 localPos = GetSlotLocalPosition( index );
+		Transform liveTransform = live.transform;
+		bool alreadySeated = liveTransform.parent == transform
+			&& ( liveTransform.localPosition - localPos ).sqrMagnitude < 0.0000001f
+			&& liveTransform.localRotation == Quaternion.identity;
+		if ( !alreadySeated )
+			live.EnterStacked( this, transform, localPos, Quaternion.identity );
+
+		live.SetMeshVisible( true );
+	}
+
+	void SpawnIndividualForSlot( int index )
 	{
 		if ( index < 0 || index >= _slots.Count )
 			return;
@@ -1493,22 +1618,20 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return;
 
 		TreasureDefinition def = _slots[ index ];
+		if ( def == null )
+			return;
+
 		Vector3 worldPos = GetSlotWorldPosition( index );
-		TreasureItem item = await TreasureItemFactory.SpawnAsync( def, worldPos, transform.rotation, null );
-		if ( item == null || _destroying || generation != _visualGeneration )
+		TreasureItem item = TreasureItemFactory.RentVisualCoin( def, worldPos, transform.rotation );
+		if ( item == null || _destroying )
 		{
 			if ( item != null )
 				TreasureItemFactory.Despawn( item );
 			return;
 		}
 
-		if ( index >= _slots.Count || _slots[ index ] != def || IsSlotInFlight( index ) )
-		{
-			TreasureItemFactory.Despawn( item );
-			return;
-		}
-
-		if ( index < _cylinderCovered.Length && _cylinderCovered[ index ] )
+		if ( index >= _slots.Count || _slots[ index ] != def || IsSlotInFlight( index )
+			|| ( index < _cylinderCovered.Length && _cylinderCovered[ index ] ) )
 		{
 			TreasureItemFactory.Despawn( item );
 			return;
@@ -1594,19 +1717,43 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	float GetOffsetForIndex( int index )
 	{
-		float height = 0f;
-		for ( int i = 0; i < index && i < _slots.Count; i++ )
-			height += TreasureStackSpacing.GetStep( _slots[ i ] );
-		return height;
+		EnsureHeightPrefix();
+		if ( index <= 0 )
+			return 0f;
+		if ( index >= _heightPrefix.Count )
+			return _heightPrefix.Count > 0 ? _heightPrefix[ _heightPrefix.Count - 1 ] : 0f;
+		return _heightPrefix[ index ];
 	}
 
 	float MeasureSlotsHeight( int count )
 	{
+		EnsureHeightPrefix();
+		if ( _heightPrefix.Count <= 0 )
+			return 0f;
+
+		int n = Mathf.Clamp( count, 0, _heightPrefix.Count - 1 );
+		return _heightPrefix[ n ];
+	}
+
+	void InvalidateHeightPrefix()
+	{
+		_heightPrefixDirty = true;
+	}
+
+	void EnsureHeightPrefix()
+	{
+		if ( !_heightPrefixDirty && _heightPrefix.Count == _slots.Count + 1 )
+			return;
+
+		_heightPrefixDirty = false;
+		_heightPrefix.Clear();
 		float height = 0f;
-		int n = Mathf.Min( count, _slots.Count );
-		for ( int i = 0; i < n; i++ )
+		_heightPrefix.Add( 0f );
+		for ( int i = 0; i < _slots.Count; i++ )
+		{
 			height += TreasureStackSpacing.GetStep( _slots[ i ] );
-		return height;
+			_heightPrefix.Add( height );
+		}
 	}
 
 	public Vector3 GetSlotLocalPosition( int index )
@@ -1626,8 +1773,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( !_preferImperfectLod )
 			return Vector2.zero;
 
-		CoinStackVisualDefinition def = null;
-		def = RuntimeDefinition.Resolve( ref def );
+		CoinStackVisualDefinition def = VisualDef;
 		if ( !CoinStackImperfectLayout.IsImperfectEnabled( def ) )
 			return Vector2.zero;
 
@@ -1723,7 +1869,13 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		bool[] taken = null;
 		if ( _slots.Count > 0 )
-			taken = new bool[ _slots.Count ];
+		{
+			if ( TakenScratch.Length < _slots.Count )
+				TakenScratch = new bool[ Mathf.Max( 64, _slots.Count ) ];
+			taken = TakenScratch;
+			for ( int i = 0; i < _slots.Count; i++ )
+				taken[ i ] = false;
+		}
 
 		for ( int i = 0; i < _inFlight.Count; i++ )
 		{
@@ -1734,8 +1886,9 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 			flight.EndFlight();
 			flight.transform.SetParent( null, true );
+			TreasureItemFactory.DetachFromPool( flight );
 			into.Add( flight );
-			if ( taken != null && slotIndex >= 0 && slotIndex < taken.Length )
+			if ( taken != null && slotIndex >= 0 && slotIndex < _slots.Count )
 				taken[ slotIndex ] = true;
 		}
 
@@ -1752,6 +1905,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			{
 				_settledLive[ i ] = null;
 				live.transform.SetParent( null, true );
+				TreasureItemFactory.DetachFromPool( live );
 				into.Add( live );
 				continue;
 			}
@@ -1767,8 +1921,16 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		ClearAllVisuals();
 		_slots.Clear();
+		InvalidateHeightPrefix();
 		_settledLive.Clear();
-		All.Remove( this );
+		Unregister();
+		if ( !IsStreamPinned )
+		{
+			WorldTreasureStreamer.EnsureExists();
+			WorldTreasureStreamer.ReleaseEmptyCoinHost( this );
+			return;
+		}
+
 		Destroy( gameObject );
 	}
 
@@ -1787,6 +1949,105 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		DestroyStack();
 	}
 
+	public void SetStreamingHidden( bool hidden )
+	{
+		_streamingHidden = hidden;
+		EnsureCollider();
+		if ( _capsule != null )
+			_capsule.enabled = !hidden;
+
+		if ( _cylinderVisual != null && _cylinderVisual.MeshRenderer != null )
+			_cylinderVisual.MeshRenderer.enabled = !hidden && _slots.Count > 0;
+
+		for ( int i = 0; i < _settledLive.Count; i++ )
+		{
+			TreasureItem live = _settledLive[ i ];
+			if ( live != null )
+				live.SetStreamingHidden( hidden );
+		}
+	}
+
+	public void CaptureStreamingSlots(
+		List<TreasureDefinition> into,
+		out float variationSeed,
+		out Vector3 position,
+		out Quaternion rotation )
+	{
+		if ( into != null )
+		{
+			into.Clear();
+			for ( int i = 0; i < _slots.Count; i++ )
+				into.Add( _slots[ i ] );
+		}
+
+		variationSeed = VariationSeed;
+		position = transform.position;
+		rotation = transform.rotation;
+	}
+
+	public void RestoreStreamingSlots( IReadOnlyList<TreasureDefinition> slots, float variationSeed )
+	{
+		_destroying = false;
+		_streamingHidden = false;
+		_returningToPool = false;
+		ClearAllVisuals();
+		_slots.Clear();
+		_settledLive.Clear();
+		_inFlight.Clear();
+		_inFlightSlotIndices.Clear();
+		InvalidateHeightPrefix();
+		if ( variationSeed > 0.0001f )
+			_variationSeed = variationSeed;
+		else
+		{
+			_variationSeed = 0f;
+			EnsureVariationSeed();
+		}
+
+		if ( slots == null || slots.Count == 0 )
+		{
+			RefreshCollider();
+			return;
+		}
+
+		DebugFillSlots( slots );
+		SetStreamingHidden( false );
+	}
+
+	public void PrepareForPool()
+	{
+		_returningToPool = true;
+		_streamingHidden = false;
+		_taking = false;
+		_absorbingNearby = false;
+		_joinDirty = false;
+		_blockMergeAsTarget = false;
+		ClearAllVisuals();
+		_slots.Clear();
+		_settledLive.Clear();
+		_inFlight.Clear();
+		_inFlightSlotIndices.Clear();
+		InvalidateHeightPrefix();
+		EnsureCollider();
+		if ( _capsule != null )
+			_capsule.enabled = false;
+	}
+
+	public void ActivateFromPool( Vector3 position, Quaternion rotation )
+	{
+		_returningToPool = false;
+		_destroying = false;
+		_streamingHidden = false;
+		transform.SetParent( null, false );
+		transform.SetPositionAndRotation( position, TreasureOrientation.FlattenUpright( rotation ) );
+		if ( !gameObject.activeSelf )
+			gameObject.SetActive( true );
+		EnsureCollider();
+		EnsureVariationSeed();
+		SetStreamingHidden( false );
+		RefreshCollider();
+	}
+
 	void DestroyStack()
 	{
 		if ( _destroying )
@@ -1794,37 +2055,42 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 		_destroying = true;
 
-		List<TreasureItem> reclaim = null;
+		ReclaimBuffer.Clear();
 		if ( _inFlight.Count > 0 )
 		{
-			reclaim = new List<TreasureItem>( _inFlight.Count );
 			for ( int i = 0; i < _inFlight.Count; i++ )
 			{
 				if ( _inFlight[ i ] != null )
-					reclaim.Add( _inFlight[ i ] );
+					ReclaimBuffer.Add( _inFlight[ i ] );
 			}
 		}
 
 		ClearAllVisuals();
 		_slots.Clear();
+		InvalidateHeightPrefix();
 		_settledLive.Clear();
 		_inFlight.Clear();
 		_inFlightSlotIndices.Clear();
-		All.Remove( this );
+		Unregister();
 
-		if ( reclaim != null )
+		for ( int i = 0; i < ReclaimBuffer.Count; i++ )
 		{
-			for ( int i = 0; i < reclaim.Count; i++ )
-			{
-				TreasureItem orphan = reclaim[ i ];
-				if ( orphan == null )
-					continue;
+			TreasureItem orphan = ReclaimBuffer[ i ];
+			if ( orphan == null )
+				continue;
 
-				orphan.EndFlight();
-				Vector3 pos = orphan.transform.position;
-				Quaternion rot = TreasureOrientation.FlattenUpright( orphan.transform.rotation );
-				orphan.EnterSettledPhysics( pos, rot );
-			}
+			orphan.EndFlight();
+			Vector3 pos = orphan.transform.position;
+			Quaternion rot = TreasureOrientation.FlattenUpright( orphan.transform.rotation );
+			orphan.EnterSettledPhysics( pos, rot );
+		}
+
+		ReclaimBuffer.Clear();
+		if ( !IsStreamPinned )
+		{
+			WorldTreasureStreamer.EnsureExists();
+			WorldTreasureStreamer.ReleaseEmptyCoinHost( this );
+			return;
 		}
 
 		Destroy( gameObject );

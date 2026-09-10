@@ -9,6 +9,9 @@ public class DebugDefinition : ScriptableObject
 	[Tooltip( "Editor only: on play, place the player at the Scene view camera instead of LevelSceneMarkers.playerSpawn." )]
 	public bool spawnAtSceneCamera = false;
 
+	[Tooltip( "Debug spawn id used on play/respawn. Empty = LevelSceneMarkers.playerSpawn (intro). Use a DebugSpawnPoint id, or volume_main_cave / volume_workshop / volume_artifact_museum / volume_coin_hall." )]
+	public string debugSpawnId;
+
 	[Tooltip( "Skip spawning coins, gems, and artifacts for all treasure piles in play mode." )]
 	public bool disableTreasureSpawning = false;
 

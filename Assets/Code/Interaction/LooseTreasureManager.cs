@@ -54,8 +54,7 @@ public class LooseTreasureManager : MonoBehaviour
 		if ( !Loose.Contains( item ) )
 			Loose.Add( item );
 
-		if ( item.Definition != null && GoldPileArtifactProps.IsLargeProp( item.Definition ) )
-			WorldTreasurePersistence.NotifyLoose( item );
+		WorldTreasurePersistence.NotifyLoose( item );
 
 		_instance.EnforceCaps();
 	}

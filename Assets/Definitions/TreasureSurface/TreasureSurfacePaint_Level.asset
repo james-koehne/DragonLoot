@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21cdd1d8b4774cc47a79556f4b2760de, type: 3}
   m_Name: TreasureSurfacePaint_Level
   m_EditorClassIdentifier: Assembly-CSharp::TreasureSurfacePaintAsset
-  cellsX: 4096
-  cellsZ: 4096
+  cellsX: 2048
+  cellsZ: 2048
   bakedPaint: {fileID: 0}
-  undoSnapshotId: 137
+  undoSnapshotId: 2

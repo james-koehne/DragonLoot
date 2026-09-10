@@ -108,6 +108,41 @@ public sealed class GoldPileChunkGrid
 		return GetChunk( coord.X, coord.Z );
 	}
 
+	public bool TryWorldToChunk( Vector3 worldPos, out int chunkX, out int chunkZ )
+	{
+		chunkX = 0;
+		chunkZ = 0;
+		if ( _countX <= 0 || _countZ <= 0 || _pileRoot == null )
+			return false;
+
+		Vector3 local = _pileRoot.InverseTransformPoint( worldPos );
+		LocalToChunk( local.x, local.z, out chunkX, out chunkZ );
+		return true;
+	}
+
+	/// <summary>XZ pile footprint in world space (Y from first/last chunk bounds).</summary>
+	public bool TryGetPileWorldBounds( out Bounds pileBounds )
+	{
+		pileBounds = default;
+		if ( _chunks.Count == 0 || _pileRoot == null )
+			return false;
+
+		float half = _worldSize * 0.5f;
+		Vector3 c000 = _pileRoot.TransformPoint( new Vector3( -half, 0f, -half ) );
+		Vector3 c100 = _pileRoot.TransformPoint( new Vector3( half, 0f, -half ) );
+		Vector3 c001 = _pileRoot.TransformPoint( new Vector3( -half, 0f, half ) );
+		Vector3 c101 = _pileRoot.TransformPoint( new Vector3( half, 0f, half ) );
+		pileBounds = new Bounds( c000, Vector3.zero );
+		pileBounds.Encapsulate( c100 );
+		pileBounds.Encapsulate( c001 );
+		pileBounds.Encapsulate( c101 );
+
+		// Expand Y from a couple of chunk samples so AABB distance is conservative.
+		pileBounds.Encapsulate( _chunks[ 0 ].WorldBounds );
+		pileBounds.Encapsulate( _chunks[ _chunks.Count - 1 ].WorldBounds );
+		return true;
+	}
+
 	public void RebuildAllBounds()
 	{
 		for ( int i = 0; i < _chunks.Count; i++ )

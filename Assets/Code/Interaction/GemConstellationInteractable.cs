@@ -167,23 +167,25 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 
 	[SerializeField]
 	[Min( 0.05f )]
-	float ignitionBoostDuration = 0.55f;
+	float ignitionBoostDuration = 1.2f;
 
 	[SerializeField]
 	[Min( 1f )]
 	float ignitionPeakGlow = 1.35f;
 
+	[Tooltip( "Idle glow after the flare settles. 1 = same as a connected gem." )]
 	[SerializeField]
 	[Min( 1f )]
-	float completedGlowBaseline = 1.06f;
+	float completedGlowBaseline = 1f;
 
+	[Tooltip( "Added on top of the idle baseline as a 0–1 breathe wave. Larger = more obvious pulse." )]
 	[SerializeField]
 	[Min( 0f )]
-	float breatheAmplitude = 0.08f;
+	float breatheAmplitude = 0.22f;
 
 	[SerializeField]
 	[Min( 0.05f )]
-	float breatheSpeed = 0.85f;
+	float breatheSpeed = 0.7f;
 
 	[SerializeField]
 	[Min( 0.05f )]
@@ -354,7 +356,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		{
 			_isComplete = true;
 			SetCompletedVisual( true );
-			PublishCompleted();
+			PublishCompleted( fromPlayer: false );
 			// Start-fill: breathe only — skip noisy ignition cascade on load.
 			BeginCompleteBreathe();
 		}
@@ -1194,7 +1196,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		{
 			_isComplete = true;
 			SetCompletedVisual( true );
-			PublishCompleted();
+			PublishCompleted( fromPlayer: true );
 			StartCompleteIgnition();
 		}
 	}
@@ -1296,7 +1298,10 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 			: 1f;
 		float breathe = 0f;
 		if ( _completeBreatheActive )
-			breathe = Mathf.Sin( Time.time * breatheSpeed ) * breatheAmplitude;
+		{
+			float wave = 0.5f + 0.5f * Mathf.Sin( Time.time * breatheSpeed );
+			breathe = breatheAmplitude * wave;
+		}
 
 		for ( int i = 0; i < _occupants.Length; i++ )
 		{
@@ -1346,6 +1351,12 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 
 	void BeginCompleteBreathe()
 	{
+		if ( _glowBoost != null )
+		{
+			for ( int i = 0; i < _glowBoost.Length; i++ )
+				_glowBoost[ i ] = 0f;
+		}
+
 		_completeBreatheActive = true;
 		if ( lineVisual != null )
 			lineVisual.SetCompleteBreathe( true );
@@ -1361,6 +1372,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 
 		float peakBoost = Mathf.Max( 0f, ignitionPeakGlow - completedGlowBaseline );
 		int count = SlotCount;
+		float cascadeElapsed = 0f;
 		for ( int i = 0; i < count; i++ )
 		{
 			if ( _occupants != null && i < _occupants.Length && _occupants[ i ] != null )
@@ -1372,10 +1384,15 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 			}
 
 			if ( cascadeStagger > 0.0001f && i < count - 1 )
+			{
 				yield return new WaitForSeconds( cascadeStagger );
+				cascadeElapsed += cascadeStagger;
+			}
 		}
 
-		float settleWait = Mathf.Max( ignitionBoostDuration, completeSurgeDuration * 0.75f );
+		// Hold the flare until the line surge has fully eased back to base, then breathe.
+		float remainingSurge = Mathf.Max( 0f, completeSurgeDuration - cascadeElapsed );
+		float settleWait = Mathf.Max( ignitionBoostDuration, remainingSurge );
 		if ( settleWait > 0.0001f )
 			yield return new WaitForSeconds( settleWait );
 
@@ -1488,11 +1505,12 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		} );
 	}
 
-	void PublishCompleted()
+	void PublishCompleted( bool fromPlayer )
 	{
 		EventBus.Publish( new GemConstellationCompletedEvent
 		{
-			Constellation = this
+			Constellation = this,
+			FromPlayer = fromPlayer
 		} );
 	}
 

@@ -995,7 +995,7 @@ public class PlayerInteraction : MonoBehaviour
 			TreasureItem item = treasureInteractable.Item;
 			if ( item != null
 				&& item.Definition != null
-				&& item.Definition.category == TreasureCategory.Chest )
+				&& item.Definition.UsesChestInteract() )
 			{
 				ChestInteractable chest = ChestInteractable.ResolveFromItem( item );
 				if ( chest != null )

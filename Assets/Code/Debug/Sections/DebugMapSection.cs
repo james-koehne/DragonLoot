@@ -24,7 +24,7 @@ public class DebugMapSection : DebugOverlaySection
 		GUILayout.Label( "UI open: " + MapUI.IsOpen );
 		GUILayout.Label( "Base ready: " + map.IsBaseReady );
 		GUILayout.Label( "Bake phase: " + map.BakePhaseName );
-		GUILayout.Label( $"Last bake slice: {map.LastBakeElapsedMs:0.00} ms" );
+		GUILayout.Label( $"Last bake: {map.LastBakeElapsedMs:0.00} ms" );
 		GUILayout.Label( $"Resolution: {map.Resolution}" );
 
 		if ( map.HasBounds )

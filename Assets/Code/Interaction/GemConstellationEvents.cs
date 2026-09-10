@@ -14,6 +14,7 @@ public struct GemConstellationChangedEvent
 public struct GemConstellationCompletedEvent
 {
 	public GemConstellationInteractable Constellation;
+	public bool FromPlayer;
 }
 
 /// <summary>

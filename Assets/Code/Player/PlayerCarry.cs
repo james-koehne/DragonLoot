@@ -3,17 +3,18 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>Hand rig a treasure is carried in. Chests use the Artifact bucket (exclusiveCarry).</summary>
+/// <summary>Hand rig a treasure is carried in. Chests, keys, and other non-artifact loot use General.</summary>
 public enum CarryBucketKind
 {
 	Coin = 0,
 	Gem = 1,
-	Artifact = 2
+	Artifact = 2,
+	General = 3
 }
 
 public class PlayerCarry : MonoBehaviour, ITreasureOwner
 {
-	public const int BucketCount = 3;
+	public const int BucketCount = 4;
 
 	struct CarriedEntry
 	{
@@ -77,6 +78,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	CarryBucketKind _selected = CarryBucketKind.Coin;
 	CarryBucketKind _lastPublishedHeldBucket = (CarryBucketKind)(-1);
 	int _lastPublishedHeldCount = -1;
+	readonly HashSet<string> _newTreasureIds = new HashSet<string>();
+	readonly HashSet<string> _newCountScratch = new HashSet<string>();
+	float _pouchViewElapsed;
 	float _coinHandVariationSeed;
 
 	CarryDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
@@ -156,7 +160,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	public static CarryBucketKind ResolveBucket( TreasureDefinition def )
 	{
 		if ( def == null )
-			return CarryBucketKind.Artifact;
+			return CarryBucketKind.General;
 
 		switch ( def.category )
 		{
@@ -164,8 +168,10 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return CarryBucketKind.Coin;
 			case TreasureCategory.Gem:
 				return CarryBucketKind.Gem;
-			default:
+			case TreasureCategory.Artifact:
 				return CarryBucketKind.Artifact;
+			default:
+				return CarryBucketKind.General;
 		}
 	}
 
@@ -191,6 +197,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return false;
 
 		_selected = kind;
+		_pouchViewElapsed = 0f;
 
 		CategoryBucket bucket = _buckets[ (int)kind ];
 		if ( bucket.RigRoot != null && !bucket.Visible )
@@ -207,6 +214,95 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		} );
 		PublishHeldCategoryChanged();
 		return true;
+	}
+
+	public bool CycleSelectedBucket()
+	{
+		EnsureBuckets();
+		int start = (int)_selected;
+		for ( int step = 1; step < BucketCount; step++ )
+		{
+			CarryBucketKind next = (CarryBucketKind)( ( start + step ) % BucketCount );
+			if ( GetBucketCount( next ) <= 0 )
+				continue;
+
+			return TrySetSelectedBucket( next );
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Unique newly discovered types in this pouch that have not been viewed yet.
+	/// Hidden on the selected pouch; cleared after staying on that pouch for
+	/// <see cref="CarryDefinition.pouchNewItemAcknowledgeSeconds"/>.
+	/// </summary>
+	public int GetNewItemTypeCount( CarryBucketKind kind )
+	{
+		if ( kind == _selected || _newTreasureIds.Count == 0 )
+			return 0;
+
+		_newCountScratch.Clear();
+		CategoryBucket bucket = GetBucket( kind );
+		NoteNewDefinition( bucket.HasActive ? bucket.Active.Definition : null );
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+			NoteNewDefinition( bucket.Held[ i ].Definition );
+
+		return _newCountScratch.Count;
+	}
+
+	void AcknowledgeNewItems( CarryBucketKind kind )
+	{
+		if ( _newTreasureIds.Count == 0 )
+			return;
+
+		CategoryBucket bucket = GetBucket( kind );
+		RemoveAcknowledged( bucket.HasActive ? bucket.Active.Definition : null );
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+			RemoveAcknowledged( bucket.Held[ i ].Definition );
+	}
+
+	void TickNewItemDwell()
+	{
+		if ( _newTreasureIds.Count == 0 )
+			return;
+
+		CarryDefinition def = Definition;
+		float need = def != null ? def.pouchNewItemAcknowledgeSeconds : 1.5f;
+		_pouchViewElapsed += Time.deltaTime;
+		if ( _pouchViewElapsed < need )
+			return;
+
+		AcknowledgeNewItems( _selected );
+	}
+
+	void RemoveAcknowledged( TreasureDefinition definition )
+	{
+		string id = TreasureId( definition );
+		if ( string.IsNullOrEmpty( id ) )
+			return;
+
+		_newTreasureIds.Remove( id );
+	}
+
+	void NoteNewDefinition( TreasureDefinition definition )
+	{
+		string id = TreasureId( definition );
+		if ( string.IsNullOrEmpty( id ) )
+			return;
+		if ( !_newTreasureIds.Contains( id ) )
+			return;
+
+		_newCountScratch.Add( id );
+	}
+
+	static string TreasureId( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return null;
+		if ( !string.IsNullOrEmpty( definition.id ) )
+			return definition.id;
+		return definition.name;
 	}
 
 	public bool IsHoldingCategory( TreasureCategory category )
@@ -230,16 +326,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				bucket = CarryBucketKind.Gem;
 				return true;
 			case TreasureCategory.Artifact:
-			case TreasureCategory.Chest:
-			case TreasureCategory.Crown:
-			case TreasureCategory.Goblet:
-			case TreasureCategory.Helmet:
-			case TreasureCategory.Key:
 				bucket = CarryBucketKind.Artifact;
 				return true;
 			default:
-				bucket = CarryBucketKind.Coin;
-				return false;
+				bucket = CarryBucketKind.General;
+				return true;
 		}
 	}
 
@@ -251,6 +342,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return TreasureCategory.Gem;
 			case CarryBucketKind.Artifact:
 				return TreasureCategory.Artifact;
+			case CarryBucketKind.General:
+				return TreasureCategory.Chest;
 			default:
 				return TreasureCategory.Coin;
 		}
@@ -409,6 +502,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return "CoinRig";
 			case CarryBucketKind.Gem:
 				return "GemRig";
+			case CarryBucketKind.General:
+				return "GeneralRig";
 			default:
 				return "ArtifactRig";
 		}
@@ -417,6 +512,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	void LateUpdate()
 	{
 		EnsureBuckets();
+		EnsureSelectedPouchValid();
+		TickNewItemDwell();
 		if ( _carryRigs == null )
 			return;
 
@@ -456,6 +553,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	void TryCycleFromScroll()
 	{
+		if ( _player != null && !_player.GameplayInputEnabled )
+			return;
+
 		if ( _player != null )
 		{
 			PlayerSorterReposition sorter = _player.SorterReposition;
@@ -552,6 +652,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 					rented.BeginHold( this );
 					rented.SetMeshVisible( true );
 					rented.SetHeldShadows( enabled: false );
+					rented.SetHeldLighting( enabled: true );
 					active.Item = rented;
 					bucket.Active = active;
 					rented.transform.SetParent( bucket.ActiveRoot, true );
@@ -602,17 +703,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( bucket.Count == 0 )
 			return false;
 
-		Transform hold = bucket.HoldRoot;
-		if ( hold != null )
-		{
-			startWorldPos = hold.position;
-			startWorldRot = hold.rotation;
-		}
-		else if ( bucket.ActiveRoot != null )
-		{
-			startWorldPos = bucket.ActiveRoot.position;
-			startWorldRot = bucket.ActiveRoot.rotation;
-		}
+		CaptureCoinExtractPose( bucket, out startWorldPos, out startWorldRot );
 
 		if ( bucket.HasActive && bucket.Active.Definition != null )
 		{
@@ -648,6 +739,120 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		CoinColumnCylinderBinder.ClearAndDestroy( ref bucket.HeldCylinder, null );
 		RestackPoses();
 		return definitions.Count > 0;
+	}
+
+	/// <summary>
+	/// Removes Active plus the contiguous same-type run from held bottom→top.
+	/// Stops at the first held coin that does not match Active. Remaining held coins stay.
+	/// </summary>
+	public bool TryExtractActiveConnectedCoinDefinitions(
+		out List<TreasureDefinition> definitions,
+		out Vector3 startWorldPos,
+		out Quaternion startWorldRot )
+	{
+		definitions = new List<TreasureDefinition>();
+		startWorldPos = transform.position;
+		startWorldRot = transform.rotation;
+
+		CategoryBucket bucket = GetBucket( CarryBucketKind.Coin );
+		if ( !bucket.HasActive || bucket.Active.Definition == null )
+			return false;
+
+		TreasureDefinition activeDef = bucket.Active.Definition;
+		CaptureCoinExtractPose( bucket, out startWorldPos, out startWorldRot );
+
+		definitions.Add( activeDef );
+		if ( bucket.Active.Item != null )
+		{
+			AbortHoldTween( bucket.Active.Token, snapToHand: false, bucket.Active.Item );
+			TreasureItemFactory.Despawn( bucket.Active.Item );
+		}
+
+		_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( activeDef ) );
+		bucket.HasActive = false;
+		bucket.Active = default;
+
+		int connectedHeld = 0;
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+		{
+			if ( bucket.Held[ i ].Definition != activeDef )
+				break;
+			connectedHeld++;
+		}
+
+		for ( int i = 0; i < connectedHeld; i++ )
+		{
+			CarriedEntry entry = bucket.Held[ i ];
+			definitions.Add( entry.Definition );
+			if ( entry.Item != null )
+			{
+				AbortHoldTween( entry.Token, snapToHand: false, entry.Item );
+				TreasureItemFactory.Despawn( entry.Item );
+			}
+
+			_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
+		}
+
+		if ( connectedHeld > 0 )
+			bucket.Held.RemoveRange( 0, connectedHeld );
+
+		CoinColumnCylinderBinder.ClearAndDestroy( ref bucket.HeldCylinder, null );
+		PromoteFromHeld( bucket );
+		RestackPoses();
+		return definitions.Count > 0;
+	}
+
+	/// <summary>
+	/// Active coin definition plus contiguous same-type held coins from the bottom.
+	/// </summary>
+	public int CountActiveConnectedCoinDefinitions()
+	{
+		CategoryBucket bucket = GetBucket( CarryBucketKind.Coin );
+		if ( !bucket.HasActive || bucket.Active.Definition == null )
+			return 0;
+
+		TreasureDefinition activeDef = bucket.Active.Definition;
+		int count = 1;
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+		{
+			if ( bucket.Held[ i ].Definition != activeDef )
+				break;
+			count++;
+		}
+
+		return count;
+	}
+
+	/// <summary>Active coin definition even when the Active mesh is still pending spawn.</summary>
+	public bool TryGetActiveCoinDefinition( out TreasureDefinition definition )
+	{
+		definition = null;
+		CategoryBucket bucket = GetBucket( CarryBucketKind.Coin );
+		if ( !bucket.HasActive || bucket.Active.Definition == null )
+			return false;
+
+		definition = bucket.Active.Definition;
+		return true;
+	}
+
+	void CaptureCoinExtractPose( CategoryBucket bucket, out Vector3 startWorldPos, out Quaternion startWorldRot )
+	{
+		startWorldPos = transform.position;
+		startWorldRot = transform.rotation;
+
+		Transform hold = bucket.HoldRoot;
+		if ( hold != null )
+		{
+			startWorldPos = hold.position;
+			startWorldRot = hold.rotation;
+			return;
+		}
+
+		if ( bucket.ActiveRoot != null )
+		{
+			startWorldPos = bucket.ActiveRoot.position;
+			startWorldRot = bucket.ActiveRoot.rotation;
+		}
 	}
 
 	/// <summary>
@@ -811,6 +1016,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		item.BeginHold( this );
 		item.SetMeshVisible( true );
 		item.SetHeldShadows( enabled: false );
+		item.SetHeldLighting( enabled: true );
 
 		CarriedEntry entry = new CarriedEntry
 		{
@@ -1607,6 +1813,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		item.BeginHold( this );
 		item.SetMeshVisible( true );
 		item.SetHeldShadows( enabled: false );
+		item.SetHeldLighting( enabled: true );
 
 		CarriedEntry entry = new CarriedEntry
 		{
@@ -1637,8 +1844,36 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( definition.suppressDiscoveryPopup )
 			return;
 
+		if ( ResolveBucket( definition ) != _selected )
+		{
+			string id = TreasureId( definition );
+			if ( !string.IsNullOrEmpty( id ) )
+				_newTreasureIds.Add( id );
+		}
+
 		EventBus.Publish( new TreasureDiscoveredEvent { Treasure = definition } );
 		DiscoveryToastUI.NotifyNewTreasure( definition );
+	}
+
+	/// <summary>General pouch is HUD-only while it has items; snap off it when emptied.</summary>
+	void EnsureSelectedPouchValid()
+	{
+		if ( _selected != CarryBucketKind.General )
+			return;
+		if ( GetBucketCount( CarryBucketKind.General ) > 0 )
+			return;
+
+		for ( int i = 0; i < (int)CarryBucketKind.General; i++ )
+		{
+			CarryBucketKind kind = (CarryBucketKind)i;
+			if ( GetBucketCount( kind ) <= 0 )
+				continue;
+
+			TrySetSelectedBucket( kind );
+			return;
+		}
+
+		TrySetSelectedBucket( CarryBucketKind.Coin );
 	}
 
 	float GetHeldCoinCylinderHeight( CategoryBucket bucket )
@@ -1704,6 +1939,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				rented.BeginHold( this );
 				rented.SetMeshVisible( true );
 				rented.SetHeldShadows( enabled: false );
+				rented.SetHeldLighting( enabled: true );
 				entry.Item = rented;
 				bucket.Active = entry;
 				rented.transform.SetParent( bucket.ActiveRoot, true );
@@ -1820,6 +2056,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		item.SetMeshVisible( true );
 		item.SetHeldShadows( enabled: true );
+		item.SetHeldLighting( enabled: false );
 		item.transform.SetParent( null, true );
 		item.BeginFlight();
 
@@ -2026,6 +2263,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		item.SetMeshVisible( true );
 		item.SetHeldShadows( enabled: true );
+		item.SetHeldLighting( enabled: false );
 		item.transform.SetParent( null, true );
 		item.BeginFlight();
 	}
@@ -2091,6 +2329,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		item.BeginHold( this );
 		item.ApplyHeldScale();
 		item.SetHeldShadows( enabled: false );
+		item.SetHeldLighting( enabled: true );
 
 		if ( isActive )
 		{
@@ -2397,6 +2636,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		t.SetParent( parent, false );
 		ApplyPose( t, GetLocalPose( bucket, active, heldIndex ), item.GetHeldLocalRotation( active ) );
 		item.SetHeldShadows( enabled: false );
+		item.SetHeldLighting( enabled: true );
 
 		CarriedEntry entry = active ? bucket.Active : bucket.Held[ heldIndex ];
 		if ( entry.ClusterId != 0 && entry.IsClusterAnchor )

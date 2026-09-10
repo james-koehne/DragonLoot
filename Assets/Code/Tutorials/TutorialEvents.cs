@@ -64,6 +64,12 @@ public struct MinecartCargoLoadedEvent
 	public TreasureItem Item;
 }
 
+/// <summary>Player sat in a drive minecart.</summary>
+public struct MinecartDriveEnteredEvent
+{
+	public MinecartInteractable Cart;
+}
+
 /// <summary>A cinematic presentation finished its rise/hold/fall (not an abort on disable).</summary>
 public struct CinematicPresentationEndedEvent
 {

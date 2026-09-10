@@ -59,12 +59,20 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	{
 		get
 		{
-			ResolvePickupTarget(
+			if ( !ResolvePickupTarget(
 				out GroundCoinStack stack,
 				out GroundGoldBarStack barStack,
 				out GemPyramidCluster pyramid,
 				out ITreasureDisplayStackOwner display,
-				out int displaySlot );
+				out int displaySlot ) )
+				return false;
+
+			// While carrying matching coins, prefer depositing onto a display over taking its stack.
+			if ( display != null
+				&& displaySlot >= 0
+				&& ShouldPreferDisplayPlaceOverPickup() )
+				return false;
+
 			return stack != null
 				|| barStack != null
 				|| pyramid != null
@@ -170,6 +178,48 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		return focus.CanInteract( _player );
 	}
 
+	/// <summary>
+	/// When aiming at a display stack while carrying depositable coins, charge place instead of pickup.
+	/// </summary>
+	bool ShouldPreferDisplayPlaceOverPickup()
+	{
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
+			return false;
+
+		if ( HasBlockingContextualFocus() )
+			return false;
+
+		if ( !TryResolveWholePlace(
+			out _,
+			out _,
+			out bool valid,
+			out _,
+			out _,
+			out _,
+			out ITreasureDisplayStackOwner display,
+			out int displaySlot,
+			out _ ) )
+			return false;
+
+		return valid && display != null && displaySlot >= 0;
+	}
+
+	int GetWholeStackPlaceQuantity( PlayerCarry carry )
+	{
+		if ( carry == null )
+			return 1;
+
+		if ( _placeDisplay is CoinDisplayTableInteractable )
+		{
+			int connected = carry.CountActiveConnectedCoinDefinitions();
+			if ( connected > 0 )
+				return connected;
+		}
+
+		return carry.GetBucketCount( carry.SelectedBucket );
+	}
+
 	void RefreshHoldSeconds()
 	{
 		PlayerCarry carry = _player != null ? _player.Carry : null;
@@ -193,7 +243,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		}
 		else if ( _mode == ChargeMode.Place )
 		{
-			quantity = carry.GetBucketCount( carry.SelectedBucket );
+			quantity = GetWholeStackPlaceQuantity( carry );
 		}
 		else if ( ResolvePickupTarget(
 			out GroundCoinStack stack,
@@ -221,16 +271,19 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 	void TryCategorySwitch( GameInput input )
 	{
-		if ( input.CategorySlots == null )
-			return;
-
 		PlayerCarry carry = _player != null ? _player.Carry : null;
 		if ( carry == null )
 			return;
 
-		InputActionSlotPressed( input, 0, CarryBucketKind.Coin, carry );
-		InputActionSlotPressed( input, 1, CarryBucketKind.Gem, carry );
-		InputActionSlotPressed( input, 2, CarryBucketKind.Artifact, carry );
+		if ( input.CategorySlots != null )
+		{
+			InputActionSlotPressed( input, 0, CarryBucketKind.Coin, carry );
+			InputActionSlotPressed( input, 1, CarryBucketKind.Gem, carry );
+			InputActionSlotPressed( input, 2, CarryBucketKind.Artifact, carry );
+		}
+
+		if ( input.CyclePouch != null && input.CyclePouch.WasPressedThisFrame() )
+			carry.CycleSelectedBucket();
 	}
 
 	static void InputActionSlotPressed( GameInput input, int index, CarryBucketKind kind, PlayerCarry carry )
@@ -637,6 +690,27 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( carry == null || display == null || slotIndex < 0 )
 			return;
 
+		if ( display is CoinDisplayTableInteractable coinTable )
+		{
+			if ( !carry.TryGetActiveCoinDefinition( out TreasureDefinition activeDef )
+				|| !coinTable.CanAcceptActiveConnectedCoinStack( activeDef )
+				|| !carry.TryExtractActiveConnectedCoinDefinitions(
+					out List<TreasureDefinition> connected,
+					out Vector3 matchStartPos,
+					out Quaternion matchStartRot )
+				|| connected.Count == 0 )
+				return;
+
+			PlaceCoinDefinitionsOnDisplaySlot(
+				carry,
+				display,
+				slotIndex,
+				connected,
+				matchStartPos,
+				matchStartRot );
+			return;
+		}
+
 		if ( !carry.TryExtractAllCoinDefinitions(
 			out List<TreasureDefinition> defs,
 			out Vector3 startPos,
@@ -645,24 +719,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		if ( defs.Count == 0 )
 			return;
-
-		if ( display is CoinDisplayTableInteractable coinTable )
-		{
-			if ( !coinTable.CanAcceptWholeCarriedCoinStack( defs ) )
-			{
-				carry.TryAbsorbDefinitionsAtHeldBottom( defs, CarryBucketKind.Coin, promoteIfEmpty: true );
-				return;
-			}
-
-			PlaceCoinDefinitionsOnDisplaySlot(
-				carry,
-				display,
-				slotIndex,
-				defs,
-				startPos,
-				startRot );
-			return;
-		}
 
 		if ( display is MixedDisplayTableInteractable mixedTable )
 		{
@@ -1462,13 +1518,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( hit.collider == null || carry == null )
 			return false;
 
-		if ( !carry.TryPeekActive( out TreasureItem probeItem ) || probeItem == null )
-			return false;
-
-		if ( probeItem.Definition == null || probeItem.Definition.category != TreasureCategory.Coin )
-			return false;
-
-		if ( !carry.TryCollectCoinDefinitions( DefinitionScratch ) )
+		if ( carry.SelectedBucket != CarryBucketKind.Coin
+			|| carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
 			return false;
 
 		PlacementQuery query = new PlacementQuery
@@ -1480,15 +1531,38 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		};
 
 		CoinDisplayTableInteractable coinTable = hit.collider.GetComponentInParent<CoinDisplayTableInteractable>();
-		if ( coinTable != null
-			&& coinTable.TryResolveWholeCoinPlaceSlot( probeItem, in query, out slotIndex, out position, out rotation ) )
+		if ( coinTable != null )
 		{
 			display = coinTable;
-			placeValid = coinTable.CanAcceptWholeCarriedCoinStack( DefinitionScratch )
-				&& coinTable.GetSlotCoinAppendCapacity( slotIndex, coinTable.AcceptedCoin ) > 0;
-			DefinitionScratch.Clear();
+			if ( carry.TryGetActiveCoinDefinition( out TreasureDefinition activeDef )
+				&& coinTable.CanAcceptActiveConnectedCoinStack( activeDef )
+				&& coinTable.TryResolveWholeCoinPlaceSlot(
+					activeDef,
+					in query,
+					out slotIndex,
+					out position,
+					out rotation ) )
+			{
+				placeValid = coinTable.GetSlotCoinAppendCapacity( slotIndex, activeDef ) > 0;
+			}
+			else
+			{
+				placeValid = false;
+				position = hit.point;
+				rotation = TreasureOrientation.FlattenUpright( Quaternion.identity );
+			}
+
 			return true;
 		}
+
+		if ( !carry.TryPeekActive( out TreasureItem probeItem )
+			|| probeItem == null
+			|| probeItem.Definition == null
+			|| probeItem.Definition.category != TreasureCategory.Coin )
+			return false;
+
+		if ( !carry.TryCollectCoinDefinitions( DefinitionScratch ) )
+			return false;
 
 		MixedDisplayTableInteractable mixed = hit.collider.GetComponentInParent<MixedDisplayTableInteractable>();
 		if ( mixed != null

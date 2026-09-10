@@ -22,6 +22,8 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 	bool _absorbingNearby;
 	bool _taking;
 	bool _destroying;
+	bool _streamingHidden;
+	bool _returningToPool;
 	BoxCollider _box;
 	TreasureDefinition _definition;
 
@@ -40,10 +42,22 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 	public Vector3 ContactPosition => transform.position;
 	public TreasureDefinition StackDefinition => _definition;
 	public IReadOnlyList<TreasureItem> Items => _items;
+	public bool IsReturningToPool => _returningToPool;
+	public bool CanWorldStream => !_destroying
+		&& !_taking
+		&& !_absorbingNearby
+		&& !HasInFlight
+		&& Count > 0;
 
 	public static IReadOnlyList<GroundGoldBarStack> ActiveStacks => All;
 
 	public static GroundGoldBarStack CreateAt( Vector3 contactPosition, Quaternion rotation )
+	{
+		WorldTreasureStreamer.EnsureExists();
+		return WorldTreasureStreamer.AcquireBarStack( contactPosition, rotation );
+	}
+
+	public static GroundGoldBarStack CreateUnpooled( Vector3 contactPosition, Quaternion rotation )
 	{
 		GameObject go = new GameObject( "GroundGoldBarStack" );
 		go.transform.SetPositionAndRotation( contactPosition, TreasureOrientation.FlattenUpright( rotation ) );
@@ -64,6 +78,8 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 			GroundGoldBarStack stack = All[ i ];
 			if ( stack == null || stack._destroying || stack.IsFull )
 				continue;
+			if ( stack._streamingHidden || stack._returningToPool )
+				continue;
 
 			Vector3 delta = stack.ContactPosition - worldPos;
 			float sq = delta.x * delta.x + delta.z * delta.z;
@@ -73,6 +89,10 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 			bestSq = sq;
 			best = stack;
 		}
+
+		if ( WorldTreasureStreamer.TryWakeNearestBarStack( worldPos, radius, bestSq, null, out GroundGoldBarStack woken, out float wokenSq )
+			&& ( best == null || wokenSq < bestSq ) )
+			return woken;
 
 		return best;
 	}
@@ -93,6 +113,8 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 			GroundGoldBarStack stack = All[ i ];
 			if ( stack == null || stack._destroying || stack.IsFull )
 				continue;
+			if ( stack._streamingHidden || stack._returningToPool )
+				continue;
 
 			Vector3 contact = stack.ContactPosition;
 			Vector3 to = contact - origin;
@@ -109,6 +131,17 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 			bestPerpSq = xzSq;
 			best = stack;
 		}
+
+		if ( WorldTreasureStreamer.TryWakeNearestBarStackAlongRay(
+			ray,
+			radius,
+			maxDistance,
+			bestPerpSq,
+			null,
+			out GroundGoldBarStack woken,
+			out float wokenPerpSq )
+			&& ( best == null || wokenPerpSq < bestPerpSq ) )
+			return woken;
 
 		return best;
 	}
@@ -203,16 +236,19 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 
 	void OnEnable()
 	{
+		_returningToPool = false;
 		if ( !All.Contains( this ) )
 			All.Add( this );
 		EnsureCollider();
 		EnsureCountFeedback();
 		SetInteractionName( "Gold Bar Stack" );
+		WorldTreasureStreamer.NotifyBarStackEnabled( this );
 	}
 
 	void OnDisable()
 	{
 		All.Remove( this );
+		WorldTreasureStreamer.NotifyBarStackDisabled( this );
 	}
 
 	void OnDestroy()
@@ -602,8 +638,9 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 			into.Add( member );
 		}
 
-		TakeBuffer.Clear();
-		Destroy( gameObject );
+		All.Remove( this );
+		WorldTreasureStreamer.EnsureExists();
+		WorldTreasureStreamer.ReleaseEmptyBarHost( this );
 		return into.Count > 0;
 	}
 
@@ -655,7 +692,107 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 			return;
 		_destroying = true;
 		All.Remove( this );
-		Destroy( gameObject );
+		WorldTreasureStreamer.EnsureExists();
+		WorldTreasureStreamer.ReleaseEmptyBarHost( this );
+	}
+
+	public void SetStreamingHidden( bool hidden )
+	{
+		_streamingHidden = hidden;
+		EnsureCollider();
+		if ( _box != null )
+			_box.enabled = !hidden;
+
+		for ( int i = 0; i < _items.Count; i++ )
+		{
+			TreasureItem item = _items[ i ];
+			if ( item != null )
+				item.SetStreamingHidden( hidden );
+		}
+	}
+
+	public void CaptureStreamingBars(
+		out TreasureDefinition definition,
+		out int count,
+		out Vector3 position,
+		out Quaternion rotation )
+	{
+		definition = _definition;
+		count = 0;
+		for ( int i = 0; i < _items.Count; i++ )
+		{
+			if ( _items[ i ] != null )
+				count++;
+		}
+
+		position = transform.position;
+		rotation = transform.rotation;
+	}
+
+	public void RestoreStreamingBars( TreasureDefinition definition, int count )
+	{
+		_destroying = false;
+		_streamingHidden = false;
+		_returningToPool = false;
+		_definition = definition;
+		ClearBarVisuals();
+		int clamped = Mathf.Clamp( count, 0, GoldBarStack.GroundMaxHeight );
+		for ( int i = 0; i < clamped; i++ )
+		{
+			TreasureItem item = TreasureItemFactory.SpawnSync( definition, transform.position, transform.rotation, null );
+			if ( item == null )
+				continue;
+			AbsorbSettledImmediate( item );
+		}
+
+		SetStreamingHidden( false );
+		RefreshCollider();
+	}
+
+	public void PrepareForPool()
+	{
+		_returningToPool = true;
+		_streamingHidden = false;
+		_taking = false;
+		_absorbingNearby = false;
+		ClearBarVisuals();
+		_definition = null;
+		EnsureCollider();
+		if ( _box != null )
+			_box.enabled = false;
+	}
+
+	public void ActivateFromPool( Vector3 position, Quaternion rotation )
+	{
+		_returningToPool = false;
+		_destroying = false;
+		_streamingHidden = false;
+		transform.SetParent( null, false );
+		transform.SetPositionAndRotation( position, TreasureOrientation.FlattenUpright( rotation ) );
+		if ( !gameObject.activeSelf )
+			gameObject.SetActive( true );
+		EnsureCollider();
+		SetStreamingHidden( false );
+		RefreshCollider();
+	}
+
+	void ClearBarVisuals()
+	{
+		for ( int i = 0; i < _items.Count; i++ )
+		{
+			if ( _items[ i ] != null )
+				TreasureItemFactory.Despawn( _items[ i ] );
+		}
+
+		_items.Clear();
+		for ( int i = 0; i < _inFlight.Count; i++ )
+		{
+			if ( _inFlight[ i ] != null )
+				TreasureItemFactory.Despawn( _inFlight[ i ] );
+		}
+
+		_inFlight.Clear();
+		_inFlightSlotIndices.Clear();
 	}
 
 	void PlayLandFeedback()

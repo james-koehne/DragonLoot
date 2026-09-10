@@ -36,7 +36,10 @@ public class GameMode : MonoBehaviour, IGameMode
 					_debugDefinition = ScriptableObject.CreateInstance<DebugDefinition>();
 					DebugDefinition authored = CoreDefinition.DebugDefinition;
 					if ( authored != null )
+					{
 						_debugDefinition.disableTutorials = authored.disableTutorials;
+						_debugDefinition.debugSpawnId = authored.debugSpawnId;
+					}
 				}
 				else
 				{
@@ -129,21 +132,20 @@ public class GameMode : MonoBehaviour, IGameMode
 				crosshair = interfacePrefab.AddComponent<CrosshairUI>();
 			crosshair.Setup();
 
+			CrosshairContextUI lookUi = interfacePrefab.GetComponentInChildren<CrosshairContextUI>( true );
+			if ( lookUi == null )
+			{
+				if ( crosshair != null )
+					lookUi = crosshair.gameObject.AddComponent<CrosshairContextUI>();
+				else
+					lookUi = interfacePrefab.AddComponent<CrosshairContextUI>();
+			}
+			lookUi.Setup();
+
 			InteractionContextUI contextUi = interfacePrefab.GetComponentInChildren<InteractionContextUI>( true );
 			if ( contextUi == null )
 				contextUi = interfacePrefab.AddComponent<InteractionContextUI>();
 			contextUi.Setup();
-
-			DisplayRequirementUI displayRequirementUi = interfacePrefab.GetComponentInChildren<DisplayRequirementUI>( true );
-			if ( displayRequirementUi == null )
-			{
-				Transform displayRequirements = interfacePrefab.transform.Find( "DisplayRequirements" );
-				if ( displayRequirements != null )
-					displayRequirementUi = displayRequirements.gameObject.AddComponent<DisplayRequirementUI>();
-				else
-					displayRequirementUi = interfacePrefab.AddComponent<DisplayRequirementUI>();
-			}
-			displayRequirementUi.Setup();
 
 			InteractionProgressRingUI progressRing = interfacePrefab.GetComponentInChildren<InteractionProgressRingUI>( true );
 			if ( progressRing == null )
@@ -190,6 +192,21 @@ public class GameMode : MonoBehaviour, IGameMode
 			if ( pouchSummary != null )
 				pouchSummary.Setup();
 
+			PouchBarUI pouchBar = interfacePrefab.GetComponentInChildren<PouchBarUI>( true );
+			if ( pouchBar == null )
+			{
+				Transform existingBar = interfacePrefab.transform.Find( "PouchBar" );
+				GameObject barGo = existingBar != null
+					? existingBar.gameObject
+					: new GameObject( "PouchBar", typeof( RectTransform ), typeof( CanvasGroup ), typeof( PouchBarUI ) );
+				if ( existingBar == null )
+					barGo.transform.SetParent( interfacePrefab.transform, false );
+				pouchBar = barGo.GetComponent<PouchBarUI>();
+				if ( pouchBar == null )
+					pouchBar = barGo.AddComponent<PouchBarUI>();
+			}
+			pouchBar.Setup();
+
 			TutorialPopupUI tutorialPopup = interfacePrefab.GetComponentInChildren<TutorialPopupUI>( true );
 			if ( tutorialPopup != null )
 				tutorialPopup.Setup();
@@ -215,11 +232,31 @@ public class GameMode : MonoBehaviour, IGameMode
 			else
 				Debug.LogWarning( "GameMode: DiscoveryToastUI missing on Interface prefab." );
 
+			UnlockRewardToastUI unlockToast = interfacePrefab.GetComponentInChildren<UnlockRewardToastUI>( true );
+			if ( unlockToast == null )
+			{
+				Transform existingUnlock = interfacePrefab.transform.Find( "UnlockRewardToast" );
+				GameObject unlockGo = existingUnlock != null
+					? existingUnlock.gameObject
+					: new GameObject( "UnlockRewardToast", typeof( RectTransform ), typeof( CanvasGroup ), typeof( UnlockRewardToastUI ) );
+				if ( existingUnlock == null )
+					unlockGo.transform.SetParent( interfacePrefab.transform, false );
+				unlockToast = unlockGo.GetComponent<UnlockRewardToastUI>();
+				if ( unlockToast == null )
+					unlockToast = unlockGo.AddComponent<UnlockRewardToastUI>();
+			}
+
+			if ( unlockToast != null )
+				unlockToast.Setup();
+			else
+				Debug.LogWarning( "GameMode: UnlockRewardToastUI missing on Interface prefab." );
+
 			TutorialManager tutorials = TutorialManager.EnsureExists();
 			tutorials.StartCatalog( tutorialPopup );
 
 			WorldEventSystem worldEvents = WorldEventSystem.EnsureExists();
 			worldEvents.StartCatalog();
+			DebugSpawnRegistry.ApplySkipIntroIfSelected();
 			QuestObjectiveOutline.EnsureExists();
 		}
 

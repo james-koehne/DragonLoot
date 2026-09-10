@@ -152,6 +152,11 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 	const float StopSpeedEpsilon = 0.04f;
 	const float StopFeedbackDebounce = 0.18f;
+	const float UnboundBindRetry = 0.5f;
+
+	float _unbindRetryTimer;
+	Transform _visualRoot;
+	Collider _ownCollider;
 
 	public static IReadOnlyList<MinecartInteractable> ActiveCarts => All;
 
@@ -290,6 +295,8 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 		EnsureCargoRoot();
 		RebuildGrid();
+		_visualRoot = transform.Find( "VisualRoot" );
+		_ownCollider = GetComponent<Collider>();
 		if ( IsDriveCart )
 			DisableDriveCargo();
 		if ( string.IsNullOrEmpty( InteractionName ) || InteractionName == "Interactable" )
@@ -335,10 +342,26 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !IsConsistLead )
 			return;
 
+		if ( !_bound )
+		{
+			_unbindRetryTimer -= Time.deltaTime;
+			if ( _unbindRetryTimer <= 0f )
+			{
+				_unbindRetryTimer = UnboundBindRetry;
+				EnsureBoundTrack();
+			}
+		}
+
+		bool simulating = _recalling || _drivePowered || Mathf.Abs( _coastSpeed ) >= StopSpeedEpsilon;
+		if ( !simulating )
+		{
+			TickStopFeedback();
+			return;
+		}
+
 		TickRecall( Time.deltaTime );
 		TickDrive( Time.deltaTime );
 		TickCoast( Time.deltaTime );
-		SnapFollowers();
 		TickStopFeedback();
 	}
 
@@ -376,14 +399,99 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( IsDriveCart )
 		{
 			PlayerMinecartDrive drive = player.MinecartDrive;
-			if ( drive != null )
-				drive.TryToggle( this );
-			return;
+			if ( drive != null && drive.IsDriving )
+				return;
+
+			if ( WantsDriveEnter( player ) )
+			{
+				if ( drive != null )
+					drive.TryToggle( this );
+				return;
+			}
 		}
 
 		PlayerMinecartPush push = player.MinecartPush;
 		if ( push != null )
 			push.BeginPress( this );
+	}
+
+	/// <summary>
+	/// Drive carts: side (and top) aim enters; front/back aim shoves / hold-pushes.
+	/// </summary>
+	public bool WantsDriveEnter( PlayerController player )
+	{
+		if ( !IsDriveCart )
+			return false;
+
+		RaycastHit hit;
+		if ( player != null
+			&& player.Interaction != null
+			&& player.Interaction.TryGetLastHit( out hit )
+			&& IsOwnCollider( hit.collider ) )
+			return IsDriveEnterFace( hit );
+
+		Vector3 reference = player != null ? player.transform.position : transform.position + transform.right;
+		return IsDriveEnterFromWorldPoint( reference );
+	}
+
+	public void AppendOutlineRenderers( List<Renderer> destination )
+	{
+		if ( destination == null )
+			return;
+
+		Transform root = _visualRoot != null ? _visualRoot : transform;
+		if ( root == null )
+			return;
+
+		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < renderers.Length; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null || !renderer.enabled )
+				continue;
+			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+				continue;
+			if ( renderer.sharedMaterial == null )
+				continue;
+			if ( cargoRoot != null && cargoRoot != transform && renderer.transform.IsChildOf( cargoRoot ) )
+				continue;
+			if ( renderer.GetComponentInParent<TreasureItem>() != null )
+				continue;
+			if ( renderer.GetComponentInParent<GroundCoinStack>() != null )
+				continue;
+
+			destination.Add( renderer );
+		}
+	}
+
+	bool IsOwnCollider( Collider collider )
+	{
+		if ( collider == null )
+			return false;
+
+		return collider.transform == transform || collider.transform.IsChildOf( transform );
+	}
+
+	bool IsDriveEnterFace( RaycastHit hit )
+	{
+		Vector3 localNormal = transform.InverseTransformDirection( hit.normal );
+		float ax = Mathf.Abs( localNormal.x );
+		float ay = Mathf.Abs( localNormal.y );
+		float az = Mathf.Abs( localNormal.z );
+		if ( ax + ay + az < 0.0001f )
+			return IsDriveEnterFromWorldPoint( hit.point );
+
+		return az < ax || az < ay;
+	}
+
+	bool IsDriveEnterFromWorldPoint( Vector3 worldPoint )
+	{
+		Vector3 local = transform.InverseTransformPoint( worldPoint );
+		BoxCollider box = _ownCollider as BoxCollider;
+		if ( box != null )
+			local -= box.center;
+
+		return Mathf.Abs( local.x ) >= Mathf.Abs( local.z );
 	}
 
 	public void ReleaseTreasure( TreasureItem item )
@@ -1054,6 +1162,9 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 				continue;
 
 			float dist = track.WrapDistance( _distanceAlongTrack - spacing * ( i + 1 ) );
+			if ( Mathf.Abs( follower.DistanceAlongTrack - dist ) < 0.00001f )
+				continue;
+
 			follower.SetDistanceAlongTrack( dist );
 		}
 	}
@@ -1171,6 +1282,19 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		onDriveExitFeedbacks = exit;
 	}
 
+	public void SetDriveSeatCollidersEnabled( bool enabled )
+	{
+		Collider[] colliders = GetComponentsInChildren<Collider>( true );
+		for ( int i = 0; i < colliders.Length; i++ )
+		{
+			Collider col = colliders[ i ];
+			if ( col == null || col.isTrigger )
+				continue;
+
+			col.enabled = enabled;
+		}
+	}
+
 	public void PlayDriveEnterFeedback()
 	{
 		PlayFeedback( onDriveEnterFeedbacks );
@@ -1258,9 +1382,6 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		transform.SetPositionAndRotation( position, rotation );
 		if ( runtime )
 		{
-			if ( _body == null )
-				_body = GetComponent<Rigidbody>();
-
 			if ( _body != null )
 			{
 				_body.position = position;

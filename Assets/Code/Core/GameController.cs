@@ -128,6 +128,7 @@ public class GameController : MonoBehaviour
 	public void RespawnPlayer()
 	{
 		PlacePlayerAtSpawn();
+		DebugSpawnRegistry.ApplySkipIntroIfSelected();
 	}
 
 	void PlacePlayerAtSpawn()
@@ -139,6 +140,12 @@ public class GameController : MonoBehaviour
 		if ( TryPlacePlayerAtSceneCamera() )
 			return;
 #endif
+
+		if ( DebugSpawnRegistry.TryGetSelectedPose( out Vector3 debugPosition, out Quaternion debugRotation ) )
+		{
+			PlayerController.TeleportTo( debugPosition, debugRotation );
+			return;
+		}
 
 		LevelSceneMarkers markers = LevelSceneMarkers.Instance;
 		if ( markers == null || markers.playerSpawn == null )

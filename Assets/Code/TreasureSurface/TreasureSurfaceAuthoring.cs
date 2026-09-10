@@ -309,6 +309,16 @@ public class TreasureSurfaceAuthoring : MonoBehaviour
 		return true;
 	}
 
+	/// <summary>
+	/// Fast path for map bake: traversable paint buffer without per-cell lookups.
+	/// </summary>
+	public bool TryGetPaintTraversable( out byte[] traversable, out int cellsX, out int cellsZ )
+	{
+		if ( !TryGetPaintArrays( out traversable, out _, out _, out cellsX, out cellsZ ) )
+			return false;
+		return traversable != null;
+	}
+
 #if UNITY_EDITOR
 	public void EditorGetPaintArrays( out byte[] traversable, out byte[] materials, out int cellsX, out int cellsZ )
 	{

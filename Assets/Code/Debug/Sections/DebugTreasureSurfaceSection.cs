@@ -24,7 +24,6 @@ public class DebugTreasureSurfaceSection : DebugOverlaySection
 		GUILayout.Label( $"Active: {world.ActiveChunkCount}  Frozen: {world.SleepingChunkCount}  Dirty: {world.DirtyChunkCount}" );
 		GUILayout.Label( $"Rebuild: {world.LastChunkRebuildMs:0.00} ms" );
 		GUILayout.Label( $"Surface tick: {world.LastSurfaceUpdateMs:0.00} ms" );
-		GUILayout.Label( $"GPU upload: {world.LastGpuUploadMs:0.00} ms" );
 
 		TreasureSurfaceSimulator sim = world.Simulator;
 		if ( sim != null )

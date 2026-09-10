@@ -10,61 +10,123 @@ public static class TreasureSurfaceRebuild
 		if ( chunk == null || chunk.SmoothedHeight == null || def == null )
 			return;
 
+		RebuildDerived( chunk, def, cellSize, 0, chunk.Resolution - 1, 0, chunk.Resolution - 1 );
+	}
+
+	public static void RebuildDerived(
+		TreasureChunk chunk,
+		TreasureSurfaceDefinition def,
+		float cellSize,
+		int minX,
+		int maxX,
+		int minZ,
+		int maxZ )
+	{
+		if ( chunk == null || chunk.SmoothedHeight == null || def == null )
+			return;
+
 		int res = chunk.Resolution;
+		if ( res <= 0 )
+			return;
+
+		ClampRect( res, ref minX, ref maxX, ref minZ, ref maxZ );
+
+		// Pad by 1 so finite differences at the dirty edge stay correct.
+		int padMinX = minX > 0 ? minX - 1 : 0;
+		int padMaxX = maxX < res - 1 ? maxX + 1 : res - 1;
+		int padMinZ = minZ > 0 ? minZ - 1 : 0;
+		int padMaxZ = maxZ < res - 1 ? maxZ + 1 : res - 1;
+
 		float invCell = 1f / Mathf.Max( 0.0001f, cellSize );
+		float halfInvCell = invCell * 0.5f;
 		float stableThresh = def.stableSlopeThreshold;
+		float invStable = 1f / Mathf.Max( 0.0001f, stableThresh );
 
-		for ( int z = 0; z < res; z++ )
+		float[] height = chunk.SmoothedHeight;
+		float[] slopeArr = chunk.Slope;
+		float[] normalX = chunk.NormalX;
+		float[] normalZ = chunk.NormalZ;
+		float[] flowX = chunk.FlowX;
+		float[] flowZ = chunk.FlowZ;
+		byte[] material = chunk.Material;
+		byte[] paintMaterial = chunk.PaintMaterial;
+		byte[] paintTraversable = chunk.PaintTraversable;
+		byte[] flagsArr = chunk.Flags;
+
+		for ( int z = padMinZ; z <= padMaxZ; z++ )
 		{
-			for ( int x = 0; x < res; x++ )
+			int row = z * res;
+			int rowN = z > 0 ? ( z - 1 ) * res : row;
+			int rowS = z < res - 1 ? ( z + 1 ) * res : row;
+			for ( int x = padMinX; x <= padMaxX; x++ )
 			{
-				int i = chunk.Index( x, z );
-				int xL = Mathf.Max( 0, x - 1 );
-				int xR = Mathf.Min( res - 1, x + 1 );
-				int zD = Mathf.Max( 0, z - 1 );
-				int zU = Mathf.Min( res - 1, z + 1 );
+				int i = row + x;
+				int iL = x > 0 ? i - 1 : i;
+				int iR = x < res - 1 ? i + 1 : i;
 
-				float hL = chunk.SmoothedHeight[ chunk.Index( xL, z ) ];
-				float hR = chunk.SmoothedHeight[ chunk.Index( xR, z ) ];
-				float hD = chunk.SmoothedHeight[ chunk.Index( x, zD ) ];
-				float hU = chunk.SmoothedHeight[ chunk.Index( x, zU ) ];
+				float hL = height[ iL ];
+				float hR = height[ iR ];
+				float hD = height[ rowN + x ];
+				float hU = height[ rowS + x ];
 
-				float gx = ( hR - hL ) * invCell * 0.5f;
-				float gz = ( hU - hD ) * invCell * 0.5f;
+				float gx = ( hR - hL ) * halfInvCell;
+				float gz = ( hU - hD ) * halfInvCell;
 				float slope = Mathf.Sqrt( gx * gx + gz * gz );
 
-				chunk.Slope[ i ] = slope;
-				chunk.NormalX[ i ] = -gx;
-				chunk.NormalZ[ i ] = -gz;
+				slopeArr[ i ] = slope;
+				normalX[ i ] = -gx;
+				normalZ[ i ] = -gz;
 
-				float flowMag = slope;
-				if ( flowMag > 0.0001f )
+				if ( slope > 0.0001f )
 				{
-					// Full downhill unit vector; magnitude encodes how steep (not clamped away on mid slopes).
-					float strength = Mathf.Clamp01( slope / Mathf.Max( 0.0001f, def.stableSlopeThreshold ) );
-					strength = Mathf.Min( 1f, strength );
-					chunk.FlowX[ i ] = -gx / flowMag * strength;
-					chunk.FlowZ[ i ] = -gz / flowMag * strength;
+					float strength = slope * invStable;
+					if ( strength > 1f )
+						strength = 1f;
+					float invMag = 1f / slope;
+					flowX[ i ] = -gx * invMag * strength;
+					flowZ[ i ] = -gz * invMag * strength;
 				}
 				else
 				{
-					chunk.FlowX[ i ] = 0f;
-					chunk.FlowZ[ i ] = 0f;
+					flowX[ i ] = 0f;
+					flowZ[ i ] = 0f;
 				}
 
-				chunk.Material[ i ] = chunk.PaintMaterial[ i ];
+				material[ i ] = paintMaterial[ i ];
 
 				byte flags = 0;
-				if ( chunk.PaintTraversable[ i ] != 0 )
+				if ( paintTraversable[ i ] != 0 )
 					flags |= ( byte )TreasureCellFlags.Traversable;
 				if ( slope <= stableThresh )
 					flags |= ( byte )TreasureCellFlags.Stable;
-				chunk.Flags[ i ] = flags;
+				flagsArr[ i ] = flags;
 			}
 		}
 
 		chunk.Version++;
-		chunk.Dirty = false;
-		chunk.MarkGpuDirtyFull();
+		chunk.ClearDirty();
+	}
+
+	static void ClampRect( int res, ref int minX, ref int maxX, ref int minZ, ref int maxZ )
+	{
+		if ( minX < 0 )
+			minX = 0;
+		if ( minZ < 0 )
+			minZ = 0;
+		if ( maxX >= res )
+			maxX = res - 1;
+		if ( maxZ >= res )
+			maxZ = res - 1;
+		if ( minX > maxX )
+		{
+			minX = 0;
+			maxX = res - 1;
+		}
+
+		if ( minZ > maxZ )
+		{
+			minZ = 0;
+			maxZ = res - 1;
+		}
 	}
 }

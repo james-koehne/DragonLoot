@@ -7,55 +7,84 @@ public static class TreasureSurfaceRelax
 {
 	public static void Relax( TreasureChunk chunk, int iterations )
 	{
+		if ( chunk == null || chunk.Height == null )
+			return;
+
+		Relax( chunk, iterations, 0, chunk.Resolution - 1, 0, chunk.Resolution - 1 );
+	}
+
+	public static void Relax(
+		TreasureChunk chunk,
+		int iterations,
+		int minX,
+		int maxX,
+		int minZ,
+		int maxZ )
+	{
 		if ( chunk == null || chunk.Height == null || iterations <= 0 )
 		{
-			CopyHeightToSmoothed( chunk );
+			CopyHeightToSmoothed( chunk, minX, maxX, minZ, maxZ );
 			return;
 		}
 
 		int res = chunk.Resolution;
+		if ( res <= 0 )
+			return;
+
+		ClampRect( res, ref minX, ref maxX, ref minZ, ref maxZ );
+		int pad = iterations;
+		int padMinX = minX - pad;
+		int padMaxX = maxX + pad;
+		int padMinZ = minZ - pad;
+		int padMaxZ = maxZ + pad;
+		ClampRect( res, ref padMinX, ref padMaxX, ref padMinZ, ref padMaxZ );
+
 		float[] a = chunk.Height;
 		float[] b = chunk.SmoothedHeight;
-		System.Array.Copy( a, b, a.Length );
+		float[] baseHeight = chunk.BaseHeight;
+		CopyRect( a, b, res, padMinX, padMaxX, padMinZ, padMaxZ );
 
 		for ( int iter = 0; iter < iterations; iter++ )
 		{
-			for ( int z = 0; z < res; z++ )
+			for ( int z = padMinZ; z <= padMaxZ; z++ )
 			{
-				for ( int x = 0; x < res; x++ )
+				int row = z * res;
+				int rowN = z > 0 ? ( z - 1 ) * res : row;
+				int rowS = z < res - 1 ? ( z + 1 ) * res : row;
+				for ( int x = padMinX; x <= padMaxX; x++ )
 				{
-					int i = chunk.Index( x, z );
+					int i = row + x;
 					float h = a[ i ];
 					float sum = h;
 					int count = 1;
 
 					if ( x > 0 )
 					{
-						sum += a[ chunk.Index( x - 1, z ) ];
+						sum += a[ i - 1 ];
 						count++;
 					}
 
 					if ( x < res - 1 )
 					{
-						sum += a[ chunk.Index( x + 1, z ) ];
+						sum += a[ i + 1 ];
 						count++;
 					}
 
 					if ( z > 0 )
 					{
-						sum += a[ chunk.Index( x, z - 1 ) ];
+						sum += a[ rowN + x ];
 						count++;
 					}
 
 					if ( z < res - 1 )
 					{
-						sum += a[ chunk.Index( x, z + 1 ) ];
+						sum += a[ rowS + x ];
 						count++;
 					}
 
 					float avg = sum / count;
 					float next = Mathf.Lerp( h, avg, 0.35f );
-					float floor = chunk.BaseHeight[ i ];
+					float floor = baseHeight[ i ];
 					b[ i ] = next < floor ? floor : next;
 				}
 			}
@@ -65,15 +94,11 @@ public static class TreasureSurfaceRelax
 			b = swap;
 		}
 
-		// Ensure both Height and SmoothedHeight hold the relaxed result.
+		// Ensure both Height and SmoothedHeight hold the relaxed result in the padded rect.
 		if ( a == chunk.Height )
-		{
-			System.Array.Copy( chunk.Height, chunk.SmoothedHeight, chunk.Height.Length );
-		}
+			CopyRect( chunk.Height, chunk.SmoothedHeight, res, padMinX, padMaxX, padMinZ, padMaxZ );
 		else
-		{
-			System.Array.Copy( chunk.SmoothedHeight, chunk.Height, chunk.Height.Length );
-		}
+			CopyRect( chunk.SmoothedHeight, chunk.Height, res, padMinX, padMaxX, padMinZ, padMaxZ );
 	}
 
 	public static void CopyHeightToSmoothed( TreasureChunk chunk )
@@ -81,6 +106,63 @@ public static class TreasureSurfaceRelax
 		if ( chunk == null || chunk.Height == null )
 			return;
 
-		System.Array.Copy( chunk.Height, chunk.SmoothedHeight, chunk.Height.Length );
+		CopyHeightToSmoothed( chunk, 0, chunk.Resolution - 1, 0, chunk.Resolution - 1 );
+	}
+
+	public static void CopyHeightToSmoothed(
+		TreasureChunk chunk,
+		int minX,
+		int maxX,
+		int minZ,
+		int maxZ )
+	{
+		if ( chunk == null || chunk.Height == null )
+			return;
+
+		int res = chunk.Resolution;
+		if ( res <= 0 )
+			return;
+
+		ClampRect( res, ref minX, ref maxX, ref minZ, ref maxZ );
+		if ( minX == 0 && maxX == res - 1 && minZ == 0 && maxZ == res - 1 )
+		{
+			System.Array.Copy( chunk.Height, chunk.SmoothedHeight, chunk.Height.Length );
+			return;
+		}
+
+		CopyRect( chunk.Height, chunk.SmoothedHeight, res, minX, maxX, minZ, maxZ );
+	}
+
+	static void CopyRect( float[] src, float[] dst, int res, int minX, int maxX, int minZ, int maxZ )
+	{
+		int width = maxX - minX + 1;
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			int row = z * res + minX;
+			System.Array.Copy( src, row, dst, row, width );
+		}
+	}
+
+	static void ClampRect( int res, ref int minX, ref int maxX, ref int minZ, ref int maxZ )
+	{
+		if ( minX < 0 )
+			minX = 0;
+		if ( minZ < 0 )
+			minZ = 0;
+		if ( maxX >= res )
+			maxX = res - 1;
+		if ( maxZ >= res )
+			maxZ = res - 1;
+		if ( minX > maxX )
+		{
+			minX = 0;
+			maxX = res - 1;
+		}
+
+		if ( minZ > maxZ )
+		{
+			minZ = 0;
+			maxZ = res - 1;
+		}
 	}
 }

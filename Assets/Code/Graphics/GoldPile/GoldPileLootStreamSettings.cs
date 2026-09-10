@@ -161,6 +161,46 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	[Min( 0f )]
 	public float propStreamHysteresisMeters = 2f;
 
+	[Header( "World clutter streaming (stacks / loose coins)" )]
+	[Tooltip( "When true, loose world coins are never distance-hidden." )]
+	public bool coinNeverCull = false;
+
+	[Tooltip( "XZ meters for a live GroundCoinStack / GroundGoldBarStack GameObject. Beyond this the stack is a data record only." )]
+	[Min( 0.1f )]
+	public float stackResidentDistance = 20f;
+
+	[Tooltip( "Coin stacks with more coins than this use largeStackResidentDistance." )]
+	[Min( 1 )]
+	public int largeStackCountThreshold = 50;
+
+	[Tooltip( "XZ meters for live GroundCoinStacks taller than largeStackCountThreshold." )]
+	[Min( 0.1f )]
+	public float largeStackResidentDistance = 48f;
+
+	[Tooltip( "Hard cap on live streamable stack GameObjects (coin + gold-bar combined). Steal farthest when full." )]
+	[Min( 8 )]
+	public int stackInstancePoolSize = 64;
+
+	[Tooltip( "XZ meters for a live loose coin visual. Beyond this the coin is a data record only." )]
+	[Min( 0.1f )]
+	public float coinResidentDistance = 20f;
+
+	[Tooltip( "Working-set cap for pooled loose-coin visuals (TreasureItemFactory)." )]
+	[Min( 8 )]
+	public int coinVisualPoolSize = 128;
+
+	[Tooltip( "Same-frame renderer/collider hides per tick before records are extracted." )]
+	[Min( 1 )]
+	public int streamEvictBudget = 16;
+
+	[Tooltip( "Stack / loose-coin GameObject wakes (binds) per tick." )]
+	[Min( 1 )]
+	public int streamWakeBudget = 8;
+
+	[Tooltip( "Pool returns (record extract) per tick after a hide." )]
+	[Min( 1 )]
+	public int streamExtractBudget = 8;
+
 	[Header( "Debug" )]
 	public bool drawChunkGizmos = true;
 
@@ -279,6 +319,8 @@ public class GoldPileLootStreamSettings : ScriptableObject
 
 	public bool NeverCullsProp( TreasureCategory category )
 	{
+		if ( category == TreasureCategory.Coin )
+			return coinNeverCull;
 		if ( category == TreasureCategory.Gem )
 			return gemNeverCull;
 		if ( IsArtifactStreamBucket( category ) )
@@ -288,11 +330,38 @@ public class GoldPileLootStreamSettings : ScriptableObject
 
 	public float GetPropMaxStreamDistance( TreasureCategory category )
 	{
+		if ( category == TreasureCategory.Coin )
+			return coinResidentDistance;
 		if ( category == TreasureCategory.Gem )
 			return gemMaxStreamDistance;
 		if ( IsArtifactStreamBucket( category ) )
 			return artifactMaxStreamDistance;
 		return float.MaxValue;
+	}
+
+	public float GetStackMaxStreamDistance( int coinCount )
+	{
+		float max = Mathf.Max( 0.1f, stackResidentDistance );
+		if ( coinCount > largeStackCountThreshold )
+			max = Mathf.Max( max, largeStackResidentDistance );
+		return max;
+	}
+
+	public bool IsStackInStreamRange( float distanceMetersSqr, bool currentlyResident )
+	{
+		return IsStackInStreamRange( distanceMetersSqr, currentlyResident, coinCount: 0 );
+	}
+
+	public bool IsStackInStreamRange( float distanceMetersSqr, bool currentlyResident, int coinCount )
+	{
+		float max = GetStackMaxStreamDistance( coinCount );
+		if ( currentlyResident )
+		{
+			float exit = max + Mathf.Max( 0f, propStreamHysteresisMeters );
+			return distanceMetersSqr <= exit * exit;
+		}
+
+		return distanceMetersSqr <= max * max;
 	}
 
 	/// <summary>

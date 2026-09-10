@@ -170,6 +170,82 @@ public static class CoinFlipMotion
 	}
 
 	/// <summary>
+	/// World-space flip for a single item. Uses locals so concurrent flights do not allocate arrays.
+	/// </summary>
+	public static IEnumerator AnimateWorldFlip(
+		TreasureItem item,
+		Vector3 endPos,
+		Quaternion endRot,
+		float duration,
+		bool useHopThenArc,
+		float hopHeight,
+		float riseFraction,
+		float secondaryArcHeight,
+		float spins,
+		Vector3 apexOffset )
+	{
+		if ( item == null )
+			yield break;
+
+		Transform t = item.transform;
+		t.SetParent( null, true );
+		item.ApplyWorldScale();
+
+		Rigidbody body = item.Body;
+		if ( body != null )
+		{
+			body.isKinematic = true;
+			body.detectCollisions = false;
+			body.useGravity = false;
+			body.linearVelocity = Vector3.zero;
+			body.angularVelocity = Vector3.zero;
+		}
+
+		Vector3 startPos = t.position;
+		Quaternion startRot = t.rotation;
+		Vector3 startScale = t.localScale;
+		Vector3 endScale = item.GetWorldScale();
+		float arcHeight = hopHeight;
+
+		duration = Mathf.Max( 0.05f, duration );
+		float elapsed = 0f;
+		while ( elapsed < duration )
+		{
+			elapsed += Time.deltaTime;
+			float u = Mathf.Clamp01( elapsed / duration );
+			float scaleEase = SmoothStep( u );
+
+			if ( item == null )
+				yield break;
+
+			t = item.transform;
+			if ( useHopThenArc )
+			{
+				t.position = EvaluateHopThenArcPosition(
+					startPos,
+					endPos,
+					u,
+					hopHeight,
+					riseFraction,
+					secondaryArcHeight,
+					apexOffset );
+			}
+			else
+				t.position = EvaluateArcPosition( startPos, endPos, u, arcHeight );
+
+			t.rotation = EvaluateFlipRotation( startRot, endRot, startPos, endPos, u, spins );
+			t.localScale = Vector3.Lerp( startScale, endScale, scaleEase );
+			yield return null;
+		}
+
+		if ( item == null )
+			yield break;
+
+		item.transform.SetPositionAndRotation( endPos, endRot );
+		item.ApplyWorldScale();
+	}
+
+	/// <summary>
 	/// World-space flip for a cluster of coins to their end poses. Caller settles ownership after.
 	/// </summary>
 	public static IEnumerator AnimateWorldFlips(

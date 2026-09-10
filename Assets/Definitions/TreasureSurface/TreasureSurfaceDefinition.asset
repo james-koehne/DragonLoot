@@ -16,7 +16,7 @@ MonoBehaviour:
   worldSizeX: 512
   worldSizeZ: 512
   chunkSize: 8
-  cellsPerChunk: 64
+  cellsPerChunk: 32
   baseHeight: 1
   minWorldY: -16
   maxWorldY: 128
@@ -75,6 +75,10 @@ MonoBehaviour:
   gemHopMin: 0.8
   gemHopMax: 4.5
   artifactMaxBounces: 1
+  throwPileMaxBounces: 3
+  throwPileBounceRestitution: 0.45
+  throwBoundaryMaxBounces: 4
+  throwBoundaryBounceRestitution: 0.55
   artifactBounceRestitution: 0.08
   artifactHopMin: 2
   artifactHopMax: 3.2

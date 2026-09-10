@@ -31,7 +31,7 @@ MonoBehaviour:
   coinFlipSpins: 1.25
   itemArcHeight: 0.08
   bobAmplitude: 0.025
-  bobFrequency: 8
+  bobFrequency: 16
   bobFullSpeed: 4
   idleBobScale: 0.15
   swayAmplitude: {x: 0.02, y: 0.01, z: 0.015}
@@ -47,7 +47,9 @@ MonoBehaviour:
   pouchSummaryFadeIn: 0.2
   pouchSummaryHold: 2
   pouchSummaryFadeOut: 0.35
+  pouchNewItemAcknowledgeSeconds: 1.5
   heldVisualMaxCoins: 128
+  heldReflectionFloor: 0.28
   wholeStackHoldSeconds: 2
   wholeStackHoldCurve:
     serializedVersion: 2

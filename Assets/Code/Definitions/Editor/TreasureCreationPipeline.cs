@@ -121,6 +121,8 @@ public static class TreasureCreationPipeline
 				return "Keys";
 			case TreasureCategory.Chest:
 				return "Chests";
+			case TreasureCategory.Container:
+				return "Containers";
 			default:
 				return "Artifacts";
 		}
@@ -228,22 +230,19 @@ public static class TreasureCreationPipeline
 				break;
 
 			case TreasureCategory.Chest:
+				ApplyChestLikeDefaults( request );
 				request.ExclusiveCarry = true;
-				request.UsesHeavyThrow = true;
-				request.CanStack = false;
-				request.RigidbodyMass = 2f;
-				request.Drag = 0.8f;
-				request.AngularDrag = 0.8f;
-				request.AutoToppleStrength = 0f;
-				request.PickupRadius = 0.6f;
-				request.CollideWithPlayerOnPile = true;
-				request.WorldScale = Vector3.one * 0.55f;
-				request.HeldScale = Vector3.one * 0.35f;
-				request.CoinThickness = 0.4f;
-				request.CartGridSize = new Vector2Int( 2, 2 );
-				request.Value = 150;
-				request.Weight = 10;
-				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
+				request.ChestStartsLocked = true;
+				request.ChestDestroyOnOpen = false;
+				if ( string.IsNullOrEmpty( request.Variant ) )
+					request.Variant = request.ChestType;
+				break;
+
+			case TreasureCategory.Container:
+				ApplyChestLikeDefaults( request );
+				request.ExclusiveCarry = false;
+				request.ChestStartsLocked = false;
+				request.ChestDestroyOnOpen = true;
 				if ( string.IsNullOrEmpty( request.Variant ) )
 					request.Variant = request.ChestType;
 				break;
@@ -266,6 +265,30 @@ public static class TreasureCreationPipeline
 				request.ConvertArtifactMaterials = true;
 				break;
 		}
+	}
+
+	static void ApplyChestLikeDefaults( Request request )
+	{
+		request.UsesHeavyThrow = true;
+		request.CanStack = false;
+		request.RigidbodyMass = 2f;
+		request.Drag = 0.8f;
+		request.AngularDrag = 0.8f;
+		request.AutoToppleStrength = 0f;
+		request.PickupRadius = 0.6f;
+		request.CollideWithPlayerOnPile = true;
+		request.WorldScale = Vector3.one * 0.55f;
+		request.HeldScale = Vector3.one * 0.35f;
+		request.CoinThickness = 0.4f;
+		request.CartGridSize = new Vector2Int( 2, 2 );
+		request.Value = 150;
+		request.Weight = 10;
+		request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
+	}
+
+	public static bool UsesChestDefinition( TreasureCategory category )
+	{
+		return category == TreasureCategory.Chest || category == TreasureCategory.Container;
 	}
 
 	public static void CopyFromDefinition( Request request, TreasureDefinition source )
@@ -366,8 +389,8 @@ public static class TreasureCreationPipeline
 				break;
 		}
 
-		if ( request.Category == TreasureCategory.Chest && string.IsNullOrEmpty( request.ChestType ) )
-			return "Chest type is required for chests.";
+		if ( UsesChestDefinition( request.Category ) && string.IsNullOrEmpty( request.ChestType ) )
+			return "Chest type is required for chests and containers.";
 
 		return null;
 	}
@@ -453,7 +476,7 @@ public static class TreasureCreationPipeline
 			ArtifactMaterialInstaller.ConvertPrefabMaterials( visualPath );
 
 		ChestDefinition chestDef = null;
-		if ( request.Category == TreasureCategory.Chest )
+		if ( UsesChestDefinition( request.Category ) )
 		{
 			AddressableEditorUtil.EnsureFolder( ChestDefsFolder );
 			chestDef = CreateOrUpdateChestDefinition( request, chestDefPath );
@@ -461,7 +484,7 @@ public static class TreasureCreationPipeline
 		}
 
 		TreasureDefinition def = CreateOrUpdateDefinition( request, defPath, visualGuid, chestDef );
-		bool registerDef = request.Category == TreasureCategory.Key || request.Category == TreasureCategory.Chest;
+		bool registerDef = request.Category == TreasureCategory.Key || UsesChestDefinition( request.Category );
 		if ( registerDef )
 			AddressableEditorUtil.TryRegister( defPath, Path.GetFileNameWithoutExtension( defPath ), "Definition" );
 

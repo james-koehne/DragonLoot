@@ -105,13 +105,18 @@ public sealed class AbilitySystem
 	{
 		if ( string.IsNullOrEmpty( id ) )
 			return false;
-		if ( !TryGetDefinition( id, out _ ) )
+		if ( !TryGetDefinition( id, out AbilityDefinition definition ) )
 			return false;
 		if ( IsUnlocked( id ) )
 			return false;
 
 		_unlocked[ id ] = true;
 		PersistProgress();
+		EventBus.Publish( new AbilityUnlockedEvent
+		{
+			AbilityId = id,
+			Definition = definition
+		} );
 		return true;
 	}
 
@@ -172,7 +177,9 @@ public sealed class AbilitySystem
 			return UnequipSlot( slot );
 		if ( !IsUnlocked( id ) )
 			return false;
-		if ( !TryGetDefinition( id, out _ ) )
+		if ( !TryGetDefinition( id, out AbilityDefinition definition ) )
+			return false;
+		if ( definition.isPassive )
 			return false;
 
 		UnequipAbilityEverywhere( id );
@@ -248,6 +255,9 @@ public sealed class AbilitySystem
 		if ( !IsUnlocked( id ) )
 			return false;
 
+		if ( definition.isPassive )
+			return false;
+
 		if ( !definition.enabled )
 			return false;
 
@@ -314,7 +324,9 @@ public sealed class AbilitySystem
 					continue;
 				if ( !IsUnlocked( id ) )
 					continue;
-				if ( !TryGetDefinition( id, out _ ) )
+				if ( !TryGetDefinition( id, out AbilityDefinition equippedDef ) )
+					continue;
+				if ( equippedDef.isPassive )
 					continue;
 				UnequipAbilityEverywhere( id );
 				_equippedSlots[ i ] = id;
