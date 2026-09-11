@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f1d8e5468e2160b43a05c7614639bb41
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 284093
+  packageName: Stylized Fantasy Dragons Pack
+  packageVersion: 1.1
+  assetPath: Assets/StylizedDragonPack/Materials/URP/ElderDragon/M_ElderDragon_Gn.mat
+  uploadId: 779564

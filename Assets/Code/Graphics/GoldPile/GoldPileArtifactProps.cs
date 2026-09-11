@@ -2222,12 +2222,6 @@ public class GoldPileArtifactProps : MonoBehaviour
 		RefreshPropWorldBoundsIfNeeded();
 
 		bool hasFrustum = GoldPileFrustumCache.TryGet( camera, out Plane[] frustumPlanes );
-		bool useChunkFrustum = _loot != null
-			&& _loot.StreamingEnabled
-			&& _loot.Streamer != null
-			&& _loot.Streamer.HasTicked
-			&& _loot.ChunkGrid != null
-			&& _loot.ChunkGrid.ChunkCount > 0;
 
 		for ( int i = 0; i < _props.Count; i++ )
 		{
@@ -2236,17 +2230,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( item == null )
 				continue;
 
-			bool visible = true;
-			if ( useChunkFrustum && !PropBoundsExceedChunk( entry ) )
-			{
-				GoldPileChunk chunk = _loot.ChunkGrid.GetChunk( entry.ChunkX, entry.ChunkZ );
-				// Only trust chunk frustum for coin-rendered LOD; out-of-window LOD3 flags may be stale.
-				if ( chunk != null && chunk.Lod < 3 && !chunk.FrustumVisible )
-					visible = false;
-			}
-
-			if ( visible && hasFrustum )
-				visible = GeometryUtility.TestPlanesAABB( frustumPlanes, entry.WorldBounds );
+			// Per-prop AABB only. Coin chunk frustum is stale outside the lod2End eval window.
+			bool visible = !hasFrustum || GeometryUtility.TestPlanesAABB( frustumPlanes, entry.WorldBounds );
 
 			if ( visible == entry.RenderVisible )
 				continue;
@@ -2256,16 +2241,6 @@ public class GoldPileArtifactProps : MonoBehaviour
 			item.SetMeshVisible( visible );
 			ApplyInteractableState( entry );
 		}
-	}
-
-	bool PropBoundsExceedChunk( PropEntry entry )
-	{
-		if ( _loot == null || _loot.ChunkGrid == null )
-			return true;
-
-		float chunkSize = _loot.ChunkGrid.ChunkSize;
-		Vector3 size = entry.WorldBounds.size;
-		return size.x > chunkSize * 0.5f || size.z > chunkSize * 0.5f || size.y > chunkSize;
 	}
 
 	static Bounds GetItemBounds( TreasureItem item )

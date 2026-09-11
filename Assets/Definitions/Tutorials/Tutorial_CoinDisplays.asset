@@ -28,16 +28,19 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
   prerequisiteTutorialIds:
   - tut_find_coin_hall
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: "Welcome to the Coin Hall. Each platform displays a different coin type \u2014
-    match coins to their display to sort the hoard."
+  body: Welcome to the Coin Hall. Add your coins to the platforms to sort the hoard.
   keybindHint: '[{SecondaryInteract}] Place on display'
   tasks:
   - id: place_coin_display
-    label: Put a coin in a coin display
+    label: Put a coin on the platform
     completeTrigger: 7
     completeVolumeId: 

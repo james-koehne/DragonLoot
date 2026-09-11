@@ -771,6 +771,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 
 		int room = display.GetSlotCoinAppendCapacity( slotIndex, defs[ 0 ] );
+		CoinDisplayTableInteractable wholeTable = display as CoinDisplayTableInteractable;
+		if ( wholeTable != null )
+			room = wholeTable.GetWholeStackAppendCapacity( defs[ 0 ] );
 		if ( room <= 0 )
 		{
 			carry.TryAbsorbDefinitionsAtHeldBottom( defs, CarryBucketKind.Coin, promoteIfEmpty: true );
@@ -1543,7 +1546,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 					out position,
 					out rotation ) )
 			{
-				placeValid = coinTable.GetSlotCoinAppendCapacity( slotIndex, activeDef ) > 0;
+				placeValid = coinTable.GetWholeStackAppendCapacity( activeDef ) > 0;
 			}
 			else
 			{

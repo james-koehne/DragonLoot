@@ -93,6 +93,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	protected Collider TableCollider;
 	protected DisplaySlot[] Slots;
 	readonly List<TreasureItem> _displayedItems = new List<TreasureItem>();
+	readonly List<TreasureItem> _compactKeepScratch = new List<TreasureItem>( 8 );
 	int _currentCount;
 	bool _isComplete;
 	int _previewOutlineSlot = -1;
@@ -394,6 +395,39 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		return Mathf.Max( 0, max - slot.Count );
 	}
 
+	/// <summary>
+	/// Remaining room for a whole-stack dump of <paramref name="probe"/> across every accepting
+	/// slot (per-slot max times those slots, minus coins already there). Auto-level peels the
+	/// landing pile after place, so one column may exceed <see cref="maxStackPerSlot"/> briefly.
+	/// </summary>
+	public int GetWholeStackAppendCapacity( TreasureDefinition probe )
+	{
+		if ( Slots == null || !Accepts( probe ) )
+			return 0;
+
+		int acceptingSlots = 0;
+		int current = 0;
+		for ( int i = 0; i < Slots.Length; i++ )
+		{
+			if ( !AcceptsInSlot( probe, i ) )
+				continue;
+
+			acceptingSlots++;
+			current += GetSlotCount( i );
+		}
+
+		if ( acceptingSlots <= 0 )
+			return 0;
+
+		if ( !AllowsVerticalStack )
+			return Mathf.Max( 0, acceptingSlots - current );
+
+		if ( maxStackPerSlot <= 0 )
+			return int.MaxValue;
+
+		return Mathf.Max( 0, acceptingSlots * maxStackPerSlot - current );
+	}
+
 	public bool TryGetSlotAppendPose( int slotIndex, out Vector3 contact, out Quaternion rotation )
 	{
 		contact = transform.position;
@@ -416,18 +450,35 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
 	{
+		return TryAppendSlotDefinitions( slotIndex, definitions, respectPerSlotMax: true );
+	}
+
+	public int TryAppendSlotDefinitions(
+		int slotIndex,
+		IReadOnlyList<TreasureDefinition> definitions,
+		bool respectPerSlotMax )
+	{
 		if ( definitions == null || definitions.Count == 0 || Slots == null )
 			return 0;
 		if ( slotIndex < 0 || slotIndex >= Slots.Length )
 			return 0;
 
 		DisplaySlot slot = Slots[ slotIndex ];
+		int remainingWhole = respectPerSlotMax ? 0 : GetWholeStackAppendCapacity( definitions[ 0 ] );
 		int added = 0;
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
 			TreasureDefinition def = definitions[ i ];
-			if ( GetSlotCoinAppendCapacity( slotIndex, def ) <= 0 )
-				break;
+			if ( respectPerSlotMax )
+			{
+				if ( GetSlotCoinAppendCapacity( slotIndex, def ) <= 0 )
+					break;
+			}
+			else
+			{
+				if ( remainingWhole <= 0 || !AcceptsInSlot( def, slotIndex ) )
+					break;
+			}
 
 			TryGetSlotAppendPose( slotIndex, out Vector3 pos, out Quaternion rot );
 			TreasureItem visual = TreasureItemFactory.RentVisualCoin( def, pos, rot );
@@ -445,6 +496,8 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			NotifySortedDelta( def, 1 );
 			PlayTreasurePlaceFeedback( visual );
 			added++;
+			if ( !respectPerSlotMax )
+				remainingWhole--;
 		}
 
 		if ( added <= 0 )
@@ -1062,6 +1115,11 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			RefreshSlotVisual( slotIndex, animate: true );
 			PlayTreasurePlaceFeedback( item );
 		}
+		else
+		{
+			// Recover orphaned mid-flight place coin instead of leaving it parentless.
+			item.EnterPhysics( item.transform.position, item.transform.rotation );
+		}
 
 		PlayPlaceFx();
 		TryMarkCompleteIfNeeded();
@@ -1177,6 +1235,10 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( slot.Count <= 0 )
 			return false;
 
+		// Never steal a coin that is still mid place-snap / flight reservation.
+		if ( SlotHasInFlightItem( slot ) )
+			return false;
+
 		TreasureDefinition def = null;
 		if ( slot.Definitions.Count > 0 )
 		{
@@ -1203,6 +1265,38 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( item == null )
 			item = TreasureItemFactory.SpawnFallback( def, pos, rot, null );
 		return item != null;
+	}
+
+	protected static bool SlotHasInFlightItem( DisplaySlot slot )
+	{
+		if ( slot == null || slot.Items == null )
+			return false;
+
+		for ( int i = 0; i < slot.Items.Count; i++ )
+		{
+			TreasureItem member = slot.Items[ i ];
+			if ( member != null && member.IsInFlight )
+				return true;
+		}
+
+		return false;
+	}
+
+	protected int GetSettledSlotCount( int slotIndex )
+	{
+		if ( Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return 0;
+
+		DisplaySlot slot = Slots[ slotIndex ];
+		int inFlight = 0;
+		for ( int i = 0; i < slot.Items.Count; i++ )
+		{
+			TreasureItem member = slot.Items[ i ];
+			if ( member != null && member.IsInFlight )
+				inFlight++;
+		}
+
+		return Mathf.Max( 0, slot.Count - inFlight );
 	}
 
 	protected bool TryPushSlotItem( int slotIndex, TreasureItem item )
@@ -1314,6 +1408,20 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		}
 
 		slot.Cylinder = visual;
+
+		// BindDefinitions does not hide live coin meshes (unlike Bind). Hide settled tops so
+		// they do not sit visibly on top of the cylinder.
+		if ( slot.Definitions.Count >= CoinColumnCylinderBinder.MinCountForCylinder && visual != null )
+		{
+			for ( int i = 0; i < slot.Items.Count; i++ )
+			{
+				TreasureItem member = slot.Items[ i ];
+				if ( member == null || member.IsInFlight )
+					continue;
+				member.SetMeshVisible( false );
+			}
+		}
+
 		if ( animate )
 			PlaySlotPunch( slot );
 	}
@@ -1452,19 +1560,27 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( slot.Items.Count <= 1 )
 			return;
 
+		_compactKeepScratch.Clear();
 		TreasureItem top = slot.Items[ slot.Items.Count - 1 ];
-		for ( int i = 0; i < slot.Items.Count - 1; i++ )
+		for ( int i = 0; i < slot.Items.Count; i++ )
 		{
 			TreasureItem member = slot.Items[ i ];
-			if ( member == null || member == top || member.IsInFlight )
+			if ( member == null )
 				continue;
+
+			if ( member.IsInFlight || member == top )
+			{
+				_compactKeepScratch.Add( member );
+				continue;
+			}
+
 			_displayedItems.Remove( member );
 			TreasureItemFactory.Despawn( member );
 		}
 
 		slot.Items.Clear();
-		if ( top != null )
-			slot.Items.Add( top );
+		for ( int i = 0; i < _compactKeepScratch.Count; i++ )
+			slot.Items.Add( _compactKeepScratch[ i ] );
 	}
 
 	void EnsureDisplaySlotTopVisual( int slotIndex )

@@ -55,6 +55,27 @@ MonoBehaviour:
     affectRange: 1
     rangeMin: 1.2
     rangeMax: 1.2
+  - id: LanternWorkshop
+    intensityMin: 0.92
+    intensityMax: 1.05
+    speed: 1.1
+    smoothness: 14
+    primaryWeight: 0.6
+    secondaryWeight: 0.28
+    tertiaryWeight: 0.12
+    secondarySpeed: 2.15
+    tertiarySpeed: 4.4
+    affectColor: 1
+    colorAmount: 0.12
+    tintA: {r: 0.99607843, g: 0.99607843, b: 0.71319216, a: 1}
+    tintB: {r: 0.99607843, g: 0.99607843, b: 0.6713569, a: 1}
+    affectEmissionColor: 1
+    emissionColorAmount: 0.4
+    emissionTintA: {r: 3.9999998, g: 3.3999999, b: 0.6999999, a: 1}
+    emissionTintB: {r: 4.8, g: 2.4, b: 0.24, a: 1}
+    affectRange: 1
+    rangeMin: 1.2
+    rangeMax: 1.2
   - id: LanternDragon
     intensityMin: 0.92
     intensityMax: 1.05

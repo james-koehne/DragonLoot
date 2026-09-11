@@ -16,6 +16,7 @@ MonoBehaviour:
   displayName: Ceremonial Blade
   category: 5
   variant: Sword
+  suppressDiscoveryPopup: 0
   value: 120
   weight: 3
   exclusiveCarry: 0
@@ -47,8 +48,8 @@ MonoBehaviour:
     m_EditorAssetChanged: 0
   worldScale: {x: 2, y: 2, z: 2}
   heldScale: {x: 2, y: 2, z: 2}
-  activeHeldLocalEuler: {x: 0, y: 0, z: 0}
-  heldStackLocalEuler: {x: 0, y: 0, z: 0}
+  activeHeldLocalEuler: {x: 0, y: 90, z: 0}
+  heldStackLocalEuler: {x: 0, y: 90, z: 0}
   cleaningRequirement: 0
   canStack: 0
   usesInterleavedBarStack: 0

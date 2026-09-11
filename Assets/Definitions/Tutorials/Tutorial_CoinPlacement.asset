@@ -28,6 +28,10 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
@@ -40,6 +44,6 @@ MonoBehaviour:
     completeTrigger: 2
     completeVolumeId: 
   - id: throw_coin
-    label: Throw a coin
+    label: Aim up to throw a coin
     completeTrigger: 3
     completeVolumeId: 

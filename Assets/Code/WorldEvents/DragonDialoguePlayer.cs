@@ -94,7 +94,7 @@ public class DragonDialoguePlayer
 		}
 
 		_current = _queue.Dequeue();
-		float hold = Mathf.Max( 1.5f, EstimateReadSeconds( _current.text ) ) + Mathf.Max( 0f, _current.pauseAfter );
+		float hold = Mathf.Max( 4.5f, EstimateReadSeconds( _current.text ) ) + Mathf.Max( 0f, _current.pauseAfter );
 		_lineEndsAt = Time.unscaledTime + hold;
 
 		DragonDialogueSfx.PlayLine( _current );
@@ -121,8 +121,8 @@ public class DragonDialoguePlayer
 	static float EstimateReadSeconds( string text )
 	{
 		if ( string.IsNullOrEmpty( text ) )
-			return 1.5f;
-		return Mathf.Clamp( text.Length / 18f, 1.75f, 8f );
+			return 4.5f;
+		return Mathf.Clamp( text.Length / 6f, 5.25f, 24f );
 	}
 
 	static void PublishHidden()

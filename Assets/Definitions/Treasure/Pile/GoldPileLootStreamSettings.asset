@@ -45,7 +45,7 @@ MonoBehaviour:
   gemNeverCull: 0
   gemMaxStreamDistance: 64
   artifactNeverCull: 0
-  artifactMaxStreamDistance: 64
+  artifactMaxStreamDistance: 128
   propStreamHysteresisMeters: 2
   coinNeverCull: 0
   stackResidentDistance: 20

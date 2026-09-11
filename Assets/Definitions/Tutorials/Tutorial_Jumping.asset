@@ -28,6 +28,7 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
   cinematicPresentationId: intro_ledge_cinematic
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
@@ -36,7 +37,7 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Press Jump to hop.
+  body: Jump off the ledge, no fall damage!
   keybindHint: '[{Jump}] Jump'
   tasks:
   - id: jump
