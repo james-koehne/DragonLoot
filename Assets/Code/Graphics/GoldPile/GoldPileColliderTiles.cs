@@ -12,6 +12,7 @@ public sealed class GoldPileColliderTiles
 	const string TileNamePrefix = "ColliderTile_";
 	const HideFlags RuntimeHideFlags = HideFlags.HideAndDontSave;
 	const MeshColliderCookingOptions CookingOptions = MeshColliderCookingOptions.UseFastMidphase;
+	static readonly int[] EmptyTris = new int[ 0 ];
 
 	struct BakeJob : IJob
 	{
@@ -32,6 +33,7 @@ public sealed class GoldPileColliderTiles
 		public Vector3[] BaseVerts;
 		public Vector3[] DisplacedVerts;
 		public int[] Tris;
+		public int TriCount;
 		public int GridMinX;
 		public int GridMaxX;
 		public int GridMinZ;
@@ -76,11 +78,7 @@ public sealed class GoldPileColliderTiles
 			return;
 
 		for ( int i = 0; i < _tiles.Length; i++ )
-		{
-			MeshCollider col = _tiles[ i ].Collider;
-			if ( col != null )
-				col.enabled = enabled;
-		}
+			ApplyColliderEnabled( ref _tiles[ i ] );
 	}
 
 	public void Release()
@@ -244,6 +242,17 @@ public sealed class GoldPileColliderTiles
 			dirtyCount++;
 			vertCount += tile.DisplacedVerts != null ? tile.DisplacedVerts.Length : 0;
 
+			if ( tile.TriCount <= 0 )
+			{
+				CompleteBakeIfPending( ref tile );
+				UploadTileVerts( ref tile );
+				ClearColliderMesh( ref tile );
+				tile.Dirty = false;
+				tile.CookPending = false;
+				tile.RebakeAfterCurrent = false;
+				continue;
+			}
+
 			if ( IsBakeRunning( ref tile ) )
 			{
 				tile.VertsPendingUpload = true;
@@ -291,6 +300,14 @@ public sealed class GoldPileColliderTiles
 			ref Tile tile = ref _tiles[ i ];
 			if ( !tile.CookPending )
 				continue;
+			if ( tile.TriCount <= 0 )
+			{
+				CompleteBakeIfPending( ref tile );
+				ClearColliderMesh( ref tile );
+				tile.CookPending = false;
+				tile.RebakeAfterCurrent = false;
+				continue;
+			}
 			if ( IsBakeRunning( ref tile ) )
 			{
 				tile.RebakeAfterCurrent = true;
@@ -494,7 +511,8 @@ public sealed class GoldPileColliderTiles
 			VertCountX = vertCountX,
 			VertCountZ = vertCountZ,
 			Dirty = true,
-			CookPending = false
+			CookPending = false,
+			TriCount = tris.Length
 		};
 	}
 
@@ -515,12 +533,52 @@ public sealed class GoldPileColliderTiles
 				float u = res <= 1 ? 0.5f : ( float )gx / ( res - 1 );
 				int i = z * vertCountX + x;
 				float h = heightfield.SampleNormalizedUV( u, v ) * maxH;
-				if ( h < ground )
-					h = -1f;
 				Vector3 b = tile.BaseVerts[ i ];
 				tile.DisplacedVerts[ i ] = new Vector3( b.x, h, b.z );
 			}
 		}
+
+		RebuildTileTriangles( ref tile, ground );
+	}
+
+	/// <summary>
+	/// Omit quads with any corner below ground so clipped pile has no collision.
+	/// </summary>
+	static void RebuildTileTriangles( ref Tile tile, float ground )
+	{
+		int[] tris = tile.Tris;
+		if ( tris == null || tile.DisplacedVerts == null )
+		{
+			tile.TriCount = 0;
+			return;
+		}
+
+		int vertCountX = tile.VertCountX;
+		int t = 0;
+		for ( int z = 0; z < tile.VertCountZ - 1; z++ )
+		{
+			for ( int x = 0; x < tile.VertCountX - 1; x++ )
+			{
+				int i = z * vertCountX + x;
+				int iRight = i + 1;
+				int iUp = i + vertCountX;
+				int iUpRight = iUp + 1;
+				if ( tile.DisplacedVerts[ i ].y < ground
+					|| tile.DisplacedVerts[ iRight ].y < ground
+					|| tile.DisplacedVerts[ iUp ].y < ground
+					|| tile.DisplacedVerts[ iUpRight ].y < ground )
+					continue;
+
+				tris[ t++ ] = i;
+				tris[ t++ ] = iUp;
+				tris[ t++ ] = iRight;
+				tris[ t++ ] = iRight;
+				tris[ t++ ] = iUp;
+				tris[ t++ ] = iUpRight;
+			}
+		}
+
+		tile.TriCount = t;
 	}
 
 	void UploadTileVerts( ref Tile tile )
@@ -529,6 +587,10 @@ public sealed class GoldPileColliderTiles
 			return;
 
 		tile.Mesh.vertices = tile.DisplacedVerts;
+		if ( tile.TriCount <= 0 || tile.Tris == null )
+			tile.Mesh.SetTriangles( EmptyTris, 0, false );
+		else
+			tile.Mesh.SetTriangles( tile.Tris, 0, tile.TriCount, 0, false, 0 );
 		tile.Mesh.RecalculateBounds();
 		tile.VertsPendingUpload = false;
 	}
@@ -538,14 +600,16 @@ public sealed class GoldPileColliderTiles
 		if ( tile.Mesh == null )
 			return;
 
-		if ( tile.BakeJobPending )
-		{
-			tile.BakeHandle.Complete();
-			tile.BakeJobPending = false;
-		}
+		CompleteBakeIfPending( ref tile );
 
 		if ( tile.VertsPendingUpload )
 			UploadTileVerts( ref tile );
+
+		if ( tile.TriCount <= 0 )
+		{
+			ClearColliderMesh( ref tile );
+			return;
+		}
 
 		if ( tile.Collider != null )
 			tile.Collider.cookingOptions = CookingOptions;
@@ -565,14 +629,16 @@ public sealed class GoldPileColliderTiles
 		if ( tile.Collider == null || tile.Mesh == null )
 			return;
 
-		if ( tile.BakeJobPending )
-		{
-			tile.BakeHandle.Complete();
-			tile.BakeJobPending = false;
-		}
+		CompleteBakeIfPending( ref tile );
 
 		if ( tile.VertsPendingUpload )
 			UploadTileVerts( ref tile );
+
+		if ( tile.TriCount <= 0 )
+		{
+			ClearColliderMesh( ref tile );
+			return;
+		}
 
 		GoldPileEditTiming.Begin( "GoldPile.CookColliderTile" );
 		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
@@ -595,16 +661,42 @@ public sealed class GoldPileColliderTiles
 		if ( tile.Collider == null || tile.Mesh == null )
 			return;
 
-		tile.Collider.cookingOptions = CookingOptions;
-		if ( tile.Collider.sharedMesh != tile.Mesh )
-			tile.Collider.sharedMesh = tile.Mesh;
-		else
+		if ( tile.TriCount <= 0 )
 		{
-			bool wasEnabled = tile.Collider.enabled;
-			tile.Collider.enabled = false;
-			tile.Collider.sharedMesh = tile.Mesh;
-			tile.Collider.enabled = wasEnabled && _enabled;
+			ClearColliderMesh( ref tile );
+			return;
 		}
+
+		tile.Collider.cookingOptions = CookingOptions;
+		tile.Collider.enabled = false;
+		tile.Collider.sharedMesh = tile.Mesh;
+		ApplyColliderEnabled( ref tile );
+	}
+
+	void ClearColliderMesh( ref Tile tile )
+	{
+		if ( tile.Collider == null )
+			return;
+
+		tile.Collider.enabled = false;
+		tile.Collider.sharedMesh = null;
+	}
+
+	void ApplyColliderEnabled( ref Tile tile )
+	{
+		if ( tile.Collider == null )
+			return;
+
+		tile.Collider.enabled = _enabled && tile.TriCount > 0 && tile.Collider.sharedMesh != null;
+	}
+
+	static void CompleteBakeIfPending( ref Tile tile )
+	{
+		if ( !tile.BakeJobPending )
+			return;
+
+		tile.BakeHandle.Complete();
+		tile.BakeJobPending = false;
 	}
 
 	static bool IsBakeRunning( ref Tile tile )

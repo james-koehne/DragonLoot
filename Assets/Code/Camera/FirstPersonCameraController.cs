@@ -27,6 +27,7 @@ public class FirstPersonCameraController : MonoBehaviour
 	bool _wantMovementFov;
 	float _movementFovWeight;
 	Light _softFillLight;
+	bool _softFillLightForcedOff;
 
 	const string SoftFillLightChildName = "PlayerSoftFillLight";
 
@@ -94,10 +95,19 @@ public class FirstPersonCameraController : MonoBehaviour
 		EnsureSoftFillLight();
 	}
 
+	/// <summary>
+	/// When true, the soft fill light stays disabled (e.g. minecart orbit camera).
+	/// </summary>
+	public void SetSoftFillLightForcedOff( bool forcedOff )
+	{
+		_softFillLightForcedOff = forcedOff;
+		EnsureSoftFillLight();
+	}
+
 	void EnsureSoftFillLight()
 	{
 		CameraDefinition def = Definition;
-		bool enabled = def == null || def.softFillLightEnabled;
+		bool enabled = !_softFillLightForcedOff && ( def == null || def.softFillLightEnabled );
 		Color color = def != null ? def.softFillLightColor : new Color( 1f, 0.5f, 0.15f, 1f );
 		float intensity = def != null ? def.softFillLightIntensity : 0.45f;
 		float range = def != null ? def.softFillLightRange : 4.5f;

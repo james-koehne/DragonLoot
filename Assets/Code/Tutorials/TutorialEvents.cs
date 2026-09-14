@@ -70,6 +70,12 @@ public struct MinecartDriveEnteredEvent
 	public MinecartInteractable Cart;
 }
 
+/// <summary>Player left a drive minecart (after hop-off side nudge).</summary>
+public struct MinecartDriveExitedEvent
+{
+	public MinecartInteractable Cart;
+}
+
 /// <summary>A cinematic presentation finished its rise/hold/fall (not an abort on disable).</summary>
 public struct CinematicPresentationEndedEvent
 {

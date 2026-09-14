@@ -140,6 +140,8 @@ public class PlayerMinecartDrive : MonoBehaviour
 		if ( _cart == null )
 			return;
 
+		MinecartInteractable leaving = _cart;
+
 		StopMoveLoop();
 		_cart.PlayDriveExitFeedback();
 
@@ -167,6 +169,8 @@ public class PlayerMinecartDrive : MonoBehaviour
 		PlayerMinecartRide ride = _player != null ? _player.MinecartRide : null;
 		if ( ride != null )
 			ride.NotifyDriveEnded();
+
+		EventBus.Publish( new MinecartDriveExitedEvent { Cart = leaving } );
 	}
 
 	void TickDriveInput( GameInput input, float dt )
@@ -259,6 +263,19 @@ public class PlayerMinecartDrive : MonoBehaviour
 
 	Vector3 ResolveLookFlat()
 	{
+		// Drive W/S from live camera look (orbit or first person).
+		if ( GameMode.Instance != null && GameMode.Instance.cameraController != null )
+		{
+			FirstPersonCameraController fp = GameMode.Instance.cameraController.FirstPerson;
+			if ( fp != null )
+			{
+				Vector3 camFacing = fp.GetCameraForward();
+				camFacing.y = 0f;
+				if ( camFacing.sqrMagnitude > 0.0001f )
+					return camFacing;
+			}
+		}
+
 		Transform mount = _player != null ? _player.CameraMount : null;
 		Vector3 facing = mount != null ? mount.forward : transform.forward;
 		facing.y = 0f;

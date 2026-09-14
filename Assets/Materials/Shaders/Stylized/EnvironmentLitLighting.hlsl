@@ -3,6 +3,7 @@
 
 #include "EnvironmentLitInput.hlsl"
 #include "StylizedLightingCommon.hlsl"
+#include "EnvironmentHeightFogCommon.hlsl"
 
 struct Attributes
 {
@@ -148,6 +149,7 @@ half4 EnvironmentLitFrag(Varyings input) : SV_Target
 
     half3 lit = DragonLootShadeSurface(inputData, surface);
     lit = DragonLootMixFog(lit, inputData.fogCoord, inputData.positionWS);
+    lit = DragonLootApplyHeightFog(lit, inputData.positionWS);
     return half4(lit, 1.0h);
 }
 

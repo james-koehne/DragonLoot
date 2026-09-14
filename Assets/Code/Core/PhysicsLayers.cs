@@ -10,11 +10,15 @@ public static class PhysicsLayers
 {
 	const string PlayerLayerName = "Player";
 	const string CollectableLayerName = "Collectable";
+	const string WalkableLayerName = "Walkable";
 
 	static bool _applied;
+	static bool _cached;
 	static int _playerLayer = -1;
 	static int _collectableLayer = -1;
+	static int _walkableLayer = -1;
 	static int _defaultAndCollectableMask;
+	static int _walkableMask;
 
 	public static int PlayerLayer
 	{
@@ -34,6 +38,15 @@ public static class PhysicsLayers
 		}
 	}
 
+	public static int WalkableLayer
+	{
+		get
+		{
+			EnsureCached();
+			return _walkableLayer;
+		}
+	}
+
 	/// <summary>
 	/// Default (layer 0) plus Collectable. Tall ground stacks move to Default when they block the player.
 	/// </summary>
@@ -46,17 +59,35 @@ public static class PhysicsLayers
 		}
 	}
 
+	/// <summary>Mask for the Walkable layer, or <see cref="Physics.DefaultRaycastLayers"/> if missing.</summary>
+	public static int WalkableMask
+	{
+		get
+		{
+			EnsureCached();
+			return _walkableMask;
+		}
+	}
+
 	static void EnsureCached()
 	{
-		if ( _playerLayer >= 0 && _collectableLayer >= 0 )
+		if ( _cached )
 			return;
 
 		_playerLayer = LayerMask.NameToLayer( PlayerLayerName );
 		_collectableLayer = LayerMask.NameToLayer( CollectableLayerName );
+		_walkableLayer = LayerMask.NameToLayer( WalkableLayerName );
 		int mask = 1 << 0;
 		if ( _collectableLayer >= 0 )
 			mask |= 1 << _collectableLayer;
 		_defaultAndCollectableMask = mask;
+
+		if ( _walkableLayer >= 0 )
+			_walkableMask = 1 << _walkableLayer;
+		else
+			_walkableMask = Physics.DefaultRaycastLayers;
+
+		_cached = true;
 	}
 
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.BeforeSceneLoad )]

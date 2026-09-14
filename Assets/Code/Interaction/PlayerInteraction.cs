@@ -425,6 +425,9 @@ public class PlayerInteraction : MonoBehaviour
 		if ( !_inputEnabled || _player == null || _cameraLook == null )
 			return;
 
+		if ( _player.IsDrivingMinecart || IsMinecartOrbitActive() )
+			return;
+
 		PlayerSorterReposition sorter = _player.SorterReposition;
 		if ( sorter != null && sorter.IsCarrying )
 			return;
@@ -472,9 +475,27 @@ public class PlayerInteraction : MonoBehaviour
 		}
 	}
 
+	static bool IsMinecartOrbitActive()
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.cameraController == null )
+			return false;
+
+		MinecartOrbitCamera orbit = GameMode.Instance.cameraController.GetComponent<MinecartOrbitCamera>();
+		return orbit != null && orbit.IsActive;
+	}
+
 	void Update()
 	{
 		if ( !_inputEnabled || _player == null || _cameraLook == null )
+		{
+			_current = null;
+			_hasLastHit = false;
+			_hasSurfaceHit = false;
+			ClearPickableIndicator();
+			return;
+		}
+
+		if ( _player.IsDrivingMinecart || IsMinecartOrbitActive() )
 		{
 			_current = null;
 			_hasLastHit = false;
@@ -559,6 +580,11 @@ public class PlayerInteraction : MonoBehaviour
 			if ( IsPlayerOwnedHit( hit.collider, playerRoot ) )
 				continue;
 
+			InteractableBase interactable = ResolveInteractableFromHit( hit.collider );
+			interactable = PromoteSorterMoveFocus( interactable, hit.collider );
+			if ( IsClippedTreasurePileHit( interactable, hit ) )
+				continue;
+
 			bool withinPickRange = hit.distance <= interactRange + 0.001f;
 			bool withinPlacementRange = hit.distance <= placementAimRange + 0.001f;
 
@@ -579,8 +605,6 @@ public class PlayerInteraction : MonoBehaviour
 				}
 			}
 
-			InteractableBase interactable = ResolveInteractableFromHit( hit.collider );
-			interactable = PromoteSorterMoveFocus( interactable, hit.collider );
 			if ( interactable == null )
 				continue;
 
@@ -982,6 +1006,19 @@ public class PlayerInteraction : MonoBehaviour
 		_current.Interact( _player );
 		if ( _player != null )
 			_player.CancelSlideVelocity();
+	}
+
+	static bool IsClippedTreasurePileHit( InteractableBase interactable, in RaycastHit hit )
+	{
+		TreasurePileInteractable pile = interactable as TreasurePileInteractable;
+		if ( pile == null )
+			return false;
+
+		TreasurePileVisual visual = pile.PileVisual;
+		if ( visual == null )
+			return false;
+
+		return !visual.HasPileSurfaceAt( hit.point );
 	}
 
 	static InteractableBase ResolveInteractableFromHit( Collider collider )

@@ -25,3 +25,15 @@ MonoBehaviour:
   softFillLightIntensity: 0.45
   softFillLightRange: 4.5
   softFillLightLocalOffset: {x: 0, y: -0.15, z: 0.25}
+  minecartOrbitDistance: 4.5
+  minecartOrbitHeight: 1.6
+  minecartOrbitLookahead: 2.5
+  minecartOrbitBlendTime: 0.45
+  minecartOrbitDefaultPitch: 12
+  minecartOrbitMinPitch: -15
+  minecartOrbitMaxPitch: 70
+  minecartOrbitCollisionRadius: 0.25
+  minecartOrbitCollisionSkin: 0.1
+  minecartOrbitAutoRecenter: 0
+  minecartOrbitRecenterDelay: 1.5
+  minecartOrbitRecenterSpeed: 90

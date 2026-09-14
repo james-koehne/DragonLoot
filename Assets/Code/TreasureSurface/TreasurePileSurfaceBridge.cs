@@ -481,6 +481,9 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 			return float.NegativeInfinity;
 
 		float localH = hf.SampleNormalized( local.x, local.z ) * maxHeight;
+		if ( localH < hf.GroundLevel )
+			return float.NegativeInfinity;
+
 		return rootY + localH * yScale;
 	}
 
@@ -495,6 +498,9 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 				continue;
 
 			float localH = c.Heightfield.SampleNormalized( local.x, local.z ) * c.MaxHeight;
+			if ( localH < c.Heightfield.GroundLevel )
+				continue;
+
 			float pileY = c.RootY + localH * c.YScale;
 			if ( pileY > best )
 				best = pileY;

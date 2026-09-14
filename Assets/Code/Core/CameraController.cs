@@ -10,6 +10,8 @@ public class CameraController : MonoBehaviour
 	public void Setup()
 	{
 		FirstPerson = GetComponentInChildren<FirstPersonCameraController>();
+		if ( GetComponent<MinecartOrbitCamera>() == null )
+			gameObject.AddComponent<MinecartOrbitCamera>();
 		CaptureBaseLocalPose();
 	}
 

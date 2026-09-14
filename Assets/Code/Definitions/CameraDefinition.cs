@@ -47,6 +47,50 @@ public class CameraDefinition : ScriptableObject
 	[Tooltip( "Local offset from the camera (slightly forward/down reduces floor headlight specular)." )]
 	public Vector3 softFillLightLocalOffset = new Vector3( 0f, -0.15f, 0.25f );
 
+	[Header( "Minecart Orbit" )]
+	[Tooltip( "Third-person distance behind the cart pivot while driving." )]
+	[Min( 0.5f )]
+	public float minecartOrbitDistance = 4.5f;
+
+	[Tooltip( "Pivot height above the cart origin." )]
+	public float minecartOrbitHeight = 1.6f;
+
+	[Tooltip( "Along-cart look-at bias so the cart does not fill the frame." )]
+	[Min( 0f )]
+	public float minecartOrbitLookahead = 2.5f;
+
+	[Tooltip( "Seconds to blend between first person and orbit on enter/exit." )]
+	[Min( 0.01f )]
+	public float minecartOrbitBlendTime = 0.45f;
+
+	[Tooltip( "Default pitch (degrees, look-down positive) after the enter blend." )]
+	public float minecartOrbitDefaultPitch = 12f;
+
+	[Tooltip( "Minimum orbit pitch (degrees). Negative looks up." )]
+	public float minecartOrbitMinPitch = -15f;
+
+	[Tooltip( "Maximum orbit pitch (degrees). Positive looks down." )]
+	public float minecartOrbitMaxPitch = 70f;
+
+	[Tooltip( "SphereCast radius for collision pull-in." )]
+	[Min( 0.05f )]
+	public float minecartOrbitCollisionRadius = 0.25f;
+
+	[Tooltip( "Keep this gap from hit surfaces after pull-in." )]
+	[Min( 0f )]
+	public float minecartOrbitCollisionSkin = 0.1f;
+
+	[Tooltip( "After no look input, ease yaw/pitch back behind the cart." )]
+	public bool minecartOrbitAutoRecenter = true;
+
+	[Tooltip( "Seconds without look input before auto-recenter starts." )]
+	[Min( 0f )]
+	public float minecartOrbitRecenterDelay = 1.5f;
+
+	[Tooltip( "Degrees per second while auto-recentering." )]
+	[Min( 1f )]
+	public float minecartOrbitRecenterSpeed = 90f;
+
 	void OnValidate()
 	{
 		minLookSensitivity = Mathf.Max( 0.01f, minLookSensitivity );
@@ -58,5 +102,15 @@ public class CameraDefinition : ScriptableObject
 		speedFovBlendTime = Mathf.Max( 0.01f, speedFovBlendTime );
 		softFillLightIntensity = Mathf.Max( 0f, softFillLightIntensity );
 		softFillLightRange = Mathf.Max( 0.1f, softFillLightRange );
+		minecartOrbitDistance = Mathf.Max( 0.5f, minecartOrbitDistance );
+		minecartOrbitLookahead = Mathf.Max( 0f, minecartOrbitLookahead );
+		minecartOrbitBlendTime = Mathf.Max( 0.01f, minecartOrbitBlendTime );
+		minecartOrbitMinPitch = Mathf.Clamp( minecartOrbitMinPitch, -85f, 85f );
+		minecartOrbitMaxPitch = Mathf.Clamp( minecartOrbitMaxPitch, minecartOrbitMinPitch, 85f );
+		minecartOrbitDefaultPitch = Mathf.Clamp( minecartOrbitDefaultPitch, minecartOrbitMinPitch, minecartOrbitMaxPitch );
+		minecartOrbitCollisionRadius = Mathf.Max( 0.05f, minecartOrbitCollisionRadius );
+		minecartOrbitCollisionSkin = Mathf.Max( 0f, minecartOrbitCollisionSkin );
+		minecartOrbitRecenterDelay = Mathf.Max( 0f, minecartOrbitRecenterDelay );
+		minecartOrbitRecenterSpeed = Mathf.Max( 1f, minecartOrbitRecenterSpeed );
 	}
 }

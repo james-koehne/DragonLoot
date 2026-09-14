@@ -28,6 +28,13 @@ CBUFFER_START(UnityPerMaterial)
     half4 _GridLineColor;
     half _GridStrength;
     half _GridEnabled;
+    half4 _HeightFogColor;
+    half4 _HeightFogDeepColor;
+    half _HeightFogDensity;
+    half _HeightFogFalloff;
+    half _FogHeight;
+    half _HeightFogSoftness;
+    half _HeightFogStrength;
 CBUFFER_END
 
 TEXTURE2D(_BaseMap);            SAMPLER(sampler_BaseMap);

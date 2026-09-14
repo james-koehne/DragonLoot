@@ -35,6 +35,16 @@ Shader "DragonLoot/EnvironmentLitGrid"
         [Toggle] _ReceiveShadowsLocal("Receive Shadows", Float) = 1
         [Toggle] _ReflectionsLocal("Environment Reflections", Float) = 1
 
+        [Header(Height Fog)]
+        [Toggle(_HEIGHTFOG)] _HeightFogEnabled("Height Fog", Float) = 0
+        [HDR] _HeightFogColor("Height Fog Color", Color) = (0.12, 0.045, 0.02, 1)
+        [HDR] _HeightFogDeepColor("Height Fog Deep Color", Color) = (0.015, 0.01, 0.02, 1)
+        _HeightFogDensity("Height Fog Density", Range(0, 2)) = 0.08
+        _HeightFogFalloff("Height Fog Falloff", Range(0, 4)) = 0.35
+        _FogHeight("Fog Height", Float) = 0
+        _HeightFogSoftness("Height Fog Softness", Range(0.01, 20)) = 4
+        _HeightFogStrength("Height Fog Strength", Range(0, 1)) = 1
+
         [HideInInspector] _Cutoff("Cutoff", Range(0, 1)) = 0.5
         [HideInInspector] _Surface("__surface", Float) = 0
         [HideInInspector] _Cull("__cull", Float) = 2
@@ -84,6 +94,7 @@ Shader "DragonLoot/EnvironmentLitGrid"
             #pragma multi_compile _ LOD_FADE_CROSSFADE
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_local_fragment _HEIGHTFOG
 
             #include "EnvironmentLitGridLighting.hlsl"
             ENDHLSL

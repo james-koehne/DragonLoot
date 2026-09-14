@@ -41,6 +41,7 @@ public class PlayerController : MonoBehaviour
 	CharacterController _characterController;
 	bool gameplayInputEnabled = true;
 	bool _cinematicInputLock;
+	bool _cinematicBodyLock;
 	float _verticalVelocity;
 	bool _wasGrounded;
 	Vector3 _planarVelocity;
@@ -251,7 +252,8 @@ public class PlayerController : MonoBehaviour
 	public float SlideExitBoostSpeed => _slideExitBoostSpeed;
 	public bool IsGliding => _isGliding;
 	public float GroundAngle => _groundAngle;
-	public bool GameplayInputEnabled => gameplayInputEnabled && !_cinematicInputLock;
+	public bool GameplayInputEnabled => gameplayInputEnabled && !_cinematicInputLock && !_cinematicBodyLock;
+	public bool IsCinematicLocked => _cinematicInputLock || _cinematicBodyLock;
 	public bool IsPlanarBraking => _planarBrakeActive;
 	public bool IsPlanarMovementLocked => _planarMovementLockRemaining > 0f || _cinematicPlanarMovementLock;
 	bool IsPlanarMovementRestricted => _planarBrakeActive || IsPlanarMovementLocked;
@@ -307,6 +309,21 @@ public class PlayerController : MonoBehaviour
 	}
 
 	/// <summary>
+	/// Blocks move, jump, interact, and abilities until cleared, but leaves look free.
+	/// Disables the CharacterController so external systems can drive position.
+	/// </summary>
+	public void SetCinematicBodyLock( bool locked )
+	{
+		_cinematicBodyLock = locked;
+		SetCinematicPlanarMovementLock( locked );
+		if ( _characterController != null )
+			_characterController.enabled = !locked;
+		ApplyGameplayInputEnabled();
+		if ( !locked )
+			SettleStationary();
+	}
+
+	/// <summary>
 	/// Blocks move, look, jump, interact, and abilities until cleared. Does not unlock the cursor.
 	/// Independent of pause / map / debug overlay <see cref="SetGameplayInputEnabled"/>.
 	/// </summary>
@@ -339,6 +356,23 @@ public class PlayerController : MonoBehaviour
 	}
 
 	/// <summary>
+	/// Places the body while preserving rotation so look yaw/pitch stay under player control.
+	/// </summary>
+	public void SnapToWorldPosition( Vector3 position )
+	{
+		bool controllerEnabled = _characterController != null && _characterController.enabled;
+		if ( _characterController != null )
+			_characterController.enabled = false;
+
+		transform.position = position;
+		ClearMovementVelocity();
+		WasLandingThisFrame = false;
+
+		if ( _characterController != null )
+			_characterController.enabled = controllerEnabled;
+	}
+
+	/// <summary>
 	/// Feeds cinematic translation into planar speed / ground probe so footsteps and carry bob still run.
 	/// </summary>
 	public void NotifyCinematicTravel( Vector3 worldDelta, float dt )
@@ -356,7 +390,19 @@ public class PlayerController : MonoBehaviour
 		_isSliding = false;
 		_isGliding = false;
 		ClearClimb();
-		ProbeGround( planar, _groundNormal, _hasGroundHit );
+
+		// Body-lock / disabled CC: never snap via CharacterController.Move.
+		if ( _characterController != null && _characterController.enabled )
+			ProbeGround( planar, _groundNormal, _hasGroundHit );
+		else
+		{
+			_hasGroundHit = false;
+			_groundCollider = null;
+			_groundNormal = Vector3.up;
+			_groundAngle = 0f;
+			_groundDistance = float.MaxValue;
+		}
+
 		IsGrounded = true;
 		_wasGrounded = true;
 		MovementState = PlayerMovementState.Walking;
@@ -391,7 +437,12 @@ public class PlayerController : MonoBehaviour
 		IsGrounded = grounded;
 		_wasGrounded = grounded;
 		if ( grounded )
+		{
 			_verticalVelocity = GroundStickVelocity;
+			_jumpAvailable = true;
+			_doubleJumpAvailable = true;
+			_coyoteTimer = 0f;
+		}
 
 		UpdateMovementState();
 	}
@@ -851,7 +902,7 @@ public class PlayerController : MonoBehaviour
 		if ( wantsSnap )
 		{
 			float gap = hit.distance - _characterController.skinWidth;
-			if ( gap > 0f )
+			if ( gap > 0f && _characterController.enabled )
 			{
 				float snapStep = Mathf.Min( gap, GroundSnapSpeed * Time.deltaTime );
 				_characterController.Move( Vector3.down * snapStep );
@@ -872,7 +923,7 @@ public class PlayerController : MonoBehaviour
 	void ApplyGravityAndMove()
 	{
 		TickPlanarMovementLock( Time.deltaTime );
-		if ( _cinematicInputLock )
+		if ( _cinematicInputLock || _cinematicBodyLock )
 			return;
 
 		if ( IsDrivingMinecart )
@@ -1826,7 +1877,7 @@ public class PlayerController : MonoBehaviour
 		if ( _cameraLook == null )
 			return;
 
-		bool boost = !_cinematicInputLock && !IsDrivingMinecart && ( _isGliding || _isSliding );
+		bool boost = !_cinematicInputLock && !_cinematicBodyLock && !IsDrivingMinecart && ( _isGliding || _isSliding );
 		_cameraLook.SetMovementFovActive( boost );
 	}
 
@@ -1844,6 +1895,7 @@ public class PlayerController : MonoBehaviour
 		_planarMovementLockRemaining = 0f;
 		_cinematicPlanarMovementLock = false;
 		_cinematicInputLock = false;
+		_cinematicBodyLock = false;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;
@@ -1890,6 +1942,7 @@ public class PlayerController : MonoBehaviour
 		_planarMovementLockRemaining = 0f;
 		_cinematicPlanarMovementLock = false;
 		_cinematicInputLock = false;
+		_cinematicBodyLock = false;
 		_isSliding = false;
 		ClearClimb();
 		_slideEnterCharge = 0f;
@@ -1922,12 +1975,13 @@ public class PlayerController : MonoBehaviour
 
 	void ApplyGameplayInputEnabled()
 	{
-		bool gameplay = gameplayInputEnabled && !_cinematicInputLock;
+		bool gameplay = gameplayInputEnabled && !_cinematicInputLock && !_cinematicBodyLock;
 
 		if ( _cameraLook != null )
 		{
 			_cameraLook.SetInputEnabled( gameplayInputEnabled );
-			_cameraLook.SetLookLocked( _cinematicInputLock );
+			bool orbitActive = IsMinecartOrbitCameraActive();
+			_cameraLook.SetLookLocked( _cinematicInputLock || orbitActive );
 		}
 
 		if ( _interaction != null )
@@ -1949,5 +2003,14 @@ public class PlayerController : MonoBehaviour
 	static GameInput GetGameInput()
 	{
 		return InputController.Instance != null ? InputController.Instance.GameInput : null;
+	}
+
+	static bool IsMinecartOrbitCameraActive()
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.cameraController == null )
+			return false;
+
+		MinecartOrbitCamera orbit = GameMode.Instance.cameraController.GetComponent<MinecartOrbitCamera>();
+		return orbit != null && orbit.IsActive;
 	}
 }
