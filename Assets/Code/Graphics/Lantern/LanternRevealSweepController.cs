@@ -10,6 +10,7 @@ using UnityEngine.Serialization;
 public struct LanternRevealSweepOverrides
 {
 	public float SkylightFadeDuration;
+	public float SkylightFadeDelay;
 	public float SweepDuration;
 	public float SweepDurationZ;
 	public float SweepDurationY;
@@ -42,8 +43,13 @@ public class LanternRevealSweepController : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0f )]
-	[Tooltip( "Default fade duration for skylights whose Fade Duration is 0. World-event override replaces this for all skylights when set." )]
+	[Tooltip( "Default fade duration for skylights whose Fade Duration is 0." )]
 	float _skylightFadeDuration = 2f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Seconds after reveal start before skylights begin fading. Stacks with each SkylightReveal start delay." )]
+	float _skylightFadeDelay;
 
 	[SerializeField]
 	Transform _sweepReference;
@@ -86,7 +92,7 @@ public class LanternRevealSweepController : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0f )]
-	[Tooltip( "Seconds after reveal start before the lantern sweep begins. Skylight and punch effects are unaffected." )]
+	[Tooltip( "Seconds after reveal start before the lantern sweep begins. Skylight fade uses Skylight Fade Delay instead." )]
 	float _lanternStartDelay;
 
 	[Header( "Reveal Punch" )]
@@ -122,6 +128,70 @@ public class LanternRevealSweepController : MonoBehaviour
 	}
 #endif
 
+	public string RevealId => _revealId;
+
+	public float SkylightFadeDuration => _skylightFadeDuration;
+
+	public float SkylightFadeDelay => _skylightFadeDelay;
+
+	public float SweepDurationZ => _sweepDurationZ;
+
+	public float SweepDurationY => _sweepDurationY;
+
+	public float LanternFadeDuration => _lanternFadeDuration;
+
+	public float LanternStartDelay => _lanternStartDelay;
+
+	public SkylightReveal[] Skylights => _skylights;
+
+	public RevealPunchChannel BloomPunch => _bloomPunch;
+
+	public RevealPunchChannel SpecularPunch => _specularPunch;
+
+	public Transform SweepReference => _sweepReference;
+
+	public bool AutoComputeBounds => _autoComputeBounds;
+
+	public float ResolvedSweepDuration => ResolveDiagonalSweepDuration(
+		new Vector2( _sweepEndZ - _sweepStartZ, _sweepEndY - _sweepStartY ),
+		_sweepDurationZ,
+		_sweepDurationY );
+
+	public float EstimateLanternSweepWindow()
+	{
+		return _lanternStartDelay + Mathf.Max( _sweepDurationZ, _sweepDurationY ) + _lanternFadeDuration;
+	}
+
+	public float EstimateSkylightWindow()
+	{
+		return GetSkylightRevealDuration( 0f, _skylightFadeDelay );
+	}
+
+	public float EstimateRevealDuration()
+	{
+		return Mathf.Max( EstimateLanternSweepWindow(), EstimateSkylightWindow(), GetMaxPunchDuration( _skylightFadeDelay ) );
+	}
+
+	public static bool TryFindInOpenScenes( string revealId, out LanternRevealSweepController controller )
+	{
+		controller = null;
+		if ( string.IsNullOrEmpty( revealId ) )
+			return false;
+
+		LanternRevealSweepController[] found =
+			UnityEngine.Object.FindObjectsByType<LanternRevealSweepController>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		for ( int i = 0; i < found.Length; i++ )
+		{
+			if ( found[ i ] != null && found[ i ].RevealId == revealId )
+			{
+				controller = found[ i ];
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	void Awake()
 	{
 		if ( _sweepReference == null )
@@ -150,6 +220,11 @@ public class LanternRevealSweepController : MonoBehaviour
 		}
 
 		ResetPunchEffects();
+	}
+
+	public static bool TryStartReveal( string revealId )
+	{
+		return TryStartReveal( revealId, default );
 	}
 
 	public static bool TryStartReveal( string revealId, LanternRevealSweepOverrides overrides )
@@ -257,6 +332,7 @@ public class LanternRevealSweepController : MonoBehaviour
 	IEnumerator RevealRoutine( LanternRevealSweepOverrides overrides )
 	{
 		float skylightFadeOverride = overrides.SkylightFadeDuration;
+		float skylightFadeDelay = ResolveOverride( overrides.SkylightFadeDelay, _skylightFadeDelay );
 		float sweepDurationZ = ResolvePerAxisSweepDuration( overrides.SweepDurationZ, overrides.SweepDuration, _sweepDurationZ );
 		float sweepDurationY = ResolvePerAxisSweepDuration( overrides.SweepDurationY, overrides.SweepDuration, _sweepDurationY );
 		float lanternFadeDuration = ResolveOverride( overrides.LanternFadeDuration, _lanternFadeDuration );
@@ -288,8 +364,8 @@ public class LanternRevealSweepController : MonoBehaviour
 		}
 
 		bool animateSkylight = HasSkylights();
-		float punchDuration = GetMaxPunchDuration();
-		float skylightRevealDuration = GetSkylightRevealDuration( skylightFadeOverride );
+		float punchDuration = GetMaxPunchDuration( skylightFadeDelay );
+		float skylightRevealDuration = GetSkylightRevealDuration( skylightFadeOverride, skylightFadeDelay );
 		float lanternRevealDuration = lanternStartDelay + maxTriggerTime;
 		float revealDuration = Mathf.Max( animateSkylight ? skylightRevealDuration : 0f, lanternRevealDuration, punchDuration );
 		float elapsed = 0f;
@@ -304,7 +380,7 @@ public class LanternRevealSweepController : MonoBehaviour
 			elapsed += Time.deltaTime;
 
 			if ( animateSkylight )
-				ApplySkylightReveal( elapsed, skylightFadeOverride );
+				ApplySkylightReveal( elapsed, skylightFadeOverride, skylightFadeDelay );
 
 			ApplyPunchEffects( elapsed );
 			float sweepElapsed = Mathf.Max( 0f, elapsed - lanternStartDelay );
@@ -484,7 +560,7 @@ public class LanternRevealSweepController : MonoBehaviour
 		return defaultValue;
 	}
 
-	float GetMaxPunchDuration()
+	float GetMaxPunchDuration( float skylightFadeDelay )
 	{
 		float maxDuration = 0f;
 		if ( _bloomPunch.IsActive )
@@ -502,14 +578,14 @@ public class LanternRevealSweepController : MonoBehaviour
 
 				RevealPunchChannel punch = skylight.Punch;
 				if ( punch.IsScaleActive )
-					maxDuration = Mathf.Max( maxDuration, skylight.StartDelay + punch.TotalDuration );
+					maxDuration = Mathf.Max( maxDuration, skylightFadeDelay + skylight.StartDelay + punch.TotalDuration );
 			}
 		}
 
 		return maxDuration;
 	}
 
-	float GetSkylightRevealDuration( float fadeOverride )
+	float GetSkylightRevealDuration( float fadeOverride, float skylightFadeDelay )
 	{
 		float maxDuration = 0f;
 		if ( _skylights == null )
@@ -522,8 +598,9 @@ public class LanternRevealSweepController : MonoBehaviour
 				continue;
 
 			float fadeDuration = ResolveSkylightFadeDuration( skylight, fadeOverride );
-			float fadeEnd = skylight.StartDelay + fadeDuration;
-			float punchEnd = skylight.Punch.IsScaleActive ? skylight.StartDelay + skylight.Punch.TotalDuration : 0f;
+			float start = skylightFadeDelay + skylight.StartDelay;
+			float fadeEnd = start + fadeDuration;
+			float punchEnd = skylight.Punch.IsScaleActive ? start + skylight.Punch.TotalDuration : 0f;
 			maxDuration = Mathf.Max( maxDuration, fadeEnd, punchEnd );
 		}
 
@@ -550,7 +627,7 @@ public class LanternRevealSweepController : MonoBehaviour
 		} );
 	}
 
-	void ApplySkylightReveal( float elapsed, float fadeOverride )
+	void ApplySkylightReveal( float elapsed, float fadeOverride, float skylightFadeDelay )
 	{
 		if ( _skylights == null )
 			return;
@@ -561,7 +638,7 @@ public class LanternRevealSweepController : MonoBehaviour
 			if ( skylight == null )
 				continue;
 
-			float localElapsed = elapsed - skylight.StartDelay;
+			float localElapsed = elapsed - skylightFadeDelay - skylight.StartDelay;
 			float fadeDuration = ResolveSkylightFadeDuration( skylight, fadeOverride );
 			float revealT = localElapsed < 0f
 				? 0f
@@ -601,6 +678,9 @@ public class LanternRevealSweepController : MonoBehaviour
 		}
 
 		EnsureBloomVolume();
+		if ( _bloomVolume == null || _bloomOverride == null )
+			return;
+
 		_bloomOverride.intensity.Override( _bloomPunch.peak );
 		_bloomVolume.weight = _bloomPunch.EvaluateWeight( elapsed );
 	}
@@ -610,19 +690,40 @@ public class LanternRevealSweepController : MonoBehaviour
 		if ( _bloomVolume != null )
 			return;
 
-		GameObject go = new GameObject( "[LanternRevealBloom]" );
-		go.transform.SetParent( transform, false );
-		_bloomVolume = go.AddComponent<Volume>();
-		_bloomVolume.isGlobal = true;
-		_bloomVolume.priority = 100f;
-		_bloomVolume.weight = 0f;
+		Transform existing = transform.Find( "[LanternRevealBloom]" );
+		if ( existing != null )
+		{
+			_bloomVolume = existing.GetComponent<Volume>();
+			if ( _bloomVolume != null )
+			{
+				_bloomVolume.weight = 0f;
+				_bloomProfile = _bloomVolume.sharedProfile;
+				if ( _bloomProfile != null && !_bloomProfile.TryGet( out _bloomOverride ) )
+				{
+					_bloomOverride = _bloomProfile.Add<Bloom>( true );
+					_bloomOverride.threshold.Override( 0.9f );
+				}
+			}
+		}
 
-		_bloomProfile = ScriptableObject.CreateInstance<VolumeProfile>();
-		_bloomProfile.name = "LanternRevealBloomProfile";
-		_bloomOverride = _bloomProfile.Add<Bloom>( true );
-		_bloomOverride.intensity.Override( _bloomPunch.peak );
-		_bloomOverride.threshold.Override( 0.9f );
-		_bloomVolume.profile = _bloomProfile;
+		if ( _bloomVolume == null )
+		{
+			GameObject go = new GameObject( "[LanternRevealBloom]" );
+			go.transform.SetParent( transform, false );
+			_bloomVolume = go.AddComponent<Volume>();
+			_bloomVolume.isGlobal = true;
+			_bloomVolume.priority = 100f;
+			_bloomVolume.weight = 0f;
+
+			_bloomProfile = ScriptableObject.CreateInstance<VolumeProfile>();
+			_bloomProfile.name = "LanternRevealBloomProfile";
+			_bloomOverride = _bloomProfile.Add<Bloom>( true );
+			_bloomOverride.threshold.Override( 0.9f );
+			_bloomVolume.profile = _bloomProfile;
+		}
+
+		if ( _bloomOverride != null )
+			_bloomOverride.intensity.Override( _bloomPunch.peak );
 	}
 
 	void ResetPunchEffects()

@@ -47,6 +47,21 @@ public class DebugWorldEventsSection : DebugOverlaySection
 			system.DebugFireEvent( "intro_ledge" );
 		GUILayout.EndHorizontal();
 
+		if ( GUILayout.Button( "Fly Camera" ) )
+			CinematicPresentationController.TryPlay( CinematicPresentationController.IntroLedgePresentationId );
+
+		if ( Application.isPlaying )
+		{
+			CinematicPresentationController cine;
+			if ( CinematicPresentationController.TryGet( CinematicPresentationController.IntroLedgePresentationId, out cine ) && cine != null )
+			{
+				if ( cine.IsPlaying )
+					GUILayout.Label( "Cinematic: " + cine.Phase + " @ " + cine.Elapsed.ToString( "0.00" ) + "s" );
+				else
+					GUILayout.Label( "Cinematic: idle" );
+			}
+		}
+
 		if ( GUILayout.Button( "Start Catalog" ) )
 			system.StartCatalog();
 
@@ -123,7 +138,7 @@ public class DebugWorldEventsSection : DebugOverlaySection
 		if ( GUILayout.Button( "Reveal Sweep" ) )
 		{
 			DebugResetRevealControllers();
-			LanternRevealSweepController.TryStartReveal( LanternActivator.IntroLedgeRevealId, default );
+			LanternRevealSweepController.TryStartReveal( LanternActivator.IntroLedgeRevealId );
 		}
 		if ( GUILayout.Button( "Reset Reveal" ) )
 			DebugResetRevealControllers();

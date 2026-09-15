@@ -74,11 +74,14 @@ public class WorldEventAction
 {
 	public WorldEventActionType type;
 
-	[Tooltip( "Seconds to wait before this action starts. Later actions wait as well because they run in list order." )]
+	[Tooltip( "Seconds to wait before this action starts. By default later actions wait too (list order). Enable onlyDelayThisAction to delay only this action." )]
 	[Min( 0f )]
 	public float delayBefore;
 
-	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; brake waits brake duration." )]
+	[Tooltip( "When true, delayBefore only delays this action; later actions continue immediately without waiting for the delay." )]
+	public bool onlyDelayThisAction;
+
+	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; cinematic waits until presentation ends; brake waits brake duration." )]
 	public bool waitUntilFinished;
 
 	[Tooltip( "Dialogue lines when type is Dialogue." )]
@@ -135,51 +138,11 @@ public class WorldEventAction
 	[Tooltip( "When true, PlayAudio uses spawnWorldPosition instead of spawnPointId." )]
 	public bool audioUseWorldPosition;
 
-	[Tooltip( "Reveal id for LanternRevealSweep. Matches LanternRevealSweepController / reveal lanterns." )]
+	[Tooltip( "Reveal id for LanternRevealSweep. Matches LanternRevealSweepController / reveal lanterns. Timing lives on the controller." )]
 	public string lanternRevealId;
 
-	[Tooltip( "Skylight fade duration override. 0 = use controller default." )]
-	[Min( 0f )]
-	public float lanternSkylightFadeDuration;
-
-	[Tooltip( "Seconds for the sweep front to travel start Z to end Z. 0 = use controller default." )]
-	[Min( 0f )]
-	public float lanternSweepDuration;
-
-	[Tooltip( "Per-lantern fade duration when the sweep reaches it. 0 = use controller default." )]
-	[Min( 0f )]
-	public float lanternFadeDuration;
-
-	[Tooltip( "Seconds before the lantern sweep starts. 0 = use controller default." )]
-	[Min( 0f )]
-	public float lanternStartDelay;
-
-	[Tooltip( "Presentation id for CinematicPresentation. Matches CinematicPresentationController." )]
+	[Tooltip( "Presentation id for CinematicPresentation. Matches CinematicPresentationController. Timing and cues live on the controller." )]
 	public string cinematicPresentationId;
-
-	[Tooltip( "Target FOV peak for CinematicPresentation. 0 = use controller default." )]
-	[Min( 0f )]
-	public float cinematicFovPeak;
-
-	[Tooltip( "Letterbox bar height (0-1 screen fraction) for CinematicPresentation. 0 = use controller default." )]
-	[Min( 0f )]
-	public float cinematicLetterboxPeak;
-
-	[Tooltip( "Rise duration override for CinematicPresentation. 0 = use controller default." )]
-	[Min( 0f )]
-	public float cinematicRise;
-
-	[Tooltip( "Hold duration override for CinematicPresentation. 0 = use controller default." )]
-	[Min( 0f )]
-	public float cinematicHold;
-
-	[Tooltip( "Fall duration override for CinematicPresentation. 0 = use controller default." )]
-	[Min( 0f )]
-	public float cinematicFall;
-
-	[Tooltip( "Seconds to lock planar movement when CinematicPresentation starts. 0 = no lock." )]
-	[Min( 0f )]
-	public float cinematicPlayerMovementLockDuration = 10f;
 
 	[Tooltip( "Seconds to interpolate planar velocity to zero when type is BrakePlayerMovement. 0 = instant stop." )]
 	[Min( 0f )]

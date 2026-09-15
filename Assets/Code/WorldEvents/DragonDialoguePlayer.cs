@@ -122,7 +122,7 @@ public class DragonDialoguePlayer
 	{
 		if ( string.IsNullOrEmpty( text ) )
 			return 4.5f;
-		return Mathf.Clamp( text.Length / 6f, 5.25f, 24f );
+		return Mathf.Clamp( text.Length / 4f, 5.25f, 24f );
 	}
 
 	static void PublishHidden()

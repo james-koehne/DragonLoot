@@ -15,8 +15,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 	const int MaxStreamSpawnsPerFrame = 3;
 	const int MaxStreamDespawnsPerFrame = 3;
 	const int MaxStreamLatentChecksPerFrame = 64;
-	const float StreamPlayerMoveEpsilon = 0.25f;
-	const float StreamPlayerMoveEpsilonSqr = StreamPlayerMoveEpsilon * StreamPlayerMoveEpsilon;
+	const float StreamFocusMoveEpsilon = 0.25f;
+	const float StreamFocusMoveEpsilonSqr = StreamFocusMoveEpsilon * StreamFocusMoveEpsilon;
 	const float CullCameraMoveEpsilonSqr = 0.0025f;
 	const float CullCameraForwardDotMin = 0.9995f;
 
@@ -95,8 +95,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 	int _streamDespawnBudget;
 	int _streamLatentCursor;
 	bool _streamResidencyDirty;
-	bool _hasLastStreamPlayerPos;
-	Vector3 _lastStreamPlayerPos;
+	bool _hasLastStreamFocusPos;
+	Vector3 _lastStreamFocusPos;
 	readonly List<TreasureItem> _pendingWorldReleases = new List<TreasureItem>( 8 );
 	readonly List<TreasurePileAuthoredItem> _authoredScratch = new List<TreasurePileAuthoredItem>( 16 );
 	readonly List<GameObject> _disabledAuthoredProxies = new List<GameObject>( 16 );
@@ -230,7 +230,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		_streamDespawnBudget = 0;
 		_streamLatentCursor = 0;
 		_streamResidencyDirty = true;
-		_hasLastStreamPlayerPos = false;
+		_hasLastStreamFocusPos = false;
 
 		if ( definition != null )
 		{
@@ -676,7 +676,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		_revealCursor = 0;
 		_streamLatentCursor = 0;
 		_streamResidencyDirty = true;
-		_hasLastStreamPlayerPos = false;
+		_hasLastStreamFocusPos = false;
 		_hasLatentWorldCacheRoot = false;
 		ExposedLatentCount = 0;
 		StreamedOutCount = 0;
@@ -2335,23 +2335,18 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _loot != null && !_loot.StreamingEnabled )
 			return;
 
-		if ( !TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
-		{
-			Camera cam = ResolveCamera();
-			if ( cam == null )
-				return;
-			playerPos = cam.transform.position;
-		}
-
-		bool playerMoved = !_hasLastStreamPlayerPos
-			|| PlanarDistanceSqr( playerPos, _lastStreamPlayerPos ) >= StreamPlayerMoveEpsilonSqr;
-		if ( playerMoved )
-			_streamResidencyDirty = true;
-		if ( !playerMoved && !_streamResidencyDirty )
+		if ( !TryGetStreamFocusPosition( out Vector3 focusPos ) )
 			return;
 
-		_lastStreamPlayerPos = playerPos;
-		_hasLastStreamPlayerPos = true;
+		bool focusMoved = !_hasLastStreamFocusPos
+			|| PlanarDistanceSqr( focusPos, _lastStreamFocusPos ) >= StreamFocusMoveEpsilonSqr;
+		if ( focusMoved )
+			_streamResidencyDirty = true;
+		if ( !focusMoved && !_streamResidencyDirty )
+			return;
+
+		_lastStreamFocusPos = focusPos;
+		_hasLastStreamFocusPos = true;
 
 		EnsureLatentWorldCaches();
 
@@ -2373,7 +2368,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( latent.Taken )
 				continue;
 
-			float distSqr = PlanarDistanceSqr( playerPos, prop.WorldBounds.center );
+			float distSqr = PlanarDistanceSqr( focusPos, prop.WorldBounds.center );
 			if ( IsCategoryInStreamRange( prop.Definition.category, distSqr, currentlyResident: true ) )
 				continue;
 
@@ -2393,7 +2388,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return;
 		}
 
-		CollectStreamCandidateLatents( playerPos, enterRadius );
+		CollectStreamCandidateLatents( focusPos, enterRadius );
 		int candidateCount = _streamCandidateScratch.Count;
 		int seatsAttempted = 0;
 		bool spawnBudgetHit = false;
@@ -2427,7 +2422,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 				if ( !latent.SurfaceOk && !CanSpawnBakedLatent( latent ) )
 					continue;
 
-				float spawnDistSqr = LatentPlanarDistanceSqr( latent, playerPos );
+				float spawnDistSqr = LatentPlanarDistanceSqr( latent, focusPos );
 				if ( !IsCategoryInStreamRange( latent.Definition.category, spawnDistSqr, currentlyResident: false ) )
 					continue;
 
@@ -2449,7 +2444,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 
 		if ( _streamSettings != null && _streamSettings.drawOverlayStats )
-			RecountStreamCounters( playerPos );
+			RecountStreamCounters( focusPos );
 
 		bool seatingBusy = _seatingInFlight.Count > 0;
 		if ( ( wrapped || candidateCount == 0 )
@@ -2483,7 +2478,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return Mathf.Max( 0.1f, max );
 	}
 
-	void CollectStreamCandidateLatents( Vector3 playerPos, float enterRadius )
+	void CollectStreamCandidateLatents( Vector3 focusPos, float enterRadius )
 	{
 		_streamCandidateScratch.Clear();
 		if ( _latent.Count == 0 )
@@ -2502,7 +2497,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return;
 		}
 
-		CollectChunkIndicesInRadius( playerPos, enterRadius, _streamChunkScratch, _streamChunkSet );
+		CollectChunkIndicesInRadius( focusPos, enterRadius, _streamChunkScratch, _streamChunkSet );
 		for ( int c = 0; c < _streamChunkScratch.Count; c++ )
 		{
 			int chunkIndex = _streamChunkScratch[ c ];
@@ -2529,7 +2524,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 	}
 
 	void CollectChunkIndicesInRadius(
-		Vector3 playerPos,
+		Vector3 focusPos,
 		float radius,
 		List<int> outChunks,
 		HashSet<int> scratchSet )
@@ -2557,12 +2552,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 		float evalRadius = radius + chunkDiagonal;
 		float evalRadiusSqr = evalRadius * evalRadius;
 
-		if ( !grid.TryWorldToChunk( playerPos, out int playerCx, out int playerCz ) )
+		if ( !grid.TryWorldToChunk( focusPos, out int focusCx, out int focusCz ) )
 		{
 			IReadOnlyList<GoldPileChunk> chunks = grid.Chunks;
 			for ( int i = 0; i < chunks.Count; i++ )
 			{
-				if ( PlanarDistanceToBoundsSqr( playerPos, chunks[ i ].WorldBounds ) > evalRadiusSqr )
+				if ( PlanarDistanceToBoundsSqr( focusPos, chunks[ i ].WorldBounds ) > evalRadiusSqr )
 					continue;
 				if ( scratchSet.Add( i ) )
 					outChunks.Add( i );
@@ -2572,10 +2567,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 
 		int radiusChunks = Mathf.Max( 1, Mathf.CeilToInt( evalRadius / chunkSize ) + 1 );
-		int minX = Mathf.Max( 0, playerCx - radiusChunks );
-		int maxX = Mathf.Min( _latentChunkCountX - 1, playerCx + radiusChunks );
-		int minZ = Mathf.Max( 0, playerCz - radiusChunks );
-		int maxZ = Mathf.Min( _latentChunkCountZ - 1, playerCz + radiusChunks );
+		int minX = Mathf.Max( 0, focusCx - radiusChunks );
+		int maxX = Mathf.Min( _latentChunkCountX - 1, focusCx + radiusChunks );
+		int minZ = Mathf.Max( 0, focusCz - radiusChunks );
+		int maxZ = Mathf.Min( _latentChunkCountZ - 1, focusCz + radiusChunks );
 		IReadOnlyList<GoldPileChunk> gridChunks = grid.Chunks;
 
 		for ( int z = minZ; z <= maxZ; z++ )
@@ -2586,7 +2581,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 				int i = row + x;
 				if ( i < 0 || i >= gridChunks.Count )
 					continue;
-				if ( PlanarDistanceToBoundsSqr( playerPos, gridChunks[ i ].WorldBounds ) > evalRadiusSqr )
+				if ( PlanarDistanceToBoundsSqr( focusPos, gridChunks[ i ].WorldBounds ) > evalRadiusSqr )
 					continue;
 				if ( scratchSet.Add( i ) )
 					outChunks.Add( i );
@@ -2605,7 +2600,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		return dx * dx + dz * dz;
 	}
 
-	float LatentPlanarDistanceSqr( LatentEntry latent, Vector3 playerPos )
+	float LatentPlanarDistanceSqr( LatentEntry latent, Vector3 focusPos )
 	{
 		float lx = latent.HasWorldCenter ? latent.WorldCenterX : ( _pileRoot != null
 			? _pileRoot.TransformPoint( latent.LocalBounds.center ).x
@@ -2613,8 +2608,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		float lz = latent.HasWorldCenter ? latent.WorldCenterZ : ( _pileRoot != null
 			? _pileRoot.TransformPoint( latent.LocalBounds.center ).z
 			: latent.LocalBounds.center.z );
-		float dx = playerPos.x - lx;
-		float dz = playerPos.z - lz;
+		float dx = focusPos.x - lx;
+		float dz = focusPos.z - lz;
 		return dx * dx + dz * dz;
 	}
 
@@ -2774,7 +2769,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		}
 	}
 
-	void RecountStreamCounters( Vector3 playerPos )
+	void RecountStreamCounters( Vector3 focusPos )
 	{
 		int exposed = 0;
 		int streamedOut = 0;
@@ -2789,7 +2784,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( latent.Spawned || latent.Definition == null )
 				continue;
 
-			float distSqr = LatentPlanarDistanceSqr( latent, playerPos );
+			float distSqr = LatentPlanarDistanceSqr( latent, focusPos );
 			if ( !IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident: false ) )
 				streamedOut++;
 		}
@@ -2858,18 +2853,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	bool IsLatentInStreamRange( int latentIndex, bool currentlyResident )
 	{
-		if ( !TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
-		{
-			Camera cam = ResolveCamera();
-			if ( cam == null )
-				return true;
-			playerPos = cam.transform.position;
-		}
+		if ( !TryGetStreamFocusPosition( out Vector3 focusPos ) )
+			return true;
 
-		return IsLatentInStreamRange( latentIndex, currentlyResident, playerPos );
+		return IsLatentInStreamRange( latentIndex, currentlyResident, focusPos );
 	}
 
-	bool IsLatentInStreamRange( int latentIndex, bool currentlyResident, Vector3 playerPos )
+	bool IsLatentInStreamRange( int latentIndex, bool currentlyResident, Vector3 focusPos )
 	{
 		if ( _loot != null && !_loot.StreamingEnabled )
 			return true;
@@ -2886,8 +2876,20 @@ public class GoldPileArtifactProps : MonoBehaviour
 			: ( _pileRoot != null
 				? _pileRoot.TransformPoint( latent.LocalBounds.center )
 				: latent.LocalBounds.center );
-		float distSqr = PlanarDistanceSqr( playerPos, worldCenter );
+		float distSqr = PlanarDistanceSqr( focusPos, worldCenter );
 		return IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident );
+	}
+
+	bool TryGetStreamFocusPosition( out Vector3 focusPos )
+	{
+		Camera camera = ResolveCamera();
+		if ( camera != null )
+		{
+			focusPos = camera.transform.position;
+			return true;
+		}
+
+		return TreasureProximitySleep.TryGetPlayerPosition( out focusPos );
 	}
 
 	bool IsCategoryInStreamRange( TreasureCategory category, float distanceMetersSqr, bool currentlyResident )

@@ -436,10 +436,10 @@ public class CoinHallProgression : MonoBehaviour
 		}
 
 		if ( !string.IsNullOrEmpty( optionalCinematicPresentationId ) )
-			CinematicPresentationController.TryPlay( optionalCinematicPresentationId, default );
+			CinematicPresentationController.TryPlay( optionalCinematicPresentationId );
 
 		if ( !string.IsNullOrEmpty( optionalLanternRevealId ) )
-			LanternRevealSweepController.TryStartReveal( optionalLanternRevealId, default );
+			LanternRevealSweepController.TryStartReveal( optionalLanternRevealId );
 	}
 
 	void PublishExpanded( bool fromLoad )

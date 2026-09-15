@@ -124,6 +124,10 @@ public class PlayerMinecartDrive : MonoBehaviour
 		_heldForwardSign = ResolveForwardSign();
 		cart.SetDriveSeatCollidersEnabled( false );
 		cart.PlayDriveEnterFeedback();
+
+		if ( _player != null )
+			_player.SnapToWorldPosition( cart.ResolveSeatWorldPosition() );
+
 		EventBus.Publish( new MinecartDriveEnteredEvent { Cart = cart } );
 
 		PlayerMinecartPush push = _player != null ? _player.MinecartPush : null;
@@ -145,16 +149,22 @@ public class PlayerMinecartDrive : MonoBehaviour
 		StopMoveLoop();
 		_cart.PlayDriveExitFeedback();
 
+		Vector3 inherit = Vector3.zero;
 		if ( inheritVelocity && _player != null )
 		{
 			Vector3 tangent;
 			if ( _cart.TryGetTrackTangent( out tangent ) )
-				_player.AddPlanarVelocity( tangent * _signedSpeed );
+				inherit = tangent * _signedSpeed;
 		}
 
-		Vector3 side = _cart.transform.right * 0.9f;
-		if ( _controller != null && _controller.enabled )
-			_controller.Move( side );
+		Vector3 exitPos = transform.position + _cart.transform.right * 0.9f;
+		if ( _player != null )
+			_player.SnapToWorldPosition( exitPos );
+		else if ( _controller != null && _controller.enabled )
+			_controller.Move( _cart.transform.right * 0.9f );
+
+		if ( inherit.sqrMagnitude > 0.0001f && _player != null )
+			_player.AddPlanarVelocity( inherit );
 
 		_cart.SetDriveSeatCollidersEnabled( true );
 		_cart.SetDriveSpeed( _signedSpeed, false );

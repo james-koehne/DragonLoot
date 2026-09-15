@@ -34,6 +34,9 @@ public class PlayerController : MonoBehaviour
 	PlayerMinecartPush _minecartPush;
 	PlayerMinecartRide _minecartRide;
 	PlayerMinecartDrive _minecartDrive;
+	PlayerFloatingPlatformRide _floatingPlatformRide;
+	bool _ridingFloatingPlatform;
+	[SerializeField] PlayerAvatar _avatar;
 	PlayerSorterReposition _sorterReposition;
 	PlayerAbilities _abilities;
 	PlayerCleaning _cleaning;
@@ -42,6 +45,7 @@ public class PlayerController : MonoBehaviour
 	bool gameplayInputEnabled = true;
 	bool _cinematicInputLock;
 	bool _cinematicBodyLock;
+	bool _cinematicCameraDetached;
 	float _verticalVelocity;
 	bool _wasGrounded;
 	Vector3 _planarVelocity;
@@ -181,6 +185,16 @@ public class PlayerController : MonoBehaviour
 	public PlayerMinecartPush MinecartPush => _minecartPush;
 	public PlayerMinecartRide MinecartRide => _minecartRide;
 	public PlayerMinecartDrive MinecartDrive => _minecartDrive;
+	public PlayerFloatingPlatformRide FloatingPlatformRide => _floatingPlatformRide;
+	public bool IsRidingFloatingPlatform => _ridingFloatingPlatform;
+
+	public void NotifyFloatingPlatformRide( bool riding )
+	{
+		_ridingFloatingPlatform = riding;
+		if ( riding && _verticalVelocity < 0f )
+			_verticalVelocity = 0f;
+	}
+	public PlayerAvatar Avatar => _avatar;
 	public PlayerSorterReposition SorterReposition => _sorterReposition;
 	public PlayerAbilities Abilities => _abilities;
 	public PlayerCleaning Cleaning => _cleaning;
@@ -232,6 +246,15 @@ public class PlayerController : MonoBehaviour
 		}
 	}
 	public bool IsDrivingMinecart => _minecartDrive != null && _minecartDrive.IsDriving;
+	public bool IsCinematicCameraDetached => _cinematicCameraDetached;
+
+	/// <summary>
+	/// Marks that a cinematic owns the camera off CameraMount (third-person avatar moments).
+	/// </summary>
+	public void SetCinematicCameraDetached( bool detached )
+	{
+		_cinematicCameraDetached = detached;
+	}
 
 	public bool IsSliding => _isSliding;
 	public bool IsSlideTutorialContext
@@ -639,6 +662,7 @@ public class PlayerController : MonoBehaviour
 		EnsureMinecartPush();
 		EnsureMinecartRide();
 		EnsureMinecartDrive();
+		EnsureFloatingPlatformRide();
 		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
@@ -660,6 +684,10 @@ public class PlayerController : MonoBehaviour
 			_minecartRide.Setup( this );
 		if ( _minecartDrive != null )
 			_minecartDrive.Setup( this );
+		if ( _floatingPlatformRide != null )
+			_floatingPlatformRide.Setup( this );
+		if ( _avatar != null )
+			_avatar.Setup( this );
 		if ( _sorterReposition != null )
 			_sorterReposition.Setup( this );
 	}
@@ -788,6 +816,16 @@ public class PlayerController : MonoBehaviour
 			_minecartRide = gameObject.AddComponent<PlayerMinecartRide>();
 
 		_minecartRide.Setup( this );
+	}
+
+	void EnsureFloatingPlatformRide()
+	{
+		if ( _floatingPlatformRide == null )
+			_floatingPlatformRide = GetComponent<PlayerFloatingPlatformRide>();
+		if ( _floatingPlatformRide == null )
+			_floatingPlatformRide = gameObject.AddComponent<PlayerFloatingPlatformRide>();
+
+		_floatingPlatformRide.Setup( this );
 	}
 
 	void EnsureMinecartDrive()
@@ -1069,7 +1107,7 @@ public class PlayerController : MonoBehaviour
 		_debugFlatMoveIntent = flatMoveIntent;
 		_debugGroundMoveIntent = moveIntent;
 
-		if ( IsGrounded && !_isClimbing && _verticalVelocity < 0f )
+		if ( IsGrounded && !_isClimbing && _verticalVelocity < 0f && !_ridingFloatingPlatform )
 			_verticalVelocity = GroundStickVelocity;
 
 		if ( IsGrounded && !IsPlanarMovementRestricted )
@@ -1725,6 +1763,8 @@ public class PlayerController : MonoBehaviour
 	Vector3 ComposeGroundedMoveVelocity( Vector3 slopeVelocity )
 	{
 		Vector3 alongSurface = Vector3.ProjectOnPlane( slopeVelocity, _groundNormal );
+		if ( _ridingFloatingPlatform )
+			return alongSurface;
 		return alongSurface + Vector3.up * GroundStickVelocity;
 	}
 

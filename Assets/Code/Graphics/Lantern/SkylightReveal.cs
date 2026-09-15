@@ -30,7 +30,7 @@ public class SkylightReveal : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0f )]
-	[Tooltip( "Seconds for this skylight to fade from 0 to 1. 0 = use LanternRevealSweepController default / world-event override." )]
+	[Tooltip( "Seconds for this skylight to fade from 0 to 1. 0 = use LanternRevealSweepController default." )]
 	float _fadeDuration;
 
 	[SerializeField]
@@ -47,6 +47,7 @@ public class SkylightReveal : MonoBehaviour
 	float[] _targetLightIntensities = Array.Empty<float>();
 	float _targetSkyIntensity;
 	float _targetDensity;
+	bool _targetsCached;
 	float _currentT;
 	float _overshootScale = 1f;
 	Coroutine _fadeRoutine;
@@ -70,6 +71,9 @@ public class SkylightReveal : MonoBehaviour
 
 	void CacheTargets()
 	{
+		if ( _targetsCached )
+			return;
+
 		if ( _lights == null )
 			_lights = Array.Empty<Light>();
 
@@ -82,6 +86,7 @@ public class SkylightReveal : MonoBehaviour
 
 		_targetSkyIntensity = ReadRendererFloat( _skyPortalRenderer, SkyIntensityId, 1f );
 		_targetDensity = ReadRendererFloat( _lightRaysRenderer, DensityId, 0.1f );
+		_targetsCached = true;
 	}
 
 	static float ReadRendererFloat( Renderer renderer, int propertyId, float fallback )

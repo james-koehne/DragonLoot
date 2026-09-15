@@ -442,7 +442,6 @@ public class LanternActivator : MonoBehaviour
 			{
 				PrepareLightVisuals( 1f, true );
 				_lightFlicker.enabled = true;
-				_lightFlicker.RecaptureLightBase();
 			}
 		}
 		else
@@ -450,9 +449,6 @@ public class LanternActivator : MonoBehaviour
 			SetFlickerActive( false );
 			ApplyEmissiveFade( _currentLitT );
 		}
-
-		if ( immediate && fullyLit && _lightFlicker != null && _lightFlicker.enabled )
-			_lightFlicker.RecaptureLightBase();
 	}
 
 	void PlayTransitionFeedback( bool ignite )

@@ -251,8 +251,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	int _budgetLod1 = 150;
 	int _budgetLod2 = 80;
 	float _ditherFadeWidth = 5f;
-	Vector3 _streamPlayerPos;
-	bool _hasStreamPlayerPos;
+	Vector3 _streamFocusPos;
+	bool _hasStreamFocusPos;
 	List<int>[] _eligibleByChunkScratch;
 	List<int>[] _mixByEntryScratch;
 	int[] _mixQuotaScratch;
@@ -2891,27 +2891,27 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		int lod = chunk.Lod;
 		int budget = BudgetForLodCached( lod );
-		if ( lod <= 0 || streamSettings == null || !_hasStreamPlayerPos )
+		if ( lod <= 0 || streamSettings == null || !_hasStreamFocusPos )
 			return budget;
 
-		float dist = PlanarDistanceToChunk( chunk, _streamPlayerPos );
+		float dist = PlanarDistanceToChunk( chunk, _streamFocusPos );
 		return streamSettings.SoftInstancesPerChunk( lod, dist );
 	}
 
-	static float PlanarDistanceToChunk( GoldPileChunk chunk, Vector3 playerPos )
+	static float PlanarDistanceToChunk( GoldPileChunk chunk, Vector3 focusPos )
 	{
 		Bounds b = chunk.WorldBounds;
 		float dx = 0f;
-		if ( playerPos.x < b.min.x )
-			dx = b.min.x - playerPos.x;
-		else if ( playerPos.x > b.max.x )
-			dx = playerPos.x - b.max.x;
+		if ( focusPos.x < b.min.x )
+			dx = b.min.x - focusPos.x;
+		else if ( focusPos.x > b.max.x )
+			dx = focusPos.x - b.max.x;
 
 		float dz = 0f;
-		if ( playerPos.z < b.min.z )
-			dz = b.min.z - playerPos.z;
-		else if ( playerPos.z > b.max.z )
-			dz = playerPos.z - b.max.z;
+		if ( focusPos.z < b.min.z )
+			dz = b.min.z - focusPos.z;
+		else if ( focusPos.z > b.max.z )
+			dz = focusPos.z - b.max.z;
 
 		return Mathf.Sqrt( dx * dx + dz * dz );
 	}
@@ -3541,19 +3541,24 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( !_streamingEnabled || streamSettings == null || _chunkGrid.ChunkCount == 0 )
 			return false;
 
-		if ( !TreasureProximitySleep.TryGetPlayerPosition( out Vector3 playerPos ) )
+		Camera camera = ResolveCamera();
+		if ( !TryGetStreamFocusPosition( camera, out Vector3 focusPos ) )
+			return false;
+
+		_streamFocusPos = focusPos;
+		_hasStreamFocusPos = true;
+		return _streamer.Tick( focusPos, camera );
+	}
+
+	static bool TryGetStreamFocusPosition( Camera camera, out Vector3 focusPos )
+	{
+		if ( camera != null )
 		{
-			Camera camFallback = ResolveCamera();
-			if ( camFallback == null )
-				return false;
-			playerPos = camFallback.transform.position;
+			focusPos = camera.transform.position;
+			return true;
 		}
 
-		_streamPlayerPos = playerPos;
-		_hasStreamPlayerPos = true;
-
-		Camera camera = ResolveCamera();
-		return _streamer.Tick( playerPos, camera );
+		return TreasureProximitySleep.TryGetPlayerPosition( out focusPos );
 	}
 
 	bool PassesStreamFilter( int slotIndex, Slot slot, bool checkExists )

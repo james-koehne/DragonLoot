@@ -81,8 +81,10 @@ public class StylizedLightingGlobals : MonoBehaviour
 		if ( Mathf.Approximately( _specularIntensityMultiplier, 1f ) )
 			return;
 
-		float current = Shader.GetGlobalFloat( StylizedLightingDefinition.SpecularIntensityId );
-		Shader.SetGlobalFloat( StylizedLightingDefinition.SpecularIntensityId, current * _specularIntensityMultiplier );
+		// Always scale the authored definition value. Multiplying the live shader global
+		// stacks on the previous punch when PushGlobals runs more than once per frame.
+		float baseIntensity = _definition != null ? _definition.specularIntensity : 0.45f;
+		Shader.SetGlobalFloat( StylizedLightingDefinition.SpecularIntensityId, baseIntensity * _specularIntensityMultiplier );
 	}
 
 	StylizedLightingDefinition ResolveDefinition()

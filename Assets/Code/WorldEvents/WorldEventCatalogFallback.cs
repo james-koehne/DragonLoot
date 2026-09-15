@@ -74,30 +74,10 @@ public static class WorldEventCatalogFallback
 		evt.actions = new[]
 		{
 			BrakePlayerMovementAction( 1f ),
-			DialogueAction( Line( "I believe we have rather a lot of work to do." ) ),
-			AudioAction( ResolveEpicRiserClip() ),
-			LanternRevealSweepAction( LanternActivator.IntroLedgeRevealId ),
-			CinematicPresentationAction( CinematicPresentationController.IntroLedgePresentationId, 10f )
+			CinematicPresentationAction( CinematicPresentationController.IntroLedgePresentationId ),
+			DialogueAction( Line( "I believe we have rather a lot of work to do." ) )
 		};
 		return evt;
-	}
-
-	static AudioClip ResolveEpicRiserClip()
-	{
-#if UNITY_EDITOR
-		return UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>( "Assets/Audio/SFX/Stingers/EpicRiser_TEMP_DELETE.wav" );
-#else
-		return null;
-#endif
-	}
-
-	static WorldEventAction LanternRevealSweepAction( string revealId )
-	{
-		return new WorldEventAction
-		{
-			type = WorldEventActionType.LanternRevealSweep,
-			lanternRevealId = revealId
-		};
 	}
 
 	static WorldEventAction BrakePlayerMovementAction( float duration )
@@ -109,27 +89,13 @@ public static class WorldEventCatalogFallback
 		};
 	}
 
-	static WorldEventAction CinematicPresentationAction( string presentationId, float playerMovementLockDuration = 0f )
+	static WorldEventAction CinematicPresentationAction( string presentationId )
 	{
 		return new WorldEventAction
 		{
 			type = WorldEventActionType.CinematicPresentation,
 			cinematicPresentationId = presentationId,
-			cinematicPlayerMovementLockDuration = playerMovementLockDuration
-		};
-	}
-
-	static WorldEventAction AudioAction( AudioClip clip )
-	{
-		return new WorldEventAction
-		{
-			type = WorldEventActionType.PlayAudio,
-			audioClip = clip,
-			audioVolumeMin = 1f,
-			audioVolumeMax = 1f,
-			audioPitchMin = 1f,
-			audioPitchMax = 1f,
-			audioSpatialBlend = 0f
+			waitUntilFinished = true
 		};
 	}
 

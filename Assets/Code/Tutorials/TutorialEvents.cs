@@ -81,3 +81,9 @@ public struct CinematicPresentationEndedEvent
 {
 	public string PresentationId;
 }
+
+/// <summary>A tutorial was marked completed (save + session).</summary>
+public struct TutorialCompletedEvent
+{
+	public string TutorialId;
+}

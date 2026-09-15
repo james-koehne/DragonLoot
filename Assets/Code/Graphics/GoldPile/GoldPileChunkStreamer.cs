@@ -5,12 +5,12 @@ using UnityEngine;
 /// <summary>
 /// Frustum + distance-LOD streaming for pile loot chunks.
 /// Chunks stay loaded while the pile is bound; only visibility gates drawing.
-/// Tick evaluates a player-centered LOD window (not the full grid) and only dirties
+/// Tick evaluates a camera-centered LOD window (not the full grid) and only dirties
 /// chunks whose draw-relevant rendered membership / LOD changes.
 /// </summary>
 public sealed class GoldPileChunkStreamer
 {
-	const float LodPlayerMoveEpsilonSqr = 0.0625f; // 0.25m — matches prop residency
+	const float LodFocusMoveEpsilonSqr = 0.0625f; // 0.25m — matches prop residency
 	const float CameraMoveEpsilonSqr = 0.0025f;
 	const float CameraForwardDotMin = 0.9995f;
 
@@ -24,7 +24,7 @@ public sealed class GoldPileChunkStreamer
 	GoldPileChunkGrid _grid;
 	GoldPileLootStreamSettings _settings;
 
-	Vector3 _lastPlayerPos;
+	Vector3 _lastFocusPos;
 	Vector3 _lastCameraPos;
 	Vector3 _lastCameraForward;
 	bool _hasLastSample;
@@ -123,7 +123,7 @@ public sealed class GoldPileChunkStreamer
 	/// Updates chunk LOD / frustum membership. Returns true when draw-relevant state changed.
 	/// Dirty chunk indices are listed in <see cref="DirtyChunkIndices"/> for incremental rebuilds.
 	/// </summary>
-	public bool Tick( Vector3 playerPos, Camera camera )
+	public bool Tick( Vector3 focusPos, Camera camera )
 	{
 		LastTickChanged = false;
 		_dirtyChunkIndices.Clear();
@@ -145,18 +145,18 @@ public sealed class GoldPileChunkStreamer
 			return LastTickChanged;
 		}
 
-		Vector3 cameraPos = camera != null ? camera.transform.position : playerPos;
+		Vector3 cameraPos = camera != null ? camera.transform.position : focusPos;
 		Vector3 cameraForward = camera != null ? camera.transform.forward : Vector3.forward;
 
 		bool forceTick = _forceTick || !_hasLastSample;
-		bool playerMoved = forceTick
-			|| PlanarDeltaSqr( playerPos, _lastPlayerPos ) >= LodPlayerMoveEpsilonSqr;
+		bool focusMoved = forceTick
+			|| PlanarDeltaSqr( focusPos, _lastFocusPos ) >= LodFocusMoveEpsilonSqr;
 		bool cameraMoved = forceTick
 			|| ( cameraPos - _lastCameraPos ).sqrMagnitude >= CameraMoveEpsilonSqr
 			|| Vector3.Dot( cameraForward, _lastCameraForward ) < CameraForwardDotMin;
 		bool pendingHyst = _pendingHysteresisCount > 0;
 
-		if ( !forceTick && !playerMoved && !cameraMoved && !pendingHyst )
+		if ( !forceTick && !focusMoved && !cameraMoved && !pendingHyst )
 			return false;
 
 		float chunkSize = Mathf.Max( 1f, _grid.ChunkSize );
@@ -167,11 +167,11 @@ public sealed class GoldPileChunkStreamer
 		if ( !forceTick
 			&& _rendered.Count == 0
 			&& _grid.TryGetPileWorldBounds( out Bounds pileBounds )
-			&& PlanarDistanceToBoundsSqr( playerPos, pileBounds ) > evalRadiusSqr )
+			&& PlanarDistanceToBoundsSqr( focusPos, pileBounds ) > evalRadiusSqr )
 		{
 			_forceTick = false;
 			_hasLastSample = true;
-			_lastPlayerPos = playerPos;
+			_lastFocusPos = focusPos;
 			_lastCameraPos = cameraPos;
 			_lastCameraForward = cameraForward;
 			_pendingHysteresisCount = 0;
@@ -180,11 +180,11 @@ public sealed class GoldPileChunkStreamer
 
 		_forceTick = false;
 		_hasLastSample = true;
-		_lastPlayerPos = playerPos;
+		_lastFocusPos = focusPos;
 		_lastCameraPos = cameraPos;
 		_lastCameraForward = cameraForward;
 
-		bool updateLod = playerMoved || pendingHyst || forceTick;
+		bool updateLod = focusMoved || pendingHyst || forceTick;
 
 		_prevRenderedIndices.Clear();
 		for ( int i = 0; i < _rendered.Count; i++ )
@@ -199,7 +199,7 @@ public sealed class GoldPileChunkStreamer
 		FrustumCulledCount = 0;
 		LoadedCount = _grid.ChunkCount;
 
-		CollectEvalChunks( playerPos, evalRadius, evalRadiusSqr );
+		CollectEvalChunks( focusPos, evalRadius, evalRadiusSqr );
 
 		bool hasFrustum = GoldPileFrustumCache.TryGet( camera, out Plane[] frustumPlanes );
 		int hysteresis = _settings.lodHysteresisFrames;
@@ -218,7 +218,7 @@ public sealed class GoldPileChunkStreamer
 			GoldPileChunkStreamState prevState = chunk.State;
 			bool wasRendered = prevState == GoldPileChunkStreamState.Rendered;
 
-			float distSqr = PlanarDistanceToBoundsSqr( playerPos, chunk.WorldBounds );
+			float distSqr = PlanarDistanceToBoundsSqr( focusPos, chunk.WorldBounds );
 
 			chunk.State = GoldPileChunkStreamState.Loaded;
 
@@ -274,7 +274,7 @@ public sealed class GoldPileChunkStreamer
 		return changed;
 	}
 
-	void CollectEvalChunks( Vector3 playerPos, float evalRadius, float evalRadiusSqr )
+	void CollectEvalChunks( Vector3 focusPos, float evalRadius, float evalRadiusSqr )
 	{
 		_evalScratch.Clear();
 		_evalSet.Clear();
@@ -294,12 +294,12 @@ public sealed class GoldPileChunkStreamer
 				_evalScratch.Add( idx );
 		}
 
-		if ( !_grid.TryWorldToChunk( playerPos, out int playerCx, out int playerCz ) )
+		if ( !_grid.TryWorldToChunk( focusPos, out int focusCx, out int focusCz ) )
 		{
 			// Fallback: scan all chunks by distance (small piles / missing root).
 			for ( int i = 0; i < chunks.Count; i++ )
 			{
-				if ( PlanarDistanceToBoundsSqr( playerPos, chunks[ i ].WorldBounds ) > evalRadiusSqr )
+				if ( PlanarDistanceToBoundsSqr( focusPos, chunks[ i ].WorldBounds ) > evalRadiusSqr )
 					continue;
 				if ( _evalSet.Add( i ) )
 					_evalScratch.Add( i );
@@ -309,10 +309,10 @@ public sealed class GoldPileChunkStreamer
 		}
 
 		int radiusChunks = Mathf.Max( 1, Mathf.CeilToInt( evalRadius / chunkSize ) + 1 );
-		int minX = Mathf.Max( 0, playerCx - radiusChunks );
-		int maxX = Mathf.Min( countX - 1, playerCx + radiusChunks );
-		int minZ = Mathf.Max( 0, playerCz - radiusChunks );
-		int maxZ = Mathf.Min( countZ - 1, playerCz + radiusChunks );
+		int minX = Mathf.Max( 0, focusCx - radiusChunks );
+		int maxX = Mathf.Min( countX - 1, focusCx + radiusChunks );
+		int minZ = Mathf.Max( 0, focusCz - radiusChunks );
+		int maxZ = Mathf.Min( countZ - 1, focusCz + radiusChunks );
 
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
@@ -321,7 +321,7 @@ public sealed class GoldPileChunkStreamer
 			{
 				int i = row + x;
 				GoldPileChunk chunk = chunks[ i ];
-				if ( PlanarDistanceToBoundsSqr( playerPos, chunk.WorldBounds ) > evalRadiusSqr )
+				if ( PlanarDistanceToBoundsSqr( focusPos, chunk.WorldBounds ) > evalRadiusSqr )
 					continue;
 				if ( _evalSet.Add( i ) )
 					_evalScratch.Add( i );

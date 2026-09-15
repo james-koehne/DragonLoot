@@ -146,14 +146,14 @@ public class GoldPileLootStreamSettings : ScriptableObject
 	[Tooltip( "When true, gems are never distance-despawned (frustum only)." )]
 	public bool gemNeverCull = false;
 
-	[Tooltip( "Max player XZ distance for gem spawn residency. Ignored when gemNeverCull." )]
+	[Tooltip( "Max camera XZ distance for gem spawn residency. Ignored when gemNeverCull." )]
 	[Min( 0.1f )]
 	public float gemMaxStreamDistance = 24f;
 
 	[Tooltip( "When true, artifacts/large props are never distance-despawned (frustum only)." )]
 	public bool artifactNeverCull = true;
 
-	[Tooltip( "Max player XZ distance for artifact spawn residency. Ignored when artifactNeverCull." )]
+	[Tooltip( "Max camera XZ distance for artifact spawn residency. Ignored when artifactNeverCull." )]
 	[Min( 0.1f )]
 	public float artifactMaxStreamDistance = 48f;
 

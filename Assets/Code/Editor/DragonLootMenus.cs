@@ -73,6 +73,10 @@ public static class DragonLootMenus
 	public const string GameObjectMinecartUnloadPoint = "GameObject/DragonLoot/Minecart Unload Point";
 	public const string GameObjectMinecartCallPost = "GameObject/DragonLoot/Minecart Call Post";
 
+	// --- World ---
+	public const string WorldCreateFloatingPlatformGroup = Root + "/World/Create Floating Platform Group";
+	public const string GameObjectFloatingPlatformGroup = "GameObject/DragonLoot/Floating Platform Group";
+
 	// --- Tools ---
 	public const string ToolsMilanoteSettings = Root + "/Tools/Milanote Sync Settings";
 	public const string ToolsMilanoteTasks = Root + "/Tools/Milanote Sync Tasks";
@@ -87,5 +91,8 @@ public static class DragonLootMenus
 
 	// --- Tutorials ---
 	public const string TutorialsInstallCatalog = Root + "/Tutorials/Install Catalog";
+
+	// --- Cinematic ---
+	public const string CinematicCreateIntroSplines = Root + "/Cinematic/Create Intro Splines";
 }
 #endif

@@ -68,6 +68,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	PlayerController _player;
 	FirstPersonCameraController _cameraLook;
 	Transform _carryRigs;
+	bool _cinematicHidden;
 	int _nextToken = 1;
 	int _usedCapacity;
 	float _bobPhase;
@@ -446,6 +447,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		_carryRigs.localPosition = Vector3.zero;
 		_carryRigs.localRotation = Quaternion.identity;
 		_carryRigs.localScale = Vector3.one;
+		ApplyCinematicHiddenVisual();
 
 		for ( int i = 0; i < BucketCount; i++ )
 			EnsureBucketRig( _buckets[ i ] );
@@ -459,6 +461,23 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		ApplyHoldRootPose( immediate: true );
 		RestackPoses();
+	}
+
+	/// <summary>
+	/// Hides first-person carry visuals while a detached cinematic owns the camera.
+	/// </summary>
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		ApplyCinematicHiddenVisual();
+	}
+
+	void ApplyCinematicHiddenVisual()
+	{
+		if ( _carryRigs == null )
+			return;
+
+		_carryRigs.gameObject.SetActive( !_cinematicHidden );
 	}
 
 	void EnsureBucketRig( CategoryBucket bucket )

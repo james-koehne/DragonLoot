@@ -2048,20 +2048,31 @@ public class TutorialManager : MonoBehaviour
 		if ( string.IsNullOrEmpty( tutorialId ) )
 			return;
 
+		bool alreadyCompleted = _completedThisSession.Contains( tutorialId );
 		_completedThisSession.Add( tutorialId );
 
 		ProfileSaveData save = GetSave();
-		if ( save == null )
-			return;
+		if ( save != null )
+		{
+			save.EnsureTutorialProgress();
+			if ( !save.discoveredTutorialIds.Contains( tutorialId ) )
+				save.discoveredTutorialIds.Add( tutorialId );
+			if ( save.completedTutorialIds.Contains( tutorialId ) )
+				alreadyCompleted = true;
+			else
+				save.completedTutorialIds.Add( tutorialId );
 
-		save.EnsureTutorialProgress();
-		if ( !save.discoveredTutorialIds.Contains( tutorialId ) )
-			save.discoveredTutorialIds.Add( tutorialId );
-		if ( !save.completedTutorialIds.Contains( tutorialId ) )
-			save.completedTutorialIds.Add( tutorialId );
+			if ( ProfileManager.Instance != null )
+				ProfileManager.Instance.SaveCurrentStatsToProfile();
+		}
 
-		if ( ProfileManager.Instance != null )
-			ProfileManager.Instance.SaveCurrentStatsToProfile();
+		if ( !alreadyCompleted )
+		{
+			EventBus.Publish( new TutorialCompletedEvent
+			{
+				TutorialId = tutorialId
+			} );
+		}
 	}
 
 	static ProfileSaveData GetSave()

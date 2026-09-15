@@ -31,6 +31,7 @@ public class WorldEventSystem : MonoBehaviour
 		public int Index;
 		public ActionSequencePhase Phase;
 		public float BlockUntilUnscaled;
+		public string WaitingCinematicPresentationId;
 	}
 
 	readonly DragonDialoguePlayer _dialogue = new DragonDialoguePlayer();
@@ -137,6 +138,7 @@ public class WorldEventSystem : MonoBehaviour
 			return;
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Subscribe<TreasureCollectedEvent>( OnTreasureCollected );
+		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		_subscribed = true;
 	}
 
@@ -146,6 +148,7 @@ public class WorldEventSystem : MonoBehaviour
 			return;
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Unsubscribe<TreasureCollectedEvent>( OnTreasureCollected );
+		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		_subscribed = false;
 	}
 
@@ -159,6 +162,25 @@ public class WorldEventSystem : MonoBehaviour
 	void OnTreasureCollected( TreasureCollectedEvent evt )
 	{
 		EvaluateAll( evt.Treasure );
+	}
+
+	void OnCinematicPresentationEnded( CinematicPresentationEndedEvent evt )
+	{
+		if ( string.IsNullOrEmpty( evt.PresentationId ) )
+			return;
+
+		for ( int i = 0; i < _runningSequences.Count; i++ )
+		{
+			RunningActionSequence sequence = _runningSequences[ i ];
+			if ( sequence == null || sequence.Phase != ActionSequencePhase.WaitingCallback )
+				continue;
+			if ( sequence.WaitingCinematicPresentationId != evt.PresentationId )
+				continue;
+
+			sequence.WaitingCinematicPresentationId = null;
+			CompleteCallbackWait( sequence );
+			return;
+		}
 	}
 
 	void EvaluateAll( TreasureDefinition pickupContext = null )
@@ -360,6 +382,22 @@ public class WorldEventSystem : MonoBehaviour
 			if ( sequence.Phase == ActionSequencePhase.Ready )
 			{
 				float delay = Mathf.Max( 0f, action.delayBefore );
+				if ( action.onlyDelayThisAction && delay > 0f )
+				{
+					RunningActionSequence solo = new RunningActionSequence
+					{
+						EventId = sequence.EventId,
+						Actions = new[] { action },
+						Index = 0,
+						Phase = ActionSequencePhase.WaitingDelay,
+						BlockUntilUnscaled = Time.unscaledTime + delay
+					};
+					_runningSequences.Add( solo );
+					sequence.Index++;
+					sequence.Phase = ActionSequencePhase.Ready;
+					continue;
+				}
+
 				sequence.Phase = ActionSequencePhase.WaitingDelay;
 				sequence.BlockUntilUnscaled = Time.unscaledTime + delay;
 			}
@@ -427,11 +465,9 @@ public class WorldEventSystem : MonoBehaviour
 				break;
 			case WorldEventActionType.LanternRevealSweep:
 				StartLanternRevealSweep( action );
-				BeginDurationWait( sequence, action, ResolveLanternWaitDuration( action ) );
 				break;
 			case WorldEventActionType.CinematicPresentation:
-				StartCinematicPresentation( action );
-				BeginDurationWait( sequence, action, ResolveCinematicWaitDuration( action ) );
+				StartCinematicPresentation( action, sequence );
 				break;
 			case WorldEventActionType.BrakePlayerMovement:
 				BrakePlayerMovement( action );
@@ -481,24 +517,6 @@ public class WorldEventSystem : MonoBehaviour
 		return action.audioClip.length / pitch;
 	}
 
-	static float ResolveLanternWaitDuration( WorldEventAction action )
-	{
-		if ( action == null )
-			return 0f;
-		return Mathf.Max( 0f, action.lanternStartDelay ) +
-		       Mathf.Max( 0f, action.lanternSweepDuration ) +
-		       Mathf.Max( 0f, action.lanternFadeDuration );
-	}
-
-	static float ResolveCinematicWaitDuration( WorldEventAction action )
-	{
-		if ( action == null )
-			return 0f;
-		return Mathf.Max( 0f, action.cinematicRise ) +
-		       Mathf.Max( 0f, action.cinematicHold ) +
-		       Mathf.Max( 0f, action.cinematicFall );
-	}
-
 	static void BrakePlayerMovement( WorldEventAction action )
 	{
 		if ( action == null )
@@ -523,35 +541,23 @@ public class WorldEventSystem : MonoBehaviour
 		if ( action == null || string.IsNullOrEmpty( action.lanternRevealId ) )
 			return;
 
-		LanternRevealSweepOverrides overrides = new LanternRevealSweepOverrides
-		{
-			SkylightFadeDuration = action.lanternSkylightFadeDuration,
-			SweepDuration = action.lanternSweepDuration,
-			LanternFadeDuration = action.lanternFadeDuration,
-			LanternStartDelay = action.lanternStartDelay
-		};
-		LanternRevealSweepController.TryStartReveal( action.lanternRevealId, overrides );
+		LanternRevealSweepController.TryStartReveal( action.lanternRevealId );
 	}
 
-	static void StartCinematicPresentation( WorldEventAction action )
+	static void StartCinematicPresentation( WorldEventAction action, RunningActionSequence sequence )
 	{
 		if ( action == null || string.IsNullOrEmpty( action.cinematicPresentationId ) )
 			return;
 
-		CinematicPresentationOverrides overrides = new CinematicPresentationOverrides
-		{
-			FovPeak = action.cinematicFovPeak,
-			LetterboxPeak = action.cinematicLetterboxPeak,
-			Rise = action.cinematicRise,
-			Hold = action.cinematicHold,
-			Fall = action.cinematicFall
-		};
-		CinematicPresentationController.TryPlay( action.cinematicPresentationId, overrides );
+		string presentationId = action.cinematicPresentationId;
+		if ( !CinematicPresentationController.TryPlay( presentationId ) )
+			return;
 
-		if ( action.cinematicPlayerMovementLockDuration > 0f
-		     && GameMode.Instance != null
-		     && GameMode.Instance.Player != null )
-			GameMode.Instance.Player.LockPlanarMovement( action.cinematicPlayerMovementLockDuration );
+		if ( !action.waitUntilFinished || sequence == null )
+			return;
+
+		sequence.WaitingCinematicPresentationId = presentationId;
+		sequence.Phase = ActionSequencePhase.WaitingCallback;
 	}
 
 	static Vector3 ResolveAudioPosition( WorldEventAction action )
