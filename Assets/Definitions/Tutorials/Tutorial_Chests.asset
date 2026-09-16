@@ -36,9 +36,11 @@ MonoBehaviour:
   tasks:
   - id: place_chest
     label: Place the chest on the ground
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 16
     completeVolumeId: 
   - id: open_chest
     label: Open the chest
+    keybindHint: '[{ContextualInteract}]'
     completeTrigger: 17
     completeVolumeId: 

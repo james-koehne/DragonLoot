@@ -12,7 +12,7 @@ using UnityEngine;
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 [RequireComponent( typeof( Rigidbody ) )]
-public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget
+public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget, IFeedbackIntensity
 {
 	sealed class CargoStack
 	{
@@ -149,6 +149,8 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	MinecartCallPost _recallPost;
 	float _driveSpeed;
 	bool _drivePowered;
+	bool _driveBraking;
+	int _speedWriteFrame;
 
 	const float StopSpeedEpsilon = 0.04f;
 	const float StopFeedbackDebounce = 0.18f;
@@ -261,6 +263,23 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 	public float AlongTrackSpeed => ConsistLead._alongSpeed;
 
+	public float FeedbackIntensity
+	{
+		get
+		{
+			if ( !IsConsistLead )
+				return 0f;
+
+			float refSpeed = ResolveMoveRefSpeed();
+			if ( refSpeed < 0.01f )
+				return 0f;
+
+			return Mathf.Clamp01( Mathf.Abs( _alongSpeed ) / refSpeed );
+		}
+	}
+
+	public bool FeedbackBraking => IsConsistLead && _driveBraking;
+
 	float RiderMotionScale => _riderPresent && AttachPlayerWhenStanding ? RiderSpeedMultiplier : 1f;
 
 	int GridColumns => Mathf.Max( 1, columns );
@@ -313,16 +332,29 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	{
 		if ( !All.Contains( this ) )
 			All.Add( this );
+		TryStartMoveLoop();
 	}
 
 	void OnDisable()
 	{
 		All.Remove( this );
 		_riderPresent = false;
+		_driveBraking = false;
+		StopMoveLoop();
 		CancelRecall( arrived: false );
 		DetachFromConsist();
 		FinishInFlightSnaps();
 		StopAllCoroutines();
+	}
+
+	void LateUpdate()
+	{
+		if ( !IsConsistLead )
+			return;
+
+		// Hold-push only writes speed on successful TryPushAlong frames.
+		if ( _holdPush && Time.frameCount != _speedWriteFrame )
+			_alongSpeed = 0f;
 	}
 
 	void OnValidate()
@@ -756,6 +788,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		_alongSpeed = 0f;
 		_driveSpeed = 0f;
 		_drivePowered = false;
+		_driveBraking = false;
 	}
 
 	public void SetRiderPresent( bool present )
@@ -833,6 +866,12 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		ApplyTrackPose( runtime: true );
 		SpinWheels( traveled );
 		SnapFollowers();
+
+		float dt = Time.deltaTime;
+		if ( dt > 0.00001f )
+			_alongSpeed = traveled / dt;
+		_speedWriteFrame = Time.frameCount;
+
 		return Mathf.Abs( traveled ) > 0.00001f;
 	}
 
@@ -965,6 +1004,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			follower.BindToTrack( track, _distanceAlongTrack - ConsistSpacing * ( _followers.Count + 1 ) );
 
 		follower.consistLead = this;
+		follower.StopMoveLoop();
 		if ( !_followers.Contains( follower ) )
 			_followers.Add( follower );
 
@@ -993,7 +1033,10 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			authoredFollowers.Remove( follower );
 
 		if ( follower != null )
+		{
 			follower.consistLead = null;
+			follower.TryStartMoveLoop();
+		}
 
 		return follower != null;
 	}
@@ -1024,6 +1067,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			lead._followers.Remove( this );
 			if ( lead.authoredFollowers != null )
 				lead.authoredFollowers.Remove( this );
+			TryStartMoveLoop();
 			return;
 		}
 
@@ -1031,7 +1075,10 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		{
 			MinecartInteractable follower = _followers[ i ];
 			if ( follower != null )
+			{
 				follower.consistLead = null;
+				follower.TryStartMoveLoop();
+			}
 		}
 
 		_followers.Clear();
@@ -1203,6 +1250,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 				follower.consistLead._followers.Remove( follower );
 
 			follower.consistLead = this;
+			follower.StopMoveLoop();
 			if ( !_followers.Contains( follower ) )
 				_followers.Add( follower );
 		}
@@ -1305,25 +1353,51 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		PlayFeedback( onDriveExitFeedbacks );
 	}
 
-	public void PlayDriveBrakeFeedback()
-	{
-		PlayFeedback( onDriveBrakeFeedbacks );
-	}
-
 	public void PlayDriveReverseFeedback()
 	{
 		PlayFeedback( onDriveReverseFeedbacks );
 	}
 
-	public void SetDriveMoveLoop( bool playing )
+	public void SetDriveBraking( bool braking )
 	{
-		if ( onDriveMoveFeedbacks == null )
+		MinecartInteractable lead = ConsistLead;
+		if ( lead != this )
+		{
+			lead.SetDriveBraking( braking );
+			return;
+		}
+
+		_driveBraking = braking;
+		if ( braking && onDriveBrakeFeedbacks != null && !onDriveBrakeFeedbacks.IsPlaying )
+			onDriveBrakeFeedbacks.Play();
+	}
+
+	void TryStartMoveLoop()
+	{
+		if ( !IsConsistLead )
 			return;
 
-		if ( playing )
+		if ( onDriveMoveFeedbacks != null && !onDriveMoveFeedbacks.IsPlaying )
 			onDriveMoveFeedbacks.Play();
-		else
+
+		if ( onDriveBrakeFeedbacks != null && !onDriveBrakeFeedbacks.IsPlaying )
+			onDriveBrakeFeedbacks.Play();
+	}
+
+	void StopMoveLoop()
+	{
+		if ( onDriveMoveFeedbacks != null )
 			onDriveMoveFeedbacks.Stop();
+		if ( onDriveBrakeFeedbacks != null )
+			onDriveBrakeFeedbacks.Stop();
+	}
+
+	float ResolveMoveRefSpeed()
+	{
+		if ( IsDriveCart )
+			return DriveMaxSpeed;
+
+		return Mathf.Max( ShoveSpeed, RecallSpeed );
 	}
 
 	public void EditorSetLayout( int layoutColumns, int layoutRows, float spacing, float layoutMargin, int maxStack )

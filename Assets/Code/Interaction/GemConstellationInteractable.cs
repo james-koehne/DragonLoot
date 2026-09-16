@@ -236,6 +236,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 	public int SlotCount => slots != null ? slots.Count : 0;
 	public int Capacity => SlotCount;
 	public bool IsComplete => _isComplete;
+	public bool AllowsDisplayedPickup => !_isComplete;
 	public IReadOnlyList<TreasureItem> DisplayedItems => _displayedItems;
 
 	protected virtual void Reset()
@@ -637,7 +638,7 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 			return false;
 
 		results.Clear();
-		if ( selected == null || _occupants == null )
+		if ( !AllowsDisplayedPickup || selected == null || _occupants == null )
 			return false;
 
 		for ( int i = 0; i < _occupants.Length; i++ )

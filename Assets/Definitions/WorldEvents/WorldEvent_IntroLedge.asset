@@ -78,7 +78,7 @@ MonoBehaviour:
   - type: 0
     delayBefore: 0
     onlyDelayThisAction: 0
-    waitUntilFinished: 0
+    waitUntilFinished: 1
     dialogue:
     - speaker: Dragon
       text: I believe we have rather a lot of work to do.
@@ -89,6 +89,7 @@ MonoBehaviour:
     spawnPointId: 
     spawnWorldPosition: {x: 0, y: 0, z: 0}
     useWorldPosition: 0
+    spawnAtPlayer: 0
     tutorialTitle: 
     tutorialObjectiveText: 
     markerTargetId: 

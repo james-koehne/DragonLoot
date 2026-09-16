@@ -634,6 +634,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	}
 
 	public int TotalRemainingLoot => lootInstances != null ? lootInstances.TotalRemaining : 0;
+	public int TotalInitialLoot => lootInstances != null ? lootInstances.TotalInitial : 0;
 	public float CarveRadius => _carveSettings.radius;
 	public GoldPileCarveSettings CarveSettings => _carveSettings;
 

@@ -37,5 +37,6 @@ MonoBehaviour:
   tasks:
   - id: dig
     label: Dig
+    keybindHint: '[{Interact}]'
     completeTrigger: 1
     completeVolumeId: 

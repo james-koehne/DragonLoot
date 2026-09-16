@@ -33,7 +33,7 @@ public class DebugCarrySection : DebugOverlaySection
 		GUILayout.Label( $"Selected: {carry.SelectedBucket}  Total: {carry.TotalCount}" );
 		GUILayout.Label( $"Count: {carry.Count}  Held: {carry.HeldCount}" );
 		GUILayout.Label( $"Has Active: {carry.HasActive}" );
-		GUILayout.Label( $"Buckets C/G/A/N: {carry.GetBucketCount( CarryBucketKind.Coin )}/{carry.GetBucketCount( CarryBucketKind.Gem )}/{carry.GetBucketCount( CarryBucketKind.Artifact )}/{carry.GetBucketCount( CarryBucketKind.General )}" );
+		GUILayout.Label( $"Buckets C/G/A/N/J: {carry.GetBucketCount( CarryBucketKind.Coin )}/{carry.GetBucketCount( CarryBucketKind.Gem )}/{carry.GetBucketCount( CarryBucketKind.Artifact )}/{carry.GetBucketCount( CarryBucketKind.General )}/{carry.GetBucketCount( CarryBucketKind.Junk )}" );
 
 		if ( carry.TryPeekActive( out TreasureDefinition def ) && def != null )
 			GUILayout.Label( $"Active: {def.name}" );
@@ -47,6 +47,8 @@ public class DebugCarrySection : DebugOverlaySection
 			carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
 		if ( GUILayout.Button( "General" ) )
 			carry.TrySetSelectedBucket( CarryBucketKind.General );
+		if ( GUILayout.Button( "Junk" ) )
+			carry.TrySetSelectedBucket( CarryBucketKind.Junk );
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal();
@@ -194,6 +196,7 @@ public class DebugCarrySection : DebugOverlaySection
 		DrawFilterButton( "Key", (int)TreasureCategory.Key );
 		DrawFilterButton( "Chest", (int)TreasureCategory.Chest );
 		DrawFilterButton( "Container", (int)TreasureCategory.Container );
+		DrawFilterButton( "Junk", (int)TreasureCategory.Junk );
 		GUILayout.EndHorizontal();
 	}
 

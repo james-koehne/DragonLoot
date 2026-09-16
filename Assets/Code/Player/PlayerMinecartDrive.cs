@@ -16,11 +16,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 	GameInput _input;
 	bool _ignoreInteractUntilRelease;
 	float _signedSpeed;
-	bool _moveLoopPlaying;
-	bool _wasBraking;
 	bool _wasReverseIntent;
-	bool _hasCartYaw;
-	float _lastCartYaw;
 	int _heldForwardSign = 1;
 
 	public bool IsDriving => _cart != null;
@@ -100,7 +96,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 		if ( _cart == null )
 			return;
 
-		ApplyCartYawToLook();
+		ApplyCartFacing();
 
 		if ( _controller == null || !_controller.enabled )
 			return;
@@ -116,17 +112,16 @@ public class PlayerMinecartDrive : MonoBehaviour
 		_cart = cart;
 		_ignoreInteractUntilRelease = true;
 		_signedSpeed = cart.AlongTrackSpeed;
-		_moveLoopPlaying = false;
-		_wasBraking = false;
 		_wasReverseIntent = false;
-		_hasCartYaw = false;
-		_lastCartYaw = PlanarYaw( cart.transform );
 		_heldForwardSign = ResolveForwardSign();
 		cart.SetDriveSeatCollidersEnabled( false );
+		cart.SetDriveBraking( false );
 		cart.PlayDriveEnterFeedback();
 
 		if ( _player != null )
 			_player.SnapToWorldPosition( cart.ResolveSeatWorldPosition() );
+
+		ApplyCartFacing();
 
 		EventBus.Publish( new MinecartDriveEnteredEvent { Cart = cart } );
 
@@ -146,7 +141,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 
 		MinecartInteractable leaving = _cart;
 
-		StopMoveLoop();
+		_cart.SetDriveBraking( false );
 		_cart.PlayDriveExitFeedback();
 
 		Vector3 inherit = Vector3.zero;
@@ -172,9 +167,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 		_cart = null;
 		_signedSpeed = 0f;
 		_ignoreInteractUntilRelease = false;
-		_wasBraking = false;
 		_wasReverseIntent = false;
-		_hasCartYaw = false;
 
 		PlayerMinecartRide ride = _player != null ? _player.MinecartRide : null;
 		if ( ride != null )
@@ -226,30 +219,27 @@ public class PlayerMinecartDrive : MonoBehaviour
 		else
 			powered = false;
 
-		if ( braking && !_wasBraking )
-			_cart.PlayDriveBrakeFeedback();
-
 		if ( reverseIntent && !_wasReverseIntent )
 			_cart.PlayDriveReverseFeedback();
 
-		_wasBraking = braking;
 		_wasReverseIntent = reverseIntent;
+		_cart.SetDriveBraking( braking );
 		_cart.SetDriveSpeed( _signedSpeed, powered );
-		SetMoveLoop( Mathf.Abs( _signedSpeed ) > StopEpsilon );
 	}
 
-	void ApplyCartYawToLook()
+	void ApplyCartFacing()
 	{
-		float yaw = PlanarYaw( _cart.transform );
-		if ( _hasCartYaw )
-		{
-			float delta = Mathf.DeltaAngle( _lastCartYaw, yaw );
-			if ( Mathf.Abs( delta ) > 0.0001f )
-				transform.Rotate( 0f, delta, 0f, Space.World );
-		}
+		if ( _cart == null )
+			return;
 
-		_lastCartYaw = yaw;
-		_hasCartYaw = true;
+		// Drive cart forward is local -Z.
+		Vector3 driveForward = -_cart.transform.forward;
+		driveForward.y = 0f;
+		if ( driveForward.sqrMagnitude < 0.0001f )
+			return;
+
+		float yaw = Mathf.Atan2( driveForward.x, driveForward.z ) * Mathf.Rad2Deg;
+		transform.rotation = Quaternion.Euler( 0f, yaw, 0f );
 	}
 
 	int ResolveForwardSign()
@@ -290,43 +280,6 @@ public class PlayerMinecartDrive : MonoBehaviour
 		Vector3 facing = mount != null ? mount.forward : transform.forward;
 		facing.y = 0f;
 		return facing;
-	}
-
-	static float PlanarYaw( Transform target )
-	{
-		if ( target == null )
-			return 0f;
-
-		Vector3 forward = target.forward;
-		forward.y = 0f;
-		if ( forward.sqrMagnitude < 0.0001f )
-		{
-			forward = target.up;
-			forward.y = 0f;
-		}
-
-		if ( forward.sqrMagnitude < 0.0001f )
-			return target.eulerAngles.y;
-
-		return Mathf.Atan2( forward.x, forward.z ) * Mathf.Rad2Deg;
-	}
-
-	void SetMoveLoop( bool playing )
-	{
-		if ( playing == _moveLoopPlaying || _cart == null )
-			return;
-
-		_moveLoopPlaying = playing;
-		_cart.SetDriveMoveLoop( playing );
-	}
-
-	void StopMoveLoop()
-	{
-		if ( !_moveLoopPlaying || _cart == null )
-			return;
-
-		_moveLoopPlaying = false;
-		_cart.SetDriveMoveLoop( false );
 	}
 
 	GameInput ResolveInput()

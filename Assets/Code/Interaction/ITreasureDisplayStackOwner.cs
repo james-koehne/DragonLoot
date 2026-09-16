@@ -9,6 +9,11 @@ using UnityEngine;
 public interface ITreasureDisplayStackOwner : ITreasureOwner
 {
 	/// <summary>
+	/// False once the display is complete. Pickup and whole-stack take are refused.
+	/// </summary>
+	bool AllowsDisplayedPickup { get; }
+
+	/// <summary>
 	/// Fills <paramref name="results"/> bottom-to-top from the aimed coin (or <paramref name="selected"/>)
 	/// through every item stacked above it in the same slot. Returns false if selected is not owned here.
 	/// <paramref name="hasHitWorldY"/> / <paramref name="hitWorldY"/> should be the interact raycast

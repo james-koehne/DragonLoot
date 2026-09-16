@@ -5,9 +5,10 @@ using UnityEngine.Serialization;
 
 /// <summary>
 /// One walkable floating slab. Starts sunk below rest, rises with overshoot, then idle-hovers.
-/// Ride support is via <see cref="PlayerFloatingPlatformRide"/> (CharacterController delta carry).
+/// Motion runs in LateUpdate so Feedbacks on the same object cannot pin the transform.
 /// </summary>
 [DisallowMultipleComponent]
+[DefaultExecutionOrder( 200 )]
 public class FloatingPlatform : MonoBehaviour
 {
 	public enum State
@@ -23,11 +24,18 @@ public class FloatingPlatform : MonoBehaviour
 	[FormerlySerializedAs( "onLand" )]
 	[SerializeField] Feedbacks onReachedTop;
 
+	[Tooltip( "Authored rest pose in local space (relative to parent)." )]
+	[SerializeField] Vector3 restLocalPosition;
+
+	[SerializeField] Quaternion restLocalRotation = Quaternion.identity;
+	[SerializeField] bool hasRestPose;
+	[SerializeField] bool restPoseIsLocal;
+
+	// Legacy world-space rest (migrated once into local).
 	[SerializeField] Vector3 restPosition;
 	[SerializeField] Quaternion restRotation = Quaternion.identity;
-	[SerializeField] bool hasRestPose;
 
-	[Tooltip( "Optional. If empty, all Colliders under this transform are used." )]
+	[Tooltip( "Optional. If empty, non-trigger colliders under this transform are used." )]
 	[SerializeField] Collider[] colliders;
 
 	State _state = State.Sunk;
@@ -43,10 +51,14 @@ public class FloatingPlatform : MonoBehaviour
 	float _hoverBlendDuration = 2f;
 	float _hoverBlendElapsed;
 	float _hoverClock;
+	float _landingBounceDepth = 0.12f;
+	float _landingBounceDuration = 0.35f;
+	float _landingBounceElapsed;
+	bool _landingBounceActive;
 	bool _riseStarted;
 	bool _delayDone;
-	Vector3 _riseStartPos;
-	Vector3 _lastPosition;
+	Vector3 _riseStartLocal;
+	Vector3 _lastWorldPosition;
 	Vector3 _worldVelocity;
 	Collider[] _resolvedColliders;
 
@@ -54,33 +66,70 @@ public class FloatingPlatform : MonoBehaviour
 	public bool IsRideable => ( _state == State.Rising && _riseStarted ) || _state == State.Hovering;
 	public bool IsRising => _state == State.Rising && _riseStarted;
 	public Vector3 WorldVelocity => _worldVelocity;
-	public Vector3 RestPosition => restPosition;
-	public Quaternion RestRotation => restRotation;
+	public Vector3 RestPosition => transform.parent != null
+		? transform.parent.TransformPoint( restLocalPosition )
+		: restLocalPosition;
+	public Quaternion RestRotation => transform.parent != null
+		? transform.parent.rotation * restLocalRotation
+		: restLocalRotation;
 	public bool HasRestPose => hasRestPose;
 
 	void Awake()
 	{
 		ResolveColliders();
-		if ( !hasRestPose )
-			CaptureRestPose();
-		_lastPosition = transform.position;
+		MigrateRestPoseIfNeeded();
+		_lastWorldPosition = transform.position;
 	}
 
-	void Update()
+	void MigrateRestPoseIfNeeded()
 	{
-		if ( _state == State.Rising )
-			TickRise( Time.deltaTime );
-		else if ( _state == State.Hovering )
-			TickHover( Time.deltaTime );
+		if ( !hasRestPose || restPoseIsLocal )
+			return;
 
-		UpdateVelocity( Time.deltaTime );
+		if ( transform.parent != null )
+		{
+			restLocalPosition = transform.parent.InverseTransformPoint( restPosition );
+			restLocalRotation = Quaternion.Inverse( transform.parent.rotation ) * restRotation;
+		}
+		else
+		{
+			restLocalPosition = restPosition;
+			restLocalRotation = restRotation;
+		}
+
+		restPoseIsLocal = true;
+	}
+
+	void LateUpdate()
+	{
+		float dt = Time.deltaTime;
+		TickLandingBounce( dt );
+		if ( _state == State.Rising )
+			TickRise( dt );
+		else if ( _state == State.Hovering )
+			TickHover( dt );
+
+		UpdateVelocity( dt );
+	}
+
+	/// <summary>Player landed on this platform (fall/jump onto surface).</summary>
+	public void NotifyPlayerLanded()
+	{
+		if ( !IsRideable || _landingBounceDepth <= 0.0001f )
+			return;
+
+		_landingBounceActive = true;
+		_landingBounceElapsed = 0f;
 	}
 
 	public void CaptureRestPose()
 	{
+		restLocalPosition = transform.localPosition;
+		restLocalRotation = transform.localRotation;
 		restPosition = transform.position;
 		restRotation = transform.rotation;
 		hasRestPose = true;
+		restPoseIsLocal = true;
 	}
 
 	public void ConfigureMotion(
@@ -91,7 +140,9 @@ public class FloatingPlatform : MonoBehaviour
 		float hoverLandingAmplitude,
 		float hoverFrequency,
 		float hoverPhase,
-		float hoverBlendDuration )
+		float hoverBlendDuration,
+		float landingBounceDepth,
+		float landingBounceDuration )
 	{
 		_sunkYOffset = sunkYOffset;
 		_riseDuration = Mathf.Max( 0.05f, riseDuration );
@@ -101,10 +152,13 @@ public class FloatingPlatform : MonoBehaviour
 		_hoverFrequency = Mathf.Max( 0f, hoverFrequency );
 		_hoverPhase = hoverPhase;
 		_hoverBlendDuration = Mathf.Max( 0.05f, hoverBlendDuration );
+		_landingBounceDepth = Mathf.Max( 0f, landingBounceDepth );
+		_landingBounceDuration = Mathf.Max( 0.05f, landingBounceDuration );
 	}
 
 	public void SinkImmediate()
 	{
+		MigrateRestPoseIfNeeded();
 		if ( !hasRestPose )
 			CaptureRestPose();
 
@@ -115,14 +169,17 @@ public class FloatingPlatform : MonoBehaviour
 		_riseDelay = 0f;
 		_hoverBlendElapsed = 0f;
 		_hoverClock = 0f;
+		_landingBounceActive = false;
+		_landingBounceElapsed = 0f;
 		_worldVelocity = Vector3.zero;
-		transform.SetPositionAndRotation( SunkPosition(), restRotation );
+		ApplyLocalPose( SunkLocalPosition(), restLocalRotation );
 		SetCollidersEnabled( false );
-		_lastPosition = transform.position;
+		_lastWorldPosition = transform.position;
 	}
 
 	public void SnapToRestAndHover()
 	{
+		MigrateRestPoseIfNeeded();
 		if ( !hasRestPose )
 			CaptureRestPose();
 
@@ -134,12 +191,13 @@ public class FloatingPlatform : MonoBehaviour
 		_hoverClock = _hoverPhase;
 		ApplyHoverPose();
 		SetCollidersEnabled( true );
-		_lastPosition = transform.position;
+		_lastWorldPosition = transform.position;
 		_worldVelocity = Vector3.zero;
 	}
 
 	public void BeginRise( float delaySeconds )
 	{
+		MigrateRestPoseIfNeeded();
 		if ( !hasRestPose )
 			CaptureRestPose();
 
@@ -150,10 +208,13 @@ public class FloatingPlatform : MonoBehaviour
 		_hoverBlendElapsed = 0f;
 		_hoverClock = 0f;
 		_state = State.Rising;
-		_riseStartPos = SunkPosition();
-		transform.SetPositionAndRotation( _riseStartPos, restRotation );
-		_lastPosition = transform.position;
+		_riseStartLocal = SunkLocalPosition();
+		ApplyLocalPose( _riseStartLocal, restLocalRotation );
+		_lastWorldPosition = transform.position;
 		_worldVelocity = Vector3.zero;
+
+		if ( Mathf.Abs( _sunkYOffset ) < 0.01f )
+			Debug.LogWarning( "FloatingPlatform '" + name + "': sunkYOffset is ~0, rise will be invisible.", this );
 
 		if ( _delayDone )
 			StartRiseMotion();
@@ -186,7 +247,8 @@ public class FloatingPlatform : MonoBehaviour
 		_riseElapsed += dt;
 		float t = Mathf.Clamp01( _riseElapsed / _riseDuration );
 		float curved = EvaluateRiseCurve( t );
-		transform.SetPositionAndRotation( Vector3.LerpUnclamped( _riseStartPos, restPosition, curved ), restRotation );
+		Vector3 local = Vector3.LerpUnclamped( _riseStartLocal, restLocalPosition, curved );
+		ApplyLocalPose( local, restLocalRotation );
 
 		if ( t < 1f )
 			return;
@@ -199,8 +261,7 @@ public class FloatingPlatform : MonoBehaviour
 		_state = State.Hovering;
 		_hoverClock = 0f;
 		_hoverBlendElapsed = 0f;
-		// Start at rest; first hover sample is sin(0)=0 so we leave rest going upward.
-		transform.SetPositionAndRotation( restPosition, restRotation );
+		ApplyLocalPose( restLocalPosition, restLocalRotation );
 		if ( onReachedTop != null )
 			onReachedTop.Play();
 	}
@@ -215,14 +276,14 @@ public class FloatingPlatform : MonoBehaviour
 	void ApplyHoverPose()
 	{
 		float amp = CurrentHoverAmplitude();
-		float y = restPosition.y;
+		Vector3 local = restLocalPosition;
 		if ( amp > 0.0001f && _hoverFrequency > 0.0001f )
 		{
 			// clock=0 => sin=0, derivative > 0 => always starts going up.
-			y += Mathf.Sin( _hoverClock * _hoverFrequency * Mathf.PI * 2f ) * amp;
+			local.y += Mathf.Sin( _hoverClock * _hoverFrequency * Mathf.PI * 2f ) * amp;
 		}
 
-		transform.SetPositionAndRotation( new Vector3( restPosition.x, y, restPosition.z ), restRotation );
+		ApplyLocalPose( local, restLocalRotation );
 	}
 
 	float CurrentHoverAmplitude()
@@ -231,7 +292,6 @@ public class FloatingPlatform : MonoBehaviour
 			return _hoverAmplitude;
 
 		float u = Mathf.Clamp01( _hoverBlendElapsed / _hoverBlendDuration );
-		// Ease-out: hold the larger landing bob, then settle into usual amplitude.
 		float s = 1f - ( 1f - u ) * ( 1f - u ) * ( 1f - u );
 		return Mathf.Lerp( _hoverLandingAmplitude, _hoverAmplitude, s );
 	}
@@ -243,19 +303,46 @@ public class FloatingPlatform : MonoBehaviour
 		return EaseOutCubic( t );
 	}
 
-	Vector3 SunkPosition()
+	Vector3 SunkLocalPosition()
 	{
-		return restPosition + new Vector3( 0f, _sunkYOffset, 0f );
+		return restLocalPosition + new Vector3( 0f, _sunkYOffset, 0f );
+	}
+
+	void ApplyLocalPose( Vector3 localPosition, Quaternion localRotation )
+	{
+		localPosition.y += EvaluateLandingBounceOffset();
+		transform.localPosition = localPosition;
+		transform.localRotation = localRotation;
+	}
+
+	void TickLandingBounce( float dt )
+	{
+		if ( !_landingBounceActive )
+			return;
+
+		_landingBounceElapsed += dt;
+		if ( _landingBounceElapsed >= _landingBounceDuration )
+			_landingBounceActive = false;
+	}
+
+	float EvaluateLandingBounceOffset()
+	{
+		if ( !_landingBounceActive || _landingBounceDepth <= 0.0001f )
+			return 0f;
+
+		float t = Mathf.Clamp01( _landingBounceElapsed / _landingBounceDuration );
+		// 0 -> down -> 0 (smooth squash when the player lands).
+		return -_landingBounceDepth * Mathf.Sin( t * Mathf.PI );
 	}
 
 	void UpdateVelocity( float dt )
 	{
 		Vector3 pos = transform.position;
 		if ( dt > 0.0001f )
-			_worldVelocity = ( pos - _lastPosition ) / dt;
+			_worldVelocity = ( pos - _lastWorldPosition ) / dt;
 		else
 			_worldVelocity = Vector3.zero;
-		_lastPosition = pos;
+		_lastWorldPosition = pos;
 	}
 
 	void ResolveColliders()
@@ -266,7 +353,23 @@ public class FloatingPlatform : MonoBehaviour
 			return;
 		}
 
-		_resolvedColliders = GetComponentsInChildren<Collider>( true );
+		Collider[] found = GetComponentsInChildren<Collider>( true );
+		int count = 0;
+		for ( int i = 0; i < found.Length; i++ )
+		{
+			if ( found[ i ] != null && !found[ i ].isTrigger )
+				count++;
+		}
+
+		_resolvedColliders = new Collider[ count ];
+		int write = 0;
+		for ( int i = 0; i < found.Length; i++ )
+		{
+			Collider c = found[ i ];
+			if ( c == null || c.isTrigger )
+				continue;
+			_resolvedColliders[ write++ ] = c;
+		}
 	}
 
 	void SetCollidersEnabled( bool enabled )
@@ -295,6 +398,18 @@ public class FloatingPlatform : MonoBehaviour
 #if UNITY_EDITOR
 	public void EditorCaptureRestPose()
 	{
+		CaptureRestPose();
+		UnityEditor.EditorUtility.SetDirty( this );
+	}
+
+	/// <summary>
+	/// Clears a corrupted rest pose (e.g. captured while sunk) and re-captures from the current transform.
+	/// Call while platforms are at their authored height in the editor.
+	/// </summary>
+	public void EditorRecaptureRestPoseFromCurrent()
+	{
+		hasRestPose = false;
+		restPoseIsLocal = false;
 		CaptureRestPose();
 		UnityEditor.EditorUtility.SetDirty( this );
 	}

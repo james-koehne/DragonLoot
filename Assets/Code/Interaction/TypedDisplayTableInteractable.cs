@@ -161,6 +161,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	}
 
 	public bool IsComplete => _isComplete;
+	public bool AllowsDisplayedPickup => !_isComplete;
 	public IReadOnlyList<TreasureItem> DisplayedItems => _displayedItems;
 
 	protected virtual void Reset()
@@ -211,7 +212,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			return false;
 
 		results.Clear();
-		if ( selected == null || Slots == null )
+		if ( !AllowsDisplayedPickup || selected == null || Slots == null )
 			return false;
 
 		for ( int s = 0; s < Slots.Length; s++ )
@@ -286,7 +287,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	{
 		contact = transform.position;
 		rotation = transform.rotation;
-		if ( into == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+		if ( !AllowsDisplayedPickup || into == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
 			return false;
 
 		DisplaySlot slot = Slots[ slotIndex ];

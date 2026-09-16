@@ -226,6 +226,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	List<int>[] _drawnCellLists;
 	List<int>[] _chunkDrawnSlots;
 	Dictionary<TreasureDefinition, int> _remaining;
+	int _initialTotal;
 	float[] _columnCoinReserve;
 	Dictionary<TreasureDefinition, int> _batchKeyByDef;
 	int[] _visibleCountByEntry;
@@ -308,6 +309,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return n;
 		}
 	}
+
+	public int TotalInitial => _initialTotal;
 
 	/// <summary>Remaining coin-category inventory units (not GPU seat count).</summary>
 	public int TotalRemainingCoins
@@ -596,6 +599,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_batches = null;
 		_ready = false;
 		_remaining = null;
+		_initialTotal = 0;
 		_columnCoinReserve = null;
 		_coinOccupancy = null;
 		_batchKeyByDef = null;
@@ -3939,6 +3943,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		AddRemainingFromEntries( definition.coinContents );
 		AddRemainingFromEntries( definition.treasureContents );
 		AddRemainingFromAuthoredExtras();
+		_initialTotal = TotalRemaining;
 	}
 
 	void AddRemainingFromAuthoredExtras()

@@ -121,6 +121,16 @@ public class DisplayRequirementUI
 		return false;
 	}
 
+	/// <summary>
+	/// Builds fill progress text for a known display / constellation / artifact table.
+	/// </summary>
+	public bool TryAppendDisplaySummary( Component display, StringBuilder builder )
+	{
+		if ( builder == null || display == null )
+			return false;
+		return TryAppendSummary( display, builder );
+	}
+
 	bool AppendTypedTable( TypedDisplayTableInteractable table, StringBuilder builder )
 	{
 		if ( table == null )
@@ -134,11 +144,7 @@ public class DisplayRequirementUI
 			? accepted.displayName
 			: table.InteractionName;
 
-		builder.Append( table.CurrentCount );
-		builder.Append( '/' );
-		builder.Append( table.Capacity );
-		builder.Append( ' ' );
-		builder.Append( label );
+		AppendFillProgress( builder, table.CurrentCount, table.Capacity, label );
 		return true;
 	}
 
@@ -185,11 +191,7 @@ public class DisplayRequirementUI
 
 		if ( _reqDefs.Count == 0 )
 		{
-			builder.Append( table.CurrentCount );
-			builder.Append( '/' );
-			builder.Append( table.Capacity );
-			builder.Append( ' ' );
-			builder.Append( table.InteractionName );
+			AppendFillProgress( builder, table.CurrentCount, table.Capacity, table.InteractionName );
 			return true;
 		}
 
@@ -231,10 +233,7 @@ public class DisplayRequirementUI
 
 		if ( _reqDefs.Count == 0 && anyNeeded > 0 )
 		{
-			builder.Append( anyFilled );
-			builder.Append( '/' );
-			builder.Append( anyNeeded );
-			builder.Append( " Gems" );
+			AppendFillProgress( builder, anyFilled, anyNeeded, "Gems" );
 			return true;
 		}
 
@@ -246,10 +245,7 @@ public class DisplayRequirementUI
 
 		if ( _reqDefs.Count == 0 && anyNeeded == 0 )
 		{
-			builder.Append( constellation.CurrentCount );
-			builder.Append( '/' );
-			builder.Append( constellation.Capacity );
-			builder.Append( " Gems" );
+			AppendFillProgress( builder, constellation.CurrentCount, constellation.Capacity, "Gems" );
 			return true;
 		}
 
@@ -277,6 +273,15 @@ public class DisplayRequirementUI
 		if ( table == null )
 			return false;
 
+		int aimed = table.AimedSlotIndex;
+		if ( table.IsAimFeedbackFresh && aimed >= 0 && !table.IsSlotPrerequisiteMet( aimed ) )
+		{
+			TreasureDefinition blocker = table.GetBlockingPrerequisiteArtifact( aimed );
+			string name = blocker != null ? RequirementLabel( blocker ) : "required artifact";
+			builder.Append( "Place " ).Append( name ).Append( " first" );
+			return true;
+		}
+
 		int slotCount = table.SlotCount;
 		ClearRequirementBuckets();
 
@@ -291,10 +296,7 @@ public class DisplayRequirementUI
 
 		if ( _reqDefs.Count == 0 )
 		{
-			builder.Append( table.CurrentCount );
-			builder.Append( '/' );
-			builder.Append( table.Capacity );
-			builder.Append( " Artifacts" );
+			AppendFillProgress( builder, table.CurrentCount, table.Capacity, "Artifacts" );
 			return true;
 		}
 
@@ -339,6 +341,16 @@ public class DisplayRequirementUI
 
 	static void AppendRequirementLine( StringBuilder builder, int filled, int needed, string label )
 	{
+		AppendFillProgress( builder, filled, needed, label );
+	}
+
+	static void AppendFillProgress( StringBuilder builder, int filled, int needed, string label )
+	{
+		int pct = needed > 0
+			? Mathf.Clamp( Mathf.RoundToInt( 100f * filled / needed ), 0, 100 )
+			: ( filled > 0 ? 100 : 0 );
+		builder.Append( pct );
+		builder.Append( "% — " );
 		builder.Append( filled );
 		builder.Append( '/' );
 		builder.Append( needed );

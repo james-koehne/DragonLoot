@@ -50,6 +50,12 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Completed tutorial task keys as "tutorialId/taskId".</summary>
 	public List<string> completedTutorialTaskIds;
 
+	/// <summary>Objectives whose all sub-steps were completed.</summary>
+	public List<string> completedObjectiveIds;
+
+	/// <summary>Completed objective sub keys as "objectiveId/subId".</summary>
+	public List<string> completedObjectiveSubIds;
+
 	/// <summary>Doors unlocked via <see cref="DoorUnlockedEvent"/> (by door id).</summary>
 	public List<string> eventUnlockedDoorIds;
 
@@ -98,6 +104,7 @@ public class ProfileSaveData : IGameStats
 
 		EnsureWorldEventProgress();
 		EnsureTutorialProgress();
+		EnsureObjectiveProgress();
 		EnsureTreasureDiscoveryProgress();
 		EnsureDoorProgress();
 		EnsureCoinHallProgress();
@@ -124,6 +131,14 @@ public class ProfileSaveData : IGameStats
 			completedTutorialIds = new List<string>();
 		if ( completedTutorialTaskIds == null )
 			completedTutorialTaskIds = new List<string>();
+	}
+
+	public void EnsureObjectiveProgress()
+	{
+		if ( completedObjectiveIds == null )
+			completedObjectiveIds = new List<string>();
+		if ( completedObjectiveSubIds == null )
+			completedObjectiveSubIds = new List<string>();
 	}
 
 	public void EnsureTreasureDiscoveryProgress()
@@ -208,6 +223,9 @@ public class ProfileSaveData : IGameStats
 		if ( MergeTutorialProgressFrom( other ) )
 			changed = true;
 
+		if ( MergeObjectiveProgressFrom( other ) )
+			changed = true;
+
 		if ( MergeTreasureDiscoveryProgressFrom( other ) )
 			changed = true;
 
@@ -269,6 +287,20 @@ public class ProfileSaveData : IGameStats
 		bool changed = MergeIdList( discoveredTutorialIds, other.discoveredTutorialIds );
 		changed |= MergeIdList( completedTutorialIds, other.completedTutorialIds );
 		changed |= MergeIdList( completedTutorialTaskIds, other.completedTutorialTaskIds );
+		return changed;
+	}
+
+	/// <summary>Union completed objective / sub ids between two saves.</summary>
+	public bool MergeObjectiveProgressFrom( ProfileSaveData other )
+	{
+		if ( other == null )
+			return false;
+
+		EnsureObjectiveProgress();
+		other.EnsureObjectiveProgress();
+
+		bool changed = MergeIdList( completedObjectiveIds, other.completedObjectiveIds );
+		changed |= MergeIdList( completedObjectiveSubIds, other.completedObjectiveSubIds );
 		return changed;
 	}
 

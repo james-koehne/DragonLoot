@@ -17,7 +17,7 @@ MonoBehaviour:
   tags:
   - movement
   - jump
-  trigger: 16
+  trigger: 19
   holdingCategory: 0
   volumeId: 
   fallbackVolumeId: 
@@ -28,8 +28,8 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
-  requiredAbilityId: 
-  cinematicPresentationId: intro_ledge_cinematic
+  requiredAbilityId: jump
+  cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
   prerequisiteTutorialIds:
@@ -37,10 +37,11 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Jump off the ledge, no fall damage!
+  body: Press jump to leap into the air. No fall damage!
   keybindHint: '[{Jump}] Jump'
   tasks:
   - id: jump
     label: Jump
+    keybindHint: '[{Jump}]'
     completeTrigger: 21
     completeVolumeId: 

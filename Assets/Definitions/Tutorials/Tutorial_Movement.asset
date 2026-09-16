@@ -30,9 +30,11 @@ MonoBehaviour:
   tasks:
   - id: move
     label: Move with WASD
+    keybindHint: '[WASD]'
     completeTrigger: 12
     completeVolumeId: 
   - id: look
     label: Look around with the mouse
+    keybindHint: '[Mouse]'
     completeTrigger: 13
     completeVolumeId: 

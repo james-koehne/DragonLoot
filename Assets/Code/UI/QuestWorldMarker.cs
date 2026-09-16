@@ -24,6 +24,7 @@ public class QuestWorldMarker : MonoBehaviour
 
 	bool _subscribed;
 	bool _hasTarget;
+	bool _cinematicHidden;
 	Vector3 _worldPos;
 	bool _proximityHidden;
 	float _awayTimer;
@@ -37,6 +38,16 @@ public class QuestWorldMarker : MonoBehaviour
 		Subscribe();
 		_alpha = 0f;
 		ApplyAlpha( 0f );
+	}
+
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		if ( hidden )
+		{
+			_alpha = 0f;
+			ApplyAlpha( 0f );
+		}
 	}
 
 	void OnEnable()
@@ -62,7 +73,7 @@ public class QuestWorldMarker : MonoBehaviour
 
 		UpdateProximity();
 
-		bool wantVisible = _hasTarget && inFront && !_proximityHidden;
+		bool wantVisible = _hasTarget && inFront && !_proximityHidden && !_cinematicHidden;
 		float targetFade = wantVisible ? 1f : 0f;
 		float duration = fadeDuration > 0.01f ? fadeDuration : 0.01f;
 		_alpha = Mathf.MoveTowards( _alpha, targetFade, Time.deltaTime / duration );

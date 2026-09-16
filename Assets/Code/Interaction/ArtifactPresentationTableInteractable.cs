@@ -42,6 +42,10 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	[SerializeField]
 	GameObject completedHighlight;
 
+	[Tooltip( "When false, hologram slot indicators are not bound or refreshed (artifacts + anchors only)." )]
+	[SerializeField]
+	bool showSlotIndicators = true;
+
 	[SerializeField]
 	ArtifactPresentationSlotIndicators slotIndicators;
 
@@ -72,6 +76,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	public bool IsAimFeedbackFresh => _aimFeedbackFrame == Time.frameCount;
 	public Vector3 SocketRotation => socketRotation;
 	public Collider TableCollider => _collider;
+	public bool ShowSlotIndicators => showSlotIndicators;
 
 	protected virtual void Reset()
 	{
@@ -113,10 +118,15 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			return;
 
 		EnsureSlotVolumes();
-		if ( slotIndicators == null )
-			slotIndicators = GetComponentInChildren<ArtifactPresentationSlotIndicators>();
-		if ( slotIndicators != null )
-			slotIndicators.Bind( this );
+		if ( showSlotIndicators )
+		{
+			if ( slotIndicators == null )
+				slotIndicators = GetComponentInChildren<ArtifactPresentationSlotIndicators>();
+			if ( slotIndicators != null )
+				slotIndicators.Bind( this );
+		}
+		else if ( slotIndicators != null )
+			slotIndicators.ClearForDisabledHolograms();
 	}
 #endif
 
@@ -201,7 +211,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		_aimedSlotIndex = feedbackSlot;
 		_aimedSlotValid = feedbackValid;
 		_aimFeedbackFrame = Time.frameCount;
-		if ( slotIndicators != null )
+		if ( showSlotIndicators && slotIndicators != null )
 			slotIndicators.RefreshAimFeedback();
 		return true;
 	}
@@ -243,7 +253,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		PublishChanged();
 		ClearAimFeedback();
 
-		if ( slotIndicators != null )
+		if ( showSlotIndicators && slotIndicators != null )
 			slotIndicators.RefreshSlot( slotIndex, true );
 
 		StartCoroutine( SnapIntoSlotRoutine( removed, slotIndex ) );
@@ -267,6 +277,50 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			return sharedRequiredArtifact;
 
 		return slots[ slotIndex ].requiredArtifact;
+	}
+
+	/// <summary>
+	/// True when this slot has no prerequisite, or the prerequisite slot is occupied.
+	/// </summary>
+	public bool IsSlotPrerequisiteMet( int slotIndex )
+	{
+		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
+			return false;
+
+		ArtifactPresentationSlotEntry entry = slots[ slotIndex ];
+		if ( !entry.requirePrerequisiteSlot )
+			return true;
+
+		int prereq = entry.prerequisiteSlotIndex;
+		if ( prereq < 0 || prereq == slotIndex || prereq >= slots.Count )
+			return true;
+
+		return IsSlotOccupied( prereq );
+	}
+
+	public int GetPrerequisiteSlotIndex( int slotIndex )
+	{
+		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
+			return -1;
+
+		ArtifactPresentationSlotEntry entry = slots[ slotIndex ];
+		if ( !entry.requirePrerequisiteSlot )
+			return -1;
+		return entry.prerequisiteSlotIndex;
+	}
+
+	/// <summary>
+	/// Label for the artifact that must be placed before this slot unlocks, or null if unlocked.
+	/// </summary>
+	public TreasureDefinition GetBlockingPrerequisiteArtifact( int slotIndex )
+	{
+		if ( IsSlotPrerequisiteMet( slotIndex ) )
+			return null;
+
+		int prereq = GetPrerequisiteSlotIndex( slotIndex );
+		if ( prereq < 0 )
+			return null;
+		return GetRequiredArtifact( prereq );
 	}
 
 	public void GetSlotWorldPose( int slotIndex, out Vector3 worldPos, out Quaternion worldRot )
@@ -337,6 +391,8 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	{
 		if ( item == null || IsSlotOccupied( slotIndex ) )
 			return false;
+		if ( !IsSlotPrerequisiteMet( slotIndex ) )
+			return false;
 		if ( !item.IsClean )
 			return false;
 		return AcceptsForSlot( slotIndex, item.Definition );
@@ -380,7 +436,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 		for ( int i = 0; i < slots.Count; i++ )
 		{
-			if ( IsSlotOccupied( i ) || !AcceptsForSlot( i, item.Definition ) )
+			if ( IsSlotOccupied( i ) || !IsSlotPrerequisiteMet( i ) || !AcceptsForSlot( i, item.Definition ) )
 				continue;
 			if ( !item.IsClean )
 				continue;
@@ -584,7 +640,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			TreasureInteractSfx.PlayPlace( item.Definition, endWorldPos );
 		}
 
-		if ( slotIndicators != null )
+		if ( showSlotIndicators && slotIndicators != null )
 			slotIndicators.RefreshSlot( slotIndex, true );
 
 		if ( !_isComplete && EvaluateComplete() )
@@ -642,6 +698,13 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 	void EnsureSlotIndicators()
 	{
+		if ( !showSlotIndicators )
+		{
+			if ( slotIndicators != null )
+				slotIndicators.ClearForDisabledHolograms();
+			return;
+		}
+
 		if ( slotIndicators == null )
 			slotIndicators = GetComponentInChildren<ArtifactPresentationSlotIndicators>();
 

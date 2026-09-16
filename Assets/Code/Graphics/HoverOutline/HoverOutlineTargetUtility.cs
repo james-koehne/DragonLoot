@@ -50,6 +50,10 @@ public static class HoverOutlineTargetUtility
 		if ( callPost != null )
 			return callPost.CanInteract( player );
 
+		FairyInteractable fairy = interactable as FairyInteractable;
+		if ( fairy != null )
+			return fairy.CanInteract( player );
+
 		return false;
 	}
 
@@ -178,6 +182,10 @@ public static class HoverOutlineTargetUtility
 		MinecartCallPost callPost = focus as MinecartCallPost;
 		if ( callPost != null )
 			return CollectFromBehaviour( callPost );
+
+		FairyInteractable fairy = focus as FairyInteractable;
+		if ( fairy != null )
+			return CollectFromBehaviour( fairy );
 
 		return Buffer;
 	}

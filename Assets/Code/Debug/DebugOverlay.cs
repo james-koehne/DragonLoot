@@ -97,6 +97,7 @@ public class DebugOverlay : MonoBehaviour
 		_sections.Add( new DebugUpgradesSection() );
 		_sections.Add( new DebugWorldEventsSection() );
 		_sections.Add( new DebugTutorialsSection() );
+		_sections.Add( new DebugObjectivesSection() );
 		_sections.Add( new DebugToastsSection() );
 		_sections.Add( new DebugCoinSortingStationSection() );
 		_sections.Add( new DebugCarrySection() );

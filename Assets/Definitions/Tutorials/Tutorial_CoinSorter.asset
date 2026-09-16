@@ -39,6 +39,7 @@ MonoBehaviour:
   tasks:
   - id: reach_workshop
     label: Go to the Workshop
+    keybindHint: '[M]'
     completeTrigger: 11
     completeVolumeId: volume_workshop
   - id: use_sorter

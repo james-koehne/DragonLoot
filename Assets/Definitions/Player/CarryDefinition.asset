@@ -44,6 +44,7 @@ MonoBehaviour:
   categoryRestOffset: {x: 0, y: -0.35, z: -0.2}
   categoryRestEuler: {x: 25, y: 0, z: 0}
   categorySwapDuration: 0.35
+  autoSwitchPouchOnPickup: 0
   pouchSummaryFadeIn: 0.2
   pouchSummaryHold: 2
   pouchSummaryFadeOut: 0.35

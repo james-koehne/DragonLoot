@@ -123,6 +123,8 @@ public static class TreasureCreationPipeline
 				return "Chests";
 			case TreasureCategory.Container:
 				return "Containers";
+			case TreasureCategory.Junk:
+				return "Junk";
 			default:
 				return "Artifacts";
 		}
@@ -245,6 +247,26 @@ public static class TreasureCreationPipeline
 				request.ChestDestroyOnOpen = true;
 				if ( string.IsNullOrEmpty( request.Variant ) )
 					request.Variant = request.ChestType;
+				break;
+
+			case TreasureCategory.Junk:
+				request.ExclusiveCarry = false;
+				request.UsesHeavyThrow = false;
+				request.CanStack = false;
+				request.RigidbodyMass = 0.15f;
+				request.Drag = 0.6f;
+				request.AngularDrag = 0.6f;
+				request.AutoToppleStrength = 0f;
+				request.PickupRadius = 0.4f;
+				request.CollideWithPlayerOnPile = false;
+				request.WorldScale = Vector3.one * 0.24f;
+				request.HeldScale = Vector3.one * 0.2f;
+				request.CoinThickness = 0.1f;
+				request.CartGridSize = Vector2Int.one;
+				request.Value = 1;
+				request.Weight = 1;
+				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
+				request.ConvertArtifactMaterials = false;
 				break;
 
 			default:

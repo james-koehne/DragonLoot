@@ -42,5 +42,6 @@ MonoBehaviour:
   tasks:
   - id: place_coin_display
     label: Put a coin on the platform
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 7
     completeVolumeId: 

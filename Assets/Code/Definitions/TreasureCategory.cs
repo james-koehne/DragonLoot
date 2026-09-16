@@ -9,5 +9,6 @@ public enum TreasureCategory
 	Key,
 	Chest,
 	Container,
-	Resource
+	Resource,
+	Junk
 }

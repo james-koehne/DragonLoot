@@ -66,6 +66,9 @@ public class TutorialTask
 
 	public string label;
 
+	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}." )]
+	public string keybindHint;
+
 	public TutorialTaskCompleteType completeTrigger;
 
 	[Tooltip( "When completeTrigger is EnterVolume: volume id that completes this task." )]
@@ -143,7 +146,7 @@ public class TutorialDefinition : ScriptableObject
 	[TextArea( 2, 8 )]
 	public string body;
 
-	[Tooltip( "Optional hint using {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}." )]
+	[Tooltip( "Unused. Per-task keybindHint on each TutorialTask is shown under the task instead." )]
 	public string keybindHint;
 
 	public TutorialTask[] tasks;

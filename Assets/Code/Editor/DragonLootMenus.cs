@@ -66,6 +66,7 @@ public static class DragonLootMenus
 	public const string MinecartCreateTrack = Root + "/Minecart/Create Track";
 	public const string MinecartCreateUnloadPoint = Root + "/Minecart/Create Unload Point";
 	public const string MinecartCreateCallPost = Root + "/Minecart/Create Call Post";
+	public const string MinecartPatchAudio = Root + "/Minecart/Patch Move & Brake Audio";
 
 	public const string GameObjectMinecartSetup = "GameObject/DragonLoot/Minecart Setup";
 	public const string GameObjectMinecartDriveSetup = "GameObject/DragonLoot/Minecart Drive Cart";
@@ -91,6 +92,13 @@ public static class DragonLootMenus
 
 	// --- Tutorials ---
 	public const string TutorialsInstallCatalog = Root + "/Tutorials/Install Catalog";
+
+	// --- Definitions ---
+	public const string DefinitionsEnsureJumpAbility = Root + "/Definitions/Ensure Jump Ability";
+	public const string DefinitionsEnsureIslandObjectives = Root + "/Definitions/Ensure Island Objectives";
+
+	// --- Companions ---
+	public const string CompanionsBuildFairyHelper = Root + "/Companions/Build Fairy Helper Prefab";
 
 	// --- Cinematic ---
 	public const string CinematicCreateIntroSplines = Root + "/Cinematic/Create Intro Splines";

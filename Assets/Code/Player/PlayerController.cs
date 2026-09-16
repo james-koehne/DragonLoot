@@ -14,6 +14,7 @@ public enum PlayerMovementState
 public class PlayerController : MonoBehaviour
 {
 	public const string GlideAbilityId = "glide";
+	public const string JumpAbilityId = "jump";
 
 	const float SlideExitSpeedThreshold = 1.5f;
 	const float MinDownhillSqr = 0.0001f;
@@ -1040,14 +1041,17 @@ public class PlayerController : MonoBehaviour
 			if ( input != null )
 			{
 				bool canCoyoteJump = _coyoteTimer > 0f;
-				if ( _isClimbing
+				bool hasJumpAbility = HasJumpAbility();
+				if ( hasJumpAbility
+				     && _isClimbing
 				     && IsGrounded
 				     && !_isSliding
 				     && jumpPressed )
 				{
 					PerformClimbJumpOff();
 				}
-				else if ( _jumpAvailable
+				else if ( hasJumpAbility
+				     && _jumpAvailable
 				     && !_isClimbing
 				     && ( IsGrounded || canCoyoteJump )
 				     && jumpPressed )
@@ -1200,6 +1204,12 @@ public class PlayerController : MonoBehaviour
 	{
 		AbilitySystem system = AbilitySystem.Instance;
 		return system != null && system.IsUnlocked( GlideAbilityId );
+	}
+
+	public static bool HasJumpAbility()
+	{
+		AbilitySystem system = AbilitySystem.Instance;
+		return system != null && system.IsUnlocked( JumpAbilityId );
 	}
 
 	void BeginGlide()

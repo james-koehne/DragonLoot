@@ -43,7 +43,7 @@ public class CinematicCue
 /// <summary>
 /// Intro ledge cinematic: detach camera, lag-walk the player to a ledge, tour an open camera
 /// spline (look path ahead), then return to the player while looking at the dragon.
-/// Letterbox, FOV punch, input lock, timed cues, and <see cref="CinematicPresentationEndedEvent"/> remain.
+/// Letterbox, FOV punch, input lock, HUD hide, timed cues, and <see cref="CinematicPresentationEndedEvent"/> remain.
 ///
 /// Scene setup (manual in Editor):
 /// 1. Add <see cref="CinematicPresentationController"/> to the level.
@@ -247,6 +247,20 @@ public class CinematicPresentationController : MonoBehaviour
 
 	public bool IsPlaying => _presentationRoutine != null;
 
+	public static bool IsAnyPlaying
+	{
+		get
+		{
+			foreach ( KeyValuePair<string, CinematicPresentationController> pair in Controllers )
+			{
+				if ( pair.Value != null && pair.Value.IsPlaying )
+					return true;
+			}
+
+			return false;
+		}
+	}
+
 	public float EstimateWalkDurationForEditor()
 	{
 		PlayerController player = ResolvePlayer();
@@ -411,6 +425,7 @@ public class CinematicPresentationController : MonoBehaviour
 		RevealPunchChannel letterboxChannel = BuildLetterboxChannel();
 
 		LockPlayerInputForCinematic( true );
+		SetTutorialObjectiveHudHidden( true );
 
 		CinematicLetterboxUI letterbox = CinematicLetterboxUI.EnsureExists();
 		FirstPersonCameraController firstPerson = ResolveFirstPersonCamera();
@@ -1037,6 +1052,7 @@ public class CinematicPresentationController : MonoBehaviour
 			player.SetCinematicCameraDetached( false );
 
 		LockPlayerInputForCinematic( false );
+		SetTutorialObjectiveHudHidden( false );
 
 		FirstPersonCameraController firstPerson = ResolveFirstPersonCamera();
 		if ( firstPerson != null )
@@ -1070,6 +1086,29 @@ public class CinematicPresentationController : MonoBehaviour
 			return;
 
 		player.SetCinematicInputLock( locked );
+	}
+
+	static void SetTutorialObjectiveHudHidden( bool hidden )
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.InterfaceController == null )
+			return;
+
+		Transform root = GameMode.Instance.InterfaceController.transform;
+		QuestObjectiveUI objective = root.GetComponentInChildren<QuestObjectiveUI>( true );
+		if ( objective != null )
+			objective.SetCinematicHidden( hidden );
+
+		TutorialPopupUI tutorial = root.GetComponentInChildren<TutorialPopupUI>( true );
+		if ( tutorial != null )
+			tutorial.SetCinematicHidden( hidden );
+
+		QuestCompassUI compass = root.GetComponentInChildren<QuestCompassUI>( true );
+		if ( compass != null )
+			compass.SetCinematicHidden( hidden );
+
+		QuestWorldMarker marker = root.GetComponentInChildren<QuestWorldMarker>( true );
+		if ( marker != null )
+			marker.SetCinematicHidden( hidden );
 	}
 
 	static PlayerController ResolvePlayer()

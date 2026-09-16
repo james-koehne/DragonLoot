@@ -112,8 +112,7 @@ public class TreasureItemInteractable : InteractableBase
 		if ( IsBuriedInPile( item ) )
 			return false;
 
-		if ( item.State == TreasureItemState.Displayed
-			&& item.Owner is IPermanentTreasureDisplayOwner )
+		if ( IsDisplayedPickupLocked( item ) )
 			return false;
 
 		if ( item.Owner is CleaningStationInteractable cleaningStation
@@ -155,6 +154,9 @@ public class TreasureItemInteractable : InteractableBase
 			|| item.IsReclaiming )
 			return;
 
+		if ( IsDisplayedPickupLocked( item ) )
+			return;
+
 		if ( item.Owner is CleaningStationInteractable cleaningStation
 			&& !cleaningStation.AllowsPickup )
 			return;
@@ -189,6 +191,18 @@ public class TreasureItemInteractable : InteractableBase
 
 		if ( pile != null )
 			pile.CompleteSteal( item );
+	}
+
+	static bool IsDisplayedPickupLocked( TreasureItem item )
+	{
+		if ( item == null || item.State != TreasureItemState.Displayed )
+			return false;
+
+		if ( item.Owner is IPermanentTreasureDisplayOwner )
+			return true;
+
+		ITreasureDisplayStackOwner stackOwner = item.Owner as ITreasureDisplayStackOwner;
+		return stackOwner != null && !stackOwner.AllowsDisplayedPickup;
 	}
 
 	static bool UsesDisplayedCoinStackPickup( TreasureItem item )
@@ -304,7 +318,6 @@ public class TreasureItemInteractable : InteractableBase
 		if ( carry == null )
 			return;
 
-		carry.TrySetSelectedBucket( CarryBucketKind.Coin );
 		carry.TryReceiveActiveCoinFromWorld( item );
 	}
 

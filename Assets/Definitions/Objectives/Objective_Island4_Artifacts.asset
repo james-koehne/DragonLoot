@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3454bda4ebe9284399c0e855eee818f, type: 3}
+  m_Name: Objective_Island4_Artifacts
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
+  id: obj_island_4_artifacts
+  title: Present the Artifacts
+  showVolumeId: volume_island_4
+  showRadius: 40
+  prerequisiteObjectiveIds:
+  - obj_island_3_constellation
+  subs:
+  - id: fill_display
+    label: Fill the coin display
+    completeType: 1
+    targetId: island4_coin_display
+  - id: present_artifacts
+    label: Place the statue and attach the artifacts
+    completeType: 1
+    targetId: island4_artifact_presentation
+  rewards: []
+  rewardLabel: Platforms
+  completionToast: "Island complete \u2014 platforms activated"
+  onCompleteWorldEventIds: []

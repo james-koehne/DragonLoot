@@ -550,6 +550,8 @@ public class PauseMenuUI : MonoBehaviour
 			AppendControl( SlotOrNull( gameInput.CategorySlots, 0 ), "Coins" );
 			AppendControl( SlotOrNull( gameInput.CategorySlots, 1 ), "Gems" );
 			AppendControl( SlotOrNull( gameInput.CategorySlots, 2 ), "Artifacts" );
+			AppendControl( SlotOrNull( gameInput.CategorySlots, 3 ), "General" );
+			AppendControl( SlotOrNull( gameInput.CategorySlots, 4 ), "Junk" );
 		}
 
 		AppendControl( gameInput.CyclePouch, "Cycle pouch" );

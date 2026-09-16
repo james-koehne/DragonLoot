@@ -27,6 +27,7 @@ public class PouchBarUI : MonoBehaviour
 	[SerializeField] Slot[] slots = new Slot[ PlayerCarry.BucketCount ];
 	[SerializeField] Text cycleBinding;
 	[SerializeField] Text cycleLabel;
+	Transform _cycleRoot;
 	[Tooltip( "Star shown top-right of each pouch when it holds newly discovered types. Leave empty to assign per-slot Star images on the prefab." )]
 	[SerializeField] Sprite newItemStarSprite;
 
@@ -37,8 +38,8 @@ public class PouchBarUI : MonoBehaviour
 	bool _subscribed;
 	CanvasGroup _group;
 
-	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotGeneral" };
-	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "General" };
+	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotGeneral", "SlotJunk" };
+	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "General", "Junk" };
 
 	public void Setup()
 	{
@@ -183,6 +184,8 @@ public class PouchBarUI : MonoBehaviour
 
 		for ( int i = 0; i < count; i++ )
 			ApplySlot( i, selected, carry );
+
+		RefreshCycle( carry );
 	}
 
 	void ApplySlot( int index, CarryBucketKind selected, PlayerCarry carry )
@@ -196,7 +199,7 @@ public class PouchBarUI : MonoBehaviour
 
 		CarryBucketKind kind = (CarryBucketKind)index;
 		int held = carry != null ? carry.GetBucketCount( kind ) : 0;
-		bool visible = kind != CarryBucketKind.General || held > 0;
+		bool visible = held > 0;
 		if ( slot.root.gameObject.activeSelf != visible )
 			slot.root.gameObject.SetActive( visible );
 
@@ -210,6 +213,19 @@ public class PouchBarUI : MonoBehaviour
 
 		int newCount = ( carry != null && !isSelected ) ? carry.GetNewItemTypeCount( kind ) : 0;
 		ApplyNewItemBadge( slot, newCount );
+	}
+
+	void RefreshCycle( PlayerCarry carry )
+	{
+		if ( _cycleRoot == null )
+			_cycleRoot = transform.Find( "Cycle" );
+		if ( _cycleRoot == null )
+			return;
+
+		int filled = carry != null ? carry.CountFilledBuckets() : 0;
+		bool show = filled > 1;
+		if ( _cycleRoot.gameObject.activeSelf != show )
+			_cycleRoot.gameObject.SetActive( show );
 	}
 
 	void ApplyNewItemBadge( Slot slot, int newCount )
@@ -308,13 +324,14 @@ public class PouchBarUI : MonoBehaviour
 
 			EnsureNewItem( slot );
 
-			if ( slot.label != null && string.IsNullOrEmpty( slot.label.text ) )
+			if ( slot.label != null )
 				slot.label.text = SlotLabels[ i ];
 		}
 
 		Transform cycleT = transform.Find( "Cycle" );
 		if ( cycleT != null )
 		{
+			_cycleRoot = cycleT;
 			if ( cycleBinding == null )
 				cycleBinding = FindChildText( cycleT, "Binding" );
 			if ( cycleLabel == null )
@@ -322,6 +339,20 @@ public class PouchBarUI : MonoBehaviour
 		}
 
 		OrderSlots();
+		CopySlotIconIfEmpty( CarryBucketKind.Junk, CarryBucketKind.General );
+	}
+
+	void CopySlotIconIfEmpty( CarryBucketKind target, CarryBucketKind source )
+	{
+		int to = (int)target;
+		if ( slots == null || to < 0 || to >= slots.Length || slots[ to ] == null || slots[ to ].icon == null )
+			return;
+		if ( slots[ to ].icon.sprite != null )
+			return;
+
+		Sprite sprite = GetSlotIcon( source );
+		if ( sprite != null )
+			slots[ to ].icon.sprite = sprite;
 	}
 
 	void OrderSlots()
@@ -361,12 +392,13 @@ public class PouchBarUI : MonoBehaviour
 				continue;
 
 			slots[ i ] = CreateSlot( SlotNames[ i ], SlotLabels[ i ] );
-			if ( i == (int)CarryBucketKind.General )
-				slots[ i ].root.gameObject.SetActive( false );
+			slots[ i ].root.gameObject.SetActive( false );
 		}
 
 		if ( transform.Find( "Cycle" ) == null )
 			CreateCycle();
+		if ( _cycleRoot == null )
+			_cycleRoot = transform.Find( "Cycle" );
 
 		OrderSlots();
 	}

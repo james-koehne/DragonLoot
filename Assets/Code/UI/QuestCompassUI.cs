@@ -19,16 +19,20 @@ public class QuestCompassUI : MonoBehaviour
 
 	bool _subscribed;
 	bool _hasMarker;
+	bool _cinematicHidden;
 	Vector3 _markerWorld;
 
 	public void Setup()
 	{
 		Subscribe();
 		AttachDistanceToPip();
-		if ( group != null )
-			group.alpha = 0f;
-		if ( pip != null )
-			pip.gameObject.SetActive( false );
+		ApplyVisibility();
+	}
+
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		ApplyVisibility();
 	}
 
 	void AttachDistanceToPip()
@@ -92,10 +96,16 @@ public class QuestCompassUI : MonoBehaviour
 	{
 		_hasMarker = evt.HasMarker && !evt.Cleared;
 		_markerWorld = evt.MarkerWorldPosition;
+		ApplyVisibility();
+	}
+
+	void ApplyVisibility()
+	{
+		bool show = _hasMarker && !_cinematicHidden;
 		if ( group != null )
-			group.alpha = _hasMarker ? 1f : 0f;
+			group.alpha = show ? 1f : 0f;
 		if ( pip != null )
-			pip.gameObject.SetActive( _hasMarker );
+			pip.gameObject.SetActive( show );
 	}
 
 	void UpdateCompass()

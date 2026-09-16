@@ -47,6 +47,11 @@ public class PlayerInteraction : MonoBehaviour
 	public IInteractable Current => _current;
 	public bool HasInteractableFocus => _current != null;
 
+	/// <summary>
+	/// True when ContextualInteract (E) currently does something: look-at use, hold-stack, or an active E action.
+	/// </summary>
+	public bool HasContextualInteractFocus => ResolveHasContextualInteract();
+
 	public float InteractRange
 	{
 		get
@@ -391,6 +396,45 @@ public class PlayerInteraction : MonoBehaviour
 		EnsureInteractMask();
 		EnsurePickableOutlineSettings();
 		SubscribeBeginContextRendering();
+	}
+
+	bool ResolveHasContextualInteract()
+	{
+		if ( _player == null )
+			return false;
+
+		PlayerSorterReposition sorter = _player.SorterReposition;
+		if ( sorter != null && sorter.IsCarrying )
+			return true;
+
+		PlayerMinecartPush push = _player.MinecartPush;
+		if ( push != null && push.IsPushing )
+			return true;
+
+		PlayerMinecartDrive drive = _player.MinecartDrive;
+		if ( drive != null && drive.IsDriving )
+			return true;
+
+		IInteractable focus = _current;
+		if ( focus != null )
+		{
+			DoorInteractable door = focus as DoorInteractable;
+			if ( door != null && door.ShowsLockedPrompt )
+				return true;
+
+			if ( !InteractableBase.IsPickupInteract( focus ) && focus.CanInteract( _player ) )
+				return true;
+		}
+
+		PlayerWholeStackInteraction wholeStack = _player.WholeStack;
+		if ( wholeStack != null && wholeStack.CanOfferWholeStackPickup )
+			return true;
+
+		PlayerCarry carry = _player.Carry;
+		if ( carry != null && carry.Count > 0 && wholeStack != null && wholeStack.CanOfferWholeStackPlace )
+			return true;
+
+		return false;
 	}
 
 	void OnEnable()
@@ -1113,7 +1157,9 @@ public class PlayerInteraction : MonoBehaviour
 
 	static bool IsFloorExemptOutlineInteractable( InteractableBase interactable )
 	{
-		return interactable is GroundCoinStack || interactable is CoinStackInteractable;
+		return interactable is GroundCoinStack
+			|| interactable is CoinStackInteractable
+			|| interactable is FairyInteractable;
 	}
 
 	/// <summary>

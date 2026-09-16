@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Publishes tutorial / contextual HUD state for objective UI, compass, world marker, and outlines.
-/// Intro world events do not call this; future tutorial systems will.
+/// Publishes contextual HUD state for objective UI, compass, world marker, and outlines.
+/// Owned at runtime by <see cref="ObjectiveSystem"/> (nearby objectives). World-event SetTutorialHud can still publish but will be overwritten on the next objective refresh.
 /// </summary>
 public static class TutorialHud
 {

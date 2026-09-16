@@ -229,6 +229,132 @@ MonoBehaviour:
   m_PointerBehavior: 0
   m_CursorLockBehavior: 0
   m_ScrollDeltaPerTick: 6
+--- !u!1 &4175622668837593450
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1400649274888191716}
+  - component: {fileID: 1987949476564358893}
+  m_Layer: 0
+  m_Name: ObjectiveCompleteFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1400649274888191716
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4175622668837593450}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000202}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1987949476564358893
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4175622668837593450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448716616532088
+  _useUnscaledTime: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448716616532088
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 0e812923ac7917b45902eb9068b35bc1, type: 3}
+        VolumeMin: 0.85
+        VolumeMax: 1
+        PitchMin: 0.98
+        PitchMax: 1.02
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
+--- !u!1 &4204570582936051790
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7054798882366521668}
+  - component: {fileID: 6267923530146926140}
+  m_Layer: 0
+  m_Name: SubObjectiveCompleteFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7054798882366521668
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4204570582936051790}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000202}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6267923530146926140
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4204570582936051790}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448716616532087
+  _useUnscaledTime: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448716616532087
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 819afbcc8df8eac499eeedb4ab911548, type: 3}
+        VolumeMin: 0.85
+        VolumeMax: 1
+        PitchMin: 0.98
+        PitchMax: 1.02
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
 --- !u!1 &5277881177787326480
 GameObject:
   m_ObjectHideFlags: 0
@@ -821,7 +947,6 @@ GameObject:
   m_Component:
   - component: {fileID: 7101000000000000202}
   - component: {fileID: 7101000000000000203}
-  - component: {fileID: 7101000000000000204}
   - component: {fileID: 7101000000000000205}
   - component: {fileID: 7101000000000000206}
   m_Layer: 5
@@ -845,6 +970,8 @@ RectTransform:
   m_Children:
   - {fileID: 7101000000000000212}
   - {fileID: 7101000000000000222}
+  - {fileID: 7054798882366521668}
+  - {fileID: 1400649274888191716}
   m_Father: {fileID: 8603568719501364491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
@@ -860,36 +987,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7101000000000000201}
   m_CullTransparentMesh: 1
---- !u!114 &7101000000000000204
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7101000000000000201}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.35}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!225 &7101000000000000205
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -898,7 +995,7 @@ CanvasGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7101000000000000201}
   m_Enabled: 1
-  m_Alpha: 0
+  m_Alpha: 1
   m_Interactable: 0
   m_BlocksRaycasts: 0
   m_IgnoreParentGroups: 0
@@ -920,6 +1017,8 @@ MonoBehaviour:
   padding: {x: 22, y: 22}
   textSpacing: 8
   contextualSizePercent: 118
+  subObjectiveCompleteFeedback: {fileID: 6267923530146926140}
+  objectiveCompleteFeedback: {fileID: 1987949476564358893}
 --- !u!1 &7101000000000000211
 GameObject:
   m_ObjectHideFlags: 0
@@ -931,6 +1030,7 @@ GameObject:
   - component: {fileID: 7101000000000000212}
   - component: {fileID: 7101000000000000213}
   - component: {fileID: 7101000000000000214}
+  - component: {fileID: 5375474901811291865}
   m_Layer: 5
   m_Name: Title
   m_TagString: Untagged
@@ -999,6 +1099,21 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: Quest
+--- !u!114 &5375474901811291865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000211}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Shadow
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
+  m_EffectDistance: {x: 1.5, y: -0.5}
+  m_UseGraphicAlpha: 1
 --- !u!1 &7101000000000000221
 GameObject:
   m_ObjectHideFlags: 0
@@ -1010,6 +1125,7 @@ GameObject:
   - component: {fileID: 7101000000000000222}
   - component: {fileID: 7101000000000000223}
   - component: {fileID: 7101000000000000224}
+  - component: {fileID: 8883141275246203860}
   m_Layer: 5
   m_Name: Objective
   m_TagString: Untagged
@@ -1078,6 +1194,21 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 
+--- !u!114 &8883141275246203860
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000221}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Shadow
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
+  m_EffectDistance: {x: 1.5, y: -0.5}
+  m_UseGraphicAlpha: 1
 --- !u!1 &7101000000000000301
 GameObject:
   m_ObjectHideFlags: 0
@@ -1905,6 +2036,7 @@ MonoBehaviour:
   idleColor: {r: 1, g: 1, b: 1, a: 1}
   focusedColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   size: 8
+  contextualRingSize: 20
   _canvasGroup: {fileID: 0}
 --- !u!114 &7101000000000000504
 MonoBehaviour:
@@ -2352,9 +2484,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a725780e5934adf41a4f6a34f73a4ddc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DiscoveryToastUI
-  group: {fileID: 7101000000000000643}
   label: {fileID: 7101000000000000654}
-  pouchIcon: {fileID: 7101000000000000684}
   coinPouchSprite: {fileID: 21300000, guid: 0e1ca78fe4394b34f8342564feb2e2c6, type: 3}
   gemPouchSprite: {fileID: 21300000, guid: edc0ba4db2e1f5c47a60864d007476b9, type: 3}
   artifactPouchSprite: {fileID: 21300000, guid: a69ad76f80bff7a44a6508b5b4668f79, type: 3}
@@ -2781,6 +2911,19 @@ MonoBehaviour:
   references:
     version: 2
     RefIds:
+    - rid: 8923448716616532065
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 9be77e0759833764783dbd7f769ac975, type: 3}
+        VolumeMin: 0.5
+        VolumeMax: 0.5
+        PitchMin: 0.95
+        PitchMax: 1.1
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
     - rid: 9202000000000000001
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
@@ -2789,6 +2932,7 @@ MonoBehaviour:
         - rid: 9202000000000000002
         - rid: 9202000000000000003
         - rid: 9202000000000000004
+        - rid: 8923448716616532065
     - rid: 9202000000000000002
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
@@ -3824,9 +3968,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7648dae0bf22002459c3104b5182828e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UnlockRewardToastUI
-  group: {fileID: 7101000000000000853}
   label: {fileID: 7101000000000000874}
-  rewardIcon: {fileID: 7101000000000000864}
   showFeedback: {fileID: 7101000000000000883}
   hideFeedback: {fileID: 7101000000000000893}
   holdDuration: 5
@@ -4038,6 +4180,19 @@ MonoBehaviour:
   references:
     version: 2
     RefIds:
+    - rid: 8923448716616532064
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: c698c11d90f9f1a4581d30b84e15a24b, type: 3}
+        VolumeMin: 0.6
+        VolumeMax: 0.6
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
     - rid: 9204000000000000001
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
@@ -4046,6 +4201,7 @@ MonoBehaviour:
         - rid: 9204000000000000002
         - rid: 9204000000000000003
         - rid: 9204000000000000004
+        - rid: 8923448716616532064
     - rid: 9204000000000000002
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
@@ -4395,6 +4551,7 @@ MonoBehaviour:
   taskCompleteFeedback: {fileID: 7101000000000001023}
   tutorialCompleteFeedback: {fileID: 7101000000000001053}
   switchFeedback: {fileID: 0}
+  stackAddFeedback: {fileID: 0}
   completeGlowGroup: {fileID: 7101000000000001045}
 --- !u!1 &7101000000000000911
 GameObject:
@@ -7481,7 +7638,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &7101000000000002402
 RectTransform:
   m_ObjectHideFlags: 0

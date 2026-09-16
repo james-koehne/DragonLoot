@@ -37,9 +37,11 @@ MonoBehaviour:
   tasks:
   - id: reach_artifact_museum
     label: Go to the Artifact Museum
+    keybindHint: '[M]'
     completeTrigger: 11
     completeVolumeId: volume_artifact_museum
   - id: place_artifact
     label: Put an artifact on a stand
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 8
     completeVolumeId: 

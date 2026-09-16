@@ -3,18 +3,19 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>Hand rig a treasure is carried in. Chests, keys, and other non-artifact loot use General.</summary>
+/// <summary>Hand rig a treasure is carried in. Keys/chests use General; TreasureCategory.Junk uses Junk.</summary>
 public enum CarryBucketKind
 {
 	Coin = 0,
 	Gem = 1,
 	Artifact = 2,
-	General = 3
+	General = 3,
+	Junk = 4
 }
 
 public class PlayerCarry : MonoBehaviour, ITreasureOwner
 {
-	public const int BucketCount = 4;
+	public const int BucketCount = 5;
 
 	struct CarriedEntry
 	{
@@ -69,6 +70,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	FirstPersonCameraController _cameraLook;
 	Transform _carryRigs;
 	bool _cinematicHidden;
+	bool _minecartDriveHidden;
 	int _nextToken = 1;
 	int _usedCapacity;
 	float _bobPhase;
@@ -171,6 +173,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return CarryBucketKind.Gem;
 			case TreasureCategory.Artifact:
 				return CarryBucketKind.Artifact;
+			case TreasureCategory.Junk:
+				return CarryBucketKind.Junk;
 			default:
 				return CarryBucketKind.General;
 		}
@@ -231,6 +235,20 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 
 		return false;
+	}
+
+	/// <summary>How many pouches currently hold at least one item.</summary>
+	public int CountFilledBuckets()
+	{
+		EnsureBuckets();
+		int filled = 0;
+		for ( int i = 0; i < BucketCount; i++ )
+		{
+			if ( _buckets[ i ].Count > 0 )
+				filled++;
+		}
+
+		return filled;
 	}
 
 	/// <summary>
@@ -329,6 +347,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			case TreasureCategory.Artifact:
 				bucket = CarryBucketKind.Artifact;
 				return true;
+			case TreasureCategory.Junk:
+				bucket = CarryBucketKind.Junk;
+				return true;
 			default:
 				bucket = CarryBucketKind.General;
 				return true;
@@ -343,6 +364,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return TreasureCategory.Gem;
 			case CarryBucketKind.Artifact:
 				return TreasureCategory.Artifact;
+			case CarryBucketKind.Junk:
+				return TreasureCategory.Junk;
 			case CarryBucketKind.General:
 				return TreasureCategory.Chest;
 			default:
@@ -447,7 +470,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		_carryRigs.localPosition = Vector3.zero;
 		_carryRigs.localRotation = Quaternion.identity;
 		_carryRigs.localScale = Vector3.one;
-		ApplyCinematicHiddenVisual();
+		ApplyCarryHiddenVisual();
 
 		for ( int i = 0; i < BucketCount; i++ )
 			EnsureBucketRig( _buckets[ i ] );
@@ -469,15 +492,24 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	public void SetCinematicHidden( bool hidden )
 	{
 		_cinematicHidden = hidden;
-		ApplyCinematicHiddenVisual();
+		ApplyCarryHiddenVisual();
 	}
 
-	void ApplyCinematicHiddenVisual()
+	/// <summary>
+	/// Hides first-person carry visuals while driving a minecart (until the orbit cam returns to the player).
+	/// </summary>
+	public void SetMinecartDriveHidden( bool hidden )
+	{
+		_minecartDriveHidden = hidden;
+		ApplyCarryHiddenVisual();
+	}
+
+	void ApplyCarryHiddenVisual()
 	{
 		if ( _carryRigs == null )
 			return;
 
-		_carryRigs.gameObject.SetActive( !_cinematicHidden );
+		_carryRigs.gameObject.SetActive( !_cinematicHidden && !_minecartDriveHidden );
 	}
 
 	void EnsureBucketRig( CategoryBucket bucket )
@@ -523,6 +555,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return "GemRig";
 			case CarryBucketKind.General:
 				return "GeneralRig";
+			case CarryBucketKind.Junk:
+				return "JunkRig";
 			default:
 				return "ArtifactRig";
 		}
@@ -1058,7 +1092,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			duration = def != null ? def.holdTweenDuration : 0.2f;
 		StartHoldTween( item, token, duration, playPickupFeedback: true );
 
-		TrySetSelectedBucket( CarryBucketKind.Coin );
+		AutoSelectIfIdle( bucket );
 		RestackPoses();
 		return true;
 	}
@@ -1532,7 +1566,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( !AddExistingEntry( bucket, item, 0, allowActive: true, tweenDuration: -1f, out _ ) )
 			return false;
 
-		ForceSelectBucket( bucket );
+		AutoSelectIfIdle( bucket );
 		// Shifted items must restack; entries with running hold tweens are skipped.
 		RestackPoses();
 		return true;
@@ -1874,25 +1908,21 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		DiscoveryToastUI.NotifyNewTreasure( definition );
 	}
 
-	/// <summary>General pouch is HUD-only while it has items; snap off it when emptied.</summary>
+	/// <summary>If the selected pouch is empty, snap to another pouch that still has items.</summary>
 	void EnsureSelectedPouchValid()
 	{
-		if ( _selected != CarryBucketKind.General )
-			return;
-		if ( GetBucketCount( CarryBucketKind.General ) > 0 )
+		if ( GetBucketCount( _selected ) > 0 )
 			return;
 
-		for ( int i = 0; i < (int)CarryBucketKind.General; i++ )
+		for ( int i = 0; i < BucketCount; i++ )
 		{
 			CarryBucketKind kind = (CarryBucketKind)i;
-			if ( GetBucketCount( kind ) <= 0 )
+			if ( kind == _selected || GetBucketCount( kind ) <= 0 )
 				continue;
 
 			TrySetSelectedBucket( kind );
 			return;
 		}
-
-		TrySetSelectedBucket( CarryBucketKind.Coin );
 	}
 
 	float GetHeldCoinCylinderHeight( CategoryBucket bucket )
@@ -1909,19 +1939,18 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		return height;
 	}
 
-	/// <summary>Keeps an empty selection from hiding a pickup that landed in another category.</summary>
+	/// <summary>
+	/// Selects the destination pouch after a pickup. Always switches when
+	/// <see cref="CarryDefinition.autoSwitchPouchOnPickup"/> is on; otherwise only if the current pouch is empty.
+	/// </summary>
 	void AutoSelectIfIdle( CategoryBucket bucket )
 	{
-		ForceSelectBucket( bucket );
-	}
-
-	/// <summary>Always switches pouch to the destination category on pickup.</summary>
-	void ForceSelectBucket( CategoryBucket bucket )
-	{
-		if ( bucket == null || bucket.Kind == _selected )
+		if ( bucket == null || bucket.Kind == _selected || bucket.Count == 0 )
 			return;
 
-		if ( bucket.Count == 0 )
+		CarryDefinition def = Definition;
+		bool alwaysSwitch = def != null && def.autoSwitchPouchOnPickup;
+		if ( !alwaysSwitch && GetBucket( _selected ).Count > 0 )
 			return;
 
 		TrySetSelectedBucket( bucket.Kind );

@@ -132,6 +132,9 @@ public class CarryDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float categorySwapDuration = 0.35f;
 
+	[Tooltip( "When on, picking up loot always selects that item's pouch. When off, the current pouch stays selected unless it is empty." )]
+	public bool autoSwitchPouchOnPickup = false;
+
 	[Header( "Pouch Summary HUD" )]
 	[Tooltip( "Seconds to slide the pouch summary in from the left." )]
 	[Min( 0f )]

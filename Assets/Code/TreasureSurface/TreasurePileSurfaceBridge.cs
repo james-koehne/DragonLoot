@@ -28,6 +28,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 
 	void OnEnable()
 	{
+		if ( _visual == null )
+			_visual = GetComponent<TreasurePileVisual>();
 		if ( !ActiveBridges.Contains( this ) )
 			ActiveBridges.Add( this );
 	}

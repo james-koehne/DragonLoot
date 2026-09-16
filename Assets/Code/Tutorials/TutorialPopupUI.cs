@@ -10,7 +10,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Corner contextual tutorial popup: explanation + multi-task checkboxes.
 /// Non-blocking, gameplay-driven; no click required.
-/// Wire Feedbacks on the Interface prefab (show / hide / task complete / tutorial complete).
+/// Wire Feedbacks on the Interface prefab (show / hide / task complete / tutorial complete / switch / stack add).
 /// </summary>
 public class TutorialPopupUI : MonoBehaviour
 {
@@ -41,9 +41,11 @@ public class TutorialPopupUI : MonoBehaviour
 	[SerializeField] Feedbacks taskCompleteFeedback;
 	[SerializeField] Feedbacks tutorialCompleteFeedback;
 	[SerializeField] Feedbacks switchFeedback;
+	[SerializeField] Feedbacks stackAddFeedback;
 	[SerializeField] CanvasGroup completeGlowGroup;
 
 	bool _visible;
+	bool _cinematicHidden;
 	bool _ready;
 	string _bodyBase = string.Empty;
 	string _tasksFormatted = string.Empty;
@@ -74,6 +76,12 @@ public class TutorialPopupUI : MonoBehaviour
 	}
 
 	public bool IsVisible => _visible;
+
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		ApplyCinematicVisibility();
+	}
 
 	public float TaskCompleteFeedbackDuration => ResolveFeedbackDuration( taskCompleteFeedback, 0.35f );
 
@@ -119,6 +127,7 @@ public class TutorialPopupUI : MonoBehaviour
 		CacheCardChrome();
 		EnsureActiveCard();
 		EnsureSwitchFeedback();
+		EnsureStackAddFeedback();
 		HideLegacyCycleHint();
 		EnsureMinimizedRoot();
 		EnsureCycleControl();
@@ -307,6 +316,94 @@ public class TutorialPopupUI : MonoBehaviour
 		switchFeedback.AddFeedback( parallel );
 	}
 
+	void EnsureStackAddFeedback()
+	{
+		if ( stackAddFeedback != null && stackAddFeedback.FeedbackList != null && stackAddFeedback.FeedbackList.Count > 0 )
+		{
+			SetUnscaled( stackAddFeedback );
+			return;
+		}
+
+		Transform existing = transform.Find( "StackAddFeedbacks" );
+		GameObject go = existing != null ? existing.gameObject : new GameObject( "StackAddFeedbacks", typeof( RectTransform ) );
+		if ( existing == null )
+			go.transform.SetParent( transform, false );
+
+		if ( stackAddFeedback == null )
+			stackAddFeedback = go.GetComponent<Feedbacks>();
+		if ( stackAddFeedback == null )
+			stackAddFeedback = go.AddComponent<Feedbacks>();
+		stackAddFeedback.UseUnscaledTime = true;
+
+		if ( stackAddFeedback.FeedbackList != null && stackAddFeedback.FeedbackList.Count > 0 )
+			return;
+
+		ParallelFeedback parallel = new ParallelFeedback();
+		parallel.Feedbacks = new List<Feedback>();
+
+		UiPunchScaleFeedback punch = new UiPunchScaleFeedback();
+		punch.Punch = new Vector3( 0.06f, 0.1f, 0f );
+		punch.Duration = 0.3f;
+		punch.UseUnscaledTime = true;
+		punch.Curve = new AnimationCurve(
+			new Keyframe( 0f, 0f ),
+			new Keyframe( 0.28f, 1f ),
+			new Keyframe( 1f, 0f ) );
+		parallel.Feedbacks.Add( punch );
+
+		UiAnchoredSlideFeedback slide = new UiAnchoredSlideFeedback();
+		slide.FromOffset = new Vector2( 24f, 0f );
+		slide.ToOffset = Vector2.zero;
+		slide.Duration = 0.24f;
+		slide.UseUnscaledTime = true;
+		slide.Curve = new AnimationCurve(
+			new Keyframe( 0f, 0f, 0f, 2.4f ),
+			new Keyframe( 0.7f, 1.05f ),
+			new Keyframe( 1f, 1f ) );
+		parallel.Feedbacks.Add( slide );
+
+		stackAddFeedback.AddFeedback( parallel );
+	}
+
+	void RetargetStackAddFeedback( RectTransform row )
+	{
+		if ( stackAddFeedback == null || stackAddFeedback.FeedbackList == null || row == null )
+			return;
+
+		for ( int i = 0; i < stackAddFeedback.FeedbackList.Count; i++ )
+			RetargetStackAddFeedbackRecursive( stackAddFeedback.FeedbackList[ i ], row );
+	}
+
+	static void RetargetStackAddFeedbackRecursive( Feedback feedback, RectTransform row )
+	{
+		if ( feedback == null || row == null )
+			return;
+
+		ParallelFeedback parallel = feedback as ParallelFeedback;
+		if ( parallel != null && parallel.Feedbacks != null )
+		{
+			for ( int i = 0; i < parallel.Feedbacks.Count; i++ )
+				RetargetStackAddFeedbackRecursive( parallel.Feedbacks[ i ], row );
+			return;
+		}
+
+		SequenceFeedback sequence = feedback as SequenceFeedback;
+		if ( sequence != null && sequence.Feedbacks != null )
+		{
+			for ( int i = 0; i < sequence.Feedbacks.Count; i++ )
+				RetargetStackAddFeedbackRecursive( sequence.Feedbacks[ i ], row );
+			return;
+		}
+
+		UiPunchScaleFeedback punch = feedback as UiPunchScaleFeedback;
+		if ( punch != null )
+			punch.Target = row;
+
+		UiAnchoredSlideFeedback slide = feedback as UiAnchoredSlideFeedback;
+		if ( slide != null )
+			slide.Target = row;
+	}
+
 	static void PinChromeToTop( RectTransform rect, float extraSize, float extraUp )
 	{
 		if ( rect == null )
@@ -427,6 +524,7 @@ public class TutorialPopupUI : MonoBehaviour
 		SetUnscaled( taskCompleteFeedback );
 		SetUnscaled( tutorialCompleteFeedback );
 		SetUnscaled( switchFeedback );
+		SetUnscaled( stackAddFeedback );
 	}
 
 	static void SetUnscaled( Feedbacks feedbacks )
@@ -493,6 +591,8 @@ public class TutorialPopupUI : MonoBehaviour
 				group.alpha = 1f;
 			PlaySwitch();
 		}
+
+		ApplyCinematicVisibility();
 	}
 
 	public void SetCycleHint( bool visible, string binding, string label )
@@ -506,8 +606,9 @@ public class TutorialPopupUI : MonoBehaviour
 			LayoutContent();
 	}
 
-	public void SetMinimizedTutorials( List<string> titles )
+	public bool SetMinimizedTutorials( List<string> titles )
 	{
+		int previousCount = _minimizedTitles.Count;
 		_minimizedTitles.Clear();
 		if ( titles != null )
 		{
@@ -519,8 +620,10 @@ public class TutorialPopupUI : MonoBehaviour
 			}
 		}
 
+		bool added = _visible && _minimizedTitles.Count > previousCount;
 		if ( _visible )
 			LayoutContent();
+		return added;
 	}
 
 	public void SetTasks( string tasksFormatted )
@@ -549,6 +652,20 @@ public class TutorialPopupUI : MonoBehaviour
 			switchFeedback.Play();
 	}
 
+	public void PlayStackAdd()
+	{
+		EnsureStackAddFeedback();
+		MinimizedRow newest = null;
+		if ( _minimizedTitles.Count > 0 )
+			newest = EnsureMinimizedRow( _minimizedTitles.Count - 1 );
+		if ( newest == null || newest.rect == null )
+			return;
+
+		RetargetStackAddFeedback( newest.rect );
+		if ( stackAddFeedback != null )
+			stackAddFeedback.Play();
+	}
+
 	public void Hide()
 	{
 		if ( !_visible )
@@ -569,6 +686,8 @@ public class TutorialPopupUI : MonoBehaviour
 			tutorialCompleteFeedback.Stop();
 		if ( switchFeedback != null )
 			switchFeedback.Stop();
+		if ( stackAddFeedback != null )
+			stackAddFeedback.Stop();
 
 		transform.localScale = _restScale;
 		transform.localRotation = Quaternion.identity;
@@ -598,6 +717,8 @@ public class TutorialPopupUI : MonoBehaviour
 			tutorialCompleteFeedback.Stop();
 		if ( switchFeedback != null )
 			switchFeedback.Stop();
+		if ( stackAddFeedback != null )
+			stackAddFeedback.Stop();
 
 		RestoreActiveCardRest();
 		RestoreTasksTransform();
@@ -637,6 +758,23 @@ public class TutorialPopupUI : MonoBehaviour
 			group.blocksRaycasts = false;
 			group.interactable = false;
 		}
+
+		ApplyCinematicVisibility();
+	}
+
+	void ApplyCinematicVisibility()
+	{
+		if ( group == null )
+			return;
+
+		if ( _cinematicHidden )
+		{
+			group.alpha = 0f;
+			return;
+		}
+
+		if ( _visible )
+			group.alpha = 1f;
 	}
 
 	void HideStackExtras()
@@ -654,6 +792,7 @@ public class TutorialPopupUI : MonoBehaviour
 		StopIfNot( taskCompleteFeedback, keep );
 		StopIfNot( tutorialCompleteFeedback, keep );
 		StopIfNot( switchFeedback, keep );
+		StopIfNot( stackAddFeedback, keep );
 	}
 
 	static void StopIfNot( Feedbacks feedbacks, Feedbacks keep )
@@ -910,6 +1049,15 @@ public class TutorialPopupUI : MonoBehaviour
 			sb.Append( task.label ?? string.Empty );
 			if ( done )
 				sb.Append( "</color>" );
+
+			string control = TutorialKeybindFormatter.Format( task.keybindHint );
+			if ( !string.IsNullOrEmpty( control ) )
+			{
+				sb.Append( '\n' );
+				sb.Append( "<size=16><color=#9aa4b8>  " );
+				sb.Append( control );
+				sb.Append( "</color></size>" );
+			}
 		}
 
 		return sb.ToString();

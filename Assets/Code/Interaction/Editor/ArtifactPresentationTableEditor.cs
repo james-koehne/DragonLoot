@@ -209,6 +209,17 @@ public class ArtifactPresentationTableEditor : Editor
 			SerializedProperty rotationProp = element.FindPropertyRelative( "rotationOffset" );
 			if ( rotationProp != null )
 				EditorGUILayout.PropertyField( rotationProp, true );
+
+			SerializedProperty requirePrereqProp = element.FindPropertyRelative( "requirePrerequisiteSlot" );
+			if ( requirePrereqProp != null )
+				EditorGUILayout.PropertyField( requirePrereqProp, true );
+
+			if ( requirePrereqProp != null && requirePrereqProp.boolValue )
+			{
+				SerializedProperty prereqIndexProp = element.FindPropertyRelative( "prerequisiteSlotIndex" );
+				if ( prereqIndexProp != null )
+					EditorGUILayout.PropertyField( prereqIndexProp, true );
+			}
 			EditorGUI.indentLevel--;
 		}
 

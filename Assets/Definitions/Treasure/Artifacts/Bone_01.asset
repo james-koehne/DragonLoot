@@ -14,8 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasureDefinition
   id: Bone_01
   displayName: Bone
-  category: 5
+  category: 10
   variant: Bone
+  suppressDiscoveryPopup: 0
   value: 0
   weight: 1
   exclusiveCarry: 0

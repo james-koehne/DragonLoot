@@ -280,6 +280,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			InputActionSlotPressed( input, 0, CarryBucketKind.Coin, carry );
 			InputActionSlotPressed( input, 1, CarryBucketKind.Gem, carry );
 			InputActionSlotPressed( input, 2, CarryBucketKind.Artifact, carry );
+			InputActionSlotPressed( input, 3, CarryBucketKind.General, carry );
+			InputActionSlotPressed( input, 4, CarryBucketKind.Junk, carry );
 		}
 
 		if ( input.CyclePouch != null && input.CyclePouch.WasPressedThisFrame() )
@@ -293,6 +295,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		UnityEngine.InputSystem.InputAction action = input.CategorySlots[ index ];
 		if ( action == null || !action.WasPressedThisFrame() )
+			return;
+
+		if ( carry.GetBucketCount( kind ) <= 0 )
 			return;
 
 		carry.TrySetSelectedBucket( kind );
@@ -473,7 +478,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 		}
 
-		carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
 		if ( !carry.TryAbsorbAtHeldBottom( ItemScratch ) )
 		{
 			for ( int i = 0; i < ItemScratch.Count; i++ )
@@ -510,7 +514,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		if ( display is GoldBarDisplayTableInteractable || ( taken[ 0 ] != null && GoldBarStack.IsStackable( taken[ 0 ] ) ) )
 		{
-			carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
 			carry.TryAbsorbDefinitionsAtHeldBottom( taken, CarryBucketKind.Artifact );
 			return;
 		}
@@ -532,7 +535,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		int count = taken.Count;
 		CoinStackInteractSfx.PlayStackPickup( startPos );
 
-		carry.TrySetSelectedBucket( CarryBucketKind.Coin );
 		Transform holdRoot = carry.GetHoldRoot( CarryBucketKind.Coin );
 		CarryDefinition carryDef = null;
 		carryDef = RuntimeDefinition.Resolve( ref carryDef );
@@ -583,7 +585,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		for ( int i = 0; i < ItemScratch.Count; i++ )
 			GemPyramidRegistry.NotifyRemoved( ItemScratch[ i ] );
 
-		carry.TrySetSelectedBucket( CarryBucketKind.Gem );
 		carry.TryAbsorbAtHeldBottom( ItemScratch );
 		ItemScratch.Clear();
 	}
@@ -1241,6 +1242,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return false;
 
 		if ( item.Owner is ITreasureDisplayStackOwner displayOwner
+			&& displayOwner.AllowsDisplayedPickup
 			&& displayOwner.TryGetSlotIndex( item, out int slotIndex )
 			&& displayOwner.GetSlotCount( slotIndex ) > 0
 			&& ( item.Definition.category == TreasureCategory.Coin || GoldBarStack.IsStackable( item ) ) )

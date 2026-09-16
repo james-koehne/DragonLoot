@@ -87,6 +87,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	Feedbacks _placeFeedbacks;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Table;
+	public bool AllowsDisplayedPickup => true;
 
 	public int ItemCount => _itemCount;
 	public int SlotCount => DisplayTableSlotLayout.SlotCount( rows, columns );

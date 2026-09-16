@@ -354,6 +354,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a8e4c2f19b7d4e6a9c3f5d8e1b0a2746
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_IntroFairy.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: af0660cc87c621b449fdbb6ca7167227
     m_Address: Tables/GemConstellation
     m_ReadOnly: 0
@@ -522,6 +528,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e0ab68d9f5c2b43a6b8d1e4c9f7a2508
+    m_Address: Companions/FairyHelper
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e1bfaf5b80ff3454e9baa76a828cfa95
     m_Address: Assets/Addressables/Treasure/Artifacts/Bone_01Visual.prefab
     m_ReadOnly: 0
@@ -578,6 +589,12 @@ MonoBehaviour:
     m_Address: Tables/CleaningStation
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fd78af89568275b42afb00ce80d7dadd
+    m_Address: ObjectiveCatalogDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: 2ff3ecdee64efb048874f0bfaa32ec1a, type: 2}

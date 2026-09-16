@@ -239,9 +239,46 @@ public class WorldEventSystem : MonoBehaviour
 				return Time.unscaledTime >= _catalogStartUnscaledTime + Mathf.Max( 0f, condition.delaySeconds );
 			case WorldEventConditionType.TutorialCompleted:
 				return IsRequiredTutorialCompleted( condition.targetId );
+			case WorldEventConditionType.WorldEventCompleted:
+				return IsWorldEventCompleted( condition.targetId );
+			case WorldEventConditionType.ObjectiveCompleted:
+				return IsRequiredObjectiveCompleted( condition.targetId );
 			default:
 				return false;
 		}
+	}
+
+	static bool IsRequiredObjectiveCompleted( string objectiveId )
+	{
+		if ( string.IsNullOrEmpty( objectiveId ) )
+			return false;
+
+		ObjectiveSystem objectives = ObjectiveSystem.Instance;
+		return objectives != null && objectives.IsCompleted( objectiveId );
+	}
+
+	bool IsWorldEventCompleted( string eventId )
+	{
+		if ( string.IsNullOrEmpty( eventId ) )
+			return false;
+		if ( !HasFired( eventId ) )
+			return false;
+		return !IsEventSequenceRunning( eventId );
+	}
+
+	bool IsEventSequenceRunning( string eventId )
+	{
+		if ( string.IsNullOrEmpty( eventId ) )
+			return false;
+
+		for ( int i = 0; i < _runningSequences.Count; i++ )
+		{
+			RunningActionSequence sequence = _runningSequences[ i ];
+			if ( sequence != null && sequence.EventId == eventId )
+				return true;
+		}
+
+		return false;
 	}
 
 	static bool IsRequiredTutorialCompleted( string tutorialId )
@@ -287,7 +324,7 @@ public class WorldEventSystem : MonoBehaviour
 		if ( HasFired( definition.id ) )
 			return;
 
-		MarkFired( definition.id );
+		MarkFired( definition );
 		RunActions( definition );
 
 		EventBus.Publish( new WorldEventFiredEvent
@@ -295,6 +332,17 @@ public class WorldEventSystem : MonoBehaviour
 			Id = definition.id,
 			Tags = definition.tags
 		} );
+	}
+
+	void MarkFired( WorldEventDefinition definition )
+	{
+		if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+			return;
+
+		if ( definition.sessionOnly )
+			MarkFiredThisSessionOnly( definition.id );
+		else
+			MarkFired( definition.id );
 	}
 
 	void RunActions( WorldEventDefinition definition )
@@ -368,6 +416,7 @@ public class WorldEventSystem : MonoBehaviour
 			if ( sequence.Index >= sequence.Actions.Length )
 			{
 				_runningSequences.Remove( sequence );
+				EvaluateAll();
 				return;
 			}
 
@@ -597,11 +646,20 @@ public class WorldEventSystem : MonoBehaviour
 		Quaternion rotation = Quaternion.identity;
 		Transform parent = null;
 
-		if ( !action.useWorldPosition &&
-		     !string.IsNullOrEmpty( action.spawnPointId ) &&
-		     EventTargetRegistry.TryGetSpawnPoint( action.spawnPointId, out EventSpawnPoint spawnPoint ) &&
-		     spawnPoint != null &&
-		     spawnPoint.SpawnTransform != null )
+		if ( action.spawnAtPlayer )
+		{
+			if ( GameMode.Instance != null && GameMode.Instance.Player != null )
+			{
+				Transform playerTransform = GameMode.Instance.Player.transform;
+				position = playerTransform.position;
+				rotation = playerTransform.rotation;
+			}
+		}
+		else if ( !action.useWorldPosition &&
+		          !string.IsNullOrEmpty( action.spawnPointId ) &&
+		          EventTargetRegistry.TryGetSpawnPoint( action.spawnPointId, out EventSpawnPoint spawnPoint ) &&
+		          spawnPoint != null &&
+		          spawnPoint.SpawnTransform != null )
 		{
 			position = spawnPoint.SpawnTransform.position;
 			rotation = spawnPoint.SpawnTransform.rotation;
@@ -684,6 +742,24 @@ public class WorldEventSystem : MonoBehaviour
 		}
 
 		EvaluateAll();
+	}
+
+	/// <summary>Fire a catalog event if it has not already fired. Returns false when unknown or already fired.</summary>
+	public bool TryFireIfUnfired( string eventId )
+	{
+		if ( string.IsNullOrEmpty( eventId ) )
+			return false;
+		if ( _catalog == null || !_catalog.TryGetById( eventId, out WorldEventDefinition definition ) || definition == null )
+		{
+			Debug.LogWarning( "WorldEventSystem: unknown event id '" + eventId + "'." );
+			return false;
+		}
+
+		if ( HasFired( definition.id ) )
+			return false;
+
+		FireEvent( definition );
+		return true;
 	}
 
 	public void DebugFireEvent( string eventId )

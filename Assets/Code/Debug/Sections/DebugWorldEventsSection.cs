@@ -45,6 +45,8 @@ public class DebugWorldEventsSection : DebugOverlaySection
 			system.DebugFireEvent( "intro_hallway" );
 		if ( GUILayout.Button( "Ledge" ) )
 			system.DebugFireEvent( "intro_ledge" );
+		if ( GUILayout.Button( "Fairy" ) )
+			system.DebugFireEvent( "intro_fairy" );
 		GUILayout.EndHorizontal();
 
 		if ( GUILayout.Button( "Fly Camera" ) )

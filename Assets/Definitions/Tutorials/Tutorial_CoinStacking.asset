@@ -33,10 +33,13 @@ MonoBehaviour:
   tasks:
   - id: stack_coins
     label: Stack coins
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 4
   - id: whole_stack_place
     label: Hold to place a stack
+    keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 6
   - id: whole_stack_pickup
     label: Hold to pick up a stack
+    keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 5

@@ -41,9 +41,11 @@ MonoBehaviour:
   tasks:
   - id: place_coin_floor
     label: Place a coin on the ground
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 2
     completeVolumeId: 
   - id: throw_coin
     label: Aim up to throw a coin
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 3
     completeVolumeId: 

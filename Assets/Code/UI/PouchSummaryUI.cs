@@ -240,6 +240,8 @@ public class PouchSummaryUI : MonoBehaviour
 				return "Artifacts";
 			case CarryBucketKind.General:
 				return "General";
+			case CarryBucketKind.Junk:
+				return "Junk";
 			default:
 				return "Pouch";
 		}

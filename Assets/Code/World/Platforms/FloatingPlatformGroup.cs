@@ -10,7 +10,8 @@ public enum FloatingPlatformTriggerType
 	TutorialCompleted = 1,
 	WorldEventFired = 2,
 	AbilityUnlocked = 3,
-	VolumeEntered = 4
+	VolumeEntered = 4,
+	ObjectiveCompleted = 5
 }
 
 /// <summary>
@@ -30,7 +31,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 	[Header( "Activation" )]
 	[SerializeField] FloatingPlatformTriggerType triggerType = FloatingPlatformTriggerType.Manual;
 
-	[Tooltip( "Tutorial id, world event id, ability id, or volume id depending on trigger type." )]
+	[Tooltip( "Tutorial id, world event id, ability id, volume id, or objective id depending on trigger type." )]
 	[SerializeField] string triggerId;
 
 	[Header( "Rise" )]
@@ -56,6 +57,12 @@ public class FloatingPlatformGroup : MonoBehaviour
 
 	[Tooltip( "Seconds to blend the rise ending into hover: residual offset fades out, landing bob eases down to Hover Amplitude." )]
 	[SerializeField] [Min( 0.05f )] float hoverBlendDuration = 2f;
+
+	[Header( "Player Landing" )]
+	[Tooltip( "How far the platform dips locally when the player lands on it." )]
+	[SerializeField] [Min( 0f )] float landingBounceDepth = 0.12f;
+
+	[SerializeField] [Min( 0.05f )] float landingBounceDuration = 0.35f;
 
 	[Header( "Feedbacks" )]
 	[SerializeField] Feedbacks onRiseStart;
@@ -95,6 +102,8 @@ public class FloatingPlatformGroup : MonoBehaviour
 
 	void InitializeState()
 	{
+		AutoFillPlatformsIfEmpty();
+		CaptureMissingRestPosesBeforeSink();
 		ConfigureAllPlatforms();
 
 		if ( ShouldRestoreActivated() )
@@ -109,6 +118,29 @@ public class FloatingPlatformGroup : MonoBehaviour
 		_initialized = true;
 	}
 
+	void AutoFillPlatformsIfEmpty()
+	{
+		if ( platforms != null && platforms.Length > 0 )
+			return;
+
+		platforms = GetComponentsInChildren<FloatingPlatform>( true );
+	}
+
+	void CaptureMissingRestPosesBeforeSink()
+	{
+		if ( platforms == null )
+			return;
+
+		for ( int i = 0; i < platforms.Length; i++ )
+		{
+			FloatingPlatform platform = platforms[ i ];
+			if ( platform == null )
+				continue;
+			if ( !platform.HasRestPose )
+				platform.CaptureRestPose();
+		}
+	}
+
 	void ConfigureAllPlatforms()
 	{
 		if ( platforms == null )
@@ -120,10 +152,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 			if ( platform == null )
 				continue;
 
-			if ( !platform.HasRestPose )
-				platform.CaptureRestPose();
-
-			platform.ConfigureMotion( sunkYOffset, riseDuration, riseCurve, hoverAmplitude, hoverLandingAmplitude, hoverFrequency, i * hoverPhaseStep, hoverBlendDuration );
+			platform.ConfigureMotion( sunkYOffset, riseDuration, riseCurve, hoverAmplitude, hoverLandingAmplitude, hoverFrequency, i * hoverPhaseStep, hoverBlendDuration, landingBounceDepth, landingBounceDuration );
 		}
 	}
 
@@ -137,7 +166,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 			FloatingPlatform platform = platforms[ i ];
 			if ( platform == null )
 				continue;
-			platform.ConfigureMotion( sunkYOffset, riseDuration, riseCurve, hoverAmplitude, hoverLandingAmplitude, hoverFrequency, i * hoverPhaseStep, hoverBlendDuration );
+			platform.ConfigureMotion( sunkYOffset, riseDuration, riseCurve, hoverAmplitude, hoverLandingAmplitude, hoverFrequency, i * hoverPhaseStep, hoverBlendDuration, landingBounceDepth, landingBounceDuration );
 			platform.SinkImmediate();
 		}
 	}
@@ -153,7 +182,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 			FloatingPlatform platform = platforms[ i ];
 			if ( platform == null )
 				continue;
-			platform.ConfigureMotion( sunkYOffset, riseDuration, riseCurve, hoverAmplitude, hoverLandingAmplitude, hoverFrequency, i * hoverPhaseStep, hoverBlendDuration );
+			platform.ConfigureMotion( sunkYOffset, riseDuration, riseCurve, hoverAmplitude, hoverLandingAmplitude, hoverFrequency, i * hoverPhaseStep, hoverBlendDuration, landingBounceDepth, landingBounceDuration );
 			platform.SnapToRestAndHover();
 		}
 	}
@@ -165,13 +194,18 @@ public class FloatingPlatformGroup : MonoBehaviour
 			return;
 
 		_activated = true;
+		AutoFillPlatformsIfEmpty();
+		CaptureMissingRestPosesBeforeSink();
 		ConfigureAllPlatforms();
 
 		if ( onRiseStart != null )
 			onRiseStart.Play();
 
-		if ( platforms == null )
+		if ( platforms == null || platforms.Length == 0 )
+		{
+			Debug.LogWarning( "FloatingPlatformGroup '" + groupId + "': no platforms assigned.", this );
 			return;
+		}
 
 		for ( int i = 0; i < platforms.Length; i++ )
 		{
@@ -210,6 +244,8 @@ public class FloatingPlatformGroup : MonoBehaviour
 				return IsWorldEventFired( triggerId );
 			case FloatingPlatformTriggerType.AbilityUnlocked:
 				return IsAbilityUnlocked( triggerId );
+			case FloatingPlatformTriggerType.ObjectiveCompleted:
+				return IsObjectiveCompleted( triggerId );
 			default:
 				return false;
 		}
@@ -224,6 +260,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 		EventBus.Subscribe<WorldEventFiredEvent>( OnWorldEventFired );
 		EventBus.Subscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Subscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		_subscribed = true;
 	}
 
@@ -236,6 +273,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 		EventBus.Unsubscribe<WorldEventFiredEvent>( OnWorldEventFired );
 		EventBus.Unsubscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Unsubscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		_subscribed = false;
 	}
 
@@ -275,10 +313,25 @@ public class FloatingPlatformGroup : MonoBehaviour
 		Activate();
 	}
 
+	void OnObjectiveCompleted( ObjectiveCompletedEvent evt )
+	{
+		if ( !_initialized || triggerType != FloatingPlatformTriggerType.ObjectiveCompleted )
+			return;
+		if ( string.IsNullOrEmpty( triggerId ) || evt.ObjectiveId != triggerId )
+			return;
+		Activate();
+	}
+
 	static bool IsTutorialCompleted( string tutorialId )
 	{
 		TutorialManager tutorials = TutorialManager.Instance;
 		return tutorials != null && tutorials.IsCompleted( tutorialId );
+	}
+
+	static bool IsObjectiveCompleted( string objectiveId )
+	{
+		ObjectiveSystem objectives = ObjectiveSystem.Instance;
+		return objectives != null && objectives.IsCompleted( objectiveId );
 	}
 
 	static bool IsWorldEventFired( string eventId )
@@ -319,6 +372,7 @@ public class FloatingPlatformGroup : MonoBehaviour
 
 	public void EditorCaptureAllRestPoses()
 	{
+		AutoFillPlatformsIfEmpty();
 		if ( platforms == null )
 			return;
 
@@ -327,8 +381,14 @@ public class FloatingPlatformGroup : MonoBehaviour
 			FloatingPlatform platform = platforms[ i ];
 			if ( platform == null )
 				continue;
-			platform.EditorCaptureRestPose();
+			platform.EditorRecaptureRestPoseFromCurrent();
 		}
+	}
+
+	[ContextMenu( "Recapture Rest Poses From Current" )]
+	void ContextRecaptureRestPoses()
+	{
+		EditorCaptureAllRestPoses();
 	}
 
 	void OnDrawGizmosSelected()

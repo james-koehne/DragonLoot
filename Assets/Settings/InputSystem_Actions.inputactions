@@ -676,6 +676,24 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "CategorySlot4",
+                    "type": "Button",
+                    "id": "6e7f8a90-b1c2-4d3e-9f0a-1b2c3d4e5f71",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CategorySlot5",
+                    "type": "Button",
+                    "id": "7f8a90b1-c2d3-4e5f-a0b1-2c3d4e5f6072",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "WholeStackPickup",
                     "type": "Button",
                     "id": "a218db73-5a4f-4408-998b-691bebe01c7e",
@@ -1005,6 +1023,28 @@
                     "processors": "",
                     "groups": "Gamepad",
                     "action": "CategorySlot3",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d2e3f4a5-b6c7-8901-bcde-f12345678004",
+                    "path": "<Keyboard>/4",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "CategorySlot4",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e3f4a5b6-c7d8-9012-cdef-123456780005",
+                    "path": "<Keyboard>/5",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "CategorySlot5",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

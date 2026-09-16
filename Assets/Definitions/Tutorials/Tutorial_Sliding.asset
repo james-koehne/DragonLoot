@@ -41,5 +41,6 @@ MonoBehaviour:
   tasks:
   - id: slide
     label: Slide
+    keybindHint: 'Look down  Hold [{Sprint}] + move downhill'
     completeTrigger: 24
     completeVolumeId: 

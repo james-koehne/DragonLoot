@@ -1326,8 +1326,6 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshCollider();
 
 		PlayerCarry carry = player.Carry;
-		carry.TrySetSelectedBucket( CarryBucketKind.Coin );
-
 		TreasureItem aimedCoin = TreasureItemFactory.RentVisualCoin( aimedDef, aimPos, rot );
 		bool receivedActive = aimedCoin != null && carry.TryReceiveActiveCoinFromWorld( aimedCoin );
 		if ( !receivedActive && aimedCoin != null )

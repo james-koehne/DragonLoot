@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 public sealed class GameInput : System.IDisposable
 {
 	public const int AbilitySlotCount = 4;
-	public const int CategorySlotCount = 3;
+	public const int CategorySlotCount = 5;
 
 	readonly InputActionMap _game;
 
@@ -52,7 +52,7 @@ public sealed class GameInput : System.IDisposable
 
 		CategorySlots = new InputAction[ CategorySlotCount ];
 		for ( int i = 0; i < CategorySlotCount; i++ )
-			CategorySlots[ i ] = _game.FindAction( "CategorySlot" + ( i + 1 ), throwIfNotFound: true );
+			CategorySlots[ i ] = _game.FindAction( "CategorySlot" + ( i + 1 ), throwIfNotFound: i < 3 );
 	}
 
 	public void Enable()

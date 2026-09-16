@@ -118,6 +118,7 @@ public class MinecartOrbitCamera : MonoBehaviour
 		_phase = Phase.Entering;
 		EnsureLookLocked();
 		SetFillLightForOrbit( true );
+		SetCarryHidden( true );
 	}
 
 	void OnDriveExited( MinecartDriveExitedEvent evt )
@@ -397,6 +398,7 @@ public class MinecartOrbitCamera : MonoBehaviour
 		}
 
 		ApplyCrosshairAlpha( 1f );
+		SetCarryHidden( false );
 		_cart = null;
 		_phase = Phase.Idle;
 		_blend = 0f;
@@ -418,6 +420,7 @@ public class MinecartOrbitCamera : MonoBehaviour
 		}
 
 		ApplyCrosshairAlpha( 1f );
+		SetCarryHidden( false );
 		_cart = null;
 		_phase = Phase.Idle;
 		_blend = 0f;
@@ -464,6 +467,16 @@ public class MinecartOrbitCamera : MonoBehaviour
 			return;
 
 		_firstPerson.SetSoftFillLightForcedOff( orbiting );
+	}
+
+	void SetCarryHidden( bool hidden )
+	{
+		if ( _player == null )
+			_player = ResolvePlayer();
+		if ( _player == null || _player.Carry == null )
+			return;
+
+		_player.Carry.SetMinecartDriveHidden( hidden );
 	}
 
 	void ApplyCrosshair()

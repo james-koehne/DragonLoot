@@ -582,7 +582,6 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 		RestackSettled();
 		RefreshCollider();
 
-		carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
 		bool received = carry.TryAddExisting( top );
 		if ( !received )
 		{

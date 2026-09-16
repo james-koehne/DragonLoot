@@ -9,7 +9,9 @@ public enum WorldEventConditionType
 	PickupTreasure = 2,
 	PlayerGameplayInput = 3,
 	ElapsedUnscaledSeconds = 4,
-	TutorialCompleted = 5
+	TutorialCompleted = 5,
+	WorldEventCompleted = 6,
+	ObjectiveCompleted = 7
 }
 
 public enum WorldEventActionType
@@ -47,7 +49,7 @@ public class WorldEventCondition
 {
 	public WorldEventConditionType type;
 
-	[Tooltip( "EventVolume id for EnterVolume, or tutorial id for TutorialCompleted (e.g. tut_movement). Ignored by other types." )]
+	[Tooltip( "EventVolume id for EnterVolume, tutorial id for TutorialCompleted (e.g. tut_movement), world event id for WorldEventCompleted, or objective id for ObjectiveCompleted. Ignored by other types." )]
 	public string targetId;
 
 	[Tooltip( "Optional treasure filter for PickupTreasure. Null = any treasure." )]
@@ -96,6 +98,9 @@ public class WorldEventAction
 	public Vector3 spawnWorldPosition;
 
 	public bool useWorldPosition;
+
+	[Tooltip( "When true, SpawnAddressable uses the player transform (ignores spawn point / world position)." )]
+	public bool spawnAtPlayer;
 
 	[Tooltip( "Tutorial HUD title when type is SetTutorialHud." )]
 	public string tutorialTitle;
@@ -163,6 +168,9 @@ public class WorldEventDefinition : ScriptableObject
 	public WorldEventCondition[] conditions;
 
 	public WorldEventAction[] actions;
+
+	[Tooltip( "When true, firing only marks progress for this session (not saved). Use for repeatable spawns like companions." )]
+	public bool sessionOnly;
 
 	void OnValidate()
 	{

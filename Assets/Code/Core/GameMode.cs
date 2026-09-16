@@ -227,6 +227,8 @@ public class GameMode : MonoBehaviour, IGameMode
 					discoveryToast = toastGo.AddComponent<DiscoveryToastUI>();
 			}
 
+			ToastStackUI.EnsureOnCanvas( interfacePrefab.transform );
+
 			if ( discoveryToast != null )
 				discoveryToast.Setup();
 			else
@@ -257,6 +259,10 @@ public class GameMode : MonoBehaviour, IGameMode
 			WorldEventSystem worldEvents = WorldEventSystem.EnsureExists();
 			worldEvents.StartCatalog();
 			DebugSpawnRegistry.ApplySkipIntroIfSelected();
+
+			ObjectiveSystem objectives = ObjectiveSystem.EnsureExists();
+			objectives.StartCatalog();
+
 			QuestObjectiveOutline.EnsureExists();
 		}
 

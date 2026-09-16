@@ -41,5 +41,6 @@ MonoBehaviour:
   tasks:
   - id: sprint
     label: Sprint
+    keybindHint: 'Hold [{Sprint}]'
     completeTrigger: 22
     completeVolumeId: 

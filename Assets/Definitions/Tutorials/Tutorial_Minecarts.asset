@@ -40,17 +40,21 @@ MonoBehaviour:
   tasks:
   - id: shove_cart
     label: Tap to shove the cart
+    keybindHint: '[{ContextualInteract}]'
     completeTrigger: 18
     completeVolumeId: 
   - id: hold_push
     label: Hold to push the cart
+    keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 19
     completeVolumeId: 
   - id: load_cart
     label: Put something in the cart
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 20
     completeVolumeId: 
   - id: ride_cart
     label: Sit in a drive cart
+    keybindHint: '[{ContextualInteract}]'
     completeTrigger: 23
     completeVolumeId: 

@@ -1,11 +1,13 @@
 using System.Text;
 
+using FeedbackSystem;
+
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Tutorial / contextual objective list. Wire references on the Interface prefab.
-/// Driven by <see cref="TutorialHudChangedEvent"/> (idle until a tutorial publishes).
+/// Nearby objective list. Wire references on the Interface prefab.
+/// Driven by <see cref="TutorialHudChangedEvent"/> from <see cref="ObjectiveSystem"/>.
 /// </summary>
 public class QuestObjectiveUI : MonoBehaviour
 {
@@ -16,16 +18,29 @@ public class QuestObjectiveUI : MonoBehaviour
 	[SerializeField] float textSpacing = 8f;
 	[SerializeField] [Range( 100, 150 )] int contextualSizePercent = 118;
 
+	[Header( "Feedbacks" )]
+	[SerializeField] Feedbacks subObjectiveCompleteFeedback;
+	[SerializeField] Feedbacks objectiveCompleteFeedback;
+
 	RectTransform _panel;
 	bool _layoutReady;
 	bool _subscribed;
+	bool _wantVisible;
+	bool _cinematicHidden;
 
 	public void Setup()
 	{
 		EnsureLayout();
+		ResolveFeedbackRefs();
 		Subscribe();
-		if ( group != null )
-			group.alpha = 0f;
+		_wantVisible = false;
+		ApplyVisibility();
+	}
+
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		ApplyVisibility();
 	}
 
 	void OnEnable()
@@ -43,11 +58,30 @@ public class QuestObjectiveUI : MonoBehaviour
 		Unsubscribe();
 	}
 
+	void ResolveFeedbackRefs()
+	{
+		if ( subObjectiveCompleteFeedback == null )
+		{
+			Transform existing = transform.Find( "SubObjectiveCompleteFeedbacks" );
+			if ( existing != null )
+				subObjectiveCompleteFeedback = existing.GetComponent<Feedbacks>();
+		}
+
+		if ( objectiveCompleteFeedback == null )
+		{
+			Transform existing = transform.Find( "ObjectiveCompleteFeedbacks" );
+			if ( existing != null )
+				objectiveCompleteFeedback = existing.GetComponent<Feedbacks>();
+		}
+	}
+
 	void Subscribe()
 	{
 		if ( _subscribed )
 			return;
 		EventBus.Subscribe<TutorialHudChangedEvent>( OnHudChanged );
+		EventBus.Subscribe<ObjectiveSubCompletedEvent>( OnSubCompleted );
+		EventBus.Subscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		_subscribed = true;
 	}
 
@@ -56,19 +90,32 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( !_subscribed )
 			return;
 		EventBus.Unsubscribe<TutorialHudChangedEvent>( OnHudChanged );
+		EventBus.Unsubscribe<ObjectiveSubCompletedEvent>( OnSubCompleted );
+		EventBus.Unsubscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		_subscribed = false;
+	}
+
+	void OnSubCompleted( ObjectiveSubCompletedEvent evt )
+	{
+		if ( subObjectiveCompleteFeedback != null )
+			subObjectiveCompleteFeedback.Play();
+	}
+
+	void OnObjectiveCompleted( ObjectiveCompletedEvent evt )
+	{
+		if ( objectiveCompleteFeedback != null )
+			objectiveCompleteFeedback.Play();
 	}
 
 	void OnHudChanged( TutorialHudChangedEvent evt )
 	{
 		EnsureLayout();
 
-		bool show = !evt.Cleared && HasRows( evt );
-		if ( group != null )
-			group.alpha = show ? 1f : 0f;
+		_wantVisible = !evt.Cleared && HasRows( evt );
+		ApplyVisibility();
 
 		if ( title != null )
-			title.text = string.IsNullOrEmpty( evt.Title ) ? "Tip" : evt.Title;
+			title.text = string.IsNullOrEmpty( evt.Title ) ? "Nearby" : evt.Title;
 		if ( objective != null )
 			objective.text = FormatRows( evt );
 
@@ -128,6 +175,12 @@ public class QuestObjectiveUI : MonoBehaviour
 		fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 	}
 
+	void ApplyVisibility()
+	{
+		if ( group != null )
+			group.alpha = _wantVisible && !_cinematicHidden ? 1f : 0f;
+	}
+
 	void RefreshLayout()
 	{
 		if ( _panel == null )
@@ -157,6 +210,10 @@ public class QuestObjectiveUI : MonoBehaviour
 			for ( int n = 0; n < row.Indent; n++ )
 				sb.Append( "  " );
 
+			bool isReward = !string.IsNullOrEmpty( row.Text ) && row.Text.StartsWith( "Reward:" );
+			if ( isReward )
+				sb.Append( "<color=#f0d878>" );
+
 			if ( row.Complete )
 				sb.Append( "<color=#9ad89a>" );
 
@@ -165,7 +222,10 @@ public class QuestObjectiveUI : MonoBehaviour
 				sb.Append( "<size=" ).Append( contextualFontSize ).Append( "><b>" );
 			}
 
-			sb.Append( row.Complete ? "✓ " : "• " );
+			if ( isReward )
+				sb.Append( "★ " );
+			else
+				sb.Append( row.Complete ? "✓ " : "• " );
 			sb.Append( row.Text ?? string.Empty );
 			if ( row.Optional )
 				sb.Append( " (optional)" );
@@ -174,6 +234,9 @@ public class QuestObjectiveUI : MonoBehaviour
 				sb.Append( "</b></size>" );
 
 			if ( row.Complete )
+				sb.Append( "</color>" );
+
+			if ( isReward )
 				sb.Append( "</color>" );
 		}
 

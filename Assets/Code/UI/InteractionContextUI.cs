@@ -171,6 +171,9 @@ public class InteractionContextUI : MonoBehaviour
 		if ( focus is MinecartCallPost )
 			return "Call minecart";
 
+		if ( focus is FairyInteractable fairy )
+			return fairy.ResolvePromptLabel();
+
 		if ( focus is MinecartInteractable driveCart && driveCart.IsDriveCart )
 			return driveCart.WantsDriveEnter( player ) ? "Ride minecart" : "Shove / hold to push";
 

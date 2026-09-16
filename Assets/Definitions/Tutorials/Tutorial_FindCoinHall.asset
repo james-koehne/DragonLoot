@@ -35,9 +35,11 @@ MonoBehaviour:
   tasks:
   - id: open_map
     label: Open the map
+    keybindHint: '[M]'
     completeTrigger: 10
     completeVolumeId: 
   - id: reach_coin_hall
     label: Find the Coin Hall
+    keybindHint: '[M]'
     completeTrigger: 11
     completeVolumeId: volume_coin_hall

@@ -47,6 +47,9 @@ public class PlayerFloatingPlatformRide : MonoBehaviour
 		if ( standing != null && standing.IsRideable )
 		{
 			_airborneTime = 0f;
+			if ( _player.WasLandingThisFrame )
+				standing.NotifyPlayerLanded();
+
 			if ( standing != _platform )
 			{
 				Detach( inheritVelocity: false );

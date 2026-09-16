@@ -8,9 +8,12 @@ public class DebugToastsSection : DebugOverlaySection
 	{
 		bool discoveryReady = DiscoveryToastUI.Instance != null;
 		bool unlockReady = UnlockRewardToastUI.Instance != null;
+		ToastStackUI stack = ToastStackUI.Instance;
+		bool stackReady = stack != null;
 
 		GUILayout.Label( "Discovery: " + ( discoveryReady ? ( DiscoveryToastUI.Instance.IsBusy ? "busy" : "ready" ) : "missing" ) );
 		GUILayout.Label( "Unlock: " + ( unlockReady ? ( UnlockRewardToastUI.Instance.IsBusy ? "busy" : "ready" ) : "missing" ) );
+		GUILayout.Label( "Stack: " + ( stackReady ? ( stack.VisibleCount + " visible / " + stack.QueuedCount + " queued" ) : "missing" ) );
 
 		GUILayout.Space( 6f );
 		GUILayout.Label( "DiscoveryToast" );
@@ -37,6 +40,19 @@ public class DebugToastsSection : DebugOverlaySection
 		{
 			DiscoveryToastUI.NotifyMessage( "Constellation Complete: Debug Gem" );
 			UnlockRewardToastUI.NotifyMessage( "Unlocked: Double Jump", ResolveGlideIcon() );
+		}
+		if ( GUILayout.Button( "Play 3 Stacked Discovery" ) )
+		{
+			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 1" );
+			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 2" );
+			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 3" );
+		}
+		if ( GUILayout.Button( "Play Mixed Stack (4, queues 1)" ) )
+		{
+			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 1" );
+			UnlockRewardToastUI.NotifyMessage( "Unlocked: Debug A", ResolveGlideIcon() );
+			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 2" );
+			UnlockRewardToastUI.NotifyMessage( "Unlocked: Debug B" );
 		}
 		GUI.enabled = true;
 	}

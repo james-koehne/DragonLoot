@@ -38,9 +38,11 @@ MonoBehaviour:
   tasks:
   - id: reach_constellation
     label: Find a constellation
+    keybindHint: '[M]'
     completeTrigger: 11
     completeVolumeId: marker_gem_constellation
   - id: place_gem_constellation
     label: Put a gem in a constellation
+    keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 9
     completeVolumeId: 

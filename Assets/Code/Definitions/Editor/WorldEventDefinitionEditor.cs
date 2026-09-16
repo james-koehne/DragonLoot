@@ -10,6 +10,7 @@ public class WorldEventDefinitionEditor : Editor
 	SerializedProperty _tags;
 	SerializedProperty _conditions;
 	SerializedProperty _actions;
+	SerializedProperty _sessionOnly;
 
 	void OnEnable()
 	{
@@ -17,6 +18,7 @@ public class WorldEventDefinitionEditor : Editor
 		_tags = serializedObject.FindProperty( "tags" );
 		_conditions = serializedObject.FindProperty( "conditions" );
 		_actions = serializedObject.FindProperty( "actions" );
+		_sessionOnly = serializedObject.FindProperty( "sessionOnly" );
 	}
 
 	public override void OnInspectorGUI()
@@ -25,6 +27,7 @@ public class WorldEventDefinitionEditor : Editor
 
 		EditorGUILayout.PropertyField( _id );
 		EditorGUILayout.PropertyField( _tags );
+		EditorGUILayout.PropertyField( _sessionOnly );
 		EditorGUILayout.PropertyField( _conditions, includeChildren: true );
 
 		EditorGUILayout.Space( 8f );
@@ -166,7 +169,7 @@ public class WorldEventActionDrawer : PropertyDrawer
 				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "dialogue" ), true ) + 2f;
 				break;
 			case WorldEventActionType.SpawnAddressable:
-				height += line * 4f;
+				height += line * 5f;
 				break;
 			case WorldEventActionType.SetTutorialHud:
 				height += line * 3f;
@@ -221,6 +224,7 @@ public class WorldEventActionDrawer : PropertyDrawer
 				break;
 			case WorldEventActionType.SpawnAddressable:
 				row = DrawRelative( row, property, "addressableKey" );
+				row = DrawRelative( row, property, "spawnAtPlayer" );
 				row = DrawRelative( row, property, "spawnPointId" );
 				row = DrawRelative( row, property, "useWorldPosition" );
 				row = DrawRelative( row, property, "spawnWorldPosition" );

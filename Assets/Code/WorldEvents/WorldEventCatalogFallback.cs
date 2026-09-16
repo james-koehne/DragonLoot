@@ -20,7 +20,8 @@ public static class WorldEventCatalogFallback
 		{
 			CreateIntroWelcome(),
 			CreateIntroHallway(),
-			CreateIntroLedge()
+			CreateIntroLedge(),
+			CreateIntroFairy()
 		};
 		return _runtime;
 	}
@@ -75,7 +76,32 @@ public static class WorldEventCatalogFallback
 		{
 			BrakePlayerMovementAction( 1f ),
 			CinematicPresentationAction( CinematicPresentationController.IntroLedgePresentationId ),
-			DialogueAction( Line( "I believe we have rather a lot of work to do." ) )
+			DialogueActionWait( Line( "I believe we have rather a lot of work to do." ) )
+		};
+		return evt;
+	}
+
+	static WorldEventDefinition CreateIntroFairy()
+	{
+		WorldEventDefinition evt = Create( "intro_fairy" );
+		evt.tags = new[] { "intro" };
+		evt.sessionOnly = true;
+		evt.conditions = new[]
+		{
+			new WorldEventCondition
+			{
+				type = WorldEventConditionType.WorldEventCompleted,
+				targetId = "intro_ledge"
+			}
+		};
+		evt.actions = new[]
+		{
+			new WorldEventAction
+			{
+				type = WorldEventActionType.SpawnAddressable,
+				addressableKey = "Companions/FairyHelper",
+				spawnAtPlayer = true
+			}
 		};
 		return evt;
 	}
@@ -113,6 +139,16 @@ public static class WorldEventCatalogFallback
 		{
 			type = WorldEventActionType.Dialogue,
 			dialogue = lines
+		};
+	}
+
+	static WorldEventAction DialogueActionWait( params DragonDialogueLine[] lines )
+	{
+		return new WorldEventAction
+		{
+			type = WorldEventActionType.Dialogue,
+			dialogue = lines,
+			waitUntilFinished = true
 		};
 	}
 

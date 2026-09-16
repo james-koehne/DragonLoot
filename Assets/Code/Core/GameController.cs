@@ -75,6 +75,7 @@ public class GameController : MonoBehaviour
 		TreasureSurfaceWorld.EnsureExists();
 		MapSystem.EnsureExists();
 		WorldEventSystem.EnsureExists();
+		ObjectiveSystem.EnsureExists();
 		MusicAmbienceSystem.EnsureExists();
 	}
 

@@ -60,10 +60,21 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 	public void Bind( ArtifactPresentationTableInteractable table )
 	{
 		_table = table;
+		if ( _table != null && !_table.ShowSlotIndicators )
+		{
+			ClearForDisabledHolograms();
+			return;
+		}
+
 		if ( Application.isPlaying )
 			RebuildVisuals();
 		else
 			QueueEditModeRebuild();
+	}
+
+	public void ClearForDisabledHolograms()
+	{
+		ClearVisuals();
 	}
 
 	public void RefreshEditModePreviews()
@@ -200,6 +211,12 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 		ClearVisuals();
 		ResolveTable();
 		if ( _table == null )
+		{
+			RememberEditModeFingerprint();
+			return;
+		}
+
+		if ( !_table.ShowSlotIndicators )
 		{
 			RememberEditModeFingerprint();
 			return;
@@ -559,12 +576,14 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			return;
 
 		bool occupied = Application.isPlaying && _table.IsSlotOccupied( slotIndex );
+		bool lockedByPrerequisite = Application.isPlaying && !_table.IsSlotPrerequisiteMet( slotIndex );
 		bool hideForAimFeedback = Application.isPlaying
 			&& _table.IsAimFeedbackFresh
 			&& _table.AimedSlotIndex == slotIndex;
 
-		// Hide the cyan base hologram while the placement ghost shows valid/invalid feedback.
-		if ( occupied || hideForAimFeedback )
+		// Hide the cyan base hologram while the placement ghost shows valid/invalid feedback,
+		// when occupied, or while a prerequisite slot is empty.
+		if ( occupied || lockedByPrerequisite || hideForAimFeedback )
 		{
 			visual.Root.SetActive( false );
 			return;

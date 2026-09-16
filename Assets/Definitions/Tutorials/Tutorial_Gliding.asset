@@ -42,5 +42,6 @@ MonoBehaviour:
   tasks:
   - id: glide
     label: Glide
+    keybindHint: '[{Jump}] then [{Jump}] in air'
     completeTrigger: 15
     completeVolumeId: 

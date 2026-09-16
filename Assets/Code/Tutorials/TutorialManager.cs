@@ -257,6 +257,9 @@ public class TutorialManager : MonoBehaviour
 		if ( _catalog == null || _popup == null )
 			return;
 
+		if ( CinematicPresentationController.IsAnyPlaying )
+			return;
+
 		TickCeremony();
 
 		if ( _activeIsReplay )
@@ -608,11 +611,13 @@ public class TutorialManager : MonoBehaviour
 			}
 		}
 
-		_popup.SetMinimizedTutorials( _minimizedTitleScratch );
+		bool addedMinimized = _popup.SetMinimizedTutorials( _minimizedTitleScratch );
 
 		CollectCycleCandidates( _cycleScratch );
 		bool canCycle = _popup.IsVisible && !_activeIsReplay && _cycleScratch.Count > 1;
 		_popup.SetCycleHint( canCycle, "[Tab]", "Switch" );
+		if ( addedMinimized )
+			_popup.PlayStackAdd();
 	}
 
 	void NoteHadContext( TutorialDefinition def )
@@ -1151,14 +1156,16 @@ public class TutorialManager : MonoBehaviour
 	{
 		if ( string.IsNullOrEmpty( id ) )
 			return;
+		if ( _active != null && !_activeIsReplay )
+			return;
 		_lastActivatedId = id;
 	}
 
 	void EvaluateContext( bool force )
 	{
-		if ( _activeIsReplay )
+		if ( CinematicPresentationController.IsAnyPlaying )
 			return;
-		if ( _phase != CeremonyPhase.None )
+		if ( _activeIsReplay )
 			return;
 		if ( _catalog == null || _popup == null )
 			return;
@@ -1186,23 +1193,24 @@ public class TutorialManager : MonoBehaviour
 		}
 
 		PruneOpenTutorials();
-		TutorialDefinition best = PickBestMatch( _matchingScratch );
+		RefreshStackUi();
 
-		if ( _active != null && IsEligible( _active ) )
+		if ( _phase != CeremonyPhase.None )
+			return;
+
+		if ( _active != null )
 		{
-			if ( force )
+			if ( force && IsEligible( _active ) )
 				RefreshActivePopup();
-			RefreshStackUi();
 			return;
 		}
 
-		TutorialDefinition next = PickNextOpen( _active );
+		TutorialDefinition best = PickBestMatch( _matchingScratch );
+		TutorialDefinition next = PickNextOpen( null );
 		if ( next == null )
 			next = best;
 		if ( next != null )
 			RequestShow( next );
-		else if ( _active != null )
-			RequestHide( complete: false );
 		else
 			RefreshStackUi();
 	}
@@ -1214,18 +1222,13 @@ public class TutorialManager : MonoBehaviour
 		if ( matches.Count == 1 )
 			return matches[ 0 ];
 
-		TutorialDefinition preferred = null;
 		for ( int i = 0; i < matches.Count; i++ )
 		{
 			TutorialDefinition def = matches[ i ];
 			if ( def != null && def.id == _lastActivatedId )
 				return def;
-			if ( _active != null && def != null && def.id == _active.id )
-				preferred = def;
 		}
 
-		if ( preferred != null )
-			return preferred;
 		return matches[ matches.Count - 1 ];
 	}
 
@@ -1441,13 +1444,13 @@ public class TutorialManager : MonoBehaviour
 
 		EnsureOpen( def );
 
-		if ( _active != null && !IsEligible( _active ) && _phase == CeremonyPhase.None )
+		if ( _active != null && _active.id == def.id && _phase == CeremonyPhase.None )
 		{
-			ShowTutorialNow( def, isReplay: false );
+			RefreshStackUi();
 			return;
 		}
 
-		if ( _active != null && _active.id == def.id && _phase == CeremonyPhase.None )
+		if ( _active != null && !_activeIsReplay )
 		{
 			RefreshStackUi();
 			return;
@@ -1505,7 +1508,7 @@ public class TutorialManager : MonoBehaviour
 		_popup.Show(
 			def.title,
 			def.body,
-			TutorialKeybindFormatter.Format( def.keybindHint ),
+			string.Empty,
 			TutorialPopupUI.FormatTasks( def.tasks, IsTaskCompleteInActive ),
 			animate );
 
@@ -1680,7 +1683,7 @@ public class TutorialManager : MonoBehaviour
 		_popup.Show(
 			_active.title,
 			_active.body,
-			TutorialKeybindFormatter.Format( _active.keybindHint ),
+			string.Empty,
 			tasks );
 	}
 

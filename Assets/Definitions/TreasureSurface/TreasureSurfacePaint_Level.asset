@@ -15,4 +15,4 @@ MonoBehaviour:
   cellsX: 2048
   cellsZ: 2048
   bakedPaint: {fileID: 0}
-  undoSnapshotId: 2
+  undoSnapshotId: 6
