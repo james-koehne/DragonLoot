@@ -31,12 +31,11 @@ MonoBehaviour:
     count: 1
   maxVisibleTotal: 32
   coinVisibleBufferFraction: 0.1
-  heightResolution: 32
-  worldSize: 4
-  maxHeight: 2
+  cellSize: 0.125
+  minResolution: 32
+  maxResolution: 1024
   groundLevelHeight: 0.1
-  lootGroundLevelHeight: 0.6
-  meshResolution: 32
+  lootFloorClearance: 0.05
   meshDeformNormalSoften: 0
   meshDeformSampleBlur: 0
   pickRadius: 0.45

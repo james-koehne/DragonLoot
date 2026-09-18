@@ -40,6 +40,13 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		ActiveBridges.Remove( this );
 	}
 
+	static float StampRadiusForHeightfield( GoldPileHeightfield heightfield )
+	{
+		float sizeX = heightfield.WorldSizeX;
+		float sizeZ = heightfield.WorldSizeZ;
+		return 0.5f * Mathf.Sqrt( sizeX * sizeX + sizeZ * sizeZ );
+	}
+
 	public void Bind( TreasurePileVisual visual )
 	{
 		_visual = visual;
@@ -49,7 +56,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 			&& visual.Heightfield.IsInitialized )
 		{
 			PinChunks( visual.Heightfield );
-			QueueStamp( transform.position, visual.Heightfield.WorldSize * 0.5f * 1.42f );
+			QueueStamp( transform.position, StampRadiusForHeightfield( visual.Heightfield ) );
 		}
 
 		_registered = true;
@@ -114,7 +121,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 
 		PinChunks( heightfield );
 		_stampPending = false;
-		StampRegion( transform.position, heightfield.WorldSize * 0.5f * 1.42f, sampleAllPiles: true );
+		StampRegion( transform.position, StampRadiusForHeightfield( heightfield ), sampleAllPiles: true );
 		_lastStampTime = Time.unscaledTime;
 		_registered = true;
 	}
@@ -180,9 +187,10 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 				continue;
 
 			Transform root = other._visual.transform;
-			float half = hf.WorldSize * 0.5f;
-			// Approximate footprint as XZ circle of radius half*√2 (corner of square).
-			float pileReach = half * 1.42f;
+			float halfX = hf.WorldSizeX * 0.5f;
+			float halfZ = hf.WorldSizeZ * 0.5f;
+			// Approximate footprint reach as half the XZ diagonal (corner of rect).
+			float pileReach = Mathf.Sqrt( halfX * halfX + halfZ * halfZ );
 			Vector3 delta = worldCenter - root.position;
 			delta.y = 0f;
 			float reach = r + pileReach;
@@ -199,9 +207,10 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		if ( _world == null || _world.Streamer == null )
 			return;
 
-		float half = heightfield.WorldSize * 0.5f;
-		Vector3 min = transform.TransformPoint( new Vector3( -half, 0f, -half ) );
-		Vector3 max = transform.TransformPoint( new Vector3( half, 0f, half ) );
+		float halfX = heightfield.WorldSizeX * 0.5f;
+		float halfZ = heightfield.WorldSizeZ * 0.5f;
+		Vector3 min = transform.TransformPoint( new Vector3( -halfX, 0f, -halfZ ) );
+		Vector3 max = transform.TransformPoint( new Vector3( halfX, 0f, halfZ ) );
 		Vector3 a = new Vector3( Mathf.Min( min.x, max.x ), 0f, Mathf.Min( min.z, max.z ) );
 		Vector3 b = new Vector3( Mathf.Max( min.x, max.x ), 0f, Mathf.Max( min.z, max.z ) );
 
@@ -261,7 +270,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		GoldPileHeightfield thisHf = _visual != null ? _visual.Heightfield : null;
 		Transform thisRoot = _visual != null ? _visual.transform : null;
 		Matrix4x4 thisW2L = Matrix4x4.identity;
-		float thisHalf = 0f;
+		float thisHalfX = 0f;
+		float thisHalfZ = 0f;
 		float thisMaxH = 0f;
 		float thisRootY = 0f;
 		float thisYScale = 1f;
@@ -269,7 +279,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		if ( hasThisPile )
 		{
 			thisW2L = thisRoot.worldToLocalMatrix;
-			thisHalf = thisHf.WorldSize * 0.5f;
+			thisHalfX = thisHf.WorldSizeX * 0.5f;
+			thisHalfZ = thisHf.WorldSizeZ * 0.5f;
 			thisMaxH = thisHf.MaxHeight;
 			thisRootY = thisRoot.position.y;
 			thisYScale = Mathf.Abs( thisRoot.lossyScale.y );
@@ -291,8 +302,9 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 				if ( hf == null || !hf.IsInitialized || root == null )
 					continue;
 
-				float half = hf.WorldSize * 0.5f;
-				float pileReach = half * 1.42f;
+				float pileHalfX = hf.WorldSizeX * 0.5f;
+				float pileHalfZ = hf.WorldSizeZ * 0.5f;
+				float pileReach = Mathf.Sqrt( pileHalfX * pileHalfX + pileHalfZ * pileHalfZ );
 				Vector3 delta = worldCenter - root.position;
 				delta.y = 0f;
 				float reach = stampR + pileReach;
@@ -307,7 +319,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 				{
 					Heightfield = hf,
 					WorldToLocal = root.worldToLocalMatrix,
-					Half = half,
+					HalfX = pileHalfX,
+					HalfZ = pileHalfZ,
 					MaxHeight = hf.MaxHeight,
 					RootY = root.position.y,
 					YScale = yScale
@@ -400,7 +413,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 						cellsTouched++;
 						float pileY = sampleAllPiles
 							? SampleMaxPileWorldYCached( wx, wz, s_sampleScratch )
-							: SampleThisPileWorldY( wx, wz, thisHf, thisW2L, thisHalf, thisMaxH, thisRootY, thisYScale, hasThisPile );
+							: SampleThisPileWorldY( wx, wz, thisHf, thisW2L, thisHalfX, thisHalfZ, thisMaxH, thisRootY, thisYScale, hasThisPile );
 
 						int i = row + x;
 						float baseH = baseHeight[ i ];
@@ -458,7 +471,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 	{
 		public GoldPileHeightfield Heightfield;
 		public Matrix4x4 WorldToLocal;
-		public float Half;
+		public float HalfX;
+		public float HalfZ;
 		public float MaxHeight;
 		public float RootY;
 		public float YScale;
@@ -469,7 +483,8 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		float wz,
 		GoldPileHeightfield hf,
 		Matrix4x4 worldToLocal,
-		float half,
+		float halfX,
+		float halfZ,
 		float maxHeight,
 		float rootY,
 		float yScale,
@@ -479,7 +494,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 			return float.NegativeInfinity;
 
 		Vector3 local = worldToLocal.MultiplyPoint3x4( new Vector3( wx, rootY, wz ) );
-		if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+		if ( Mathf.Abs( local.x ) > halfX || Mathf.Abs( local.z ) > halfZ )
 			return float.NegativeInfinity;
 
 		float localH = hf.SampleNormalized( local.x, local.z ) * maxHeight;
@@ -496,7 +511,7 @@ public class TreasurePileSurfaceBridge : MonoBehaviour
 		{
 			PileSampleCtx c = ctx[ i ];
 			Vector3 local = c.WorldToLocal.MultiplyPoint3x4( new Vector3( wx, c.RootY, wz ) );
-			if ( Mathf.Abs( local.x ) > c.Half || Mathf.Abs( local.z ) > c.Half )
+			if ( Mathf.Abs( local.x ) > c.HalfX || Mathf.Abs( local.z ) > c.HalfZ )
 				continue;
 
 			float localH = c.Heightfield.SampleNormalized( local.x, local.z ) * c.MaxHeight;

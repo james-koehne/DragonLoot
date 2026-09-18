@@ -281,14 +281,38 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 			return;
 		if ( _loot == null )
 			_loot = GetComponent<GoldPileLootInstances>();
-		if ( _loot == null || _loot.ChunkGrid == null || _loot.ChunkGrid.ChunkCount == 0 )
+		if ( _loot == null )
 			return;
 
 		GoldPileLootStreamSettings settings = _loot.StreamSettings;
 		if ( settings != null && !settings.drawChunkGizmos )
 			return;
 
-		var chunks = _loot.ChunkGrid.Chunks;
+		if ( _loot.ChunkGrid != null && _loot.ChunkGrid.ChunkCount > 0 )
+		{
+			DrawChunkGridGizmos( _loot.ChunkGrid, transform );
+			return;
+		}
+
+		// Edit mode / pre-bind: synthesize chunk cells from the live heightfield footprint.
+		TreasurePileVisual visual = GetComponent<TreasurePileVisual>();
+		if ( visual == null )
+			visual = GetComponentInParent<TreasurePileVisual>();
+		GoldPileHeightfield hf = visual != null ? visual.Heightfield : null;
+		if ( hf == null || !hf.IsInitialized )
+			return;
+
+		float chunkSize = settings != null ? Mathf.Max( 1f, settings.chunkSize ) : GoldPileChunkGrid.DefaultChunkSize;
+		DrawSyntheticChunkGizmos( hf, transform, chunkSize );
+	}
+
+	static void DrawChunkGridGizmos( GoldPileChunkGrid grid, Transform pileRoot )
+	{
+		IReadOnlyList<GoldPileChunk> chunks = grid.Chunks;
+		bool useLocal = pileRoot != null;
+		if ( useLocal )
+			Gizmos.matrix = pileRoot.localToWorldMatrix;
+
 		for ( int i = 0; i < chunks.Count; i++ )
 		{
 			GoldPileChunk chunk = chunks[ i ];
@@ -315,8 +339,45 @@ public class GoldPileLootStreamDebug : MonoBehaviour
 				c = Color.Lerp( c, Color.red, 0.55f );
 
 			Gizmos.color = c;
-			Gizmos.DrawWireCube( chunk.WorldBounds.center, chunk.WorldBounds.size );
+			if ( useLocal )
+				Gizmos.DrawWireCube( chunk.LocalBounds.center, chunk.LocalBounds.size );
+			else
+				Gizmos.DrawWireCube( chunk.WorldBounds.center, chunk.WorldBounds.size );
 		}
+
+		Gizmos.matrix = Matrix4x4.identity;
+	}
+
+	static void DrawSyntheticChunkGizmos( GoldPileHeightfield heightfield, Transform pileRoot, float chunkSize )
+	{
+		if ( pileRoot == null )
+			return;
+
+		float sizeX = heightfield.WorldSizeX;
+		float sizeZ = heightfield.WorldSizeZ;
+		float halfX = sizeX * 0.5f;
+		float halfZ = sizeZ * 0.5f;
+		int countX = Mathf.Max( 1, Mathf.CeilToInt( sizeX / chunkSize ) );
+		int countZ = Mathf.Max( 1, Mathf.CeilToInt( sizeZ / chunkSize ) );
+		float maxY = Mathf.Max( 0.1f, heightfield.MaxHeight );
+
+		Gizmos.matrix = pileRoot.localToWorldMatrix;
+		Gizmos.color = new Color( 0.2f, 0.85f, 1f, 0.45f );
+		for ( int z = 0; z < countZ; z++ )
+		{
+			float minZ = -halfZ + z * chunkSize;
+			float maxZ = Mathf.Min( halfZ, minZ + chunkSize );
+			for ( int x = 0; x < countX; x++ )
+			{
+				float minX = -halfX + x * chunkSize;
+				float maxX = Mathf.Min( halfX, minX + chunkSize );
+				Vector3 center = new Vector3( ( minX + maxX ) * 0.5f, maxY * 0.5f, ( minZ + maxZ ) * 0.5f );
+				Vector3 size = new Vector3( maxX - minX, maxY, maxZ - minZ );
+				Gizmos.DrawWireCube( center, size );
+			}
+		}
+
+		Gizmos.matrix = Matrix4x4.identity;
 	}
 
 	static Color LodColor( int lod )

@@ -58,15 +58,20 @@ public sealed class GoldPileColliderTiles
 	Tile[] _tiles;
 	int _tileCountX;
 	int _tileCountZ;
-	int _colliderResolution;
-	float _worldSize;
+	int _colliderResolutionX;
+	int _colliderResolutionZ;
+	float _worldSizeX;
+	float _worldSizeZ;
 	float _chunkSize;
 	bool _enabled = true;
 
 	public int TileCount => _tiles != null ? _tiles.Length : 0;
 	public int TileCountX => _tileCountX;
 	public int TileCountZ => _tileCountZ;
-	public int ColliderResolution => _colliderResolution;
+	public int ColliderResolutionX => _colliderResolutionX;
+	public int ColliderResolutionZ => _colliderResolutionZ;
+	/// <summary>Largest collider grid axis (compat).</summary>
+	public int ColliderResolution => Mathf.Max( _colliderResolutionX, _colliderResolutionZ );
 	public float ChunkSize => _chunkSize;
 	public MeshCollider FirstCollider =>
 		_tiles != null && _tiles.Length > 0 ? _tiles[ 0 ].Collider : null;
@@ -88,35 +93,41 @@ public sealed class GoldPileColliderTiles
 		_tiles = null;
 		_tileCountX = 0;
 		_tileCountZ = 0;
-		_colliderResolution = 0;
+		_colliderResolutionX = 0;
+		_colliderResolutionZ = 0;
 		_dirtyIndices.Clear();
 		_cookQueue.Clear();
 	}
 
 	public void Build(
 		Transform parent,
-		int colliderResolution,
-		float worldSize,
+		int colliderResX,
+		int colliderResZ,
+		float worldSizeX,
+		float worldSizeZ,
 		float chunkSize,
 		int layer )
 	{
 		Release();
 
 		_parent = parent;
-		_colliderResolution = Mathf.Max( 2, colliderResolution );
-		_worldSize = Mathf.Max( 0.1f, worldSize );
+		_colliderResolutionX = Mathf.Max( 2, colliderResX );
+		_colliderResolutionZ = Mathf.Max( 2, colliderResZ );
+		_worldSizeX = Mathf.Max( 0.1f, worldSizeX );
+		_worldSizeZ = Mathf.Max( 0.1f, worldSizeZ );
 		_chunkSize = Mathf.Max( 1f, chunkSize );
 
-		_tileCountX = Mathf.Max( 1, Mathf.CeilToInt( _worldSize / _chunkSize ) );
-		_tileCountZ = Mathf.Max( 1, Mathf.CeilToInt( _worldSize / _chunkSize ) );
+		_tileCountX = Mathf.Max( 1, Mathf.CeilToInt( _worldSizeX / _chunkSize ) );
+		_tileCountZ = Mathf.Max( 1, Mathf.CeilToInt( _worldSizeZ / _chunkSize ) );
 
 		EnsureRoot( layer );
 
-		int cells = _colliderResolution - 1;
-		int baseCellsX = cells / _tileCountX;
-		int remX = cells % _tileCountX;
-		int baseCellsZ = cells / _tileCountZ;
-		int remZ = cells % _tileCountZ;
+		int cellsX = _colliderResolutionX - 1;
+		int cellsZ = _colliderResolutionZ - 1;
+		int baseCellsX = cellsX / _tileCountX;
+		int remX = cellsX % _tileCountX;
+		int baseCellsZ = cellsZ / _tileCountZ;
+		int remZ = cellsZ % _tileCountZ;
 
 		int[] xEdges = new int[ _tileCountX + 1 ];
 		int[] zEdges = new int[ _tileCountZ + 1 ];
@@ -162,7 +173,8 @@ public sealed class GoldPileColliderTiles
 	/// Marks tiles overlapping a heightfield dirty rect (heightfield cell indices).
 	/// </summary>
 	public void MarkDirtyFromHeightfieldRect(
-		int heightRes,
+		int heightResX,
+		int heightResZ,
 		int minX,
 		int maxX,
 		int minZ,
@@ -172,22 +184,24 @@ public sealed class GoldPileColliderTiles
 		if ( _tiles == null || _tiles.Length == 0 )
 			return;
 
-		if ( full || heightRes <= 1 )
+		if ( full || heightResX <= 1 || heightResZ <= 1 )
 		{
 			MarkAllDirty();
 			return;
 		}
 
-		int res = _colliderResolution;
-		float inv = 1f / ( heightRes - 1 );
-		float u0 = minX * inv;
-		float u1 = maxX * inv;
-		float v0 = minZ * inv;
-		float v1 = maxZ * inv;
-		int cMinX = Mathf.Clamp( Mathf.FloorToInt( u0 * ( res - 1 ) ) - 1, 0, res - 1 );
-		int cMaxX = Mathf.Clamp( Mathf.CeilToInt( u1 * ( res - 1 ) ) + 1, 0, res - 1 );
-		int cMinZ = Mathf.Clamp( Mathf.FloorToInt( v0 * ( res - 1 ) ) - 1, 0, res - 1 );
-		int cMaxZ = Mathf.Clamp( Mathf.CeilToInt( v1 * ( res - 1 ) ) + 1, 0, res - 1 );
+		int resX = _colliderResolutionX;
+		int resZ = _colliderResolutionZ;
+		float invX = 1f / ( heightResX - 1 );
+		float invZ = 1f / ( heightResZ - 1 );
+		float u0 = minX * invX;
+		float u1 = maxX * invX;
+		float v0 = minZ * invZ;
+		float v1 = maxZ * invZ;
+		int cMinX = Mathf.Clamp( Mathf.FloorToInt( u0 * ( resX - 1 ) ) - 1, 0, resX - 1 );
+		int cMaxX = Mathf.Clamp( Mathf.CeilToInt( u1 * ( resX - 1 ) ) + 1, 0, resX - 1 );
+		int cMinZ = Mathf.Clamp( Mathf.FloorToInt( v0 * ( resZ - 1 ) ) - 1, 0, resZ - 1 );
+		int cMaxZ = Mathf.Clamp( Mathf.CeilToInt( v1 * ( resZ - 1 ) ) + 1, 0, resZ - 1 );
 
 		for ( int i = 0; i < _tiles.Length; i++ )
 		{
@@ -238,9 +252,15 @@ public sealed class GoldPileColliderTiles
 			if ( !tile.Dirty )
 				continue;
 
-			DisplaceTile( ref tile, heightfield );
-			dirtyCount++;
-			vertCount += tile.DisplacedVerts != null ? tile.DisplacedVerts.Length : 0;
+			// Fully carved-out tiles cannot produce triangles, so skip the displace pass entirely.
+			if ( IsTileEmpty( ref tile, heightfield ) )
+				tile.TriCount = 0;
+			else
+			{
+				DisplaceTile( ref tile, heightfield );
+				dirtyCount++;
+				vertCount += tile.DisplacedVerts != null ? tile.DisplacedVerts.Length : 0;
+			}
 
 			if ( tile.TriCount <= 0 )
 			{
@@ -282,7 +302,7 @@ public sealed class GoldPileColliderTiles
 			GoldPileEditTiming.Record(
 				"collider.displaceTiles",
 				sw.Elapsed.TotalMilliseconds,
-				$"tiles={dirtyCount} verts={vertCount} res={_colliderResolution}" );
+				$"tiles={dirtyCount} verts={vertCount} res={_colliderResolutionX}x{_colliderResolutionZ}" );
 		}
 
 		GoldPileEditTiming.End();
@@ -452,18 +472,20 @@ public sealed class GoldPileColliderTiles
 		int vertCount = vertCountX * vertCountZ;
 		Vector3[] baseVerts = new Vector3[ vertCount ];
 		Vector3[] displaced = new Vector3[ vertCount ];
-		float half = _worldSize * 0.5f;
-		float step = _worldSize / Mathf.Max( 1, _colliderResolution - 1 );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		float stepX = _worldSizeX / Mathf.Max( 1, _colliderResolutionX - 1 );
+		float stepZ = _worldSizeZ / Mathf.Max( 1, _colliderResolutionZ - 1 );
 
 		for ( int z = 0; z < vertCountZ; z++ )
 		{
 			int gz = gridMinZ + z;
-			float lz = -half + gz * step;
+			float lz = -halfZ + gz * stepZ;
 			for ( int x = 0; x < vertCountX; x++ )
 			{
 				int gx = gridMinX + x;
 				int i = z * vertCountX + x;
-				float lx = -half + gx * step;
+				float lx = -halfX + gx * stepX;
 				baseVerts[ i ] = new Vector3( lx, 0f, lz );
 				displaced[ i ] = baseVerts[ i ];
 			}
@@ -518,27 +540,48 @@ public sealed class GoldPileColliderTiles
 
 	void DisplaceTile( ref Tile tile, GoldPileHeightfield heightfield )
 	{
-		int res = _colliderResolution;
-		float maxH = heightfield.MaxHeight;
 		float ground = heightfield.GroundLevel;
 		int vertCountX = tile.VertCountX;
 
 		for ( int z = 0; z < tile.VertCountZ; z++ )
 		{
-			int gz = tile.GridMinZ + z;
-			float v = res <= 1 ? 0.5f : ( float )gz / ( res - 1 );
-			for ( int x = 0; x < tile.VertCountX; x++ )
+			for ( int x = 0; x < vertCountX; x++ )
 			{
-				int gx = tile.GridMinX + x;
-				float u = res <= 1 ? 0.5f : ( float )gx / ( res - 1 );
 				int i = z * vertCountX + x;
-				float h = heightfield.SampleNormalizedUV( u, v ) * maxH;
 				Vector3 b = tile.BaseVerts[ i ];
+				// Base verts sit on the collider grid in pile-local space, so a direct
+				// surface sample matches the heightfield without any UV round-trip.
+				float h = heightfield.SampleSurfaceHeight( b.x, b.z );
 				tile.DisplacedVerts[ i ] = new Vector3( b.x, h, b.z );
 			}
 		}
 
 		RebuildTileTriangles( ref tile, ground );
+	}
+
+	/// <summary>
+	/// True when no heightfield cell overlapping this tile reaches ground level, so every quad
+	/// would be dropped by <see cref="RebuildTileTriangles"/> anyway.
+	/// </summary>
+	bool IsTileEmpty( ref Tile tile, GoldPileHeightfield heightfield )
+	{
+		int heightResX = heightfield.ResolutionX;
+		int heightResZ = heightfield.ResolutionZ;
+		if ( heightResX <= 1 || heightResZ <= 1 )
+			return false;
+
+		HeightfieldRange( tile.GridMinX, tile.GridMaxX, _colliderResolutionX, heightResX, out int minX, out int maxX );
+		HeightfieldRange( tile.GridMinZ, tile.GridMaxZ, _colliderResolutionZ, heightResZ, out int minZ, out int maxZ );
+		return !heightfield.HasAnyAboveGround( minX, maxX, minZ, maxZ );
+	}
+
+	/// <summary>Maps a collider grid span onto heightfield cells, padded by one cell each side.</summary>
+	static void HeightfieldRange( int gridMin, int gridMax, int colliderRes, int heightRes, out int min, out int max )
+	{
+		float inv = 1f / Mathf.Max( 1, colliderRes - 1 );
+		int cells = heightRes - 1;
+		min = Mathf.Clamp( Mathf.FloorToInt( gridMin * inv * cells ) - 1, 0, cells );
+		max = Mathf.Clamp( Mathf.CeilToInt( gridMax * inv * cells ) + 1, 0, cells );
 	}
 
 	/// <summary>

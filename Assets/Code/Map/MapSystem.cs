@@ -587,19 +587,20 @@ public sealed class MapSystem : MonoBehaviour
 			return;
 		}
 
-		float worldSize = heightfield.WorldSize;
-		int hfRes = heightfield.Resolution;
-		if ( worldSize < 0.01f || hfRes < 2 )
+		float worldSizeX = heightfield.WorldSizeX;
+		float worldSizeZ = heightfield.WorldSizeZ;
+		int hfResX = heightfield.ResolutionX;
+		int hfResZ = heightfield.ResolutionZ;
+		if ( worldSizeX < 0.01f || worldSizeZ < 0.01f || hfResX < 2 || hfResZ < 2 )
 			return;
 
 		float maxHeight = Mathf.Max( 0.01f, heightfield.MaxHeight );
 		float groundNorm = heightfield.GroundLevel / maxHeight;
-		float half = worldSize * 0.5f;
 		Transform root = pile.transform;
 
-		for ( int z = 0; z < hfRes; z++ )
+		for ( int z = 0; z < hfResZ; z++ )
 		{
-			for ( int x = 0; x < hfRes; x++ )
+			for ( int x = 0; x < hfResX; x++ )
 			{
 				if ( heightfield.GetCellNormalizedHeight( x, z ) < groundNorm )
 					continue;
@@ -616,22 +617,26 @@ public sealed class MapSystem : MonoBehaviour
 
 	void StampPileGoldAuthored( TreasurePileVisual pile, Color32 gold, int res )
 	{
-		float worldSize = pile.AuthoredWorldSize;
-		if ( worldSize < 0.01f )
+		float worldSizeX = pile.AuthoredWorldSizeX;
+		float worldSizeZ = pile.AuthoredWorldSizeZ;
+		if ( worldSizeX < 0.01f || worldSizeZ < 0.01f )
 			return;
 
-		int steps = Mathf.Clamp( Mathf.CeilToInt( worldSize / Mathf.Max( 0.05f, _mapBounds.size.x / res ) ), 8, 128 );
-		float half = worldSize * 0.5f;
+		float mapCell = Mathf.Max( 0.05f, _mapBounds.size.x / res );
+		int stepsX = Mathf.Clamp( Mathf.CeilToInt( worldSizeX / mapCell ), 8, 128 );
+		int stepsZ = Mathf.Clamp( Mathf.CeilToInt( worldSizeZ / mapCell ), 8, 128 );
+		float halfX = worldSizeX * 0.5f;
+		float halfZ = worldSizeZ * 0.5f;
 		Transform root = pile.transform;
 
-		for ( int z = 0; z <= steps; z++ )
+		for ( int z = 0; z <= stepsZ; z++ )
 		{
-			float u = z / ( float )steps;
-			float localZ = Mathf.Lerp( -half, half, u );
-			for ( int x = 0; x <= steps; x++ )
+			float u = z / ( float )stepsZ;
+			float localZ = Mathf.Lerp( -halfZ, halfZ, u );
+			for ( int x = 0; x <= stepsX; x++ )
 			{
-				float t = x / ( float )steps;
-				float localX = Mathf.Lerp( -half, half, t );
+				float t = x / ( float )stepsX;
+				float localX = Mathf.Lerp( -halfX, halfX, t );
 				Vector3 world = root.TransformPoint( new Vector3( localX, 0f, localZ ) );
 				if ( !pile.HasAnyHeightAtWorld( world ) )
 					continue;

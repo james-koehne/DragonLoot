@@ -12,7 +12,8 @@ public sealed class CoinSeatOccupancy
 	readonly int[] _ids;
 	readonly float[] _xs;
 	readonly float[] _zs;
-	readonly float _worldSize;
+	readonly float _worldSizeX;
+	readonly float _worldSizeZ;
 	readonly float _spacing;
 	readonly float _spacingSq;
 	readonly float _cellSize;
@@ -28,16 +29,23 @@ public sealed class CoinSeatOccupancy
 	public int CountX => _countX;
 	public int CountZ => _countZ;
 
+	/// <summary>Square footprint (compat) — prefer the rectangular constructor.</summary>
 	public CoinSeatOccupancy( float worldSize, float spacing )
+		: this( worldSize, worldSize, spacing )
 	{
-		_worldSize = Mathf.Max( 0.1f, worldSize );
+	}
+
+	public CoinSeatOccupancy( float worldSizeX, float worldSizeZ, float spacing )
+	{
+		_worldSizeX = Mathf.Max( 0.1f, worldSizeX );
+		_worldSizeZ = Mathf.Max( 0.1f, worldSizeZ );
 		_spacing = Mathf.Max( 0.01f, spacing );
 		_spacingSq = _spacing * _spacing;
 		_cellSize = _spacing / Mathf.Sqrt( 2f );
-		_originX = -_worldSize * 0.5f;
-		_originZ = -_worldSize * 0.5f;
-		_countX = Mathf.Max( 1, Mathf.CeilToInt( _worldSize / _cellSize ) );
-		_countZ = Mathf.Max( 1, Mathf.CeilToInt( _worldSize / _cellSize ) );
+		_originX = -_worldSizeX * 0.5f;
+		_originZ = -_worldSizeZ * 0.5f;
+		_countX = Mathf.Max( 1, Mathf.CeilToInt( _worldSizeX / _cellSize ) );
+		_countZ = Mathf.Max( 1, Mathf.CeilToInt( _worldSizeZ / _cellSize ) );
 		int n = _countX * _countZ;
 		_ids = new int[ n ];
 		_xs = new float[ n ];
@@ -46,9 +54,16 @@ public sealed class CoinSeatOccupancy
 			_ids[ i ] = Empty;
 	}
 
+	/// <summary>Square footprint (compat) — prefer the rectangular overload.</summary>
 	public bool Matches( float worldSize, float spacing )
 	{
-		return Mathf.Abs( _worldSize - worldSize ) <= 0.01f
+		return Matches( worldSize, worldSize, spacing );
+	}
+
+	public bool Matches( float worldSizeX, float worldSizeZ, float spacing )
+	{
+		return Mathf.Abs( _worldSizeX - worldSizeX ) <= 0.01f
+			&& Mathf.Abs( _worldSizeZ - worldSizeZ ) <= 0.01f
 			&& Mathf.Abs( _spacing - spacing ) <= 0.001f;
 	}
 

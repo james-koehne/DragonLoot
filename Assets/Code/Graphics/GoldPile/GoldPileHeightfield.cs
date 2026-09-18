@@ -2,6 +2,8 @@ using System;
 
 using UnityEngine;
 
+using Object = UnityEngine.Object;
+
 /// <summary>Scene-view sculpt modes for gold pile heightfield authoring.</summary>
 public enum GoldPileEditorBrushMode
 {
@@ -68,7 +70,7 @@ public struct GoldPileBrushParams
 }
 
 /// <summary>
-/// CPU heightfield for a deformable gold pile. Owns the float buffer and runtime deform texture.
+/// CPU heightfield for a deformable gold pile. Owns the float buffer (world meters) and deform texture.
 /// </summary>
 public sealed class GoldPileHeightfield
 {
@@ -77,6 +79,7 @@ public sealed class GoldPileHeightfield
 	const float BlurKernelCenter = 4f;
 	const float BlurKernelSum = 16f;
 	const float DirtyRectFullUploadThreshold = 0.25f;
+	const float MinMaxHeight = 0.01f;
 
 	float[] _heights;
 	float[] _blurScratch;
@@ -89,36 +92,51 @@ public sealed class GoldPileHeightfield
 	int _dirtyMaxX;
 	int _dirtyMinZ;
 	int _dirtyMaxZ;
-	int _resolution;
-	float _worldSize;
-	float _maxHeight;
+	int _resolutionX;
+	int _resolutionZ;
+	float _worldSizeX;
+	float _worldSizeZ;
+	float _maxHeight = MinMaxHeight;
 	float _groundLevel = 0.01f;
-	float _lootGroundLevel = 0.6f;
 	float _initialVolume;
+	bool _lockMaxHeight;
+	Func<float, float, float> _lootFloorResolver;
 
-	public int Resolution => _resolution;
-	public float WorldSize => _worldSize;
+	public int ResolutionX => _resolutionX;
+	public int ResolutionZ => _resolutionZ;
+	/// <summary>Max axis resolution (compat).</summary>
+	public int Resolution => Mathf.Max( _resolutionX, _resolutionZ );
+	public float WorldSizeX => _worldSizeX;
+	public float WorldSizeZ => _worldSizeZ;
+	/// <summary>Max axis world size (carve radius floor, etc.).</summary>
+	public float WorldSize => Mathf.Max( _worldSizeX, _worldSizeZ );
 	public float MaxHeight => _maxHeight;
 	public float GroundLevel => _groundLevel;
-	/// <summary>Seat floor for coins / treasure. Never below the mesh cutoff.</summary>
-	public float LootGroundLevel => Mathf.Max( _groundLevel, _lootGroundLevel );
+	/// <summary>Loot floor at pile origin XZ. Prefer <see cref="GetLootFloorLocal"/>.</summary>
+	public float LootGroundLevel => GetLootFloorLocal( 0f, 0f );
 	public Texture2D Texture => _texture;
 	public bool IsDirty => _dirty;
 	public bool IsInitialized => _heights != null && _texture != null;
+	public float LocalCellSizeX => _worldSizeX / Mathf.Max( 1, _resolutionX - 1 );
+	public float LocalCellSizeZ => _worldSizeZ / Mathf.Max( 1, _resolutionZ - 1 );
+	public float LocalCellSize => LocalCellSizeX;
+	/// <summary>Meters per texel (X axis; matches global cell size when axes share spacing).</summary>
+	public float CellSize => LocalCellSizeX;
 
 	/// <summary>
-	/// Deterministic fingerprint of layout params + initial height samples (for latent bake keys).
+	/// Deterministic fingerprint of layout params + height samples (for latent bake keys).
 	/// </summary>
 	public int ComputeLayoutFingerprint()
 	{
 		unchecked
 		{
 			uint h = 2166136261u;
-			h = ( h ^ ( uint )_resolution ) * 16777619u;
-			h = ( h ^ ( uint )FloatToBits( _worldSize ) ) * 16777619u;
+			h = ( h ^ ( uint )_resolutionX ) * 16777619u;
+			h = ( h ^ ( uint )_resolutionZ ) * 16777619u;
+			h = ( h ^ ( uint )FloatToBits( _worldSizeX ) ) * 16777619u;
+			h = ( h ^ ( uint )FloatToBits( _worldSizeZ ) ) * 16777619u;
 			h = ( h ^ ( uint )FloatToBits( _maxHeight ) ) * 16777619u;
 			h = ( h ^ ( uint )FloatToBits( _groundLevel ) ) * 16777619u;
-			h = ( h ^ ( uint )FloatToBits( LootGroundLevel ) ) * 16777619u;
 			if ( _heights == null )
 				return ( int )h;
 
@@ -135,25 +153,22 @@ public sealed class GoldPileHeightfield
 		return System.BitConverter.SingleToInt32Bits( value );
 	}
 
-	public void Initialize( int res, float size, float height )
+	public void Initialize( int res, float size, float groundLevel )
 	{
-		Initialize( res, size, height, groundLevel: 0.01f, lootGroundLevel: 0.6f );
+		Initialize( res, res, size, size, groundLevel );
 	}
 
-	public void Initialize( int res, float size, float height, float groundLevel )
+	public void Initialize( int resX, int resZ, float sizeX, float sizeZ, float groundLevel )
 	{
-		Initialize( res, size, height, groundLevel, lootGroundLevel: groundLevel );
-	}
-
-	public void Initialize( int res, float size, float height, float groundLevel, float lootGroundLevel )
-	{
-		_resolution = Mathf.Max( 8, res );
-		_worldSize = Mathf.Max( 0.1f, size );
-		_maxHeight = Mathf.Max( 0.01f, height );
+		_resolutionX = Mathf.Max( 8, resX );
+		_resolutionZ = Mathf.Max( 8, resZ );
+		_worldSizeX = Mathf.Max( 0.1f, sizeX );
+		_worldSizeZ = Mathf.Max( 0.1f, sizeZ );
+		_maxHeight = MinMaxHeight;
 		_groundLevel = Mathf.Max( 0f, groundLevel );
-		_lootGroundLevel = Mathf.Max( 0f, lootGroundLevel );
+		_lockMaxHeight = false;
 
-		int count = _resolution * _resolution;
+		int count = _resolutionX * _resolutionZ;
 		_heights = new float[ count ];
 		_blurScratch = new float[ count ];
 		_delta = new float[ count ];
@@ -163,18 +178,16 @@ public sealed class GoldPileHeightfield
 		{
 #if UNITY_EDITOR
 			if ( !Application.isPlaying )
-				UnityEngine.Object.DestroyImmediate( _texture );
+				Object.DestroyImmediate( _texture );
 			else
 #endif
-				UnityEngine.Object.Destroy( _texture );
+				Object.Destroy( _texture );
 		}
 
-		_texture = new Texture2D( _resolution, _resolution, TextureFormat.R16, false, true )
+		_texture = new Texture2D( _resolutionX, _resolutionZ, TextureFormat.R16, false, true )
 		{
 			name = "GoldPileDeform",
 			wrapMode = TextureWrapMode.Clamp,
-			// Bilinear for smooth normals/lighting. Mesh UVs use texel centers so vertex
-			// displace still matches CPU/collider grid heights (avoids edge-UV drift).
 			filterMode = FilterMode.Bilinear
 		};
 
@@ -192,9 +205,61 @@ public sealed class GoldPileHeightfield
 			MarkDirtyFull();
 	}
 
-	public void SetLootGroundLevel( float lootGroundLevel )
+	public void SetLootFloorResolver( Func<float, float, float> resolver )
 	{
-		_lootGroundLevel = Mathf.Max( 0f, lootGroundLevel );
+		_lootFloorResolver = resolver;
+	}
+
+	public float GetLootFloorLocal( float localX, float localZ )
+	{
+		float floor = _lootFloorResolver != null
+			? _lootFloorResolver( localX, localZ )
+			: _groundLevel;
+		return Mathf.Max( _groundLevel, floor );
+	}
+
+	public void SetMaxHeightLocked( bool locked )
+	{
+		_lockMaxHeight = locked;
+	}
+
+	public void RecomputeMaxHeight()
+	{
+		if ( _heights == null )
+		{
+			_maxHeight = MinMaxHeight;
+			return;
+		}
+
+		float max = 0f;
+		for ( int i = 0; i < _heights.Length; i++ )
+		{
+			if ( _heights[ i ] > max )
+				max = _heights[ i ];
+		}
+
+		float next = Mathf.Max( MinMaxHeight, max );
+		if ( Mathf.Abs( next - _maxHeight ) > 1e-5f )
+		{
+			_maxHeight = next;
+			MarkDirtyFull();
+		}
+		else
+			_maxHeight = next;
+	}
+
+	float ClampHeight( float height )
+	{
+		height = Mathf.Max( 0f, height );
+		if ( _lockMaxHeight )
+			return Mathf.Min( _maxHeight, height );
+
+		if ( height > _maxHeight )
+		{
+			_maxHeight = height;
+			MarkDirtyFull();
+		}
+		return height;
 	}
 
 	/// <summary>True when the heightfield surface at this local XZ is at or above ground level.</summary>
@@ -210,28 +275,33 @@ public sealed class GoldPileHeightfield
 	{
 		if ( _heights == null )
 			return 0f;
-		return SampleNormalized( localX, localZ ) * _maxHeight;
+		float u = ( localX / _worldSizeX ) + 0.5f;
+		float v = ( localZ / _worldSizeZ ) + 0.5f;
+		return SampleHeightUV( u, v );
 	}
 
-	/// <summary>World-space size of one heightfield grid step along X or Z.</summary>
-	public float LocalCellSize => _worldSize / Mathf.Max( 1, _resolution - 1 );
-
-	public float GetCellNormalizedHeight( int cellX, int cellZ )
+	public float GetCellHeight( int cellX, int cellZ )
 	{
 		if ( _heights == null )
 			return 0f;
 
-		cellX = Mathf.Clamp( cellX, 0, _resolution - 1 );
-		cellZ = Mathf.Clamp( cellZ, 0, _resolution - 1 );
+		cellX = Mathf.Clamp( cellX, 0, _resolutionX - 1 );
+		cellZ = Mathf.Clamp( cellZ, 0, _resolutionZ - 1 );
 		return _heights[ Index( cellX, cellZ ) ];
+	}
+
+	public float GetCellNormalizedHeight( int cellX, int cellZ )
+	{
+		float h = GetCellHeight( cellX, cellZ );
+		return _maxHeight > 1e-6f ? h / _maxHeight : 0f;
 	}
 
 	public void CellCenterLocal( int cellX, int cellZ, out float localX, out float localZ )
 	{
-		float half = _worldSize * 0.5f;
-		float cell = LocalCellSize;
-		localX = -half + cellX * cell;
-		localZ = -half + cellZ * cell;
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		localX = -halfX + cellX * LocalCellSizeX;
+		localZ = -halfZ + cellZ * LocalCellSizeZ;
 	}
 
 	public bool TryLocalToCell( float localX, float localZ, out int cellX, out int cellZ )
@@ -241,16 +311,16 @@ public sealed class GoldPileHeightfield
 		if ( _heights == null )
 			return false;
 
-		float half = _worldSize * 0.5f;
-		float cell = LocalCellSize;
-		cellX = Mathf.Clamp( Mathf.RoundToInt( ( localX + half ) / cell ), 0, _resolution - 1 );
-		cellZ = Mathf.Clamp( Mathf.RoundToInt( ( localZ + half ) / cell ), 0, _resolution - 1 );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		cellX = Mathf.Clamp( Mathf.RoundToInt( ( localX + halfX ) / LocalCellSizeX ), 0, _resolutionX - 1 );
+		cellZ = Mathf.Clamp( Mathf.RoundToInt( ( localZ + halfZ ) / LocalCellSizeZ ), 0, _resolutionZ - 1 );
 		return true;
 	}
 
 	public int CellIndex( int cellX, int cellZ )
 	{
-		return cellZ * _resolution + cellX;
+		return cellZ * _resolutionX + cellX;
 	}
 
 	/// <summary>
@@ -266,7 +336,7 @@ public sealed class GoldPileHeightfield
 		if ( surface < _groundLevel )
 			return true;
 
-		return surface <= LootGroundLevel + Mathf.Max( 0f, margin );
+		return surface <= GetLootFloorLocal( localX, localZ ) + Mathf.Max( 0f, margin );
 	}
 
 	/// <summary>True when the heightfield surface under this world point is at or above ground level.</summary>
@@ -276,8 +346,9 @@ public sealed class GoldPileHeightfield
 			return false;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		float half = _worldSize * 0.5f;
-		if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		if ( Mathf.Abs( local.x ) > halfX || Mathf.Abs( local.z ) > halfZ )
 			return false;
 
 		return ExistsAtLocal( local.x, local.z );
@@ -304,21 +375,30 @@ public sealed class GoldPileHeightfield
 		_dirtyFull = false;
 	}
 
-	/// <summary>Copies normalized 0..1 heights from a packed U16 buffer (length must be res*res).</summary>
+	/// <summary>Copies packed U16 heights using current MaxHeight as pack scale (meters = u16/65535 * MaxHeight).</summary>
 	public bool CopyFromNormalizedU16( ushort[] source )
+	{
+		return CopyFromPackedU16( source, _maxHeight );
+	}
+
+	/// <summary>Copies packed U16 heights: meters = u16/65535 * packScale.</summary>
+	public bool CopyFromPackedU16( ushort[] source, float packScale )
 	{
 		if ( _heights == null || source == null || source.Length != _heights.Length )
 			return false;
 
+		packScale = Mathf.Max( MinMaxHeight, packScale );
 		for ( int i = 0; i < _heights.Length; i++ )
-			_heights[ i ] = source[ i ] * ( 1f / 65535f );
+			_heights[ i ] = source[ i ] * ( 1f / 65535f ) * packScale;
 
+		_maxHeight = packScale;
 		_initialVolume = SumHeights();
+		RecomputeMaxHeight();
 		MarkDirtyFull();
 		return true;
 	}
 
-	/// <summary>Writes normalized heights into a packed U16 buffer (allocates if needed).</summary>
+	/// <summary>Writes heights packed as u16 against MaxHeight (meters / MaxHeight).</summary>
 	public bool CopyToNormalizedU16( ref ushort[] destination )
 	{
 		if ( _heights == null )
@@ -328,22 +408,23 @@ public sealed class GoldPileHeightfield
 		if ( destination == null || destination.Length != count )
 			destination = new ushort[ count ];
 
+		float scale = Mathf.Max( MinMaxHeight, _maxHeight );
 		for ( int i = 0; i < count; i++ )
-			destination[ i ] = HeightToUShort( _heights[ i ] );
+			destination[ i ] = HeightToUShort( _heights[ i ] / scale );
 
 		return true;
 	}
 
-	/// <summary>Raises heights under a soft brush. amountNormalized is peak add in 0..1 height units.</summary>
-	public void RaiseAtLocal( float localX, float localZ, float radius, float amountNormalized, float falloff = 1f )
+	/// <summary>Raises heights under a soft brush. amountMeters is peak add in world meters.</summary>
+	public void RaiseAtLocal( float localX, float localZ, float radius, float amountMeters, float falloff = 1f )
 	{
-		ApplySignedBrush( localX, localZ, radius, Mathf.Abs( amountNormalized ), falloff, raise: true );
+		ApplySignedBrush( localX, localZ, radius, Mathf.Abs( amountMeters ), falloff, raise: true );
 	}
 
-	/// <summary>Lowers heights under a soft brush. amountNormalized is peak subtract in 0..1 height units.</summary>
-	public void LowerAtLocal( float localX, float localZ, float radius, float amountNormalized, float falloff = 1f )
+	/// <summary>Lowers heights under a soft brush. amountMeters is peak subtract in world meters.</summary>
+	public void LowerAtLocal( float localX, float localZ, float radius, float amountMeters, float falloff = 1f )
 	{
-		ApplySignedBrush( localX, localZ, radius, Mathf.Abs( amountNormalized ), falloff, raise: false );
+		ApplySignedBrush( localX, localZ, radius, Mathf.Abs( amountMeters ), falloff, raise: false );
 	}
 
 	/// <summary>Blends each cell toward its 3x3 neighborhood average under the brush.</summary>
@@ -355,13 +436,13 @@ public sealed class GoldPileHeightfield
 		strength = Mathf.Clamp( strength, 0.001f, 2.0f );
 		falloff = Mathf.Max( 0.01f, falloff );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		int copyMinX = Mathf.Max( 0, minX - 1 );
-		int copyMaxX = Mathf.Min( _resolution - 1, maxX + 1 );
+		int copyMaxX = Mathf.Min( _resolutionX - 1, maxX + 1 );
 		int copyMinZ = Mathf.Max( 0, minZ - 1 );
-		int copyMaxZ = Mathf.Min( _resolution - 1, maxZ + 1 );
+		int copyMaxZ = Mathf.Min( _resolutionZ - 1, maxZ + 1 );
 		int copyWidth = copyMaxX - copyMinX + 1;
 		for ( int z = copyMinZ; z <= copyMaxZ; z++ )
 		{
@@ -373,8 +454,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -386,10 +467,10 @@ public sealed class GoldPileHeightfield
 				int samples = 0;
 				for ( int oz = -1; oz <= 1; oz++ )
 				{
-					int zz = Mathf.Clamp( z + oz, 0, _resolution - 1 );
+					int zz = Mathf.Clamp( z + oz, 0, _resolutionZ - 1 );
 					for ( int ox = -1; ox <= 1; ox++ )
 					{
-						int xx = Mathf.Clamp( x + ox, 0, _resolution - 1 );
+						int xx = Mathf.Clamp( x + ox, 0, _resolutionX - 1 );
 						avg += _blurScratch[ Index( xx, zz ) ];
 						samples++;
 					}
@@ -397,38 +478,38 @@ public sealed class GoldPileHeightfield
 
 				avg /= Mathf.Max( 1, samples );
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( Mathf.Lerp( _blurScratch[ idx ], avg, w ) );
+				_heights[ idx ] = ClampHeight( Mathf.Lerp( _blurScratch[ idx ], avg, w ) );
 			}
 		}
 
 		ExpandDirtyRect( minX, maxX, minZ, maxZ );
 	}
 
-	/// <summary>Lerps heights toward targetNormalized under a soft brush.</summary>
+	/// <summary>Lerps heights toward a target height in meters under a soft brush.</summary>
 	public void FlattenAtLocal(
 		float localX,
 		float localZ,
 		float radius,
-		float targetNormalized,
+		float targetMeters,
 		float strength,
 		float falloff = 1f )
 	{
 		if ( _heights == null || strength <= 0f )
 			return;
 
-		targetNormalized = Mathf.Clamp01( targetNormalized );
+		targetMeters = Mathf.Max( 0f, targetMeters );
 		strength = Mathf.Clamp01( strength );
 		falloff = Mathf.Max( 0.01f, falloff );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -437,7 +518,7 @@ public sealed class GoldPileHeightfield
 
 				float w = BrushWeight( distSq, radiusSq, falloff ) * strength;
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( Mathf.Lerp( _heights[ idx ], targetNormalized, w ) );
+				_heights[ idx ] = ClampHeight( Mathf.Lerp( _heights[ idx ], targetMeters, w ) );
 			}
 		}
 
@@ -471,8 +552,10 @@ public sealed class GoldPileHeightfield
 
 		falloff = Mathf.Max( 0.01f, falloff );
 		float signedAmount = Mathf.Abs( amountNormalized ) * ( invert ? -1f : 1f );
-		float half = _worldSize * 0.5f;
-		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		float cellX = _worldSizeX / Mathf.Max( 1, _resolutionX - 1 );
+		float cellZ = _worldSizeZ / Mathf.Max( 1, _resolutionZ - 1 );
 
 		int minX;
 		int maxX;
@@ -482,14 +565,14 @@ public sealed class GoldPileHeightfield
 		if ( fullFootprint )
 		{
 			minX = 0;
-			maxX = _resolution - 1;
+			maxX = _resolutionX - 1;
 			minZ = 0;
-			maxZ = _resolution - 1;
+			maxZ = _resolutionZ - 1;
 		}
 		else
 		{
 			if ( !TryGetBrushBounds( localX, localZ, radius, out minX, out maxX, out minZ, out maxZ,
-				out _, out _, out radiusSq ) )
+				out _, out _, out _, out _, out radiusSq ) )
 				return;
 		}
 
@@ -497,8 +580,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float brushW = 1f;
 				if ( !fullFootprint )
 				{
@@ -514,8 +597,8 @@ public sealed class GoldPileHeightfield
 				float v;
 				if ( fullFootprint )
 				{
-					u = _resolution <= 1 ? 0.5f : ( float )x / ( _resolution - 1 );
-					v = _resolution <= 1 ? 0.5f : ( float )z / ( _resolution - 1 );
+					u = _resolutionX <= 1 ? 0.5f : ( float )x / ( _resolutionX - 1 );
+					v = _resolutionZ <= 1 ? 0.5f : ( float )z / ( _resolutionZ - 1 );
 				}
 				else
 				{
@@ -531,7 +614,7 @@ public sealed class GoldPileHeightfield
 					continue;
 
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + delta );
+				_heights[ idx ] = ClampHeight( _heights[ idx ] + delta );
 			}
 		}
 
@@ -550,13 +633,13 @@ public sealed class GoldPileHeightfield
 		iterations = Mathf.Clamp( iterations, 1, 20 );
 		float tanRepose = Mathf.Tan( Mathf.Clamp( angleOfReposeDegrees, 1f, 89f ) * Mathf.Deg2Rad );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		int padMinX = Mathf.Max( 0, minX - 1 );
-		int padMaxX = Mathf.Min( _resolution - 1, maxX + 1 );
+		int padMaxX = Mathf.Min( _resolutionX - 1, maxX + 1 );
 		int padMinZ = Mathf.Max( 0, minZ - 1 );
-		int padMaxZ = Mathf.Min( _resolution - 1, maxZ + 1 );
+		int padMaxZ = Mathf.Min( _resolutionZ - 1, maxZ + 1 );
 
 		for ( int iter = 0; iter < iterations; iter++ )
 		{
@@ -565,8 +648,8 @@ public sealed class GoldPileHeightfield
 			{
 				for ( int x = minX; x <= maxX; x++ )
 				{
-					float wx = -half + x * cell;
-					float wz = -half + z * cell;
+					float wx = -halfX + x * cellX;
+					float wz = -halfZ + z * cellZ;
 					float dx = wx - localX;
 					float dz = wz - localZ;
 					if ( dx * dx + dz * dz > radiusSq )
@@ -577,10 +660,10 @@ public sealed class GoldPileHeightfield
 					float transferBudget = 0f;
 					float weightSum = 0f;
 
-					AccumulateSettleNeighbor( x, z, h, cell, tanRepose, 1, 0, ref transferBudget, ref weightSum );
-					AccumulateSettleNeighbor( x, z, h, cell, tanRepose, -1, 0, ref transferBudget, ref weightSum );
-					AccumulateSettleNeighbor( x, z, h, cell, tanRepose, 0, 1, ref transferBudget, ref weightSum );
-					AccumulateSettleNeighbor( x, z, h, cell, tanRepose, 0, -1, ref transferBudget, ref weightSum );
+					AccumulateSettleNeighbor( x, z, h, cellX, tanRepose, 1, 0, ref transferBudget, ref weightSum );
+					AccumulateSettleNeighbor( x, z, h, cellX, tanRepose, -1, 0, ref transferBudget, ref weightSum );
+					AccumulateSettleNeighbor( x, z, h, cellX, tanRepose, 0, 1, ref transferBudget, ref weightSum );
+					AccumulateSettleNeighbor( x, z, h, cellX, tanRepose, 0, -1, ref transferBudget, ref weightSum );
 
 					if ( transferBudget <= 1e-8f || weightSum <= 1e-8f )
 						continue;
@@ -588,10 +671,10 @@ public sealed class GoldPileHeightfield
 					float remove = Mathf.Min( h, transferBudget );
 					_delta[ idx ] -= remove;
 					float inv = remove / weightSum;
-					DistributeSettleNeighbor( x, z, h, cell, tanRepose, 1, 0, inv );
-					DistributeSettleNeighbor( x, z, h, cell, tanRepose, -1, 0, inv );
-					DistributeSettleNeighbor( x, z, h, cell, tanRepose, 0, 1, inv );
-					DistributeSettleNeighbor( x, z, h, cell, tanRepose, 0, -1, inv );
+					DistributeSettleNeighbor( x, z, h, cellX, tanRepose, 1, 0, inv );
+					DistributeSettleNeighbor( x, z, h, cellX, tanRepose, -1, 0, inv );
+					DistributeSettleNeighbor( x, z, h, cellX, tanRepose, 0, 1, inv );
+					DistributeSettleNeighbor( x, z, h, cellX, tanRepose, 0, -1, inv );
 				}
 			}
 
@@ -614,22 +697,21 @@ public sealed class GoldPileHeightfield
 	{
 		int nx = x + ox;
 		int nz = z + oz;
-		if ( nx < 0 || nz < 0 || nx >= _resolution || nz >= _resolution )
+		if ( nx < 0 || nz < 0 || nx >= _resolutionX || nz >= _resolutionZ )
 			return;
 
 		float nh = _heights[ Index( nx, nz ) ];
 		if ( nh >= h )
 			return;
 
-		float worldDrop = ( h - nh ) * _maxHeight;
+		float worldDrop = h - nh;
 		float maxDrop = tanRepose * cell;
 		float excessWorld = worldDrop - maxDrop;
 		if ( excessWorld <= 0f )
 			return;
 
-		float excessNorm = excessWorld / _maxHeight;
-		transferBudget += excessNorm;
-		weightSum += excessNorm;
+		transferBudget += excessWorld;
+		weightSum += excessWorld;
 	}
 
 	void DistributeSettleNeighbor(
@@ -644,21 +726,20 @@ public sealed class GoldPileHeightfield
 	{
 		int nx = x + ox;
 		int nz = z + oz;
-		if ( nx < 0 || nz < 0 || nx >= _resolution || nz >= _resolution )
+		if ( nx < 0 || nz < 0 || nx >= _resolutionX || nz >= _resolutionZ )
 			return;
 
 		float nh = _heights[ Index( nx, nz ) ];
 		if ( nh >= h )
 			return;
 
-		float worldDrop = ( h - nh ) * _maxHeight;
+		float worldDrop = h - nh;
 		float maxDrop = tanRepose * cell;
 		float excessWorld = worldDrop - maxDrop;
 		if ( excessWorld <= 0f )
 			return;
 
-		float excessNorm = excessWorld / _maxHeight;
-		_delta[ Index( nx, nz ) ] += inv * excessNorm;
+		_delta[ Index( nx, nz ) ] += inv * excessWorld;
 	}
 
 	/// <summary>Downslope volume transport along the height gradient. Volume conserved.</summary>
@@ -670,21 +751,21 @@ public sealed class GoldPileHeightfield
 		falloff = Mathf.Max( 0.01f, falloff );
 		strength = Mathf.Clamp01( strength );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		int padMinX = Mathf.Max( 0, minX - 1 );
-		int padMaxX = Mathf.Min( _resolution - 1, maxX + 1 );
+		int padMaxX = Mathf.Min( _resolutionX - 1, maxX + 1 );
 		int padMinZ = Mathf.Max( 0, minZ - 1 );
-		int padMaxZ = Mathf.Min( _resolution - 1, maxZ + 1 );
+		int padMaxZ = Mathf.Min( _resolutionZ - 1, maxZ + 1 );
 		ClearDeltaRect( padMinX, padMaxX, padMinZ, padMaxZ );
 
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -722,7 +803,7 @@ public sealed class GoldPileHeightfield
 
 				int nx = x + ox;
 				int nz = z + oz;
-				if ( nx < 0 || nz < 0 || nx >= _resolution || nz >= _resolution )
+				if ( nx < 0 || nz < 0 || nx >= _resolutionX || nz >= _resolutionZ )
 					continue;
 
 				float amount = Mathf.Min( h, strength * w * gMag * 0.5f );
@@ -747,7 +828,7 @@ public sealed class GoldPileHeightfield
 		falloff = Mathf.Max( 0.01f, falloff );
 		float signed = strength;
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		CopyHeightsRect( minX, maxX, minZ, maxZ, pad: 1 );
@@ -756,8 +837,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -773,7 +854,7 @@ public sealed class GoldPileHeightfield
 					+ ScratchAtClamped( x, z - 1 )
 					+ ScratchAtClamped( x, z + 1 ) ) * 0.25f;
 				float curvature = Mathf.Clamp( h - avg, -0.2f, 0.2f );
-				_heights[ idx ] = Mathf.Clamp01( h + signed * w * curvature );
+				_heights[ idx ] = ClampHeight( h + signed * w * curvature );
 			}
 		}
 
@@ -803,12 +884,12 @@ public sealed class GoldPileHeightfield
 		float midX = localX + moveDeltaX * 0.5f;
 		float midZ = localZ + moveDeltaZ * 0.5f;
 		if ( !TryGetBrushBounds( midX, midZ, expand, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out _ ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out _ ) )
 			return;
 
 		// Also cover source brush centred on current position.
 		if ( TryGetBrushBounds( localX, localZ, expand, out int sMinX, out int sMaxX, out int sMinZ, out int sMaxZ,
-			out _, out _, out _ ) )
+			out _, out _, out _, out _, out _ ) )
 		{
 			minX = Mathf.Min( minX, sMinX );
 			maxX = Mathf.Max( maxX, sMaxX );
@@ -823,8 +904,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -841,7 +922,7 @@ public sealed class GoldPileHeightfield
 
 				float tx = wx + moveDeltaX;
 				float tz = wz + moveDeltaZ;
-				DepositBilinear( tx, tz, half, cell, amount );
+				DepositBilinear( tx, tz, halfX, halfZ, cellX, cellZ, amount );
 			}
 		}
 
@@ -857,7 +938,7 @@ public sealed class GoldPileHeightfield
 
 		strength = Mathf.Clamp01( strength );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		ClearDeltaRect( minX, maxX, minZ, maxZ );
@@ -866,8 +947,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -881,7 +962,7 @@ public sealed class GoldPileHeightfield
 					continue;
 
 				_delta[ idx ] -= amount;
-				DepositBilinear( localX, localZ, half, cell, amount );
+				DepositBilinear( localX, localZ, halfX, halfZ, cellX, cellZ, amount );
 			}
 		}
 
@@ -907,7 +988,7 @@ public sealed class GoldPileHeightfield
 		frequency = Mathf.Max( 0.01f, frequency );
 		octaves = Mathf.Clamp( octaves, 1, 8 );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		float seedX = ( seed % 997 ) * 0.173f + 11.3f;
@@ -917,8 +998,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -930,7 +1011,7 @@ public sealed class GoldPileHeightfield
 				// Remap 0..1 Perlin stack to -1..1
 				n = n * 2f - 1f;
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + n * strength * w );
+				_heights[ idx ] = ClampHeight( _heights[ idx ] + n * strength * w );
 			}
 		}
 
@@ -946,13 +1027,13 @@ public sealed class GoldPileHeightfield
 		iterations = Mathf.Clamp( iterations, 1, 50 );
 		strength = Mathf.Clamp01( strength );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		int padMinX = Mathf.Max( 0, minX - 1 );
-		int padMaxX = Mathf.Min( _resolution - 1, maxX + 1 );
+		int padMaxX = Mathf.Min( _resolutionX - 1, maxX + 1 );
 		int padMinZ = Mathf.Max( 0, minZ - 1 );
-		int padMaxZ = Mathf.Min( _resolution - 1, maxZ + 1 );
+		int padMaxZ = Mathf.Min( _resolutionZ - 1, maxZ + 1 );
 		float transferScale = 0.02f * strength;
 
 		for ( int iter = 0; iter < iterations; iter++ )
@@ -962,8 +1043,8 @@ public sealed class GoldPileHeightfield
 			{
 				for ( int x = minX; x <= maxX; x++ )
 				{
-					float wx = -half + x * cell;
-					float wz = -half + z * cell;
+					float wx = -halfX + x * cellX;
+					float wz = -halfZ + z * cellZ;
 					float dx = wx - localX;
 					float dz = wz - localZ;
 					if ( dx * dx + dz * dz > radiusSq )
@@ -998,7 +1079,7 @@ public sealed class GoldPileHeightfield
 
 	void TryLowerNeighbor( int nx, int nz, ref int bestX, ref int bestZ, ref float bestH )
 	{
-		if ( nx < 0 || nz < 0 || nx >= _resolution || nz >= _resolution )
+		if ( nx < 0 || nz < 0 || nx >= _resolutionX || nz >= _resolutionZ )
 			return;
 
 		float nh = _heights[ Index( nx, nz ) ];
@@ -1019,7 +1100,7 @@ public sealed class GoldPileHeightfield
 		strength = Mathf.Clamp01( strength );
 		falloff = Mathf.Max( 0.01f, falloff );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		CopyHeightsRect( minX, maxX, minZ, maxZ, pad: 1 );
@@ -1028,8 +1109,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1045,7 +1126,7 @@ public sealed class GoldPileHeightfield
 					+ ScratchAtClamped( x, z - 1 )
 					+ ScratchAtClamped( x, z + 1 ) ) * 0.25f;
 				float delta = Mathf.Max( 0f, avg - h ) * strength * w;
-				_heights[ idx ] = Mathf.Clamp01( h + delta );
+				_heights[ idx ] = ClampHeight( h + delta );
 			}
 		}
 
@@ -1066,7 +1147,7 @@ public sealed class GoldPileHeightfield
 
 		profileFalloff = Mathf.Clamp( profileFalloff, 0.1f, 0.99f );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		float r = Mathf.Max( 0.05f, radius );
@@ -1074,8 +1155,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1086,7 +1167,7 @@ public sealed class GoldPileHeightfield
 				t = Mathf.Clamp01( t / profileFalloff );
 				t = t * t * ( 3f - 2f * t );
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + peakHeight * t );
+				_heights[ idx ] = ClampHeight( _heights[ idx ] + peakHeight * t );
 			}
 		}
 
@@ -1135,7 +1216,7 @@ public sealed class GoldPileHeightfield
 		float midZ = ( fromZ + toZ ) * 0.5f;
 		float expand = segLen * 0.5f + width * 2f;
 		if ( !TryGetBrushBounds( midX, midZ, expand, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out _ ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out _ ) )
 			return;
 
 		float halfWidth = width * 0.5f;
@@ -1146,8 +1227,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float vx = wx - fromX;
 				float vz = wz - fromZ;
 				float along = vx * dirX + vz * dirZ;
@@ -1169,7 +1250,7 @@ public sealed class GoldPileHeightfield
 					continue;
 
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + add );
+				_heights[ idx ] = ClampHeight( _heights[ idx ] + add );
 			}
 		}
 
@@ -1197,7 +1278,7 @@ public sealed class GoldPileHeightfield
 				float d = _delta[ idx ];
 				if ( d == 0f )
 					continue;
-				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + d );
+				_heights[ idx ] = ClampHeight( _heights[ idx ] + d );
 			}
 		}
 	}
@@ -1205,9 +1286,9 @@ public sealed class GoldPileHeightfield
 	void CopyHeightsRect( int minX, int maxX, int minZ, int maxZ, int pad )
 	{
 		int copyMinX = Mathf.Max( 0, minX - pad );
-		int copyMaxX = Mathf.Min( _resolution - 1, maxX + pad );
+		int copyMaxX = Mathf.Min( _resolutionX - 1, maxX + pad );
 		int copyMinZ = Mathf.Max( 0, minZ - pad );
-		int copyMaxZ = Mathf.Min( _resolution - 1, maxZ + pad );
+		int copyMaxZ = Mathf.Min( _resolutionZ - 1, maxZ + pad );
 		int copyWidth = copyMaxX - copyMinX + 1;
 		for ( int z = copyMinZ; z <= copyMaxZ; z++ )
 		{
@@ -1216,10 +1297,10 @@ public sealed class GoldPileHeightfield
 		}
 	}
 
-	void DepositBilinear( float localX, float localZ, float half, float cell, float amount )
+	void DepositBilinear( float localX, float localZ, float halfX, float halfZ, float cellX, float cellZ, float amount )
 	{
-		float u = ( localX + half ) / cell;
-		float v = ( localZ + half ) / cell;
+		float u = ( localX + halfX ) / cellX;
+		float v = ( localZ + halfZ ) / cellZ;
 		int x0 = Mathf.FloorToInt( u );
 		int z0 = Mathf.FloorToInt( v );
 		float tx = u - x0;
@@ -1234,22 +1315,22 @@ public sealed class GoldPileHeightfield
 
 	void AddDeltaClamped( int x, int z, float amount )
 	{
-		if ( amount == 0f || x < 0 || z < 0 || x >= _resolution || z >= _resolution )
+		if ( amount == 0f || x < 0 || z < 0 || x >= _resolutionX || z >= _resolutionZ )
 			return;
 		_delta[ Index( x, z ) ] += amount;
 	}
 
 	float HeightAtClamped( int x, int z )
 	{
-		x = Mathf.Clamp( x, 0, _resolution - 1 );
-		z = Mathf.Clamp( z, 0, _resolution - 1 );
+		x = Mathf.Clamp( x, 0, _resolutionX - 1 );
+		z = Mathf.Clamp( z, 0, _resolutionZ - 1 );
 		return _heights[ Index( x, z ) ];
 	}
 
 	float ScratchAtClamped( int x, int z )
 	{
-		x = Mathf.Clamp( x, 0, _resolution - 1 );
-		z = Mathf.Clamp( z, 0, _resolution - 1 );
+		x = Mathf.Clamp( x, 0, _resolutionX - 1 );
+		z = Mathf.Clamp( z, 0, _resolutionZ - 1 );
 		return _blurScratch[ Index( x, z ) ];
 	}
 
@@ -1283,15 +1364,15 @@ public sealed class GoldPileHeightfield
 
 		falloff = Mathf.Max( 0.01f, falloff );
 		if ( !TryGetBrushBounds( localX, localZ, radius, out int minX, out int maxX, out int minZ, out int maxZ,
-			out float half, out float cell, out float radiusSq ) )
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out float radiusSq ) )
 			return;
 
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1302,7 +1383,7 @@ public sealed class GoldPileHeightfield
 				float delta = amountNormalized * w;
 				int idx = Index( x, z );
 				if ( raise )
-					_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + delta );
+					_heights[ idx ] = ClampHeight( _heights[ idx ] + delta );
 				else
 					_heights[ idx ] = Mathf.Max( 0f, _heights[ idx ] - delta );
 			}
@@ -1319,20 +1400,24 @@ public sealed class GoldPileHeightfield
 		out int maxX,
 		out int minZ,
 		out int maxZ,
-		out float half,
-		out float cell,
+		out float halfX,
+		out float halfZ,
+		out float cellX,
+		out float cellZ,
 		out float radiusSq )
 	{
 		minX = maxX = minZ = maxZ = 0;
-		half = _worldSize * 0.5f;
-		cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		halfX = _worldSizeX * 0.5f;
+		halfZ = _worldSizeZ * 0.5f;
+		cellX = _worldSizeX / Mathf.Max( 1, _resolutionX - 1 );
+		cellZ = _worldSizeZ / Mathf.Max( 1, _resolutionZ - 1 );
 		radius = Mathf.Max( 0.05f, radius );
 		radiusSq = radius * radius;
 
-		minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + half ) / cell ), 0, _resolution - 1 );
-		maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + half ) / cell ), 0, _resolution - 1 );
-		minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + half ) / cell ), 0, _resolution - 1 );
-		maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + half ) / cell ), 0, _resolution - 1 );
+		minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + halfX ) / cellX ), 0, _resolutionX - 1 );
+		maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + halfX ) / cellX ), 0, _resolutionX - 1 );
+		minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
+		maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
 		return maxX >= minX && maxZ >= minZ;
 	}
 
@@ -1344,31 +1429,63 @@ public sealed class GoldPileHeightfield
 		return t * t * ( 3f - 2f * t );
 	}
 
-	/// <summary>Builds a rounded mound. peakNormalized is 0..1 of max height.</summary>
-	public void FillMound( float peakNormalized, float edgeFalloff = 0.85f )
+	/// <summary>Builds a rounded mound. peakHeightMeters is world height at center.</summary>
+	public void FillMound( float peakHeightMeters, float edgeFalloff = 0.85f )
 	{
 		if ( _heights == null )
 			return;
 
-		peakNormalized = Mathf.Clamp01( peakNormalized );
+		peakHeightMeters = Mathf.Max( 0f, peakHeightMeters );
 		edgeFalloff = Mathf.Clamp( edgeFalloff, 0.1f, 0.99f );
-		float half = ( _resolution - 1 ) * 0.5f;
+		float halfX = ( _resolutionX - 1 ) * 0.5f;
+		float halfZ = ( _resolutionZ - 1 ) * 0.5f;
 
-		for ( int z = 0; z < _resolution; z++ )
+		for ( int z = 0; z < _resolutionZ; z++ )
 		{
-			for ( int x = 0; x < _resolution; x++ )
+			for ( int x = 0; x < _resolutionX; x++ )
 			{
-				float nx = ( x - half ) / half;
-				float nz = ( z - half ) / half;
+				float nx = halfX > 1e-6f ? ( x - halfX ) / halfX : 0f;
+				float nz = halfZ > 1e-6f ? ( z - halfZ ) / halfZ : 0f;
 				float dist = Mathf.Sqrt( nx * nx + nz * nz );
 				float t = Mathf.Clamp01( 1f - dist / edgeFalloff );
 				t = t * t * ( 3f - 2f * t );
-				_heights[ Index( x, z ) ] = peakNormalized * t;
+				_heights[ Index( x, z ) ] = peakHeightMeters * t;
 			}
 		}
 
 		_initialVolume = SumHeights();
+		RecomputeMaxHeight();
 		MarkDirtyFull();
+	}
+
+	public void FillZeros()
+	{
+		if ( _heights == null )
+			return;
+		for ( int i = 0; i < _heights.Length; i++ )
+			_heights[ i ] = 0f;
+		_maxHeight = MinMaxHeight;
+		_initialVolume = 0f;
+		MarkDirtyFull();
+	}
+
+	public bool HasAnyAboveGround( int minX, int maxX, int minZ, int maxZ )
+	{
+		if ( _heights == null )
+			return false;
+		minX = Mathf.Clamp( minX, 0, _resolutionX - 1 );
+		maxX = Mathf.Clamp( maxX, 0, _resolutionX - 1 );
+		minZ = Mathf.Clamp( minZ, 0, _resolutionZ - 1 );
+		maxZ = Mathf.Clamp( maxZ, 0, _resolutionZ - 1 );
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				if ( _heights[ Index( x, z ) ] >= _groundLevel )
+					return true;
+			}
+		}
+		return false;
 	}
 
 	/// <summary>Scales all heights so average volume tracks remaining/total ratio.</summary>
@@ -1380,17 +1497,15 @@ public sealed class GoldPileHeightfield
 		ratio = Mathf.Clamp01( ratio );
 		float current = SumHeights();
 		if ( current < 0.0001f )
-		{
-			if ( ratio > 0f )
-				FillMound( ratio );
 			return;
-		}
 
-		float target = ratio * _resolution * _resolution * 0.35f;
+		float baseline = _initialVolume > 0.0001f ? _initialVolume : current;
+		float target = ratio * baseline;
 		float scale = target / current;
 		for ( int i = 0; i < _heights.Length; i++ )
-			_heights[ i ] = Mathf.Clamp01( _heights[ i ] * scale );
+			_heights[ i ] = ClampHeight( _heights[ i ] * scale );
 
+		RecomputeMaxHeight();
 		MarkDirtyFull();
 	}
 
@@ -1399,24 +1514,24 @@ public sealed class GoldPileHeightfield
 		if ( _heights == null )
 			return 0f;
 
-		float u = ( localX / _worldSize ) + 0.5f;
-		float v = ( localZ / _worldSize ) + 0.5f;
+		float u = ( localX / _worldSizeX ) + 0.5f;
+		float v = ( localZ / _worldSizeZ ) + 0.5f;
 		return SampleNormalizedUV( u, v );
 	}
 
-	public float SampleNormalizedUV( float u, float v )
+	public float SampleHeightUV( float u, float v )
 	{
 		if ( _heights == null )
 			return 0f;
 
 		u = Mathf.Clamp01( u );
 		v = Mathf.Clamp01( v );
-		float fx = u * ( _resolution - 1 );
-		float fz = v * ( _resolution - 1 );
+		float fx = u * ( _resolutionX - 1 );
+		float fz = v * ( _resolutionZ - 1 );
 		int x0 = Mathf.FloorToInt( fx );
 		int z0 = Mathf.FloorToInt( fz );
-		int x1 = Mathf.Min( x0 + 1, _resolution - 1 );
-		int z1 = Mathf.Min( z0 + 1, _resolution - 1 );
+		int x1 = Mathf.Min( x0 + 1, _resolutionX - 1 );
+		int z1 = Mathf.Min( z0 + 1, _resolutionZ - 1 );
 		float tx = fx - x0;
 		float tz = fz - z0;
 
@@ -1429,13 +1544,19 @@ public sealed class GoldPileHeightfield
 		return Mathf.Lerp( h0, h1, tz );
 	}
 
+	public float SampleNormalizedUV( float u, float v )
+	{
+		float h = SampleHeightUV( u, v );
+		return _maxHeight > 1e-6f ? h / _maxHeight : 0f;
+	}
+
 	public float SampleWorldHeight( Vector3 worldPos, Transform pileRoot )
 	{
 		if ( pileRoot == null || _heights == null )
 			return 0f;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		return SampleNormalized( local.x, local.z ) * _maxHeight;
+		return SampleSurfaceHeight( local.x, local.z );
 	}
 
 	public Vector3 SampleWorldNormal( Vector3 worldPos, Transform pileRoot )
@@ -1444,12 +1565,13 @@ public sealed class GoldPileHeightfield
 			return Vector3.up;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		float step = _worldSize / Mathf.Max( 1, _resolution - 1 );
-		float hL = SampleNormalized( local.x - step, local.z ) * _maxHeight;
-		float hR = SampleNormalized( local.x + step, local.z ) * _maxHeight;
-		float hD = SampleNormalized( local.x, local.z - step ) * _maxHeight;
-		float hU = SampleNormalized( local.x, local.z + step ) * _maxHeight;
-		Vector3 normal = new Vector3( hL - hR, step * 2f, hD - hU ).normalized;
+		float stepX = LocalCellSizeX;
+		float stepZ = LocalCellSizeZ;
+		float hL = SampleSurfaceHeight( local.x - stepX, local.z );
+		float hR = SampleSurfaceHeight( local.x + stepX, local.z );
+		float hD = SampleSurfaceHeight( local.x, local.z - stepZ );
+		float hU = SampleSurfaceHeight( local.x, local.z + stepZ );
+		Vector3 normal = new Vector3( hL - hR, ( stepX + stepZ ), hD - hU ).normalized;
 		return pileRoot.TransformDirection( normal ).normalized;
 	}
 
@@ -1470,15 +1592,16 @@ public sealed class GoldPileHeightfield
 			return false;
 		direction /= dirLen;
 
-		float half = _worldSize * 0.5f;
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
 		float minY = -0.05f * _maxHeight;
 		float maxY = _maxHeight * 1.15f;
 
 		if ( !TryIntersectLocalAabb(
 			origin,
 			direction,
-			new Vector3( -half, minY, -half ),
-			new Vector3( half, maxY, half ),
+			new Vector3( -halfX, minY, -halfZ ),
+			new Vector3( halfX, maxY, halfZ ),
 			out float tEnter,
 			out float tExit ) )
 			return false;
@@ -1492,15 +1615,15 @@ public sealed class GoldPileHeightfield
 		float step = span / CoarseSteps;
 		float prevT = tEnter;
 		Vector3 prevP = origin + direction * prevT;
-		float prevSurface = SampleNormalized( prevP.x, prevP.z ) * _maxHeight;
+		float prevSurface = SampleSurfaceHeight( prevP.x, prevP.z );
 		float prevSign = prevP.y - prevSurface;
-		bool havePrev = IsInsideFootprint( prevP.x, prevP.z, half ) && prevSurface >= _groundLevel;
+		bool havePrev = IsInsideFootprint( prevP.x, prevP.z, halfX, halfZ ) && prevSurface >= _groundLevel;
 
 		for ( int i = 1; i <= CoarseSteps; i++ )
 		{
 			float t = tEnter + step * i;
 			Vector3 p = origin + direction * t;
-			if ( !IsInsideFootprint( p.x, p.z, half ) )
+			if ( !IsInsideFootprint( p.x, p.z, halfX, halfZ ) )
 			{
 				havePrev = false;
 				prevT = t;
@@ -1508,7 +1631,7 @@ public sealed class GoldPileHeightfield
 				continue;
 			}
 
-			float surface = SampleNormalized( p.x, p.z ) * _maxHeight;
+			float surface = SampleSurfaceHeight( p.x, p.z );
 			if ( surface < _groundLevel )
 			{
 				havePrev = false;
@@ -1520,9 +1643,9 @@ public sealed class GoldPileHeightfield
 			float sign = p.y - surface;
 			if ( havePrev && prevSign > 0f && sign <= 0f )
 			{
-				float tHit = RefineSurfaceCrossing( origin, direction, prevT, t, half );
+				float tHit = RefineSurfaceCrossing( origin, direction, prevT, t, halfX, halfZ );
 				Vector3 localHit = origin + direction * tHit;
-				float h = SampleNormalized( localHit.x, localHit.z ) * _maxHeight;
+				float h = SampleSurfaceHeight( localHit.x, localHit.z );
 				if ( h < _groundLevel )
 				{
 					havePrev = true;
@@ -1547,19 +1670,19 @@ public sealed class GoldPileHeightfield
 		return false;
 	}
 
-	float RefineSurfaceCrossing( Vector3 origin, Vector3 direction, float t0, float t1, float half )
+	float RefineSurfaceCrossing( Vector3 origin, Vector3 direction, float t0, float t1, float halfX, float halfZ )
 	{
 		for ( int i = 0; i < 12; i++ )
 		{
 			float tm = ( t0 + t1 ) * 0.5f;
 			Vector3 p = origin + direction * tm;
-			if ( !IsInsideFootprint( p.x, p.z, half ) )
+			if ( !IsInsideFootprint( p.x, p.z, halfX, halfZ ) )
 			{
 				t1 = tm;
 				continue;
 			}
 
-			float surface = SampleNormalized( p.x, p.z ) * _maxHeight;
+			float surface = SampleSurfaceHeight( p.x, p.z );
 			if ( p.y > surface )
 				t0 = tm;
 			else
@@ -1569,9 +1692,9 @@ public sealed class GoldPileHeightfield
 		return ( t0 + t1 ) * 0.5f;
 	}
 
-	static bool IsInsideFootprint( float localX, float localZ, float half )
+	static bool IsInsideFootprint( float localX, float localZ, float halfX, float halfZ )
 	{
-		return Mathf.Abs( localX ) <= half && Mathf.Abs( localZ ) <= half;
+		return Mathf.Abs( localX ) <= halfX && Mathf.Abs( localZ ) <= halfZ;
 	}
 
 	static bool TryIntersectLocalAabb(
@@ -1621,11 +1744,12 @@ public sealed class GoldPileHeightfield
 
 	public float GradientMagnitude( float localX, float localZ )
 	{
-		float step = _worldSize / Mathf.Max( 1, _resolution - 1 );
-		float hL = SampleNormalized( localX - step, localZ );
-		float hR = SampleNormalized( localX + step, localZ );
-		float hD = SampleNormalized( localX, localZ - step );
-		float hU = SampleNormalized( localX, localZ + step );
+		float stepX = LocalCellSizeX;
+		float stepZ = LocalCellSizeZ;
+		float hL = SampleNormalized( localX - stepX, localZ );
+		float hR = SampleNormalized( localX + stepX, localZ );
+		float hD = SampleNormalized( localX, localZ - stepZ );
+		float hU = SampleNormalized( localX, localZ + stepZ );
 		float gx = hR - hL;
 		float gz = hU - hD;
 		return Mathf.Sqrt( gx * gx + gz * gz );
@@ -1655,17 +1779,19 @@ public sealed class GoldPileHeightfield
 
 		radius = Mathf.Max( 0.05f, radius );
 		float radiusSq = radius * radius;
-		float half = _worldSize * 0.5f;
-		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		float cellX = _worldSizeX / Mathf.Max( 1, _resolutionX - 1 );
+		float cellZ = _worldSizeZ / Mathf.Max( 1, _resolutionZ - 1 );
 		float falloffSharpness = Mathf.Max( 0.1f, settings.falloffSharpness );
 
-		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + half ) / cell ), 0, _resolution - 1 );
-		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + half ) / cell ), 0, _resolution - 1 );
-		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + half ) / cell ), 0, _resolution - 1 );
-		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + half ) / cell ), 0, _resolution - 1 );
+		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + halfX ) / cellX ), 0, _resolutionX - 1 );
+		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + halfX ) / cellX ), 0, _resolutionX - 1 );
+		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
+		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
 		int brushW = maxX - minX + 1;
 		int brushH = maxZ - minZ + 1;
-		string brushDetail = $"cells={brushW}x{brushH} res={_resolution}";
+		string brushDetail = $"cells={brushW}x{brushH} res={_resolutionX}";
 
 		float weightSum = 0f;
 		int weightedCells = 0;
@@ -1673,8 +1799,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1704,8 +1830,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1725,19 +1851,19 @@ public sealed class GoldPileHeightfield
 			phaseSw.Restart();
 		}
 
-		int pad = ResolveCarveBlurPad( radius, cell, settings.blurPadCells );
+		int pad = ResolveCarveBlurPad( radius, cellX, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
 		ExpandDirtyRect(
 			Mathf.Max( 0, minX - pad ),
-			Mathf.Min( _resolution - 1, maxX + pad ),
+			Mathf.Min( _resolutionX - 1, maxX + pad ),
 			Mathf.Max( 0, minZ - pad ),
-			Mathf.Min( _resolution - 1, maxZ + pad ) );
+			Mathf.Min( _resolutionZ - 1, maxZ + pad ) );
 
 		if ( phaseSw != null )
 		{
 			phaseSw.Stop();
-			int blurW = Mathf.Min( _resolution, brushW + pad * 2 );
-			int blurH = Mathf.Min( _resolution, brushH + pad * 2 );
+			int blurW = Mathf.Min( _resolutionX, brushW + pad * 2 );
+			int blurH = Mathf.Min( _resolutionX, brushH + pad * 2 );
 			GoldPileEditTiming.Record(
 				"brush.blur",
 				phaseSw.Elapsed.TotalMilliseconds,
@@ -1773,7 +1899,7 @@ public sealed class GoldPileHeightfield
 			return;
 
 		Vector3 local = pileRoot.InverseTransformPoint( worldPos );
-		float search = Mathf.Max( radius * 4f, _worldSize * 0.2f );
+		float search = Mathf.Max( radius * 4f, Mathf.Max(_worldSizeX, _worldSizeZ) * 0.2f );
 		if ( TrySnapToExistingMound( local.x, local.z, search, out float snappedX, out float snappedZ ) )
 			CarveAtLocal( snappedX, snappedZ, radius, amountNormalized, settings );
 		else
@@ -1794,17 +1920,19 @@ public sealed class GoldPileHeightfield
 		if ( ExistsAtLocal( localX, localZ ) )
 			return true;
 
-		float half = _worldSize * 0.5f;
-		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
-		int originX = Mathf.Clamp( Mathf.RoundToInt( ( localX + half ) / cell ), 0, _resolution - 1 );
-		int originZ = Mathf.Clamp( Mathf.RoundToInt( ( localZ + half ) / cell ), 0, _resolution - 1 );
-		int maxR = Mathf.Max( 1, Mathf.CeilToInt( Mathf.Max( searchRadius, cell ) / cell ) );
-		float groundN = _maxHeight > 0.0001f ? _groundLevel / _maxHeight : 0f;
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		float cellX = _worldSizeX / Mathf.Max( 1, _resolutionX - 1 );
+		float cellZ = _worldSizeZ / Mathf.Max( 1, _resolutionZ - 1 );
+		int originX = Mathf.Clamp( Mathf.RoundToInt( ( localX + halfX ) / cellX ), 0, _resolutionX - 1 );
+		int originZ = Mathf.Clamp( Mathf.RoundToInt( ( localZ + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
+		int maxR = Mathf.Max( 1, Mathf.CeilToInt( Mathf.Max( searchRadius, cellX ) / cellX ) );
+		float groundN = _groundLevel;
 
 		int minX = Mathf.Max( 0, originX - maxR );
-		int maxX = Mathf.Min( _resolution - 1, originX + maxR );
+		int maxX = Mathf.Min( _resolutionX - 1, originX + maxR );
 		int minZ = Mathf.Max( 0, originZ - maxR );
-		int maxZ = Mathf.Min( _resolution - 1, originZ + maxR );
+		int maxZ = Mathf.Min( _resolutionZ - 1, originZ + maxR );
 
 		float bestSq = float.MaxValue;
 		int bestX = -1;
@@ -1813,7 +1941,7 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				if ( _heights[ Index( x, z ) ] < groundN )
+				if ( _heights[ Index( x, z ) ] < _groundLevel )
 					continue;
 
 				float dx = x - originX;
@@ -1831,8 +1959,8 @@ public sealed class GoldPileHeightfield
 		if ( bestX < 0 )
 			return false;
 
-		snappedX = -half + bestX * cell;
-		snappedZ = -half + bestZ * cell;
+		snappedX = -halfX + bestX * cellX;
+		snappedZ = -halfZ + bestZ * cellZ;
 		return true;
 	}
 
@@ -1856,22 +1984,24 @@ public sealed class GoldPileHeightfield
 
 		radius = Mathf.Max( 0.05f, radius );
 		float radiusSq = radius * radius;
-		float half = _worldSize * 0.5f;
-		float cell = _worldSize / Mathf.Max( 1, _resolution - 1 );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		float cellX = _worldSizeX / Mathf.Max( 1, _resolutionX - 1 );
+		float cellZ = _worldSizeZ / Mathf.Max( 1, _resolutionZ - 1 );
 		float falloffSharpness = Mathf.Max( 0.1f, settings.falloffSharpness );
 
-		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + half ) / cell ), 0, _resolution - 1 );
-		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + half ) / cell ), 0, _resolution - 1 );
-		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + half ) / cell ), 0, _resolution - 1 );
-		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + half ) / cell ), 0, _resolution - 1 );
+		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localX - radius + halfX ) / cellX ), 0, _resolutionX - 1 );
+		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localX + radius + halfX ) / cellX ), 0, _resolutionX - 1 );
+		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ - radius + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
+		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localZ + radius + halfZ ) / cellZ ), 0, _resolutionZ - 1 );
 
 		float weightSum = 0f;
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1890,8 +2020,8 @@ public sealed class GoldPileHeightfield
 		{
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				float wx = -half + x * cell;
-				float wz = -half + z * cell;
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
 				float dx = wx - localX;
 				float dz = wz - localZ;
 				float distSq = dx * dx + dz * dz;
@@ -1900,17 +2030,17 @@ public sealed class GoldPileHeightfield
 
 				float w = SoftFalloff( distSq, radiusSq, falloffSharpness );
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Clamp01( _heights[ idx ] + invWeight * w );
+				_heights[ idx ] = ClampHeight( _heights[ idx ] + invWeight * w );
 			}
 		}
 
-		int pad = ResolveCarveBlurPad( radius, cell, settings.blurPadCells );
+		int pad = ResolveCarveBlurPad( radius, cellX, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
 		ExpandDirtyRect(
 			Mathf.Max( 0, minX - pad ),
-			Mathf.Min( _resolution - 1, maxX + pad ),
+			Mathf.Min( _resolutionX - 1, maxX + pad ),
 			Mathf.Max( 0, minZ - pad ),
-			Mathf.Min( _resolution - 1, maxZ + pad ) );
+			Mathf.Min( _resolutionZ - 1, maxZ + pad ) );
 	}
 
 	public void DepositAtWorld( Vector3 worldPos, Transform pileRoot, float radius, float amountNormalized )
@@ -1955,7 +2085,7 @@ public sealed class GoldPileHeightfield
 		if ( _heights == null )
 			return;
 
-		BlurRegion( 0, _resolution - 1, 0, _resolution - 1 );
+		BlurRegion( 0, _resolutionX - 1, 0, _resolutionX - 1 );
 	}
 
 	public bool TryGetDirtyRect( out int minX, out int maxX, out int minZ, out int maxZ, out bool full )
@@ -1985,15 +2115,15 @@ public sealed class GoldPileHeightfield
 
 		pad = Mathf.Max( 0, pad );
 		minX = Mathf.Max( 0, minX - pad );
-		maxX = Mathf.Min( _resolution - 1, maxX + pad );
+		maxX = Mathf.Min( _resolutionX - 1, maxX + pad );
 		minZ = Mathf.Max( 0, minZ - pad );
-		maxZ = Mathf.Min( _resolution - 1, maxZ + pad );
+		maxZ = Mathf.Min( _resolutionZ - 1, maxZ + pad );
 
 		// Copy only the padded rect (+1 for the 3x3 kernel neighborhood).
 		int copyMinX = Mathf.Max( 0, minX - 1 );
-		int copyMaxX = Mathf.Min( _resolution - 1, maxX + 1 );
+		int copyMaxX = Mathf.Min( _resolutionX - 1, maxX + 1 );
 		int copyMinZ = Mathf.Max( 0, minZ - 1 );
-		int copyMaxZ = Mathf.Min( _resolution - 1, maxZ + 1 );
+		int copyMaxZ = Mathf.Min( _resolutionZ - 1, maxZ + 1 );
 		int copyWidth = copyMaxX - copyMinX + 1;
 		for ( int z = copyMinZ; z <= copyMaxZ; z++ )
 		{
@@ -2009,10 +2139,10 @@ public sealed class GoldPileHeightfield
 				float sum = 0f;
 				for ( int oz = -1; oz <= 1; oz++ )
 				{
-					int zz = Mathf.Clamp( z + oz, 0, _resolution - 1 );
+					int zz = Mathf.Clamp( z + oz, 0, _resolutionZ - 1 );
 					for ( int ox = -1; ox <= 1; ox++ )
 					{
-						int xx = Mathf.Clamp( x + ox, 0, _resolution - 1 );
+						int xx = Mathf.Clamp( x + ox, 0, _resolutionX - 1 );
 						float w = ox == 0 && oz == 0
 							? BlurKernelCenter
 							: ( ox == 0 || oz == 0 ? BlurKernelEdge : BlurKernelCorner );
@@ -2114,9 +2244,9 @@ public sealed class GoldPileHeightfield
 		_dirty = true;
 		_dirtyFull = true;
 		_dirtyMinX = 0;
-		_dirtyMaxX = _resolution - 1;
+		_dirtyMaxX = _resolutionX - 1;
 		_dirtyMinZ = 0;
-		_dirtyMaxZ = _resolution - 1;
+		_dirtyMaxZ = _resolutionZ - 1;
 	}
 
 	void ExpandDirtyRect( int minX, int maxX, int minZ, int maxZ )
@@ -2149,11 +2279,11 @@ public sealed class GoldPileHeightfield
 	/// GPU deform tex treats below-ground cells as empty so the mesh does not displace there.
 	/// CPU buffer keeps authored values for sculpt / volume math.
 	/// </summary>
-	float HeightForGpu( float normalizedHeight )
+	float HeightForGpu( float heightMeters )
 	{
-		if ( normalizedHeight * _maxHeight < _groundLevel )
+		if ( heightMeters < _groundLevel )
 			return 0f;
-		return normalizedHeight;
+		return _maxHeight > 1e-6f ? heightMeters / _maxHeight : 0f;
 	}
 
 	static ushort HeightToUShort( float h )
@@ -2163,6 +2293,6 @@ public sealed class GoldPileHeightfield
 
 	int Index( int x, int z )
 	{
-		return z * _resolution + x;
+		return z * _resolutionX + x;
 	}
 }

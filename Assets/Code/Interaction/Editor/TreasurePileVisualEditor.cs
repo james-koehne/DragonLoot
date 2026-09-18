@@ -115,6 +115,8 @@ public class TreasurePileVisualEditor : Editor
 		if ( GUILayout.Button( "Sculpt Pile" ) )
 			GoldPileSculptToolContext.ActivateAndRestoreBrush();
 
+		DrawDerivedLayoutStats( visual );
+
 		EditorGUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Rebuild Preview" ) )
 		{
@@ -122,16 +124,24 @@ public class TreasurePileVisualEditor : Editor
 			EditorUtility.SetDirty( visual );
 		}
 
-		if ( GUILayout.Button( "Reset To Mound" ) )
+		if ( GUILayout.Button( "Reset To Empty" ) )
 		{
-			Undo.RecordObject( visual, "Reset Gold Pile Mound" );
-			visual.ResetAuthoredToMound();
+			Undo.RecordObject( visual, "Reset Gold Pile Empty" );
+			visual.ResetAuthoredToEmpty();
 			RebuildPreview( visual );
 			EditorUtility.SetDirty( visual );
 		}
 		EditorGUILayout.EndHorizontal();
 
 		EditorGUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Fit Bounds" ) )
+		{
+			Undo.RecordObject( visual, "Fit Gold Pile Bounds" );
+			visual.FitBounds();
+			RebuildPreview( visual );
+			EditorUtility.SetDirty( visual );
+		}
+
 		if ( GUILayout.Button( "Apply Settle Pass" ) )
 		{
 			Undo.RecordObject( visual, "Settle Gold Pile" );
@@ -141,6 +151,7 @@ public class TreasurePileVisualEditor : Editor
 				GoldPileSculptSettings.SettleItersStrokeEnd );
 			_previewRevision = visual.AuthoredRevision;
 		}
+		EditorGUILayout.EndHorizontal();
 
 		if ( GUILayout.Button( "Clear Authored Height" ) )
 		{
@@ -149,14 +160,35 @@ public class TreasurePileVisualEditor : Editor
 			RebuildPreview( visual );
 			EditorUtility.SetDirty( visual );
 		}
-		EditorGUILayout.EndHorizontal();
 
 		EditorGUILayout.LabelField(
 			visual.HasAuthoredHeight
-				? $"Authored: {visual.AuthoredResolution}²  rev {visual.AuthoredRevision}"
-				: "Authored: (none — preview seeds a mound)" );
+				? $"Authored: {visual.AuthoredResolutionX}×{visual.AuthoredResolutionZ}  "
+					+ $"{visual.AuthoredWorldSizeX:0.###}m×{visual.AuthoredWorldSizeZ:0.###}m  rev {visual.AuthoredRevision}"
+				: "Authored: (none — preview starts empty)" );
 
 		serializedObject.ApplyModifiedProperties();
+	}
+
+	static void DrawDerivedLayoutStats( TreasurePileVisual visual )
+	{
+		GoldPileHeightfield hf = visual.Heightfield;
+		if ( hf != null && hf.IsInitialized )
+		{
+			EditorGUILayout.LabelField(
+				$"Layout: {hf.ResolutionX}×{hf.ResolutionZ}  "
+					+ $"{hf.WorldSizeX:0.###}m×{hf.WorldSizeZ:0.###}m  "
+					+ $"cell {hf.CellSize:0.####}m  maxH {hf.MaxHeight:0.###}m" );
+			return;
+		}
+
+		if ( visual.HasAuthoredHeight )
+		{
+			EditorGUILayout.LabelField(
+				$"Layout (authored): {visual.AuthoredResolutionX}×{visual.AuthoredResolutionZ}  "
+					+ $"{visual.AuthoredWorldSizeX:0.###}m×{visual.AuthoredWorldSizeZ:0.###}m  "
+					+ $"maxH {visual.AuthoredMaxHeight:0.###}m" );
+		}
 	}
 
 	void RebuildPreview( TreasurePileVisual visual )

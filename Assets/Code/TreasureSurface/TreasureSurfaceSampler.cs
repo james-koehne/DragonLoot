@@ -92,6 +92,53 @@ public sealed class TreasureSurfaceSampler
 	}
 
 	/// <summary>
+	/// Bilinear sample of authored <see cref="TreasureChunk.BaseHeight"/> (excludes live pile stamps).
+	/// </summary>
+	public bool TrySampleBaseHeight( Vector3 worldPos, out float height )
+	{
+		height = 0f;
+		if ( _world == null || !_world.IsInitialized )
+			return false;
+
+		if ( !_world.TryGetChunkCoord( worldPos, out TreasureChunkCoord coord ) )
+			return false;
+
+		TreasureChunk chunk = _world.GetLoadedChunk( coord );
+		if ( chunk == null || !chunk.Loaded || chunk.BaseHeight == null )
+			return false;
+
+		TreasureSurfaceDefinition def = _world.Definition;
+		float cell = def.CellSize;
+		float halfX = def.worldSizeX * 0.5f;
+		float halfZ = def.worldSizeZ * 0.5f;
+		float localX = worldPos.x - def.worldOrigin.x + halfX;
+		float localZ = worldPos.z - def.worldOrigin.z + halfZ;
+
+		float chunkOriginX = coord.X * def.chunkSize;
+		float chunkOriginZ = coord.Z * def.chunkSize;
+		float fx = ( localX - chunkOriginX ) / cell;
+		float fz = ( localZ - chunkOriginZ ) / cell;
+
+		int res = chunk.Resolution;
+		int x0 = Mathf.Clamp( Mathf.FloorToInt( fx ), 0, res - 1 );
+		int z0 = Mathf.Clamp( Mathf.FloorToInt( fz ), 0, res - 1 );
+		int x1 = Mathf.Min( x0 + 1, res - 1 );
+		int z1 = Mathf.Min( z0 + 1, res - 1 );
+		float tx = Mathf.Clamp01( fx - x0 );
+		float tz = Mathf.Clamp01( fz - z0 );
+
+		int i00 = chunk.Index( x0, z0 );
+		int i10 = chunk.Index( x1, z0 );
+		int i01 = chunk.Index( x0, z1 );
+		int i11 = chunk.Index( x1, z1 );
+
+		float h0 = Mathf.Lerp( chunk.BaseHeight[ i00 ], chunk.BaseHeight[ i10 ], tx );
+		float h1 = Mathf.Lerp( chunk.BaseHeight[ i01 ], chunk.BaseHeight[ i11 ], tx );
+		height = Mathf.Lerp( h0, h1, tz );
+		return true;
+	}
+
+	/// <summary>
 	/// Strict: all four bilinear paint corners must be traversable (matches <see cref="TrySample"/>).
 	/// Lenient: only the floor cell under the point must be traversable.
 	/// </summary>

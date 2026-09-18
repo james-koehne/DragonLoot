@@ -5,8 +5,8 @@ Shader "DragonLoot/Hover Outline Mask"
 		[Toggle] _DeformEnabled("Runtime Deform Map", Float) = 0
 		_DeformMap("Deform Height Map", 2D) = "black" {}
 		_DeformScale("Deform Height Scale", Float) = 1.5
-		_DeformWorldSize("Deform World Size", Float) = 4
-		_DeformResolution("Deform Resolution", Float) = 64
+		[HideInInspector] _DeformWorldSize("Deform World Size", Vector) = (4,4,0,0)
+		[HideInInspector] _DeformResolution("Deform Resolution", Vector) = (64,64,0,0)
 		_DeformSampleBlur("Deform Sample Blur", Float) = 0
 		_GroundLevelHeight("Ground Level Height", Float) = 0.01
 	}
@@ -38,8 +38,8 @@ Shader "DragonLoot/Hover Outline Mask"
 			CBUFFER_START(UnityPerMaterial)
 				half _DeformEnabled;
 				float _DeformScale;
-				float _DeformWorldSize;
-				float _DeformResolution;
+				float2 _DeformWorldSize;
+				float2 _DeformResolution;
 				float _DeformSampleBlur;
 				float _GroundLevelHeight;
 			CBUFFER_END
@@ -66,12 +66,12 @@ Shader "DragonLoot/Hover Outline Mask"
 				if (blur <= 0.001)
 					return center;
 
-				float uvStep = rcp(max(_DeformResolution, 1.0)) * blur;
+				float2 uvStep = rcp(max(_DeformResolution, float2(1.0, 1.0))) * blur;
 				float sum = center * 2.0;
-				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(uvStep, 0), 0).r;
-				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(uvStep, 0), 0).r;
-				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(0, uvStep), 0).r;
-				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(0, uvStep), 0).r;
+				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(uvStep.x, 0), 0).r;
+				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(uvStep.x, 0), 0).r;
+				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(0, uvStep.y), 0).r;
+				sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(0, uvStep.y), 0).r;
 				return sum * (1.0 / 6.0);
 			}
 

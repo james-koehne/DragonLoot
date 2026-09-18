@@ -24,7 +24,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	const int BindSeedMaxPasses = 64;
 	/// <summary>How often intermediate bind commits refresh Drawn seats for progressive fill.</summary>
 	const int BindProgressiveCommitSeatStride = 256;
-	/// <summary>0 = any pile column above <see cref="GoldPileHeightfield.LootGroundLevel"/>.</summary>
+	/// <summary>0 = any pile column above <see cref="GoldPileHeightfield.GetLootFloorLocal"/>.</summary>
 	const float CoinMinSurfaceHeightFraction = 0f;
 	/// <summary>Full heightfield footprint; empty / below-mesh cells are rejected per-column.</summary>
 	const float CoinPlacementRadiusFraction = 1f;
@@ -1323,7 +1323,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return;
 		}
 
-		int cellCount = _heightfield.Resolution * _heightfield.Resolution;
+		int cellCount = _heightfield.ResolutionX * _heightfield.ResolutionZ;
 		if ( _columnCoinReserve == null || _columnCoinReserve.Length != cellCount )
 			_columnCoinReserve = new float[ cellCount ];
 
@@ -1336,13 +1336,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return;
 		}
 
-		int res = _heightfield.Resolution;
-		for ( int z = 0; z < res; z++ )
+		int resX = _heightfield.ResolutionX;
+		int resZ = _heightfield.ResolutionZ;
+		for ( int z = 0; z < resZ; z++ )
 		{
-			for ( int x = 0; x < res; x++ )
+			for ( int x = 0; x < resX; x++ )
 			{
 				int idx = _heightfield.CellIndex( x, z );
-				float h = _heightfield.GetCellNormalizedHeight( x, z );
+				float h = _heightfield.GetCellHeight( x, z );
 				_columnCoinReserve[ idx ] = h / sum * total;
 			}
 		}
@@ -1384,13 +1385,14 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		// One dig unit of volume loss should not eject more than that many column-spill coins.
 		int maxSpawn = Mathf.Min( 128, Mathf.Max( 1, carveUnits ) );
 		float radiusSq = radius * radius;
-		float half = _heightfield.WorldSize * 0.5f;
-		float cell = _heightfield.LocalCellSize;
-		int res = _heightfield.Resolution;
-		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - radius + half ) / cell ), 0, res - 1 );
-		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + radius + half ) / cell ), 0, res - 1 );
-		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - radius + half ) / cell ), 0, res - 1 );
-		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + radius + half ) / cell ), 0, res - 1 );
+		float halfX = _heightfield.WorldSizeX * 0.5f;
+		float halfZ = _heightfield.WorldSizeZ * 0.5f;
+		float cellX = _heightfield.LocalCellSizeX;
+		float cellZ = _heightfield.LocalCellSizeZ;
+		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - radius + halfX ) / cellX ), 0, _heightfield.ResolutionX - 1 );
+		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + radius + halfX ) / cellX ), 0, _heightfield.ResolutionX - 1 );
+		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - radius + halfZ ) / cellZ ), 0, _heightfield.ResolutionZ - 1 );
+		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + radius + halfZ ) / cellZ ), 0, _heightfield.ResolutionZ - 1 );
 
 		for ( int z = minZ; z <= maxZ && spawned < maxSpawn; z++ )
 		{
@@ -1454,14 +1456,16 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		float angle = GoldPileTreasurePlacement.Hash01( _pileLootSeed, serial * 5 ) * Mathf.PI * 2f;
 		float dist = GoldPileTreasurePlacement.HashRange( _pileLootSeed, serial * 5 + 1, 0.02f, 0.12f );
+		float spawnX = localX + Mathf.Cos( angle ) * dist;
+		float spawnZ = localZ + Mathf.Sin( angle ) * dist;
 		Vector3 local = new Vector3(
-			localX + Mathf.Cos( angle ) * dist,
-			_heightfield.LootGroundLevel,
-			localZ + Mathf.Sin( angle ) * dist );
+			spawnX,
+			_heightfield.GetLootFloorLocal( spawnX, spawnZ ),
+			spawnZ );
 		if ( _heightfield.ExistsAtLocal( local.x, local.z ) )
 		{
 			float surface = _heightfield.SampleSurfaceHeight( local.x, local.z );
-			local.y = Mathf.Max( _heightfield.LootGroundLevel, surface ) + definition.worldScale.x * 0.05f;
+			local.y = Mathf.Max( _heightfield.GetLootFloorLocal( local.x, local.z ), surface ) + definition.worldScale.x * 0.05f;
 		}
 
 		Vector3 spawnPos = _pileRoot.TransformPoint( local );
@@ -1721,8 +1725,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		float maxDist = maxDistance > 0f ? maxDistance : _pickRadius;
 		float bestSq = maxDist * maxDist;
 		Vector3 local = _pileRoot.InverseTransformPoint( worldPoint );
-		int cellX = LocalToCell( local.x );
-		int cellZ = LocalToCell( local.z );
+		int cellX = LocalToCellX( local.x );
+		int cellZ = LocalToCellZ( local.z );
 
 		RefreshStreamStateForPick();
 
@@ -2012,9 +2016,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			definition = pair.Key;
 			if ( _heightfield != null && _pileRoot != null )
 			{
-				float half = _heightfield.WorldSize * 0.5f;
-				float lx = Random.Range( -half * 0.4f, half * 0.4f );
-				float lz = Random.Range( -half * 0.4f, half * 0.4f );
+				float halfX = _heightfield.WorldSizeX * 0.5f;
+				float halfZ = _heightfield.WorldSizeZ * 0.5f;
+				float lx = Random.Range( -halfX * 0.4f, halfX * 0.4f );
+				float lz = Random.Range( -halfZ * 0.4f, halfZ * 0.4f );
 				float h = _heightfield.SampleNormalized( lx, lz ) * _heightfield.MaxHeight;
 				worldPos = _pileRoot.TransformPoint( new Vector3( lx, h + 0.05f, lz ) );
 			}
@@ -2401,8 +2406,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				float ang = ( s / (float)samples ) * Mathf.PI * 2f;
 				float r = step * ring;
 				Vector3 probe = preferredLocal + new Vector3( Mathf.Cos( ang ) * r, 0f, Mathf.Sin( ang ) * r );
-				float half = _heightfield.WorldSize * 0.5f;
-				if ( Mathf.Abs( probe.x ) > half || Mathf.Abs( probe.z ) > half )
+				float halfX = _heightfield.WorldSizeX * 0.5f;
+				float halfZ = _heightfield.WorldSizeZ * 0.5f;
+				if ( Mathf.Abs( probe.x ) > halfX || Mathf.Abs( probe.z ) > halfZ )
 					continue;
 				if ( IsTooCloseToDrawn( probe, spacingSq ) )
 					continue;
@@ -2726,15 +2732,16 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return;
 		}
 
-		float world = _heightfield.WorldSize;
+		float worldX = _heightfield.WorldSizeX;
+		float worldZ = _heightfield.WorldSizeZ;
 		float spacing = ResolveCoinPlacementSpacing();
-		if ( _coinOccupancy != null && _coinOccupancy.Matches( world, spacing ) )
+		if ( _coinOccupancy != null && _coinOccupancy.Matches( worldX, worldZ, spacing ) )
 		{
 			_coinOccupancy.Clear();
 			return;
 		}
 
-		_coinOccupancy = new CoinSeatOccupancy( world, spacing );
+		_coinOccupancy = new CoinSeatOccupancy( worldX, worldZ, spacing );
 	}
 
 	void RebuildCoinOccupancyFromSlots()
@@ -2831,8 +2838,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _slots == null || spacingSq <= 0f )
 			return false;
 
-		int cellX = LocalToCell( localPos.x );
-		int cellZ = LocalToCell( localPos.z );
+		int cellX = LocalToCellX( localPos.x );
+		int cellZ = LocalToCellZ( localPos.z );
 		float cellSize = _heightfield != null
 			? _heightfield.WorldSize / Mathf.Max( 1, spatialCells )
 			: 1f;
@@ -3519,16 +3526,17 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _pileRoot == null || _heightfield == null )
 			return new Bounds( transform.position, Vector3.one * 50f );
 
-		float size = _heightfield.WorldSize;
+		float sizeX = _heightfield.WorldSizeX;
+		float sizeZ = _heightfield.WorldSizeZ;
 		float height = Mathf.Max( 1f, _heightfield.MaxHeight );
 		Vector3 center = _pileRoot.TransformPoint( new Vector3( 0f, height * 0.5f, 0f ) );
-		float scale = Mathf.Max(
-			Mathf.Abs( _pileRoot.lossyScale.x ),
-			Mathf.Abs( _pileRoot.lossyScale.z ) );
-		float worldWidth = size * Mathf.Max( 0.01f, scale );
+		float scaleX = Mathf.Max( 0.01f, Mathf.Abs( _pileRoot.lossyScale.x ) );
+		float scaleZ = Mathf.Max( 0.01f, Mathf.Abs( _pileRoot.lossyScale.z ) );
+		float worldWidthX = sizeX * scaleX;
+		float worldWidthZ = sizeZ * scaleZ;
 		return new Bounds(
 			center,
-			new Vector3( worldWidth * 1.5f, height * 2f + 4f, worldWidth * 1.5f ) );
+			new Vector3( worldWidthX * 1.5f, height * 2f + 4f, worldWidthZ * 1.5f ) );
 	}
 
 	void RefreshStreamStateForPick()
@@ -5965,7 +5973,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		float half = _heightfield.WorldSize * 0.5f * CoinPlacementRadiusFraction;
 		float usable = Mathf.Max( 0.05f, half );
-		float minSurface = _heightfield.LootGroundLevel;
+		float minSurfaceFromHeight = 0f;
 
 		for ( int attempt = 0; attempt < 64; attempt++ )
 		{
@@ -5974,6 +5982,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			float radius = usable * Mathf.Sqrt( GoldPileTreasurePlacement.Hash01( _pileLootSeed, salt + 1 ) );
 			float lx = Mathf.Cos( angle ) * radius;
 			float lz = Mathf.Sin( angle ) * radius;
+			float minSurface = Mathf.Max( _heightfield.GetLootFloorLocal( lx, lz ), minSurfaceFromHeight );
 			if ( !GoldPileTreasurePlacement.IsCoinFootprintSupported(
 				_heightfield,
 				new Vector3( lx, 0f, lz ),
@@ -6840,8 +6849,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		float cellSize = _heightfield.WorldSize / spatialCells;
 		int radius = Mathf.Max( 1, Mathf.CeilToInt( _placementMinSpacing / Mathf.Max( 0.01f, cellSize ) ) );
-		int cx = LocalToCell( localPos.x );
-		int cz = LocalToCell( localPos.z );
+		int cx = LocalToCellX( localPos.x );
+		int cz = LocalToCellZ( localPos.z );
 		bool filterDrawn = lists == _cellLists;
 		for ( int oz = -radius; oz <= radius; oz++ )
 		{
@@ -7364,8 +7373,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		float cellSize = _heightfield.WorldSize / Mathf.Max( 1, spatialCells );
 		int cellRadius = Mathf.Max( 1, Mathf.CeilToInt( radius / Mathf.Max( 0.01f, cellSize ) ) );
-		int cx = LocalToCell( local.x );
-		int cz = LocalToCell( local.z );
+		int cx = LocalToCellX( local.x );
+		int cz = LocalToCellZ( local.z );
 		for ( int oz = -cellRadius; oz <= cellRadius; oz++ )
 		{
 			int zz = cz + oz;
@@ -7532,8 +7541,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	void AssignCell( int slotIndex )
 	{
 		Slot slot = _slots[ slotIndex ];
-		slot.CellX = LocalToCell( slot.LocalPos.x );
-		slot.CellZ = LocalToCell( slot.LocalPos.z );
+		slot.CellX = LocalToCellX( slot.LocalPos.x );
+		slot.CellZ = LocalToCellZ( slot.LocalPos.z );
 		_chunkGrid.LocalToChunk( slot.LocalPos.x, slot.LocalPos.z, out slot.ChunkX, out slot.ChunkZ );
 		_slots[ slotIndex ] = slot;
 		_cellLists[ CellIndex( slot.CellX, slot.CellZ ) ].Add( slotIndex );
@@ -7548,10 +7557,18 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_cellLists[ cell ].Remove( slotIndex );
 	}
 
-	int LocalToCell( float local )
+	int LocalToCellX( float localX )
 	{
-		float half = _heightfield.WorldSize * 0.5f;
-		float u = ( local + half ) / _heightfield.WorldSize;
+		float half = _heightfield.WorldSizeX * 0.5f;
+		float u = ( localX + half ) / _heightfield.WorldSizeX;
+		int c = Mathf.FloorToInt( Mathf.Clamp01( u ) * spatialCells );
+		return Mathf.Clamp( c, 0, spatialCells - 1 );
+	}
+
+	int LocalToCellZ( float localZ )
+	{
+		float half = _heightfield.WorldSizeZ * 0.5f;
+		float u = ( localZ + half ) / _heightfield.WorldSizeZ;
 		int c = Mathf.FloorToInt( Mathf.Clamp01( u ) * spatialCells );
 		return Mathf.Clamp( c, 0, spatialCells - 1 );
 	}

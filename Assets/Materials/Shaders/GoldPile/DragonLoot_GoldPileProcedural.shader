@@ -36,8 +36,8 @@ Shader "DragonLoot/Gold Pile Procedural"
         _DeformScale("Deform Height Scale", Range(0, 8)) = 1.5
         _DeformNormalSoften("Deform Normal Soften", Range(0, 1)) = 0
         _DeformSampleBlur("Deform Sample Blur", Range(0, 4)) = 0
-        [HideInInspector] _DeformWorldSize("Deform World Size", Float) = 4
-        [HideInInspector] _DeformResolution("Deform Resolution", Float) = 64
+        [HideInInspector] _DeformWorldSize("Deform World Size", Vector) = (4,4,0,0)
+        [HideInInspector] _DeformResolution("Deform Resolution", Vector) = (64,64,0,0)
         [HideInInspector] _GroundLevelHeight("Ground Level Height", Float) = 0.01
 
         [Header(ProceduralCoins)]

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -7,10 +8,13 @@ using UnityEngine;
 /// </summary>
 public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 {
-	const int DefaultResolution = 64;
-	const float DefaultWorldSize = 6f;
-	const float DefaultMaxHeight = 1.75f;
+	const int AuthoredFormatLegacy = 0;
+	const int AuthoredFormatWorldMeters = 1;
+	const int DefaultMinResolution = 32;
+	const float DefaultCellSize = 0.125f;
 	const float DefaultPickRadius = 0.45f;
+	const float DefaultLootFloorClearance = 0.05f;
+	const float ExpandRimCells = 1.5f;
 
 	[SerializeField]
 	GoldPileTerrainMesh terrainMesh;
@@ -332,13 +336,15 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		unchecked
 		{
 			uint h = 2166136261u;
-			h = ( h ^ ( uint )authoredRes ) * 16777619u;
-			h = ( h ^ ( uint )AuthoredFloatToBits( authoredWorldSize ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredResolutionX ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredResolutionZ ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( AuthoredWorldSizeX ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( AuthoredWorldSizeZ ) ) * 16777619u;
 			h = ( h ^ ( uint )AuthoredFloatToBits( authoredMaxHeight ) ) * 16777619u;
 			if ( def != null )
 			{
 				h = ( h ^ ( uint )AuthoredFloatToBits( def.groundLevelHeight ) ) * 16777619u;
-				h = ( h ^ ( uint )AuthoredFloatToBits( def.lootGroundLevelHeight ) ) * 16777619u;
+				h = ( h ^ ( uint )AuthoredFloatToBits( def.lootFloorClearance ) ) * 16777619u;
 			}
 
 			if ( !HasAuthoredHeight )
@@ -390,19 +396,39 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	[SerializeField]
 	[HideInInspector]
-	int authoredRes;
+	int authoredRes; // legacy square
 
 	[SerializeField]
 	[HideInInspector]
-	float authoredWorldSize;
+	int authoredResX;
 
 	[SerializeField]
 	[HideInInspector]
-	float authoredMaxHeight;
+	int authoredResZ;
+
+	[SerializeField]
+	[HideInInspector]
+	float authoredWorldSize; // legacy square
+
+	[SerializeField]
+	[HideInInspector]
+	float authoredWorldSizeX;
+
+	[SerializeField]
+	[HideInInspector]
+	float authoredWorldSizeZ;
+
+	[SerializeField]
+	[HideInInspector]
+	float authoredMaxHeight; // pack scale
 
 	[SerializeField]
 	[HideInInspector]
 	int authoredRevision;
+
+	[SerializeField]
+	[HideInInspector]
+	int authoredHeightFormat;
 
 	GoldPileHeightfield _heightfield;
 	TreasurePileInteractable _pile;
@@ -423,12 +449,20 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	public Material PileMaterial => pileMaterial;
 	public bool HasAuthoredHeight =>
 		authoredHeights != null
-		&& authoredRes >= 8
-		&& authoredHeights.Length == authoredRes * authoredRes;
+		&& (
+			( authoredHeightFormat == AuthoredFormatWorldMeters
+				&& authoredResX >= 8
+				&& authoredResZ >= 8
+				&& authoredHeights.Length == authoredResX * authoredResZ )
+			|| ( authoredRes >= 8 && authoredHeights.Length == authoredRes * authoredRes ) );
 	public int AuthoredRevision => authoredRevision;
 	public TreasurePileDefinition Definition => ResolveDefinition();
-	public int AuthoredResolution => authoredRes;
-	public float AuthoredWorldSize => authoredWorldSize;
+	public int AuthoredResolution => Mathf.Max( authoredResX, authoredResZ, authoredRes );
+	public int AuthoredResolutionX => authoredResX > 0 ? authoredResX : authoredRes;
+	public int AuthoredResolutionZ => authoredResZ > 0 ? authoredResZ : authoredRes;
+	public float AuthoredWorldSize => Mathf.Max( authoredWorldSizeX, authoredWorldSizeZ, authoredWorldSize );
+	public float AuthoredWorldSizeX => authoredWorldSizeX > 0.1f ? authoredWorldSizeX : authoredWorldSize;
+	public float AuthoredWorldSizeZ => authoredWorldSizeZ > 0.1f ? authoredWorldSizeZ : authoredWorldSize;
 	public float AuthoredMaxHeight => authoredMaxHeight;
 	public float PickRadius
 	{
@@ -454,8 +488,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		float surface = _heightfield.SampleWorldHeight( worldPos, transform );
 		Vector3 local = transform.InverseTransformPoint( worldPos );
-		float half = _heightfield.WorldSize * 0.5f;
-		if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+		float halfX = _heightfield.WorldSizeX * 0.5f;
+		float halfZ = _heightfield.WorldSizeZ * 0.5f;
+		if ( Mathf.Abs( local.x ) > halfX || Mathf.Abs( local.z ) > halfZ )
 			return false;
 
 		return local.y < surface - surfaceClearance;
@@ -486,36 +521,45 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		if ( _heightfield != null && _heightfield.IsInitialized )
 			return _heightfield.ExistsAtWorld( worldPos, transform );
 
-		if ( !HasAuthoredHeight || authoredWorldSize < 0.01f )
+		if ( !HasAuthoredHeight )
+			return false;
+
+		EnsureMigratedAuthoredHeights();
+		float sizeX = AuthoredWorldSizeX;
+		float sizeZ = AuthoredWorldSizeZ;
+		int resX = AuthoredResolutionX;
+		int resZ = AuthoredResolutionZ;
+		if ( sizeX < 0.01f || sizeZ < 0.01f || resX < 8 || resZ < 8 )
 			return false;
 
 		Vector3 local = transform.InverseTransformPoint( worldPos );
-		float half = authoredWorldSize * 0.5f;
-		if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+		float halfX = sizeX * 0.5f;
+		float halfZ = sizeZ * 0.5f;
+		if ( Mathf.Abs( local.x ) > halfX || Mathf.Abs( local.z ) > halfZ )
 			return false;
 
-		float u = Mathf.Clamp01( ( local.x / authoredWorldSize ) + 0.5f );
-		float v = Mathf.Clamp01( ( local.z / authoredWorldSize ) + 0.5f );
-		float fx = u * ( authoredRes - 1 );
-		float fz = v * ( authoredRes - 1 );
-		int x0 = Mathf.Clamp( Mathf.FloorToInt( fx ), 0, authoredRes - 1 );
-		int z0 = Mathf.Clamp( Mathf.FloorToInt( fz ), 0, authoredRes - 1 );
-		int x1 = Mathf.Min( x0 + 1, authoredRes - 1 );
-		int z1 = Mathf.Min( z0 + 1, authoredRes - 1 );
+		float u = Mathf.Clamp01( ( local.x / sizeX ) + 0.5f );
+		float v = Mathf.Clamp01( ( local.z / sizeZ ) + 0.5f );
+		float fx = u * ( resX - 1 );
+		float fz = v * ( resZ - 1 );
+		int x0 = Mathf.Clamp( Mathf.FloorToInt( fx ), 0, resX - 1 );
+		int z0 = Mathf.Clamp( Mathf.FloorToInt( fz ), 0, resZ - 1 );
+		int x1 = Mathf.Min( x0 + 1, resX - 1 );
+		int z1 = Mathf.Min( z0 + 1, resZ - 1 );
 		float tx = fx - x0;
 		float tz = fz - z0;
-		float n00 = authoredHeights[ z0 * authoredRes + x0 ] / 65535f;
-		float n10 = authoredHeights[ z0 * authoredRes + x1 ] / 65535f;
-		float n01 = authoredHeights[ z1 * authoredRes + x0 ] / 65535f;
-		float n11 = authoredHeights[ z1 * authoredRes + x1 ] / 65535f;
-		float n = Mathf.Lerp( Mathf.Lerp( n00, n10, tx ), Mathf.Lerp( n01, n11, tx ), tz );
+		float pack = authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f;
+		float h00 = authoredHeights[ z0 * resX + x0 ] / 65535f * pack;
+		float h10 = authoredHeights[ z0 * resX + x1 ] / 65535f * pack;
+		float h01 = authoredHeights[ z1 * resX + x0 ] / 65535f * pack;
+		float h11 = authoredHeights[ z1 * resX + x1 ] / 65535f * pack;
+		float h = Mathf.Lerp( Mathf.Lerp( h00, h10, tx ), Mathf.Lerp( h01, h11, tx ), tz );
 
-		float maxHeight = authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f;
 		float ground = 0.01f;
 		TreasurePileDefinition def = ResolveDefinition();
 		if ( def != null )
 			ground = def.groundLevelHeight;
-		return n * maxHeight >= ground;
+		return h >= ground;
 	}
 
 	/// <summary>
@@ -825,7 +869,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		if ( terrainMesh != null && _heightfield != null )
 		{
-			ConfigureTerrainMesh( terrainMesh, pileMaterial, _heightfield.Resolution, def );
+			ConfigureTerrainMesh( terrainMesh, pileMaterial, _heightfield.ResolutionX, _heightfield.ResolutionZ, def );
 			// Runtime: defer PhysX cooks across frames (SyncColliderImmediate stalls LoadScene Integrate / first frames).
 			terrainMesh.Bind( _heightfield, syncCollider: false );
 			if ( Application.isPlaying )
@@ -1066,15 +1110,11 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	GoldPileCarveSettings ResolveCarveSettings( GoldPileCarveSettings settings )
 	{
-		float worldSize = DefaultWorldSize;
+		float worldSize = DefaultCellSize * ( DefaultMinResolution - 1 );
 		if ( _heightfield != null && _heightfield.IsInitialized )
 			worldSize = _heightfield.WorldSize;
-		else
-		{
-			TreasurePileDefinition def = ResolveDefinition();
-			if ( def != null )
-				worldSize = def.worldSize;
-		}
+		else if ( HasAuthoredHeight )
+			worldSize = AuthoredWorldSize;
 
 		return settings.ResolvedForPile( worldSize );
 	}
@@ -1356,24 +1396,28 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	void InitializeHeightfield()
 	{
-		ResolveLayout( out int res, out float size, out float height );
+		EnsureMigratedAuthoredHeights();
+		ResolveLayout( out int resX, out int resZ, out float sizeX, out float sizeZ );
 
 		if ( _heightfield != null )
 			_heightfield.Release();
 
 		_heightfield = new GoldPileHeightfield();
 		TreasurePileDefinition def = ResolveDefinition();
-		_heightfield.Initialize(
-			res,
-			size,
-			height,
-			def != null ? def.groundLevelHeight : 0.01f,
-			def != null ? def.lootGroundLevelHeight : 0.6f );
+		float ground = def != null ? def.groundLevelHeight : 0.01f;
+		_heightfield.Initialize( resX, resZ, sizeX, sizeZ, ground );
+		_heightfield.SetLootFloorResolver( ResolveLootFloorLocal );
+		_heightfield.SetMaxHeightLocked( Application.isPlaying );
 
-		if ( HasAuthoredHeight && authoredRes == res )
-			_heightfield.CopyFromNormalizedU16( authoredHeights );
+		if ( HasAuthoredHeight
+			&& authoredHeightFormat == AuthoredFormatWorldMeters
+			&& authoredResX == resX
+			&& authoredResZ == resZ )
+		{
+			_heightfield.CopyFromPackedU16( authoredHeights, authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f );
+		}
 		else
-			_heightfield.FillMound( 1f );
+			_heightfield.FillZeros();
 
 		_heightfield.UploadIfDirty();
 		_totalUnits = def != null
@@ -1381,25 +1425,26 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			: Mathf.Max( 1, _pile != null ? _pile.TotalCount : 1 );
 	}
 
-	void ResolveLayout( out int res, out float size, out float height )
+	void ResolveLayout( out int resX, out int resZ, out float sizeX, out float sizeZ )
 	{
-		res = DefaultResolution;
-		size = DefaultWorldSize;
-		height = DefaultMaxHeight;
-
 		TreasurePileDefinition def = ResolveDefinition();
-		if ( def != null )
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+		int minRes = def != null ? def.ResolveMinResolution() : DefaultMinResolution;
+
+		if ( HasAuthoredHeight && authoredHeightFormat == AuthoredFormatWorldMeters
+			&& authoredResX >= 8 && authoredResZ >= 8 )
 		{
-			res = def.heightResolution;
-			size = def.worldSize;
-			height = def.maxHeight;
+			resX = authoredResX;
+			resZ = authoredResZ;
+			sizeX = authoredWorldSizeX > 0.1f ? authoredWorldSizeX : cell * ( resX - 1 );
+			sizeZ = authoredWorldSizeZ > 0.1f ? authoredWorldSizeZ : cell * ( resZ - 1 );
+			return;
 		}
-		else if ( HasAuthoredHeight )
-		{
-			res = authoredRes;
-			size = authoredWorldSize > 0.1f ? authoredWorldSize : size;
-			height = authoredMaxHeight > 0.01f ? authoredMaxHeight : height;
-		}
+
+		resX = minRes;
+		resZ = minRes;
+		sizeX = cell * ( resX - 1 );
+		sizeZ = cell * ( resZ - 1 );
 	}
 
 	TreasurePileDefinition ResolveDefinition()
@@ -1419,69 +1464,176 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		return ResolveDefinition();
 	}
 
-	static int ResolveMeshResolution( TreasurePileDefinition definition, int heightRes )
-	{
-		if ( definition != null )
-			return definition.ResolveMeshResolution();
-		return Mathf.Max( 8, heightRes );
-	}
-
 	static void ConfigureTerrainMesh(
 		GoldPileTerrainMesh mesh,
 		Material material,
-		int heightRes,
+		int resX,
+		int resZ,
 		TreasurePileDefinition definition )
 	{
 		if ( mesh == null )
 			return;
 
-		int meshRes = ResolveMeshResolution( definition, heightRes );
 		float soften = definition != null ? definition.meshDeformNormalSoften : 0f;
 		float blur = definition != null ? definition.meshDeformSampleBlur : 4f;
-		mesh.Configure( material, heightRes, meshRes, soften, blur );
+		mesh.Configure( material, resX, resZ, soften, blur );
+	}
+
+	float ResolveLootFloorClearance()
+	{
+		TreasurePileDefinition def = ResolveDefinition();
+		return def != null ? Mathf.Max( 0f, def.lootFloorClearance ) : DefaultLootFloorClearance;
+	}
+
+	float ResolveLootFloorLocal( float localX, float localZ )
+	{
+		float clearance = ResolveLootFloorClearance();
+		float ground = 0.01f;
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( def != null )
+			ground = def.groundLevelHeight;
+
+		Vector3 world = transform.TransformPoint( new Vector3( localX, 0f, localZ ) );
+		if ( TrySampleAuthoredSurfaceHeight( world, out float worldY ) )
+			return Mathf.Max( ground, ( worldY - transform.position.y ) + clearance );
+
+		return ground + clearance;
+	}
+
+	bool TrySampleAuthoredSurfaceHeight( Vector3 worldPos, out float worldY )
+	{
+		worldY = 0f;
+		if ( Application.isPlaying )
+		{
+			TreasureSurfaceWorld surfaceWorld = TreasureSurfaceWorld.Instance;
+			if ( surfaceWorld != null && surfaceWorld.IsInitialized && surfaceWorld.Sampler != null )
+				return surfaceWorld.Sampler.TrySampleBaseHeight( worldPos, out worldY );
+			return false;
+		}
+
+#if UNITY_EDITOR
+		TreasureSurfaceAuthoring authoring = TreasureSurfaceAuthoring.Instance;
+		if ( authoring != null && authoring.TryWorldToCell( worldPos, out int cellX, out int cellZ ) )
+		{
+			worldY = authoring.GetPaintHeight( cellX, cellZ );
+			return true;
+		}
+#endif
+		return false;
+	}
+
+	/// <summary>Convert legacy square 0–1 authored heights to world-meter rectangular format.</summary>
+	public void EnsureMigratedAuthoredHeights()
+	{
+		if ( authoredHeights == null )
+			return;
+
+		if ( authoredHeightFormat == AuthoredFormatWorldMeters
+			&& authoredResX >= 8
+			&& authoredResZ >= 8
+			&& authoredHeights.Length == authoredResX * authoredResZ )
+			return;
+
+		bool legacySquare = authoredRes >= 8 && authoredHeights.Length == authoredRes * authoredRes;
+		if ( !legacySquare )
+			return;
+
+		TreasurePileDefinition def = ResolveDefinition();
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+		int minRes = def != null ? def.ResolveMinResolution() : DefaultMinResolution;
+
+		int oldRes = authoredRes;
+		float oldSize = authoredWorldSize > 0.1f ? authoredWorldSize : cell * ( oldRes - 1 );
+		float oldMax = authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f;
+
+		float[] worldH = new float[ oldRes * oldRes ];
+		for ( int i = 0; i < worldH.Length; i++ )
+			worldH[ i ] = authoredHeights[ i ] * ( 1f / 65535f ) * oldMax;
+
+		// Preserve authored footprint and resolution — do not clamp to definition maxResolution.
+		int needed = Mathf.Max( minRes, Mathf.RoundToInt( oldSize / cell ) );
+		needed = Mathf.Max( needed, oldRes );
+		int newRes = Mathf.NextPowerOfTwo( Mathf.Max( 8, needed ) );
+		float newSize = cell * ( newRes - 1 );
+
+		ushort[] packed = new ushort[ newRes * newRes ];
+		float oldHalf = oldSize * 0.5f;
+		float newHalf = newSize * 0.5f;
+		float newStep = newSize / Mathf.Max( 1, newRes - 1 );
+
+		float[] meters = new float[ newRes * newRes ];
+		float packScale = 0.01f;
+		for ( int z = 0; z < newRes; z++ )
+		{
+			float lz = -newHalf + z * newStep;
+			for ( int x = 0; x < newRes; x++ )
+			{
+				float lx = -newHalf + x * newStep;
+				float h = 0f;
+				if ( Mathf.Abs( lx ) <= oldHalf && Mathf.Abs( lz ) <= oldHalf )
+				{
+					float u = ( lx / oldSize ) + 0.5f;
+					float v = ( lz / oldSize ) + 0.5f;
+					float fx = Mathf.Clamp01( u ) * ( oldRes - 1 );
+					float fz = Mathf.Clamp01( v ) * ( oldRes - 1 );
+					int x0 = Mathf.FloorToInt( fx );
+					int z0 = Mathf.FloorToInt( fz );
+					int x1 = Mathf.Min( x0 + 1, oldRes - 1 );
+					int z1 = Mathf.Min( z0 + 1, oldRes - 1 );
+					float tx = fx - x0;
+					float tz = fz - z0;
+					float h00 = worldH[ z0 * oldRes + x0 ];
+					float h10 = worldH[ z0 * oldRes + x1 ];
+					float h01 = worldH[ z1 * oldRes + x0 ];
+					float h11 = worldH[ z1 * oldRes + x1 ];
+					h = Mathf.Lerp( Mathf.Lerp( h00, h10, tx ), Mathf.Lerp( h01, h11, tx ), tz );
+				}
+
+				meters[ z * newRes + x ] = h;
+				if ( h > packScale )
+					packScale = h;
+			}
+		}
+
+		for ( int i = 0; i < meters.Length; i++ )
+			packed[ i ] = ( ushort )Mathf.Clamp( Mathf.RoundToInt( ( meters[ i ] / packScale ) * 65535f ), 0, 65535 );
+
+		authoredHeights = packed;
+		authoredRes = newRes;
+		authoredResX = newRes;
+		authoredResZ = newRes;
+		authoredWorldSize = newSize;
+		authoredWorldSizeX = newSize;
+		authoredWorldSizeZ = newSize;
+		authoredMaxHeight = packScale;
+		authoredHeightFormat = AuthoredFormatWorldMeters;
+		authoredRevision++;
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying )
+			UnityEditor.EditorUtility.SetDirty( this );
+#endif
 	}
 
 	public void EnsureAuthoredBuffers()
 	{
-		ResolveLayout( out int res, out float size, out float height );
-		int count = res * res;
-
-		if ( authoredHeights != null
-			&& authoredRes == res
-			&& authoredHeights.Length == count
-			&& Mathf.Abs( authoredWorldSize - size ) < 0.001f
-			&& Mathf.Abs( authoredMaxHeight - height ) < 0.001f )
+		EnsureMigratedAuthoredHeights();
+		if ( HasAuthoredHeight && authoredHeightFormat == AuthoredFormatWorldMeters )
 			return;
 
-		ushort[] previous = authoredHeights;
-		int prevRes = authoredRes;
+		TreasurePileDefinition def = ResolveDefinition();
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+		int minRes = def != null ? def.ResolveMinResolution() : DefaultMinResolution;
+		int count = minRes * minRes;
 		authoredHeights = new ushort[ count ];
-		authoredRes = res;
-		authoredWorldSize = size;
-		authoredMaxHeight = height;
-
-		if ( previous != null && prevRes >= 8 && previous.Length == prevRes * prevRes )
-		{
-			// Nearest-neighbor resample when definition resolution changes.
-			for ( int z = 0; z < res; z++ )
-			{
-				int srcZ = prevRes <= 1 ? 0 : Mathf.Clamp( ( z * ( prevRes - 1 ) ) / Mathf.Max( 1, res - 1 ), 0, prevRes - 1 );
-				for ( int x = 0; x < res; x++ )
-				{
-					int srcX = prevRes <= 1 ? 0 : Mathf.Clamp( ( x * ( prevRes - 1 ) ) / Mathf.Max( 1, res - 1 ), 0, prevRes - 1 );
-					authoredHeights[ z * res + x ] = previous[ srcZ * prevRes + srcX ];
-				}
-			}
-		}
-		else
-		{
-			GoldPileHeightfield temp = new GoldPileHeightfield();
-			temp.Initialize( res, size, height );
-			temp.FillMound( 1f );
-			temp.CopyToNormalizedU16( ref authoredHeights );
-			temp.Release();
-		}
-
+		authoredRes = minRes;
+		authoredResX = minRes;
+		authoredResZ = minRes;
+		authoredWorldSize = cell * ( minRes - 1 );
+		authoredWorldSizeX = authoredWorldSize;
+		authoredWorldSizeZ = authoredWorldSize;
+		authoredMaxHeight = 0.01f;
+		authoredHeightFormat = AuthoredFormatWorldMeters;
 		authoredRevision++;
 	}
 
@@ -1490,9 +1642,15 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		if ( _heightfield == null || !_heightfield.IsInitialized )
 			return;
 
-		authoredRes = _heightfield.Resolution;
-		authoredWorldSize = _heightfield.WorldSize;
+		_heightfield.RecomputeMaxHeight();
+		authoredResX = _heightfield.ResolutionX;
+		authoredResZ = _heightfield.ResolutionZ;
+		authoredRes = Mathf.Max( authoredResX, authoredResZ );
+		authoredWorldSizeX = _heightfield.WorldSizeX;
+		authoredWorldSizeZ = _heightfield.WorldSizeZ;
+		authoredWorldSize = Mathf.Max( authoredWorldSizeX, authoredWorldSizeZ );
 		authoredMaxHeight = _heightfield.MaxHeight;
+		authoredHeightFormat = AuthoredFormatWorldMeters;
 		_heightfield.CopyToNormalizedU16( ref authoredHeights );
 		authoredRevision++;
 	}
@@ -1501,28 +1659,37 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		authoredHeights = null;
 		authoredRes = 0;
+		authoredResX = 0;
+		authoredResZ = 0;
 		authoredWorldSize = 0f;
+		authoredWorldSizeX = 0f;
+		authoredWorldSizeZ = 0f;
 		authoredMaxHeight = 0f;
+		authoredHeightFormat = AuthoredFormatLegacy;
 		authoredRevision++;
 	}
 
-	public void ResetAuthoredToMound()
+	public void ResetAuthoredToEmpty()
 	{
 		EnsureAuthoredBuffers();
-		ResolveLayout( out int res, out float size, out float height );
-		GoldPileHeightfield temp = new GoldPileHeightfield();
-		temp.Initialize( res, size, height );
-		temp.FillMound( 1f );
-		temp.CopyToNormalizedU16( ref authoredHeights );
-		temp.Release();
-		authoredRes = res;
-		authoredWorldSize = size;
-		authoredMaxHeight = height;
+		if ( authoredHeights == null )
+			return;
+
+		for ( int i = 0; i < authoredHeights.Length; i++ )
+			authoredHeights[ i ] = 0;
+		authoredMaxHeight = 0.01f;
+		authoredHeightFormat = AuthoredFormatWorldMeters;
 		authoredRevision++;
+	}
+
+	[System.Obsolete( "Use ResetAuthoredToEmpty" )]
+	public void ResetAuthoredToMound()
+	{
+		ResetAuthoredToEmpty();
 	}
 
 	/// <summary>
-	/// Builds or refreshes the displaced mound preview in edit mode (no loot, no surface bridge).
+	/// Builds or refreshes the displaced pile preview in edit mode (no loot, no surface bridge).
 	/// </summary>
 	public void EnsureEditorPreview()
 	{
@@ -1545,48 +1712,280 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		}
 
 		EnsureAuthoredBuffers();
-		ResolveLayout( out int res, out float size, out float height );
+		EnsureMigratedAuthoredHeights();
+		ResolveLayout( out int resX, out int resZ, out float sizeX, out float sizeZ );
+		float ground = def != null ? def.groundLevelHeight : 0.01f;
 
 		if ( _heightfield == null || !_heightfield.IsInitialized
-			|| _heightfield.Resolution != res
-			|| Mathf.Abs( _heightfield.WorldSize - size ) > 0.001f
-			|| Mathf.Abs( _heightfield.MaxHeight - height ) > 0.001f )
+			|| _heightfield.ResolutionX != resX
+			|| _heightfield.ResolutionZ != resZ
+			|| Mathf.Abs( _heightfield.WorldSizeX - sizeX ) > 0.001f
+			|| Mathf.Abs( _heightfield.WorldSizeZ - sizeZ ) > 0.001f )
 		{
 			if ( _heightfield != null )
 				_heightfield.Release();
 			_heightfield = new GoldPileHeightfield();
-			_heightfield.Initialize(
-				res,
-				size,
-				height,
-				def != null ? def.groundLevelHeight : 0.01f,
-				def != null ? def.lootGroundLevelHeight : 0.6f );
+			_heightfield.Initialize( resX, resZ, sizeX, sizeZ, ground );
 		}
-		else if ( _heightfield != null )
-		{
-			_heightfield.SetGroundLevel( def != null ? def.groundLevelHeight : 0.01f );
-			_heightfield.SetLootGroundLevel( def != null ? def.lootGroundLevelHeight : 0.6f );
-		}
+		else
+			_heightfield.SetGroundLevel( ground );
 
-		if ( HasAuthoredHeight && authoredRes == res )
-			_heightfield.CopyFromNormalizedU16( authoredHeights );
+		_heightfield.SetLootFloorResolver( ResolveLootFloorLocal );
+		_heightfield.SetMaxHeightLocked( false );
+
+		if ( HasAuthoredHeight && authoredHeightFormat == AuthoredFormatWorldMeters
+			&& authoredResX == resX && authoredResZ == resZ )
+		{
+			_heightfield.CopyFromPackedU16( authoredHeights, authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f );
+		}
 		else
 		{
-			_heightfield.FillMound( 1f );
+			_heightfield.FillZeros();
 			WriteAuthoredFromHeightfield();
-			_heightfield.CopyFromNormalizedU16( authoredHeights );
 		}
 
 		_heightfield.UploadIfDirty();
 
 		if ( terrainMesh != null )
 		{
-			ConfigureTerrainMesh( terrainMesh, pileMaterial, res, def );
+			ConfigureTerrainMesh( terrainMesh, pileMaterial, resX, resZ, def );
 			terrainMesh.Bind( _heightfield, syncCollider: false );
 			terrainMesh.SetVisible( true );
 		}
 
 		HideLegacyStaticMeshes();
+	}
+
+	/// <summary>Expand power-of-two footprint when a brush approaches the rim (editor only).</summary>
+	public bool TryExpandForBrush( Vector3 worldPos, float radius )
+	{
+		if ( Application.isPlaying || _heightfield == null || !_heightfield.IsInitialized )
+			return false;
+
+		TreasurePileDefinition def = ResolveDefinition();
+		int maxRes = def != null ? def.ResolveMaxResolution() : 256;
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+
+		Vector3 local = transform.InverseTransformPoint( worldPos );
+		float halfX = _heightfield.WorldSizeX * 0.5f;
+		float halfZ = _heightfield.WorldSizeZ * 0.5f;
+		float rim = Mathf.Max( radius, cell * ExpandRimCells );
+
+		bool needX = ( local.x + rim > halfX || local.x - rim < -halfX )
+			&& _heightfield.ResolutionX < maxRes;
+		bool needZ = ( local.z + rim > halfZ || local.z - rim < -halfZ )
+			&& _heightfield.ResolutionZ < maxRes;
+		if ( !needX && !needZ )
+			return false;
+
+		int newResX = needX
+			? Mathf.Min( maxRes, Mathf.NextPowerOfTwo( _heightfield.ResolutionX + 1 ) )
+			: _heightfield.ResolutionX;
+		int newResZ = needZ
+			? Mathf.Min( maxRes, Mathf.NextPowerOfTwo( _heightfield.ResolutionZ + 1 ) )
+			: _heightfield.ResolutionZ;
+		if ( newResX == _heightfield.ResolutionX && newResZ == _heightfield.ResolutionZ )
+			return false;
+
+		ResampleHeightfieldTo( newResX, newResZ, shiftOrigin: false );
+		return true;
+	}
+
+	/// <summary>Crop to occupied power-of-two rectangle and recenter transform (editor only).</summary>
+	public void FitBounds()
+	{
+		if ( Application.isPlaying || _heightfield == null || !_heightfield.IsInitialized )
+			return;
+
+		TreasurePileDefinition def = ResolveDefinition();
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+		int minRes = def != null ? def.ResolveMinResolution() : DefaultMinResolution;
+		int maxRes = def != null ? def.ResolveMaxResolution() : 256;
+		float ground = _heightfield.GroundLevel;
+
+		int resX = _heightfield.ResolutionX;
+		int resZ = _heightfield.ResolutionZ;
+		int minOX = resX;
+		int maxOX = -1;
+		int minOZ = resZ;
+		int maxOZ = -1;
+		for ( int z = 0; z < resZ; z++ )
+		{
+			for ( int x = 0; x < resX; x++ )
+			{
+				if ( _heightfield.GetCellHeight( x, z ) < ground )
+					continue;
+				if ( x < minOX ) minOX = x;
+				if ( x > maxOX ) maxOX = x;
+				if ( z < minOZ ) minOZ = z;
+				if ( z > maxOZ ) maxOZ = z;
+			}
+		}
+
+		if ( maxOX < 0 )
+		{
+			ResampleHeightfieldTo( minRes, minRes, shiftOrigin: false );
+			_heightfield.FillZeros();
+			WriteAuthoredFromHeightfield();
+			EnsureEditorPreview();
+			return;
+		}
+
+		const int pad = 1;
+		minOX = Mathf.Max( 0, minOX - pad );
+		minOZ = Mathf.Max( 0, minOZ - pad );
+		maxOX = Mathf.Min( resX - 1, maxOX + pad );
+		maxOZ = Mathf.Min( resZ - 1, maxOZ + pad );
+		int spanX = maxOX - minOX + 1;
+		int spanZ = maxOZ - minOZ + 1;
+		int newResX = Mathf.Clamp( Mathf.NextPowerOfTwo( Mathf.Max( minRes, spanX ) ), minRes, maxRes );
+		int newResZ = Mathf.Clamp( Mathf.NextPowerOfTwo( Mathf.Max( minRes, spanZ ) ), minRes, maxRes );
+
+		float oldHalfX = _heightfield.WorldSizeX * 0.5f;
+		float oldHalfZ = _heightfield.WorldSizeZ * 0.5f;
+		float stepX = _heightfield.LocalCellSizeX;
+		float stepZ = _heightfield.LocalCellSizeZ;
+		float occMinX = -oldHalfX + minOX * stepX;
+		float occMaxX = -oldHalfX + maxOX * stepX;
+		float occMinZ = -oldHalfZ + minOZ * stepZ;
+		float occMaxZ = -oldHalfZ + maxOZ * stepZ;
+		float occCenterX = ( occMinX + occMaxX ) * 0.5f;
+		float occCenterZ = ( occMinZ + occMaxZ ) * 0.5f;
+
+		float[] src = new float[ resX * resZ ];
+		for ( int z = 0; z < resZ; z++ )
+			for ( int x = 0; x < resX; x++ )
+				src[ z * resX + x ] = _heightfield.GetCellHeight( x, z );
+
+		float newSizeX = cell * ( newResX - 1 );
+		float newSizeZ = cell * ( newResZ - 1 );
+		float newHalfX = newSizeX * 0.5f;
+		float newHalfZ = newSizeZ * 0.5f;
+		float newStepX = newSizeX / Mathf.Max( 1, newResX - 1 );
+		float newStepZ = newSizeZ / Mathf.Max( 1, newResZ - 1 );
+
+		float[] dst = new float[ newResX * newResZ ];
+		for ( int z = 0; z < newResZ; z++ )
+		{
+			float lz = -newHalfZ + z * newStepZ + occCenterZ;
+			for ( int x = 0; x < newResX; x++ )
+			{
+				float lx = -newHalfX + x * newStepX + occCenterX;
+				float u = ( lx + oldHalfX ) / stepX;
+				float v = ( lz + oldHalfZ ) / stepZ;
+				int x0 = Mathf.FloorToInt( u );
+				int z0 = Mathf.FloorToInt( v );
+				if ( x0 < 0 || z0 < 0 || x0 >= resX || z0 >= resZ )
+					continue;
+				int x1 = Mathf.Min( x0 + 1, resX - 1 );
+				int z1 = Mathf.Min( z0 + 1, resZ - 1 );
+				float tx = u - x0;
+				float tz = v - z0;
+				float h00 = src[ z0 * resX + x0 ];
+				float h10 = src[ z0 * resX + x1 ];
+				float h01 = src[ z1 * resX + x0 ];
+				float h11 = src[ z1 * resX + x1 ];
+				dst[ z * newResX + x ] = Mathf.Lerp( Mathf.Lerp( h00, h10, tx ), Mathf.Lerp( h01, h11, tx ), tz );
+			}
+		}
+
+		Vector3 shift = transform.TransformVector( new Vector3( occCenterX, 0f, occCenterZ ) );
+		transform.position += shift;
+		Transform authoredRoot = FindAuthoredLootRoot();
+		if ( authoredRoot != null )
+		{
+			for ( int i = 0; i < authoredRoot.childCount; i++ )
+			{
+				Transform child = authoredRoot.GetChild( i );
+				child.localPosition -= new Vector3( occCenterX, 0f, occCenterZ );
+			}
+		}
+
+		float groundLevel = def != null ? def.groundLevelHeight : 0.01f;
+		_heightfield.Release();
+		_heightfield = new GoldPileHeightfield();
+		_heightfield.Initialize( newResX, newResZ, newSizeX, newSizeZ, groundLevel );
+		_heightfield.SetLootFloorResolver( ResolveLootFloorLocal );
+		_heightfield.SetMaxHeightLocked( false );
+
+		float pack = 0.01f;
+		for ( int i = 0; i < dst.Length; i++ )
+			if ( dst[ i ] > pack ) pack = dst[ i ];
+		ushort[] packed = new ushort[ dst.Length ];
+		for ( int i = 0; i < dst.Length; i++ )
+			packed[ i ] = ( ushort )Mathf.Clamp( Mathf.RoundToInt( ( dst[ i ] / pack ) * 65535f ), 0, 65535 );
+		_heightfield.CopyFromPackedU16( packed, pack );
+		WriteAuthoredFromHeightfield();
+		EnsureEditorPreview();
+	}
+
+	void ResampleHeightfieldTo( int newResX, int newResZ, bool shiftOrigin )
+	{
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+			return;
+
+		TreasurePileDefinition def = ResolveDefinition();
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+		float ground = def != null ? def.groundLevelHeight : 0.01f;
+		int oldResX = _heightfield.ResolutionX;
+		int oldResZ = _heightfield.ResolutionZ;
+		float oldSizeX = _heightfield.WorldSizeX;
+		float oldSizeZ = _heightfield.WorldSizeZ;
+		float oldHalfX = oldSizeX * 0.5f;
+		float oldHalfZ = oldSizeZ * 0.5f;
+		float[] src = new float[ oldResX * oldResZ ];
+		for ( int z = 0; z < oldResZ; z++ )
+			for ( int x = 0; x < oldResX; x++ )
+				src[ z * oldResX + x ] = _heightfield.GetCellHeight( x, z );
+
+		float newSizeX = cell * ( newResX - 1 );
+		float newSizeZ = cell * ( newResZ - 1 );
+		float newHalfX = newSizeX * 0.5f;
+		float newHalfZ = newSizeZ * 0.5f;
+		float newStepX = newSizeX / Mathf.Max( 1, newResX - 1 );
+		float newStepZ = newSizeZ / Mathf.Max( 1, newResZ - 1 );
+		float[] dst = new float[ newResX * newResZ ];
+
+		for ( int z = 0; z < newResZ; z++ )
+		{
+			float lz = -newHalfZ + z * newStepZ;
+			for ( int x = 0; x < newResX; x++ )
+			{
+				float lx = -newHalfX + x * newStepX;
+				if ( Mathf.Abs( lx ) > oldHalfX || Mathf.Abs( lz ) > oldHalfZ )
+					continue;
+				float u = ( lx / oldSizeX ) + 0.5f;
+				float v = ( lz / oldSizeZ ) + 0.5f;
+				float fx = Mathf.Clamp01( u ) * ( oldResX - 1 );
+				float fz = Mathf.Clamp01( v ) * ( oldResZ - 1 );
+				int x0 = Mathf.FloorToInt( fx );
+				int z0 = Mathf.FloorToInt( fz );
+				int x1 = Mathf.Min( x0 + 1, oldResX - 1 );
+				int z1 = Mathf.Min( z0 + 1, oldResZ - 1 );
+				float tx = fx - x0;
+				float tz = fz - z0;
+				float h00 = src[ z0 * oldResX + x0 ];
+				float h10 = src[ z0 * oldResX + x1 ];
+				float h01 = src[ z1 * oldResX + x0 ];
+				float h11 = src[ z1 * oldResX + x1 ];
+				dst[ z * newResX + x ] = Mathf.Lerp( Mathf.Lerp( h00, h10, tx ), Mathf.Lerp( h01, h11, tx ), tz );
+			}
+		}
+
+		_heightfield.Release();
+		_heightfield = new GoldPileHeightfield();
+		_heightfield.Initialize( newResX, newResZ, newSizeX, newSizeZ, ground );
+		_heightfield.SetLootFloorResolver( ResolveLootFloorLocal );
+		_heightfield.SetMaxHeightLocked( false );
+		float pack = 0.01f;
+		for ( int i = 0; i < dst.Length; i++ )
+			if ( dst[ i ] > pack ) pack = dst[ i ];
+		ushort[] packed = new ushort[ dst.Length ];
+		for ( int i = 0; i < dst.Length; i++ )
+			packed[ i ] = ( ushort )Mathf.Clamp( Mathf.RoundToInt( ( dst[ i ] / pack ) * 65535f ), 0, 65535 );
+		_heightfield.CopyFromPackedU16( packed, pack );
+		WriteAuthoredFromHeightfield();
+		EnsureEditorPreview();
 	}
 
 	public void RefreshEditorPreviewFromHeightfield()
@@ -1602,6 +2001,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		if ( Application.isPlaying || _heightfield == null )
 			return;
 
+		_heightfield.RecomputeMaxHeight();
 		WriteAuthoredFromHeightfield();
 		RefreshEditorPreviewFromHeightfield();
 	}
@@ -1610,6 +2010,17 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		if ( Application.isPlaying || _heightfield == null || !_heightfield.IsInitialized )
 			return false;
+
+		if ( mode == GoldPileEditorBrushMode.ResetMound )
+		{
+			_heightfield.FillZeros();
+			return true;
+		}
+
+		float brushRadius = mode == GoldPileEditorBrushMode.Ridge
+			? ( p.ridgeWidth > 0.05f ? p.ridgeWidth : p.radius )
+			: p.radius;
+		TryExpandForBrush( worldPos, brushRadius );
 
 		Vector3 local = transform.InverseTransformPoint( worldPos );
 		float strength = p.invert ? -Mathf.Abs( p.strength ) : p.strength;
@@ -1860,59 +2271,37 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		return true;
 	}
 
-	void ResolveGizmoSize( out float size, out float maxH )
+	void ResolveGizmoSize( out float sizeX, out float sizeZ, out float maxH )
 	{
-		size = DefaultWorldSize;
-		maxH = DefaultMaxHeight;
-
-		TreasurePileDefinition def = ResolveDefinition();
-		if ( def != null )
-		{
-			size = def.worldSize;
-			maxH = def.maxHeight;
-			return;
-		}
+		sizeX = DefaultCellSize * ( DefaultMinResolution - 1 );
+		sizeZ = sizeX;
+		maxH = 1f;
 
 		if ( _heightfield != null && _heightfield.IsInitialized )
 		{
-			size = _heightfield.WorldSize;
-			maxH = _heightfield.MaxHeight;
+			sizeX = _heightfield.WorldSizeX;
+			sizeZ = _heightfield.WorldSizeZ;
+			maxH = Mathf.Max( 0.01f, _heightfield.MaxHeight );
+			return;
+		}
+
+		if ( HasAuthoredHeight )
+		{
+			sizeX = AuthoredWorldSizeX;
+			sizeZ = AuthoredWorldSizeZ;
+			maxH = Mathf.Max( 0.01f, authoredMaxHeight );
 		}
 	}
 
 	void OnDrawGizmosSelected()
 	{
-		ResolveGizmoSize( out float size, out float maxH );
+		ResolveGizmoSize( out float sizeX, out float sizeZ, out float maxH );
 
 		Matrix4x4 matrix = transform.localToWorldMatrix;
 		Gizmos.matrix = matrix;
-		Gizmos.color = new Color( 1f, 0.85f, 0.2f, 0.35f );
-		Gizmos.DrawWireCube( new Vector3( 0f, maxH * 0.5f, 0f ), new Vector3( size, maxH, size ) );
+		Gizmos.color = new Color( 1f, 0.85f, 0.2f, 0.55f );
+		Gizmos.DrawWireCube( new Vector3( 0f, maxH * 0.5f, 0f ), new Vector3( sizeX, maxH, sizeZ ) );
 		Gizmos.color = new Color( 1f, 0.75f, 0.1f, 0.9f );
-
-		const int rings = 8;
-		const int segments = 24;
-		for ( int r = 1; r <= rings; r++ )
-		{
-			float t = r / ( float )rings;
-			float radius = size * 0.5f * t;
-			float falloff = 1f - t / 0.85f;
-			if ( falloff < 0f )
-				falloff = 0f;
-			falloff = falloff * falloff * ( 3f - 2f * falloff );
-			float y = maxH * falloff;
-
-			Vector3 prev = Vector3.zero;
-			for ( int s = 0; s <= segments; s++ )
-			{
-				float ang = ( s / ( float )segments ) * Mathf.PI * 2f;
-				Vector3 p = new Vector3( Mathf.Cos( ang ) * radius, y, Mathf.Sin( ang ) * radius );
-				if ( s > 0 )
-					Gizmos.DrawLine( prev, p );
-				prev = p;
-			}
-		}
-
 		Gizmos.DrawLine( Vector3.zero, new Vector3( 0f, maxH, 0f ) );
 		Gizmos.matrix = Matrix4x4.identity;
 	}

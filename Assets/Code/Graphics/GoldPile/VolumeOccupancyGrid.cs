@@ -20,14 +20,21 @@ public sealed class VolumeOccupancyGrid
 
 	public int Count => _bounds.Count;
 
+	/// <summary>Square footprint (compat) — prefer the rectangular constructor.</summary>
 	public VolumeOccupancyGrid( float worldSize, float cellSize )
+		: this( worldSize, worldSize, cellSize )
 	{
-		float size = Mathf.Max( 0.1f, worldSize );
+	}
+
+	public VolumeOccupancyGrid( float worldSizeX, float worldSizeZ, float cellSize )
+	{
+		float sizeX = Mathf.Max( 0.1f, worldSizeX );
+		float sizeZ = Mathf.Max( 0.1f, worldSizeZ );
 		_cellSize = Mathf.Max( 0.05f, cellSize );
-		_originX = -size * 0.5f;
-		_originZ = -size * 0.5f;
-		_countX = Mathf.Max( 1, Mathf.CeilToInt( size / _cellSize ) );
-		_countZ = Mathf.Max( 1, Mathf.CeilToInt( size / _cellSize ) );
+		_originX = -sizeX * 0.5f;
+		_originZ = -sizeZ * 0.5f;
+		_countX = Mathf.Max( 1, Mathf.CeilToInt( sizeX / _cellSize ) );
+		_countZ = Mathf.Max( 1, Mathf.CeilToInt( sizeZ / _cellSize ) );
 		_cells = new List<int>[ _countX * _countZ ];
 		for ( int i = 0; i < _cells.Length; i++ )
 			_cells[ i ] = new List<int>( 4 );

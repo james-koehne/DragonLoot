@@ -220,7 +220,7 @@ MonoBehaviour:
   surfaceHoverHeight: 0.7
   moveSpeed: 6
   catchUpSpeed: 10
-  followSmoothTime: 0.28
+  followSmoothTime: 0.05
   arriveDistance: 0.12
   turnSpeed: 10
   surfaceSnapMaxDistance: 2.5
@@ -235,6 +235,12 @@ MonoBehaviour:
   farGlowHysteresis: 0.35
   idleBobAmplitude: 0.03
   idleBobSpeed: 2.2
+  closeArcAmplitude: 0.55
+  closeArcDistance: 2.5
+  waveAmplitude: 0.85
+  waveFrequency: 1.4
+  curveLookAhead: 1.1
+  travelLiftAmplitude: 0.18
   animator: {fileID: 3216443820167101961}
   speechBubble: {fileID: 9100000000000000008}
   onInteractFeedback: {fileID: 9100000000000000005}
@@ -6427,7 +6433,7 @@ MonoBehaviour:
   body: {fileID: 9100000000000000018}
   defaultHoldSeconds: 3.5
   fadeSeconds: 0.2
-  worldOffset: {x: 0.2, y: 0.25, z: 0}
+  worldOffset: {x: 0.2, y: 0.35, z: 0}
 --- !u!1 &9100000000000000014
 GameObject:
   m_ObjectHideFlags: 0

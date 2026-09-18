@@ -293,8 +293,8 @@ public static class GoldPileTreasurePlacement
 
 		// Full heightfield footprint — empty / below-loot-floor columns rejected per sample.
 		// Do not inset-sample first: a successful early hit would never reach the outer surface.
-		float half = heightfield.WorldSize * 0.5f;
-		float lootGround = heightfield.LootGroundLevel;
+		float halfX = heightfield.WorldSizeX * 0.5f;
+		float halfZ = heightfield.WorldSizeZ * 0.5f;
 		float maxH = heightfield.MaxHeight;
 		float radialPower = Mathf.Clamp( treasureRadialPower, 0.25f, 3f );
 		float heightBias = Mathf.Clamp( treasureHeightBias, 0f, 3f );
@@ -306,8 +306,9 @@ public static class GoldPileTreasurePlacement
 		for ( int attempt = 0; attempt < VolumeAttempts; attempt++ )
 		{
 			int salt = unitIndex * 64 + attempt;
-			SampleFootprintXZ( pileSeed, salt, half, xzSpread, out float lx, out float lz );
+			SampleFootprintXZ( pileSeed, salt, halfX, halfZ, xzSpread, out float lx, out float lz );
 
+			float lootGround = heightfield.GetLootFloorLocal( lx, lz );
 			float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
 			// Empty / below-mesh cells are not pile. Loot also stays above the loot floor.
 			if ( surface <= lootGround + 0.02f || !heightfield.ExistsAtLocal( lx, lz ) )
@@ -342,7 +343,8 @@ public static class GoldPileTreasurePlacement
 	public static void SampleFootprintXZ(
 		int pileSeed,
 		int salt,
-		float half,
+		float halfX,
+		float halfZ,
 		float xzSpread,
 		out float lx,
 		out float lz )
@@ -350,8 +352,8 @@ public static class GoldPileTreasurePlacement
 		float ux = Hash01( pileSeed, salt * 4 + 1 ) * 2f - 1f;
 		float uz = Hash01( pileSeed, salt * 4 + 2 ) * 2f - 1f;
 		RemapFootprintSpread( ref ux, ref uz, xzSpread );
-		lx = ux * half;
-		lz = uz * half;
+		lx = ux * halfX;
+		lz = uz * halfZ;
 	}
 
 	public static void RemapFootprintSpread( ref float ux, ref float uz, float xzSpread )
@@ -412,7 +414,7 @@ public static class GoldPileTreasurePlacement
 		out float ceilingY )
 	{
 		float meshGround = heightfield != null ? heightfield.GroundLevel : 0f;
-		float lootGround = heightfield != null ? heightfield.LootGroundLevel : 0f;
+		float lootGround = heightfield != null ? heightfield.GetLootFloorLocal( localX, localZ ) : 0f;
 		float probe = Mathf.Max( 0.02f, probeRadius );
 		floorY = FloorClearanceY( lootGround, probe );
 		ceilingY = floorY;
@@ -437,7 +439,7 @@ public static class GoldPileTreasurePlacement
 			return localPos;
 
 		float probe = Mathf.Max( 0.02f, probeRadius );
-		float floorY = FloorClearanceY( heightfield.LootGroundLevel, probe );
+		float floorY = FloorClearanceY( heightfield.GetLootFloorLocal( localPos.x, localPos.z ), probe );
 		if ( localPos.y < floorY )
 			localPos.y = floorY;
 
@@ -487,7 +489,7 @@ public static class GoldPileTreasurePlacement
 		if ( ceilingY <= floorY + 0.01f )
 			return true;
 
-		float ground = heightfield.LootGroundLevel;
+		float ground = heightfield.GetLootFloorLocal( localPos.x, localPos.z );
 		float minBottom = MinAllowedBottomY( ground, localBounds, maxGroundEmbedFraction );
 		if ( localBounds.min.y >= minBottom - 0.01f )
 			return false;
@@ -786,26 +788,29 @@ public static class GoldPileTreasurePlacement
 		if ( heightfield == null )
 			return false;
 
-		float fullHalf = heightfield.WorldSize * 0.5f;
-		float lootGround = heightfield.LootGroundLevel;
+		float halfX = heightfield.WorldSizeX * 0.5f;
+		float halfZ = heightfield.WorldSizeZ * 0.5f;
 		float maxH = heightfield.MaxHeight;
-		int res = Mathf.Max( 4, heightfield.Resolution );
-		float step = ( 2f * fullHalf ) / ( res - 1 );
+		int resX = Mathf.Max( 4, heightfield.ResolutionX );
+		int resZ = Mathf.Max( 4, heightfield.ResolutionZ );
+		float stepX = ( 2f * halfX ) / ( resX - 1 );
+		float stepZ = ( 2f * halfZ ) / ( resZ - 1 );
 
 		float bestScore = float.MaxValue;
 		bool found = false;
 
-		for ( int z = 0; z < res; z++ )
+		for ( int z = 0; z < resZ; z++ )
 		{
-			for ( int x = 0; x < res; x++ )
+			for ( int x = 0; x < resX; x++ )
 			{
-				float lx = -fullHalf + x * step;
-				float lz = -fullHalf + z * step;
+				float lx = -halfX + x * stepX;
+				float lz = -halfZ + z * stepZ;
 				if ( !heightfield.ExistsAtLocal( lx, lz ) )
 					continue;
 				if ( !HasTreasureSurfaceBelow( pileRoot, new Vector3( lx, 0f, lz ), surfaceNeighborhood ) )
 					continue;
 
+				float lootGround = heightfield.GetLootFloorLocal( lx, lz );
 				float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
 				if ( surface <= lootGround + 0.02f )
 					continue;
@@ -924,7 +929,7 @@ public static class GoldPileTreasurePlacement
 		if ( heightfield == null )
 			return;
 
-		float ground = heightfield.LootGroundLevel;
+		float ground = heightfield.GetLootFloorLocal( localPos.x, localPos.z );
 		float minBottom = MinAllowedBottomY( ground, localBounds, maxGroundEmbedFraction );
 		if ( localBounds.min.y >= minBottom - 0.01f )
 			return;
@@ -981,10 +986,12 @@ public static class GoldPileTreasurePlacement
 		float bottomOffset = Mathf.Max( 0.02f, bottomOffsetFromPivot );
 		float height = Mathf.Max( 0.04f, localBounds.size.y );
 		float minEmbed = Mathf.Max( 0.03f, height * Mathf.Clamp( minEmbedFraction, 0.05f, 0.6f ) );
-		float floorY = FloorClearanceY( heightfield.GroundLevel, Mathf.Max( 0.02f, bottomOffset ) );
 
 		float lx = localPos.x;
 		float lz = localPos.z;
+		float floorY = FloorClearanceY(
+			heightfield.GetLootFloorLocal( lx, lz ),
+			Mathf.Max( 0.02f, bottomOffset ) );
 		float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
 		bool columnMissing = !heightfield.ExistsAtLocal( lx, lz ) || surface < heightfield.GroundLevel;
 		if ( columnMissing )
@@ -1001,6 +1008,10 @@ public static class GoldPileTreasurePlacement
 
 				return false;
 			}
+
+			floorY = FloorClearanceY(
+				heightfield.GetLootFloorLocal( lx, lz ),
+				Mathf.Max( 0.02f, bottomOffset ) );
 		}
 
 		float maxBottom = surface - minEmbed;
@@ -1013,9 +1024,10 @@ public static class GoldPileTreasurePlacement
 		Vector3 target = surfacePoint - normal * minEmbed + Vector3.up * bottomOffset;
 		target.y = Mathf.Max( target.y, floorY );
 
-		float half = heightfield.WorldSize * 0.5f;
-		target.x = Mathf.Clamp( target.x, -half, half );
-		target.z = Mathf.Clamp( target.z, -half, half );
+		float halfX = heightfield.WorldSizeX * 0.5f;
+		float halfZ = heightfield.WorldSizeZ * 0.5f;
+		target.x = Mathf.Clamp( target.x, -halfX, halfX );
+		target.z = Mathf.Clamp( target.z, -halfZ, halfZ );
 
 		Vector3 delta = target - localPos;
 		if ( delta.sqrMagnitude < 1e-10f )
@@ -1041,13 +1053,14 @@ public static class GoldPileTreasurePlacement
 		if ( heightfield == null )
 			return Vector3.up;
 
-		float step = heightfield.WorldSize / Mathf.Max( 1, heightfield.Resolution - 1 );
+		float stepX = heightfield.LocalCellSizeX;
+		float stepZ = heightfield.LocalCellSizeZ;
 		float maxH = heightfield.MaxHeight;
-		float hL = heightfield.SampleNormalized( localX - step, localZ ) * maxH;
-		float hR = heightfield.SampleNormalized( localX + step, localZ ) * maxH;
-		float hD = heightfield.SampleNormalized( localX, localZ - step ) * maxH;
-		float hU = heightfield.SampleNormalized( localX, localZ + step ) * maxH;
-		Vector3 normal = new Vector3( hL - hR, step * 2f, hD - hU );
+		float hL = heightfield.SampleNormalized( localX - stepX, localZ ) * maxH;
+		float hR = heightfield.SampleNormalized( localX + stepX, localZ ) * maxH;
+		float hD = heightfield.SampleNormalized( localX, localZ - stepZ ) * maxH;
+		float hU = heightfield.SampleNormalized( localX, localZ + stepZ ) * maxH;
+		Vector3 normal = new Vector3( ( hL - hR ) / Mathf.Max( 1e-5f, stepX ), 2f, ( hD - hU ) / Mathf.Max( 1e-5f, stepZ ) );
 		if ( normal.sqrMagnitude < 1e-8f )
 			return Vector3.up;
 		return normal.normalized;
@@ -1065,8 +1078,9 @@ public static class GoldPileTreasurePlacement
 		solidZ = localZ;
 		surface = heightfield.GroundLevel;
 
-		float half = heightfield.WorldSize * 0.5f;
-		float step = heightfield.WorldSize / Mathf.Max( 1, heightfield.Resolution - 1 );
+		float halfX = heightfield.WorldSizeX * 0.5f;
+		float halfZ = heightfield.WorldSizeZ * 0.5f;
+		float step = Mathf.Max( heightfield.LocalCellSizeX, heightfield.LocalCellSizeZ );
 		float bestDistSq = float.MaxValue;
 		bool found = false;
 
@@ -1080,8 +1094,8 @@ public static class GoldPileTreasurePlacement
 				float angle = ( s / ( float )samples ) * Mathf.PI * 2f;
 				float x = localX + Mathf.Cos( angle ) * radius;
 				float z = localZ + Mathf.Sin( angle ) * radius;
-				x = Mathf.Clamp( x, -half, half );
-				z = Mathf.Clamp( z, -half, half );
+				x = Mathf.Clamp( x, -halfX, halfX );
+				z = Mathf.Clamp( z, -halfZ, halfZ );
 				if ( !heightfield.ExistsAtLocal( x, z ) )
 					continue;
 
@@ -1137,7 +1151,7 @@ public static class GoldPileTreasurePlacement
 		localPos.y += dy;
 		localBounds.center += new Vector3( 0f, dy, 0f );
 
-		float floorY = FloorClearanceY( heightfield.LootGroundLevel, 0.05f );
+		float floorY = FloorClearanceY( heightfield.GetLootFloorLocal( localPos.x, localPos.z ), 0.05f );
 		if ( localPos.y < floorY )
 		{
 			float fix = floorY - localPos.y;
@@ -1349,9 +1363,7 @@ public static class GoldPileTreasurePlacement
 
 		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
 		float usableRadius = Mathf.Max( 0.05f, half );
-		float minSurface = Mathf.Max(
-			heightfield.LootGroundLevel,
-			heightfield.MaxHeight * Mathf.Clamp01( coinSurfaceHeightFraction ) );
+		float minSurfaceFromHeight = heightfield.MaxHeight * Mathf.Clamp01( coinSurfaceHeightFraction );
 		float search = Mathf.Max( 0.15f, searchRadius );
 		float searchSq = search * search;
 		bool preferNear = nearLocal.sqrMagnitude > 1e-6f || search < usableRadius * 0.95f;
@@ -1368,7 +1380,7 @@ public static class GoldPileTreasurePlacement
 					pileSeed,
 					salt,
 					usableRadius,
-					minSurface,
+					minSurfaceFromHeight,
 					coinRadius,
 					out Vector3 candidate,
 					out float surface ) )
@@ -1414,8 +1426,9 @@ public static class GoldPileTreasurePlacement
 		float radial = usableRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 2 + 1 ) );
 		float lx = Mathf.Cos( angle ) * radial;
 		float lz = Mathf.Sin( angle ) * radial;
+		float floorMin = Mathf.Max( heightfield.GetLootFloorLocal( lx, lz ), minSurface );
 		float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
-		if ( surface < minSurface || !heightfield.ExistsAtLocal( lx, lz ) )
+		if ( surface < floorMin || !heightfield.ExistsAtLocal( lx, lz ) )
 			return false;
 
 		localPos = new Vector3( lx, 0f, lz );
@@ -1435,8 +1448,11 @@ public static class GoldPileTreasurePlacement
 			return false;
 
 		_ = coinRadius;
+		float minSurfaceAtColumn = Mathf.Max(
+			heightfield.GetLootFloorLocal( localPos.x, localPos.z ),
+			minSurface );
 		float centerSurface = heightfield.SampleNormalized( localPos.x, localPos.z ) * heightfield.MaxHeight;
-		if ( centerSurface < minSurface || !heightfield.ExistsAtLocal( localPos.x, localPos.z ) )
+		if ( centerSurface < minSurfaceAtColumn || !heightfield.ExistsAtLocal( localPos.x, localPos.z ) )
 			return false;
 
 		surfaceHeight = centerSurface;
@@ -1532,7 +1548,7 @@ public static class GoldPileTreasurePlacement
 			return false;
 
 		float probe = Mathf.Max( 0.02f, probeRadius );
-		float lootGround = heightfield.LootGroundLevel;
+		float lootGround = heightfield.GetLootFloorLocal( lx, lz );
 		float maxH = heightfield.MaxHeight;
 		if ( !heightfield.ExistsAtLocal( lx, lz ) )
 			return false;
@@ -1593,10 +1609,10 @@ public static class GoldPileTreasurePlacement
 
 		float probe = Mathf.Max( 0.02f, probeRadius );
 		float band = Mathf.Max( probe, buryBand );
+		float ground = heightfield.GetLootFloorLocal( lx, lz );
 		float minSurface = Mathf.Max(
-			heightfield.LootGroundLevel,
+			ground,
 			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
-		float ground = heightfield.LootGroundLevel;
 		if ( !CoinColumnAcceptsSeat( heightfield, lx, lz, minSurface ) )
 			return false;
 
@@ -1630,10 +1646,9 @@ public static class GoldPileTreasurePlacement
 		if ( occupancy == null )
 			return false;
 
-		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( claim.PlacementRadiusFraction, 0.2f, 1f );
-		float minSurface = Mathf.Max(
-			heightfield.LootGroundLevel,
-			heightfield.MaxHeight * Mathf.Clamp01( claim.MinSurfaceFraction ) );
+		float halfX = heightfield.WorldSizeX * 0.5f * Mathf.Clamp( claim.PlacementRadiusFraction, 0.2f, 1f );
+		float halfZ = heightfield.WorldSizeZ * 0.5f * Mathf.Clamp( claim.PlacementRadiusFraction, 0.2f, 1f );
+		float minSurfaceFromHeight = heightfield.MaxHeight * Mathf.Clamp01( claim.MinSurfaceFraction );
 		float jitterFrac = Mathf.Clamp( claim.Jitter, 0f, 0.49f );
 		float jitterRadius = occupancy.CellSize * jitterFrac;
 		bool focus = claim.SearchRadius > 0.05f;
@@ -1649,8 +1664,8 @@ public static class GoldPileTreasurePlacement
 		{
 			float seedX = Hash01( claim.PileSeed, claim.UnitIndex * 11 + 3 ) * 2f - 1f;
 			float seedZ = Hash01( claim.PileSeed, claim.UnitIndex * 11 + 7 ) * 2f - 1f;
-			startX = occupancy.CellX( seedX * half );
-			startZ = occupancy.CellZ( seedZ * half );
+			startX = occupancy.CellX( seedX * halfX );
+			startZ = occupancy.CellZ( seedZ * halfZ );
 		}
 
 		int focusRing = focus
@@ -1658,7 +1673,7 @@ public static class GoldPileTreasurePlacement
 			: 16;
 		int maxRing = Mathf.Min( 24, Mathf.Max( focusRing, 8 ) );
 
-		if ( TryJitteredCell( heightfield, occupancy, claim, startX, startZ, half, minSurface, jitterRadius, out lx, out lz ) )
+		if ( TryJitteredCell( heightfield, occupancy, claim, startX, startZ, halfX, halfZ, minSurfaceFromHeight, jitterRadius, out lx, out lz ) )
 			return true;
 
 		for ( int ring = 1; ring <= maxRing; ring++ )
@@ -1687,8 +1702,9 @@ public static class GoldPileTreasurePlacement
 						claim,
 						x,
 						z,
-						half,
-						minSurface,
+						halfX,
+						halfZ,
+						minSurfaceFromHeight,
 						jitterRadius,
 						out lx,
 						out lz ) )
@@ -1711,8 +1727,9 @@ public static class GoldPileTreasurePlacement
 		CoinXzClaimParams claim,
 		int cellX,
 		int cellZ,
-		float half,
-		float minSurface,
+		float halfX,
+		float halfZ,
+		float minSurfaceFromHeight,
 		float jitterRadius,
 		out float lx,
 		out float lz )
@@ -1737,8 +1754,9 @@ public static class GoldPileTreasurePlacement
 				pz += Mathf.Sin( ang ) * r;
 			}
 
-			if ( Mathf.Abs( px ) > half || Mathf.Abs( pz ) > half )
+			if ( Mathf.Abs( px ) > halfX || Mathf.Abs( pz ) > halfZ )
 				continue;
+			float minSurface = Mathf.Max( heightfield.GetLootFloorLocal( px, pz ), minSurfaceFromHeight );
 			if ( !CoinColumnAcceptsSeat( heightfield, px, pz, minSurface ) )
 				continue;
 			if ( occupancy.IsTooClose( px, pz ) )
@@ -1810,10 +1828,10 @@ public static class GoldPileTreasurePlacement
 	{
 		lx = 0f;
 		lz = 0f;
-		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
-		float minSurface = Mathf.Max(
-			heightfield.LootGroundLevel,
-			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
+		float halfX = heightfield.WorldSizeX * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float halfZ = heightfield.WorldSizeZ * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float sampleRadius = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float minSurfaceFromHeight = heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction );
 		bool focus = searchRadius > 0.05f;
 		float focusRadius = Mathf.Max( 0.1f, searchRadius );
 		int salt = unitIndex * 48 + attempt;
@@ -1824,18 +1842,21 @@ public static class GoldPileTreasurePlacement
 			float r = focusRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
 			lx = preferNear.x + Mathf.Cos( angle ) * r;
 			lz = preferNear.z + Mathf.Sin( angle ) * r;
-			if ( Mathf.Abs( lx ) > half || Mathf.Abs( lz ) > half )
+			if ( Mathf.Abs( lx ) > halfX || Mathf.Abs( lz ) > halfZ )
 				return false;
 		}
 		else
 		{
 			float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
 			float rNorm = Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
-			float radius = half * rNorm;
+			float radius = sampleRadius * rNorm;
 			lx = Mathf.Cos( angle ) * radius;
 			lz = Mathf.Sin( angle ) * radius;
+			if ( Mathf.Abs( lx ) > halfX || Mathf.Abs( lz ) > halfZ )
+				return false;
 		}
 
+		float minSurface = Mathf.Max( heightfield.GetLootFloorLocal( lx, lz ), minSurfaceFromHeight );
 		return CoinColumnAcceptsSeat( heightfield, lx, lz, minSurface );
 	}
 
@@ -1875,11 +1896,10 @@ public static class GoldPileTreasurePlacement
 
 		float probe = Mathf.Max( 0.02f, probeRadius );
 		float band = Mathf.Max( probe, buryBand );
-		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
-		float minSurface = Mathf.Max(
-			heightfield.LootGroundLevel,
-			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
-		float ground = heightfield.LootGroundLevel;
+		float halfX = heightfield.WorldSizeX * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float halfZ = heightfield.WorldSizeZ * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float sampleRadius = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float minSurfaceFromHeight = heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction );
 		bool focus = searchRadius > 0.05f;
 		float focusRadius = Mathf.Max( 0.1f, searchRadius );
 
@@ -1895,21 +1915,25 @@ public static class GoldPileTreasurePlacement
 				float r = focusRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
 				lx = preferNear.x + Mathf.Cos( angle ) * r;
 				lz = preferNear.z + Mathf.Sin( angle ) * r;
-				if ( Mathf.Abs( lx ) > half || Mathf.Abs( lz ) > half )
+				if ( Mathf.Abs( lx ) > halfX || Mathf.Abs( lz ) > halfZ )
 					continue;
 			}
 			else
 			{
 				float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
 				float rNorm = Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
-				float radius = half * rNorm;
+				float radius = sampleRadius * rNorm;
 				lx = Mathf.Cos( angle ) * radius;
 				lz = Mathf.Sin( angle ) * radius;
+				if ( Mathf.Abs( lx ) > halfX || Mathf.Abs( lz ) > halfZ )
+					continue;
 			}
 
 			if ( !heightfield.ExistsAtLocal( lx, lz ) )
 				continue;
 
+			float ground = heightfield.GetLootFloorLocal( lx, lz );
+			float minSurface = Mathf.Max( ground, minSurfaceFromHeight );
 			float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
 			if ( surface < minSurface )
 				continue;
@@ -1955,11 +1979,10 @@ public static class GoldPileTreasurePlacement
 
 		float probe = Mathf.Max( 0.02f, probeRadius );
 		float band = Mathf.Max( probe, buryBand );
-		float half = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
-		float minSurface = Mathf.Max(
-			heightfield.LootGroundLevel,
-			heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction ) );
-		float ground = heightfield.LootGroundLevel;
+		float halfX = heightfield.WorldSizeX * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float halfZ = heightfield.WorldSizeZ * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float sampleRadius = heightfield.WorldSize * 0.5f * Mathf.Clamp( placementRadiusFraction, 0.2f, 1f );
+		float minSurfaceFromHeight = heightfield.MaxHeight * Mathf.Clamp01( minSurfaceFraction );
 		bool focus = searchRadius > 0.05f;
 		float focusRadius = Mathf.Max( 0.1f, searchRadius );
 
@@ -1975,21 +1998,25 @@ public static class GoldPileTreasurePlacement
 				float r = focusRadius * Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
 				lx = preferNear.x + Mathf.Cos( angle ) * r;
 				lz = preferNear.z + Mathf.Sin( angle ) * r;
-				if ( Mathf.Abs( lx ) > half || Mathf.Abs( lz ) > half )
+				if ( Mathf.Abs( lx ) > halfX || Mathf.Abs( lz ) > halfZ )
 					continue;
 			}
 			else
 			{
 				float angle = Hash01( pileSeed, salt * 3 ) * Mathf.PI * 2f;
 				float rNorm = Mathf.Sqrt( Hash01( pileSeed, salt * 3 + 1 ) );
-				float radius = half * rNorm;
+				float radius = sampleRadius * rNorm;
 				lx = Mathf.Cos( angle ) * radius;
 				lz = Mathf.Sin( angle ) * radius;
+				if ( Mathf.Abs( lx ) > halfX || Mathf.Abs( lz ) > halfZ )
+					continue;
 			}
 
 			if ( !heightfield.ExistsAtLocal( lx, lz ) )
 				continue;
 
+			float ground = heightfield.GetLootFloorLocal( lx, lz );
+			float minSurface = Mathf.Max( ground, minSurfaceFromHeight );
 			float surface = heightfield.SampleNormalized( lx, lz ) * heightfield.MaxHeight;
 			if ( surface < minSurface )
 				continue;
@@ -2397,7 +2424,8 @@ public static class GoldPileTreasurePlacement
 		Vector3 min = worldBounds.min;
 		Vector3 size = worldBounds.size;
 		float ground = heightfield.GroundLevel;
-		float half = heightfield.WorldSize * 0.5f;
+		float halfX = heightfield.WorldSizeX * 0.5f;
+		float halfZ = heightfield.WorldSizeZ * 0.5f;
 
 		for ( int ix = 0; ix < Grid; ix++ )
 		{
@@ -2413,7 +2441,7 @@ public static class GoldPileTreasurePlacement
 						min.y + size.y * ty,
 						min.z + size.z * tz );
 					Vector3 local = pileRoot.InverseTransformPoint( world );
-					if ( Mathf.Abs( local.x ) > half || Mathf.Abs( local.z ) > half )
+					if ( Mathf.Abs( local.x ) > halfX || Mathf.Abs( local.z ) > halfZ )
 						continue;
 
 					float surface = heightfield.SampleNormalized( local.x, local.z ) * heightfield.MaxHeight;

@@ -1208,7 +1208,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( settings.UseSpatialHash && _heightfield != null )
 		{
 			float cell = Mathf.Max( _placementMinSpacing, 0.25f );
-			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSize, cell );
+			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSizeX, _heightfield.WorldSizeZ, cell );
 		}
 
 		if ( settings.AvoidCoinSeats && _loot != null )
@@ -1773,7 +1773,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _heightfield != null
 			&& GoldPileTreasurePlacement.ViolatesGroundEmbed(
 				latent.LocalBounds,
-				_heightfield.LootGroundLevel,
+				_heightfield.GetLootFloorLocal( latent.LocalPos.x, latent.LocalPos.z ),
 				maxEmbed ) )
 		{
 			Vector3 seatedPos = latent.LocalPos;
@@ -1854,7 +1854,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( settings.UseSpatialHash )
 		{
 			float cell = Mathf.Max( _placementMinSpacing, 0.25f );
-			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSize, cell );
+			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSizeX, _heightfield.WorldSizeZ, cell );
 		}
 
 		for ( int i = 0; i < _latent.Count; i++ )
@@ -2017,15 +2017,18 @@ public class GoldPileArtifactProps : MonoBehaviour
 			return -1;
 
 		Vector3 local = _pileRoot.InverseTransformPoint( preferredWorld );
-		float half = _heightfield.WorldSize * 0.5f;
-		local.x = Mathf.Clamp( local.x, -half, half );
-		local.z = Mathf.Clamp( local.z, -half, half );
+		float halfX = _heightfield.WorldSizeX * 0.5f;
+		float halfZ = _heightfield.WorldSizeZ * 0.5f;
+		local.x = Mathf.Clamp( local.x, -halfX, halfX );
+		local.z = Mathf.Clamp( local.z, -halfZ, halfZ );
 		float surface = _heightfield.SampleNormalized( local.x, local.z ) * _heightfield.MaxHeight;
 		float scale = definition.worldScale.x;
 		if ( scale < 0.01f )
 			scale = 1f;
 		float probe = Mathf.Max( 0.08f, scale * 0.35f );
-		float floorY = GoldPileTreasurePlacement.FloorClearanceY( _heightfield.LootGroundLevel, probe );
+		float floorY = GoldPileTreasurePlacement.FloorClearanceY(
+			_heightfield.GetLootFloorLocal( local.x, local.z ),
+			probe );
 		float yMax = Mathf.Max( floorY, surface - probe * 0.35f );
 		local.y = Mathf.Clamp( local.y, floorY, yMax );
 		local = GoldPileTreasurePlacement.ClampAboveFloor( _heightfield, local, probe );
@@ -2042,6 +2045,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 				local.z = Mathf.Sin( angle ) * radius;
 				if ( _heightfield.ExistsAtLocal( local.x, local.z ) )
 				{
+					floorY = GoldPileTreasurePlacement.FloorClearanceY(
+						_heightfield.GetLootFloorLocal( local.x, local.z ),
+						probe );
 					surface = _heightfield.SampleNormalized( local.x, local.z ) * _heightfield.MaxHeight;
 					local.y = Mathf.Clamp( local.y, floorY, Mathf.Max( floorY, surface ) );
 					break;
@@ -2058,7 +2064,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( settings.UseSpatialHash )
 		{
 			float cell = Mathf.Max( _placementMinSpacing, 0.25f );
-			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSize, cell );
+			occupancyGrid = new VolumeOccupancyGrid( _heightfield.WorldSizeX, _heightfield.WorldSizeZ, cell );
 		}
 
 		if ( GoldPileTreasurePlacement.IsInvalidFloorSeat(
@@ -2647,9 +2653,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		else if ( _heightfield != null )
 		{
 			float bucket = 8f;
-			int count = Mathf.Max( 1, Mathf.CeilToInt( _heightfield.WorldSize / bucket ) );
-			_latentChunkCountX = count;
-			_latentChunkCountZ = count;
+			_latentChunkCountX = Mathf.Max( 1, Mathf.CeilToInt( _heightfield.WorldSizeX / bucket ) );
+			_latentChunkCountZ = Mathf.Max( 1, Mathf.CeilToInt( _heightfield.WorldSizeZ / bucket ) );
 		}
 		else
 		{
@@ -2710,14 +2715,16 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 		if ( _heightfield != null && _latentChunkCountX > 0 )
 		{
-			float half = _heightfield.WorldSize * 0.5f;
-			float bucket = _heightfield.WorldSize / _latentChunkCountX;
+			float halfX = _heightfield.WorldSizeX * 0.5f;
+			float halfZ = _heightfield.WorldSizeZ * 0.5f;
+			float bucketX = _heightfield.WorldSizeX / _latentChunkCountX;
+			float bucketZ = _heightfield.WorldSizeZ / Mathf.Max( 1, _latentChunkCountZ );
 			latent.ChunkX = Mathf.Clamp(
-				Mathf.FloorToInt( ( latent.LocalPos.x + half ) / Mathf.Max( 0.01f, bucket ) ),
+				Mathf.FloorToInt( ( latent.LocalPos.x + halfX ) / Mathf.Max( 0.01f, bucketX ) ),
 				0,
 				_latentChunkCountX - 1 );
 			latent.ChunkZ = Mathf.Clamp(
-				Mathf.FloorToInt( ( latent.LocalPos.z + half ) / Mathf.Max( 0.01f, bucket ) ),
+				Mathf.FloorToInt( ( latent.LocalPos.z + halfZ ) / Mathf.Max( 0.01f, bucketZ ) ),
 				0,
 				_latentChunkCountZ - 1 );
 			return;

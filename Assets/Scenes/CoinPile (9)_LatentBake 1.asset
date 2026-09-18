@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
   authoredLayoutSeed: 122792
   effectivePileSeed: -152310106
-  heightFingerprint: 546858404
+  heightFingerprint: 964925915
   contentsFingerprint: -2128831035
   sourceDefinitionName: TreasurePile_Island2_CopperSilver
   volumeMaxAttempts: 24

@@ -42,12 +42,12 @@ float SampleProcDeformHeight(float2 uv)
 
 	// Cross blur in deform UV; blur amount is in heightfield texels.
     // Mesh UVs are texel centers ((i+0.5)/res), so one texel step is 1/res.
-    float uvStep = rcp(max(_DeformResolution, 1.0)) * blur;
+    float2 uvStep = rcp(max(_DeformResolution, float2(1.0, 1.0))) * blur;
     float sum = center * 2.0;
-    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(uvStep, 0), 0).r;
-    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(uvStep, 0), 0).r;
-    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(0, uvStep), 0).r;
-    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(0, uvStep), 0).r;
+    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(uvStep.x, 0), 0).r;
+    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(uvStep.x, 0), 0).r;
+    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv + float2(0, uvStep.y), 0).r;
+    sum += SAMPLE_TEXTURE2D_LOD(_DeformMap, sampler_DeformMap, uv - float2(0, uvStep.y), 0).r;
     return sum * (1.0 / 6.0);
 }
 
@@ -576,23 +576,25 @@ ProcCoinSurface SampleProcVirtualCoins(
 
 half3 ProcDeformNormalWS(float2 deformUV, half3 fallbackNormalWS)
 {
-    if (_DeformEnabled < 0.5h || _DeformScale <= 0.0h || _DeformResolution <= 1.0)
+    if (_DeformEnabled < 0.5h || _DeformScale <= 0.0h || max(_DeformResolution.x, _DeformResolution.y) <= 1.0)
         return fallbackNormalWS;
 
     float soften = saturate((float)_DeformNormalSoften);
     // Larger finite-difference step kills texel-scale creases in the lighting normal.
     float stepScale = 1.0 + soften * 3.0;
-    float uvStep = rcp(max(_DeformResolution, 1.0)) * stepScale;
-    half heightLeft = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV - float2(uvStep, 0)).r;
-    half heightRight = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV + float2(uvStep, 0)).r;
-    half heightDown = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV - float2(0, uvStep)).r;
-    half heightUp = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV + float2(0, uvStep)).r;
+    float2 uvStep = rcp(max(_DeformResolution, float2(1.0, 1.0))) * stepScale;
+    half heightLeft = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV - float2(uvStep.x, 0)).r;
+    half heightRight = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV + float2(uvStep.x, 0)).r;
+    half heightDown = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV - float2(0, uvStep.y)).r;
+    half heightUp = SAMPLE_TEXTURE2D(_DeformMap, sampler_DeformMap, deformUV + float2(0, uvStep.y)).r;
 
-    float worldStep = max(_DeformWorldSize * uvStep, 1e-4);
+    // Per-axis world step: X and Z texels cover different distances on a rectangular pile,
+    // so each height difference becomes a slope before building the normal.
+    float2 worldStep = max(_DeformWorldSize * uvStep, float2(1e-4, 1e-4));
     float3 normalOS = SafeNormalize(float3(
-        (heightLeft - heightRight) * _DeformScale,
-        worldStep * 2.0,
-        (heightDown - heightUp) * _DeformScale));
+        (heightLeft - heightRight) * _DeformScale / worldStep.x,
+        2.0,
+        (heightDown - heightUp) * _DeformScale / worldStep.y));
     half3 normalWS = SafeNormalize(TransformObjectToWorldNormal(normalOS));
     // Soften also blends toward mesh/up fallback so specular ignores micro-creases.
     half3 softTarget = SafeNormalize(fallbackNormalWS);

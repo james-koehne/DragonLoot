@@ -34,28 +34,27 @@ public class TreasurePileDefinition : ScriptableObject
 	public float coinVisibleBufferFraction = 0.2f;
 
 	[Header( "Heightfield" )]
+	[Tooltip( "World meters per heightfield texel. Per-pile resolution is derived from sculpted extent." )]
+	[Min( 0.01f )]
+	public float cellSize = 0.125f;
+
+	[Tooltip( "Minimum power-of-two resolution per axis for a pile heightfield." )]
 	[Min( 8 )]
-	public int heightResolution = 64;
+	public int minResolution = 32;
 
-	[Min( 0.5f )]
-	public float worldSize = 6f;
+	[Tooltip( "Maximum power-of-two resolution per axis for editor expand / Fit Bounds. Legacy migrate does not clamp to this." )]
+	[Min( 16 )]
+	public int maxResolution = 1024;
 
-	[Min( 0.1f )]
-	public float maxHeight = 1.75f;
-
-	[Tooltip( "Local height below which the pile mesh / collider is cut off." )]
+	[Tooltip( "Local height below which the pile mesh / collider is cut off (empty cells)." )]
 	[Min( 0f )]
 	public float groundLevelHeight = 0.01f;
 
-	[Tooltip( "Local height below which coins and treasure will not be seated. The mesh may still exist down to groundLevelHeight." )]
+	[Tooltip( "Extra local height above the authored treasure-surface floor used as the loot seating floor." )]
 	[Min( 0f )]
-	public float lootGroundLevelHeight = 0.6f;
+	public float lootFloorClearance = 0.05f;
 
 	[Header( "Mesh" )]
-	[Tooltip( "Visual mesh grid resolution. 0 = match heightResolution. Lower values reduce vert cost while keeping carve fidelity." )]
-	[Min( 0 )]
-	public int meshResolution = 0;
-
 	[Tooltip( "Softens heightfield-derived normals toward the flat mesh normal. Higher = smoother lighting, less carved detail." )]
 	[Range( 0f, 1f )]
 	public float meshDeformNormalSoften = 0f;
@@ -96,7 +95,7 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0f, 0.5f )]
 	public float placementScaleJitter = 0.1f;
 
-	[Tooltip( "Min relative surface height (0-1 of maxHeight) for coin instance placement. Higher pulls coins off the thin skirt." )]
+	[Tooltip( "Min relative surface height (0-1 of derived max height) for coin instance placement. Higher pulls coins off the thin skirt." )]
 	[Range( 0f, 0.5f )]
 	public float coinSurfaceHeightFraction = 0.12f;
 
@@ -112,7 +111,7 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0f, 3f )]
 	public float treasureHeightBias = 0.75f;
 
-	[Tooltip( "XZ spread for gem/artifact latents over the placement square. 0.5 = center-heavy, 1 = even, >1 prefers the rim / pile bounds." )]
+	[Tooltip( "XZ spread for gem/artifact latents over the placement footprint. 0.5 = center-heavy, 1 = even, >1 prefers the rim / pile bounds." )]
 	[Range( 0.25f, 3f )]
 	public float treasureXZSpread = 1f;
 
@@ -165,12 +164,49 @@ public class TreasurePileDefinition : ScriptableObject
 	[Header( "Visuals" )]
 	public Material pileMaterial;
 
-	/// <summary>Resolved visual mesh resolution (falls back to heightResolution when meshResolution is 0).</summary>
-	public int ResolveMeshResolution()
+	public float ResolveCellSize()
 	{
-		if ( meshResolution <= 0 )
-			return Mathf.Max( 8, heightResolution );
-		return Mathf.Max( 8, meshResolution );
+		return Mathf.Max( 0.01f, cellSize );
+	}
+
+	public int ResolveMinResolution()
+	{
+		return Mathf.Max( 8, minResolution );
+	}
+
+	public int ResolveMaxResolution()
+	{
+		return Mathf.Max( ResolveMinResolution(), maxResolution );
+	}
+
+	/// <summary>Power-of-two resolution covering <paramref name="worldExtent"/> meters at <see cref="cellSize"/>.</summary>
+	public int ResolveResolutionForExtent( float worldExtent )
+	{
+		float cell = ResolveCellSize();
+		int needed = Mathf.Max( ResolveMinResolution(), Mathf.RoundToInt( Mathf.Max( 0.01f, worldExtent ) / cell ) );
+		int pow2 = Mathf.NextPowerOfTwo( needed );
+		return Mathf.Clamp( pow2, ResolveMinResolution(), ResolveMaxResolution() );
+	}
+
+	public float ResolveWorldSizeForResolution( int resolution )
+	{
+		return ResolveCellSize() * Mathf.Max( 1, resolution - 1 );
+	}
+
+	public void Validate()
+	{
+		cellSize = Mathf.Max( 0.01f, cellSize );
+		minResolution = Mathf.Max( 8, minResolution );
+		maxResolution = Mathf.Max( minResolution, maxResolution );
+		groundLevelHeight = Mathf.Max( 0f, groundLevelHeight );
+		lootFloorClearance = Mathf.Max( 0f, lootFloorClearance );
+		meshDeformNormalSoften = Mathf.Clamp01( meshDeformNormalSoften );
+		meshDeformSampleBlur = Mathf.Clamp( meshDeformSampleBlur, 0f, 4f );
+	}
+
+	void OnValidate()
+	{
+		Validate();
 	}
 
 	public int ResolveLatentSurfaceNeighborhoodCells()

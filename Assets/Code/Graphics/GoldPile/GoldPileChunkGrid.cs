@@ -13,7 +13,8 @@ public sealed class GoldPileChunkGrid
 	float _chunkSize = DefaultChunkSize;
 	int _countX;
 	int _countZ;
-	float _worldSize;
+	float _worldSizeX;
+	float _worldSizeZ;
 	float _maxHeight;
 	int _worldSeed;
 	Transform _pileRoot;
@@ -37,11 +38,12 @@ public sealed class GoldPileChunkGrid
 		_pileRoot = pileRoot;
 		_chunkSize = Mathf.Max( 1f, chunkSize );
 		_worldSeed = worldSeed;
-		_worldSize = heightfield != null ? heightfield.WorldSize : _chunkSize;
+		_worldSizeX = heightfield != null ? heightfield.WorldSizeX : _chunkSize;
+		_worldSizeZ = heightfield != null ? heightfield.WorldSizeZ : _chunkSize;
 		_maxHeight = heightfield != null ? heightfield.MaxHeight : 1f;
 
-		_countX = Mathf.Max( 1, Mathf.CeilToInt( _worldSize / _chunkSize ) );
-		_countZ = Mathf.Max( 1, Mathf.CeilToInt( _worldSize / _chunkSize ) );
+		_countX = Mathf.Max( 1, Mathf.CeilToInt( _worldSizeX / _chunkSize ) );
+		_countZ = Mathf.Max( 1, Mathf.CeilToInt( _worldSizeZ / _chunkSize ) );
 
 		_chunks.Capacity = _countX * _countZ;
 		for ( int z = 0; z < _countZ; z++ )
@@ -74,9 +76,10 @@ public sealed class GoldPileChunkGrid
 		if ( _countX <= 0 || _countZ <= 0 )
 			return null;
 
-		float half = _worldSize * 0.5f;
-		int x = Mathf.FloorToInt( ( localX + half ) / _chunkSize );
-		int z = Mathf.FloorToInt( ( localZ + half ) / _chunkSize );
+		float halfX = _worldSizeX * 0.5f;
+		int x = Mathf.FloorToInt( ( localX + halfX ) / _chunkSize );
+		float halfZ = _worldSizeZ * 0.5f;
+		int z = Mathf.FloorToInt( ( localZ + halfZ ) / _chunkSize );
 		x = Mathf.Clamp( x, 0, _countX - 1 );
 		z = Mathf.Clamp( z, 0, _countZ - 1 );
 		return GetChunk( x, z );
@@ -91,9 +94,10 @@ public sealed class GoldPileChunkGrid
 			return;
 		}
 
-		float half = _worldSize * 0.5f;
-		chunkX = Mathf.Clamp( Mathf.FloorToInt( ( localX + half ) / _chunkSize ), 0, _countX - 1 );
-		chunkZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ + half ) / _chunkSize ), 0, _countZ - 1 );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		chunkX = Mathf.Clamp( Mathf.FloorToInt( ( localX + halfX ) / _chunkSize ), 0, _countX - 1 );
+		chunkZ = Mathf.Clamp( Mathf.FloorToInt( ( localZ + halfZ ) / _chunkSize ), 0, _countZ - 1 );
 	}
 
 	public GoldPileChunk GetChunk( int x, int z )
@@ -127,11 +131,12 @@ public sealed class GoldPileChunkGrid
 		if ( _chunks.Count == 0 || _pileRoot == null )
 			return false;
 
-		float half = _worldSize * 0.5f;
-		Vector3 c000 = _pileRoot.TransformPoint( new Vector3( -half, 0f, -half ) );
-		Vector3 c100 = _pileRoot.TransformPoint( new Vector3( half, 0f, -half ) );
-		Vector3 c001 = _pileRoot.TransformPoint( new Vector3( -half, 0f, half ) );
-		Vector3 c101 = _pileRoot.TransformPoint( new Vector3( half, 0f, half ) );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		Vector3 c000 = _pileRoot.TransformPoint( new Vector3( -halfX, 0f, -halfZ ) );
+		Vector3 c100 = _pileRoot.TransformPoint( new Vector3( halfX, 0f, -halfZ ) );
+		Vector3 c001 = _pileRoot.TransformPoint( new Vector3( -halfX, 0f, halfZ ) );
+		Vector3 c101 = _pileRoot.TransformPoint( new Vector3( halfX, 0f, halfZ ) );
 		pileBounds = new Bounds( c000, Vector3.zero );
 		pileBounds.Encapsulate( c100 );
 		pileBounds.Encapsulate( c001 );
@@ -199,11 +204,12 @@ public sealed class GoldPileChunkGrid
 
 	void RebuildChunkBounds( GoldPileChunk chunk )
 	{
-		float half = _worldSize * 0.5f;
-		float minX = -half + chunk.Coord.X * _chunkSize;
-		float minZ = -half + chunk.Coord.Z * _chunkSize;
-		float maxX = Mathf.Min( half, minX + _chunkSize );
-		float maxZ = Mathf.Min( half, minZ + _chunkSize );
+		float halfX = _worldSizeX * 0.5f;
+		float halfZ = _worldSizeZ * 0.5f;
+		float minX = -halfX + chunk.Coord.X * _chunkSize;
+		float minZ = -halfZ + chunk.Coord.Z * _chunkSize;
+		float maxX = Mathf.Min( halfX, minX + _chunkSize );
+		float maxZ = Mathf.Min( halfZ, minZ + _chunkSize );
 
 		float minY = 0f;
 		float maxY = 0.05f;
@@ -218,7 +224,7 @@ public sealed class GoldPileChunkGrid
 				{
 					float tx = ix / ( float )( samples - 1 );
 					float lx = Mathf.Lerp( minX, maxX, tx );
-					float h = _heightfield.SampleNormalized( lx, lz ) * _heightfield.MaxHeight;
+					float h = _heightfield.SampleSurfaceHeight( lx, lz );
 					if ( h > maxY )
 						maxY = h;
 				}

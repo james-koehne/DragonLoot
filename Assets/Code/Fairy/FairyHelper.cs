@@ -107,6 +107,37 @@ public class FairyHelper : MonoBehaviour
 	[Min( 0.01f )]
 	float idleBobSpeed = 2.2f;
 
+	[Header( "Curved flight" )]
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Lateral swing when relocating nearby (magical arc instead of a straight cut)." )]
+	float closeArcAmplitude = 0.55f;
+
+	[SerializeField]
+	[Min( 0.1f )]
+	[Tooltip( "Distances at or below this use the close arc feel." )]
+	float closeArcDistance = 2.5f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Side-to-side wave amplitude for longer flights." )]
+	float waveAmplitude = 0.85f;
+
+	[SerializeField]
+	[Min( 0.05f )]
+	[Tooltip( "How quickly the flight wave oscillates (radians per meter traveled)." )]
+	float waveFrequency = 1.4f;
+
+	[SerializeField]
+	[Min( 0.1f )]
+	[Tooltip( "How far ahead along the path the fairy steers toward (creates the curve)." )]
+	float curveLookAhead = 1.1f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Extra vertical flutter while traveling in a curve." )]
+	float travelLiftAmplitude = 0.18f;
+
 	[Header( "Refs" )]
 	[SerializeField]
 	Animator animator;
@@ -148,6 +179,8 @@ public class FairyHelper : MonoBehaviour
 	Vector3 _smoothVelocity;
 	Vector3 _frameMoveDelta;
 	float _bobPhase;
+	float _curvePhase;
+	float _curveSide = 1f;
 	float _followYaw;
 	float _lastCameraYaw;
 	float _cameraSettledFor;
@@ -218,6 +251,12 @@ public class FairyHelper : MonoBehaviour
 			surfaceHoverHeight = 0.7f;
 		if ( followSmoothTime < 0.05f )
 			followSmoothTime = 0.28f;
+		if ( closeArcDistance < 0.1f )
+			closeArcDistance = 2.5f;
+		if ( waveFrequency < 0.05f )
+			waveFrequency = 1.4f;
+		if ( curveLookAhead < 0.1f )
+			curveLookAhead = 1.1f;
 	}
 
 	void EnsureRuntimeSetup()
@@ -443,12 +482,14 @@ public class FairyHelper : MonoBehaviour
 		_lastCameraYaw = _followYaw;
 		_cameraYawSampled = true;
 		_cameraSettledFor = 0f;
-		Vector3 desired = ResolveSurfacePoint( player, BuildFollowTarget( player ) );
+		_introActive = true;
+		Vector3 desired = BuildViewFallback( player );
 		_logicalPosition = desired;
 		transform.position = desired;
 		_smoothVelocity = Vector3.zero;
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
+		_curvePhase = 0f;
 		_isMoving = false;
 		FaceToward( player.transform.position - transform.position, instant: true );
 	}
@@ -466,6 +507,7 @@ public class FairyHelper : MonoBehaviour
 		_smoothVelocity = Vector3.zero;
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
+		_curvePhase = 0f;
 		_isMoving = false;
 		FaceToward( player.transform.position - transform.position, instant: true );
 	}
@@ -478,7 +520,14 @@ public class FairyHelper : MonoBehaviour
 
 	Vector3 ResolveDesiredPosition( PlayerController player )
 	{
-		if ( !_introActive && _perchedDisplay != null )
+		if ( _introActive )
+		{
+			EnsureFollowYaw( player );
+			// Intro always uses the authored override slot — never snap onto treasure surface.
+			return BuildViewFallback( player );
+		}
+
+		if ( _perchedDisplay != null )
 		{
 			Transform perch = _perchedDisplay.transform;
 			return perch.position + Vector3.up * perchHeight;
@@ -494,10 +543,10 @@ public class FairyHelper : MonoBehaviour
 		float lookYaw = GetCameraLookYaw( player );
 		UpdateCameraSettleTimer( lookYaw );
 
-		// Intro: stay locked in front of the camera while talking.
+		// Intro: ease toward camera look so the override slot doesn't feel hard-locked.
 		if ( _introActive )
 		{
-			_followYaw = lookYaw;
+			_followYaw = Mathf.LerpAngle( _followYaw, lookYaw, 1f - Mathf.Exp( -followYawLerp * Time.deltaTime ) );
 			return;
 		}
 
@@ -603,6 +652,10 @@ public class FairyHelper : MonoBehaviour
 		if ( world == null || world.Sampler == null )
 			return BuildViewFallback( player );
 
+		// Only ride the treasure surface when the player is actually near it.
+		if ( !IsPlayerNearTreasureSurface( player, world ) )
+			return BuildViewFallback( player );
+
 		if ( world.TryGetChunkCoord( desired, out TreasureChunkCoord coord ) )
 			world.EnsureChunkLoaded( coord );
 
@@ -612,14 +665,14 @@ public class FairyHelper : MonoBehaviour
 		{
 			float dx = resolved.x - desired.x;
 			float dz = resolved.z - desired.z;
-			if ( dx * dx + dz * dz <= maxSnapSq )
+			if ( dx * dx + dz * dz <= maxSnapSq && IsSurfacePointNearPlayer( player, resolved ) )
 			{
 				resolved.y = sample.Height + surfaceHoverHeight;
 				return resolved;
 			}
 		}
 
-		if ( world.Sampler.TrySample( desired, out sample ) && sample.Traversable )
+		if ( world.Sampler.TrySample( desired, out sample ) && sample.Traversable && IsSurfacePointNearPlayer( player, desired ) )
 		{
 			desired.y = sample.Height + surfaceHoverHeight;
 			return desired;
@@ -628,43 +681,82 @@ public class FairyHelper : MonoBehaviour
 		return BuildViewFallback( player );
 	}
 
+	bool IsPlayerNearTreasureSurface( PlayerController player, TreasureSurfaceWorld world )
+	{
+		Vector3 playerPos = player.transform.position;
+		float maxSnapSq = surfaceSnapMaxDistance * surfaceSnapMaxDistance;
+
+		if ( world.TryResolveTraversableEntry( playerPos, out Vector3 resolved, out _, preferStable: true ) )
+		{
+			float dx = resolved.x - playerPos.x;
+			float dz = resolved.z - playerPos.z;
+			if ( dx * dx + dz * dz <= maxSnapSq )
+				return true;
+		}
+
+		if ( world.Sampler.TrySample( playerPos, out TreasureSurfaceSample sample ) && sample.Traversable )
+			return true;
+
+		return false;
+	}
+
+	bool IsSurfacePointNearPlayer( PlayerController player, Vector3 surfacePoint )
+	{
+		float dx = surfacePoint.x - player.transform.position.x;
+		float dz = surfacePoint.z - player.transform.position.z;
+		float maxDist = surfaceSnapMaxDistance + Mathf.Max( Mathf.Abs( followOffsetLocal.x ), Mathf.Abs( followOffsetLocal.z ) );
+		return dx * dx + dz * dz <= maxDist * maxDist;
+	}
+
 	void StepMove( Vector3 desired )
 	{
 		Vector3 current = _logicalPosition;
 		float dt = Mathf.Max( Time.deltaTime, 0.0001f );
 
-		if ( _introActive )
-		{
-			Vector3 introDelta = desired - current;
-			_logicalPosition = desired;
-			_frameMoveDelta = introDelta;
-			_smoothVelocity = Vector3.zero;
-			_planarVelocity = new Vector3( introDelta.x, 0f, introDelta.z ) / dt;
-			UpdateMoveState( dt );
-			transform.position = desired;
-			_bobPhase = 0f;
-			return;
-		}
-
 		Vector3 to = desired - current;
 		Vector3 planar = new Vector3( to.x, 0f, to.z );
 		float planarDist = planar.magnitude;
 
-		float maxSpeed = planarDist > farGlowDistance ? catchUpSpeed : moveSpeed;
-		Vector3 next = Vector3.SmoothDamp( current, desired, ref _smoothVelocity, followSmoothTime, maxSpeed, Time.deltaTime );
-
 		if ( planarDist <= arriveDistance && Mathf.Abs( to.y ) <= arriveDistance )
 		{
-			next = desired;
+			_frameMoveDelta = desired - current;
+			_planarVelocity = Vector3.zero;
 			_smoothVelocity = Vector3.zero;
+			_logicalPosition = desired;
+			UpdateMoveState( dt );
+			ApplyIdleBob( desired );
+			return;
 		}
 
-		_frameMoveDelta = next - current;
+		// Intro eases into the override slot; skip wave/arc so it reads as a soft settle.
+		if ( _introActive )
+		{
+			Vector3 next = Vector3.SmoothDamp( current, desired, ref _smoothVelocity, followSmoothTime, moveSpeed, Time.deltaTime );
+			_frameMoveDelta = next - current;
+			_planarVelocity = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ) / dt;
+			_logicalPosition = next;
+			UpdateMoveState( dt );
+			_bobPhase = 0f;
+			transform.position = next;
+			return;
+		}
+
+		if ( !_isMoving && planarDist > arriveDistance * 2f )
+			PickCurveSide( planar );
+
+		Vector3 seek = BuildCurvedSeekPoint( current, desired, planar, planarDist );
+		float maxSpeed = planarDist > farGlowDistance ? catchUpSpeed : moveSpeed;
+		Vector3 nextFree = Vector3.SmoothDamp( current, seek, ref _smoothVelocity, followSmoothTime, maxSpeed, Time.deltaTime );
+
+		_frameMoveDelta = nextFree - current;
 		_planarVelocity = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ) / dt;
-		_logicalPosition = next;
+		float traveled = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ).magnitude;
+		if ( traveled > 0.0001f )
+			_curvePhase += traveled * waveFrequency;
+		_logicalPosition = nextFree;
 		UpdateMoveState( dt );
 
-		Vector3 display = next;
+		Vector3 display = nextFree;
 		if ( !_isMoving && idleBobAmplitude > 0f )
 		{
 			_bobPhase += Time.deltaTime * idleBobSpeed;
@@ -676,6 +768,68 @@ public class FairyHelper : MonoBehaviour
 		}
 
 		transform.position = display;
+	}
+
+	void ApplyIdleBob( Vector3 logical )
+	{
+		Vector3 display = logical;
+		if ( !_isMoving && idleBobAmplitude > 0f )
+		{
+			_bobPhase += Time.deltaTime * idleBobSpeed;
+			display.y += Mathf.Sin( _bobPhase ) * idleBobAmplitude;
+		}
+		else
+		{
+			_bobPhase = 0f;
+		}
+
+		transform.position = display;
+	}
+
+	void PickCurveSide( Vector3 planarToTarget )
+	{
+		if ( planarToTarget.sqrMagnitude < 0.0001f )
+		{
+			_curveSide = Random.value < 0.5f ? -1f : 1f;
+			return;
+		}
+
+		Vector3 dir = planarToTarget.normalized;
+		Vector3 lateral = Vector3.Cross( Vector3.up, dir );
+		Vector3 fromPlayer = Vector3.zero;
+		PlayerController player = ResolvePlayer();
+		if ( player != null )
+		{
+			fromPlayer = _logicalPosition - player.transform.position;
+			fromPlayer.y = 0f;
+		}
+
+		float bias = Vector3.Dot( fromPlayer, lateral );
+		if ( Mathf.Abs( bias ) > 0.05f )
+			_curveSide = bias >= 0f ? 1f : -1f;
+		else
+			_curveSide = Random.value < 0.5f ? -1f : 1f;
+	}
+
+	Vector3 BuildCurvedSeekPoint( Vector3 current, Vector3 desired, Vector3 planar, float planarDist )
+	{
+		Vector3 dir = planar / planarDist;
+		Vector3 lateral = Vector3.Cross( Vector3.up, dir ) * _curveSide;
+
+		float closeT = 1f - Mathf.Clamp01( planarDist / closeArcDistance );
+		// Peak the close arc mid-approach so short hops swing around the player instead of cutting through.
+		float closeArc = Mathf.Sin( closeT * Mathf.PI ) * closeArcAmplitude;
+
+		float farT = Mathf.Clamp01( ( planarDist - closeArcDistance ) / Mathf.Max( closeArcDistance, 0.01f ) );
+		float wave = Mathf.Sin( _curvePhase ) * waveAmplitude * farT;
+
+		float lateralOffset = closeArc + wave;
+		float lookAhead = Mathf.Min( planarDist, curveLookAhead );
+		float pathT = lookAhead / planarDist;
+		Vector3 along = Vector3.Lerp( current, desired, pathT );
+		along += lateral * lateralOffset;
+		along.y += Mathf.Abs( Mathf.Sin( _curvePhase * 0.5f ) ) * travelLiftAmplitude * Mathf.Clamp01( planarDist / closeArcDistance );
+		return along;
 	}
 
 	void UpdateMoveState( float dt )

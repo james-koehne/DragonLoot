@@ -14,8 +14,11 @@ static class GoldPileSculptSettings
 
 	public const float MinRadius = 0.1f;
 	public const float MaxRadius = 128f;
-	public const float MinStrength = 0.001f;
-	public const float MaxStrength = 2f;
+	public const float MinStrength = 0.01f;
+	public const float MaxStrength = 4f;
+	public const float MaxFlattenTarget = 32f;
+	public const float MinPeakHeight = -16f;
+	public const float MaxPeakHeight = 16f;
 
 	public const int SettleItersPerDrag = 4;
 	public const int ErodeItersPerDrag = 8;
@@ -36,7 +39,7 @@ static class GoldPileSculptSettings
 
 	public static float BrushStrength
 	{
-		get => EditorPrefs.GetFloat( PrefPrefix + "Strength", 0.08f );
+		get => EditorPrefs.GetFloat( PrefPrefix + "Strength", 0.25f );
 		set => EditorPrefs.SetFloat( PrefPrefix + "Strength", Mathf.Clamp( value, MinStrength, MaxStrength ) );
 	}
 
@@ -48,8 +51,8 @@ static class GoldPileSculptSettings
 
 	public static float FlattenTarget
 	{
-		get => EditorPrefs.GetFloat( PrefPrefix + "FlattenTarget", 0.5f );
-		set => EditorPrefs.SetFloat( PrefPrefix + "FlattenTarget", Mathf.Clamp01( value ) );
+		get => EditorPrefs.GetFloat( PrefPrefix + "FlattenTarget", 1f );
+		set => EditorPrefs.SetFloat( PrefPrefix + "FlattenTarget", Mathf.Clamp( value, 0f, MaxFlattenTarget ) );
 	}
 
 	public static Texture2D StampMask
@@ -128,8 +131,8 @@ static class GoldPileSculptSettings
 
 	public static float PeakHeight
 	{
-		get => EditorPrefs.GetFloat( PrefPrefix + "PeakHeight", 0.35f );
-		set => EditorPrefs.SetFloat( PrefPrefix + "PeakHeight", Mathf.Clamp( value, -1f, 1f ) );
+		get => EditorPrefs.GetFloat( PrefPrefix + "PeakHeight", 1f );
+		set => EditorPrefs.SetFloat( PrefPrefix + "PeakHeight", Mathf.Clamp( value, MinPeakHeight, MaxPeakHeight ) );
 	}
 
 	public static bool SettleAfterPeak
@@ -245,10 +248,10 @@ static class GoldPileSculptSettings
 			RidgeWidth = EditorGUILayout.Slider( "Width (m)", RidgeWidth, 0.1f, 16f );
 
 		if ( showStrength )
-			BrushStrength = EditorGUILayout.Slider( "Strength", BrushStrength, MinStrength, MaxStrength );
+			BrushStrength = EditorGUILayout.Slider( "Strength (m)", BrushStrength, MinStrength, MaxStrength );
 
 		if ( mode == GoldPileEditorBrushMode.Peak || mode == GoldPileEditorBrushMode.Ridge )
-			PeakHeight = EditorGUILayout.Slider( "Height", PeakHeight, -1f, 1f );
+			PeakHeight = EditorGUILayout.Slider( "Height (m)", PeakHeight, MinPeakHeight, MaxPeakHeight );
 
 		if ( showFalloff )
 			BrushFalloff = EditorGUILayout.Slider( "Falloff", BrushFalloff, 0.2f, 4f );
@@ -263,7 +266,7 @@ static class GoldPileSculptSettings
 			SplineSmooth = EditorGUILayout.Slider( "Spline Smoothing", SplineSmooth, 0f, 1f );
 
 		if ( mode == GoldPileEditorBrushMode.Flatten )
-			FlattenTarget = EditorGUILayout.Slider( "Flatten Target", FlattenTarget, 0f, 1f );
+			FlattenTarget = EditorGUILayout.Slider( "Flatten Target (m)", FlattenTarget, 0f, MaxFlattenTarget );
 
 		if ( mode == GoldPileEditorBrushMode.Settle )
 		{

@@ -43,8 +43,13 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	MeshRenderer _renderer;
 	Mesh _visualMesh;
 	Vector3[] _baseVerts;
+	Vector3[] _normals;
 	Vector2[] _uvs;
 	int[] _tris;
+	bool[] _vertAboveGround;
+	int _visualTriCount;
+	bool _visualTrisDirty;
+	bool _visualIndicesBuilt;
 	MaterialPropertyBlock _mpb;
 	GoldPileHeightfield _heightfield;
 	readonly GoldPileColliderTiles _colliderTiles = new GoldPileColliderTiles();
@@ -55,8 +60,12 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	int _colliderDirtyMaxX;
 	int _colliderDirtyMinZ;
 	int _colliderDirtyMaxZ;
-	int _colliderResolution;
-	int _visualResolution = 64;
+	int _colliderResolutionX;
+	int _colliderResolutionZ;
+	int _configuredResolutionX;
+	int _configuredResolutionZ;
+	int _visualResolutionX = 64;
+	int _visualResolutionZ = 64;
 	float _deformNormalSoften;
 	float _deformSampleBlur = 4f;
 	bool _uploadPending;
@@ -72,9 +81,15 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	/// <summary>First collider tile (compat). Prefer resolving hits via parent GoldPileTerrainMesh.</summary>
 	public MeshCollider PileCollider => _colliderTiles.FirstCollider;
 	public int ColliderTileCount => _colliderTiles.TileCount;
-	public int ColliderResolution => _colliderResolution;
+	public int ColliderResolutionX => _colliderResolutionX;
+	public int ColliderResolutionZ => _colliderResolutionZ;
+	/// <summary>Largest collider grid axis (compat).</summary>
+	public int ColliderResolution => Mathf.Max( _colliderResolutionX, _colliderResolutionZ );
 	public Transform MeshTransform => _filter != null ? _filter.transform : transform;
-	public int VisualResolution => _visualResolution;
+	public int VisualResolutionX => _visualResolutionX;
+	public int VisualResolutionZ => _visualResolutionZ;
+	/// <summary>Largest visual grid axis (compat).</summary>
+	public int VisualResolution => Mathf.Max( _visualResolutionX, _visualResolutionZ );
 
 	/// <summary>
 	/// Clears MeshFilter/collider references and destroys procedural meshes so they are not
@@ -86,6 +101,9 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_colliderDirty = false;
 		_colliderDirtyFull = false;
 		_colliderCookPending = false;
+		_visualTrisDirty = false;
+		_visualIndicesBuilt = false;
+		_vertAboveGround = null;
 		_built = false;
 
 		if ( _filter != null )
@@ -117,23 +135,24 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	}
 
 	/// <summary>
-	/// Configures material, optional visual mesh resolution, and deform visual overrides.
-	/// meshRes 0 or negative matches heightRes; collider matches heightfield res on Bind.
+	/// Configures material, heightfield grid resolution, and deform visual overrides.
+	/// Visual topology always matches the heightfield grid (no separate mesh resolution);
+	/// resX/resZ are only a fallback for previews bound before a heightfield exists.
 	/// Soften/blur override shared material defaults via MPB (procedural gold-pile shader).
 	/// </summary>
 	public void Configure(
 		Material material,
-		int heightRes,
-		int meshRes = 0,
+		int resX,
+		int resZ,
 		float deformNormalSoften = 0f,
 		float deformSampleBlur = 4f )
 	{
 		if ( material != null )
 			pileMaterial = material;
 
-		int height = Mathf.Max( 8, heightRes );
-		_visualResolution = meshRes > 0 ? Mathf.Max( 8, meshRes ) : height;
-		resolution = _visualResolution;
+		_configuredResolutionX = Mathf.Max( 8, resX );
+		_configuredResolutionZ = Mathf.Max( 8, resZ );
+		resolution = Mathf.Max( _configuredResolutionX, _configuredResolutionZ );
 		_deformNormalSoften = Mathf.Clamp01( deformNormalSoften );
 		_deformSampleBlur = Mathf.Clamp( deformSampleBlur, 0f, 4f );
 	}
@@ -196,6 +215,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		// Coalesce multiple carves in one frame into a single Apply + MPB write.
 		_uploadPending = true;
 		_mpbPending = true;
+		// Any height edit can flip whole cells above/below ground, so visual quads may appear or vanish.
+		_visualTrisDirty = true;
 
 		if ( !Application.isPlaying )
 		{
@@ -275,7 +296,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 	void FlushPendingUpload()
 	{
-		if ( !_uploadPending && !_mpbPending )
+		if ( !_uploadPending && !_mpbPending && !_visualTrisDirty )
 			return;
 
 		GoldPileEditTiming.Begin( "GoldPile.FlushDeform" );
@@ -284,6 +305,18 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		if ( _uploadPending && _heightfield != null )
 			_heightfield.UploadIfDirty();
 		_uploadPending = false;
+
+		if ( _visualTrisDirty )
+		{
+			if ( phaseSw != null )
+				phaseSw.Restart();
+			RebuildVisualTriangles();
+			if ( phaseSw != null )
+			{
+				phaseSw.Stop();
+				GoldPileEditTiming.Record( "flush.visualTris", phaseSw.Elapsed.TotalMilliseconds );
+			}
+		}
 
 		bool applyMpb = _mpbPending;
 		if ( applyMpb )
@@ -420,8 +453,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_outlineMaskMpb.SetFloat( DeformEnabledProp, 1f );
 		_outlineMaskMpb.SetTexture( DeformMapProp, _heightfield.Texture );
 		_outlineMaskMpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
-		_outlineMaskMpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
-		_outlineMaskMpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_outlineMaskMpb.SetVector( DeformWorldSizeProp, DeformWorldSizeVector( _heightfield ) );
+		_outlineMaskMpb.SetVector( DeformResolutionProp, DeformResolutionVector( _heightfield ) );
 		_outlineMaskMpb.SetFloat( DeformSampleBlurProp, _deformSampleBlur );
 		_outlineMaskMpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
 
@@ -490,52 +523,52 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 	void BuildTopology()
 	{
-		int heightRes = _heightfield != null ? _heightfield.Resolution : Mathf.Max( 8, resolution );
-		int res = _visualResolution > 0 ? _visualResolution : heightRes;
-		res = Mathf.Max( 8, res );
-		_visualResolution = res;
-		resolution = res;
+		int fallbackX = _configuredResolutionX > 0 ? _configuredResolutionX : Mathf.Max( 8, resolution );
+		int fallbackZ = _configuredResolutionZ > 0 ? _configuredResolutionZ : Mathf.Max( 8, resolution );
+		int resX = _heightfield != null ? _heightfield.ResolutionX : fallbackX;
+		int resZ = _heightfield != null ? _heightfield.ResolutionZ : fallbackZ;
+		resX = Mathf.Max( 8, resX );
+		resZ = Mathf.Max( 8, resZ );
+		_visualResolutionX = resX;
+		_visualResolutionZ = resZ;
+		resolution = Mathf.Max( resX, resZ );
 
-		float size = _heightfield != null ? _heightfield.WorldSize : 4f;
-		_colliderResolution = Mathf.Max( MinColliderResolution, heightRes / ColliderResolutionDivisor );
+		float sizeX = _heightfield != null ? _heightfield.WorldSizeX : 4f;
+		float sizeZ = _heightfield != null ? _heightfield.WorldSizeZ : 4f;
+		_colliderResolutionX = Mathf.Max( MinColliderResolution, resX / ColliderResolutionDivisor );
+		_colliderResolutionZ = Mathf.Max( MinColliderResolution, resZ / ColliderResolutionDivisor );
 
-		int vertCount = res * res;
+		int vertCount = resX * resZ;
 		_baseVerts = new Vector3[ vertCount ];
+		_normals = new Vector3[ vertCount ];
 		_uvs = new Vector2[ vertCount ];
-		float half = size * 0.5f;
-		float step = size / Mathf.Max( 1, res - 1 );
+		float halfX = sizeX * 0.5f;
+		float halfZ = sizeZ * 0.5f;
+		float stepX = sizeX / Mathf.Max( 1, resX - 1 );
+		float stepZ = sizeZ / Mathf.Max( 1, resZ - 1 );
 
-		for ( int z = 0; z < res; z++ )
+		for ( int z = 0; z < resZ; z++ )
 		{
-			for ( int x = 0; x < res; x++ )
+			for ( int x = 0; x < resX; x++ )
 			{
-				int i = z * res + x;
-				float lx = -half + x * step;
-				float lz = -half + z * step;
+				int i = z * resX + x;
+				float lx = -halfX + x * stepX;
+				float lz = -halfZ + z * stepZ;
 				_baseVerts[ i ] = new Vector3( lx, 0f, lz );
-				// Texel centers: matches Point-filtered deform map and CPU grid heights / collider verts.
+				// Flat grid: displacement happens in the vertex shader, so normals stay up.
+				_normals[ i ] = Vector3.up;
+				// Texel centers: matches the deform map layout and CPU grid heights / collider verts.
 				_uvs[ i ] = new Vector2(
-					( x + 0.5f ) / res,
-					( z + 0.5f ) / res );
+					( x + 0.5f ) / resX,
+					( z + 0.5f ) / resZ );
 			}
 		}
 
-		int quadCount = ( res - 1 ) * ( res - 1 );
+		int quadCount = ( resX - 1 ) * ( resZ - 1 );
 		_tris = new int[ quadCount * 6 ];
-		int t = 0;
-		for ( int z = 0; z < res - 1; z++ )
-		{
-			for ( int x = 0; x < res - 1; x++ )
-			{
-				int i = z * res + x;
-				_tris[ t++ ] = i;
-				_tris[ t++ ] = i + res;
-				_tris[ t++ ] = i + 1;
-				_tris[ t++ ] = i + 1;
-				_tris[ t++ ] = i + res;
-				_tris[ t++ ] = i + res + 1;
-			}
-		}
+		_visualTriCount = 0;
+		_visualIndicesBuilt = false;
+		_vertAboveGround = null;
 
 		if ( _visualMesh == null )
 			_visualMesh = new Mesh { name = "GoldPileVisual" };
@@ -546,25 +579,117 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_visualMesh.indexFormat = vertCount > 65000
 			? UnityEngine.Rendering.IndexFormat.UInt32
 			: UnityEngine.Rendering.IndexFormat.UInt16;
+		_visualMesh.subMeshCount = 1;
 		_visualMesh.vertices = _baseVerts;
+		_visualMesh.normals = _normals;
 		_visualMesh.uv = _uvs;
-		_visualMesh.triangles = _tris;
-		_visualMesh.RecalculateNormals();
-		_visualMesh.RecalculateBounds();
-		ExpandVisualBounds( size, _heightfield != null ? _heightfield.MaxHeight : 2f );
+		_visualTrisDirty = true;
+		RebuildVisualTriangles();
+		ExpandVisualBounds( sizeX, sizeZ, _heightfield != null ? _heightfield.MaxHeight : 2f );
 
 		_filter.sharedMesh = _visualMesh;
 
-		BuildColliderTiles( size );
+		BuildColliderTiles( sizeX, sizeZ );
 		_built = true;
 	}
 
-	void BuildColliderTiles( float size )
+	/// <summary>
+	/// Rebuilds visual indices, dropping quads whose four corners are all below ground so
+	/// carved-out areas render nothing. Rim quads with any corner above ground are kept and
+	/// clipped per-pixel by the shader.
+	/// </summary>
+	void RebuildVisualTriangles()
+	{
+		_visualTrisDirty = false;
+		if ( _visualMesh == null || _tris == null || _baseVerts == null )
+			return;
+
+		// Digs that never cross the ground threshold leave the index buffer identical,
+		// so skip the rebuild + upload entirely in that (common) case.
+		if ( !RefreshVertexOccupancy() && _visualIndicesBuilt )
+			return;
+
+		int resX = _visualResolutionX;
+		int resZ = _visualResolutionZ;
+		bool[] above = _vertAboveGround;
+		int t = 0;
+
+		for ( int z = 0; z < resZ - 1; z++ )
+		{
+			for ( int x = 0; x < resX - 1; x++ )
+			{
+				int i = z * resX + x;
+				if ( above != null
+					&& !above[ i ]
+					&& !above[ i + 1 ]
+					&& !above[ i + resX ]
+					&& !above[ i + resX + 1 ] )
+					continue;
+
+				t = AppendQuad( t, i, resX );
+			}
+		}
+
+		_visualTriCount = t;
+		_visualMesh.SetTriangles( _tris, 0, _visualTriCount, 0, false, 0 );
+		_visualIndicesBuilt = true;
+	}
+
+	/// <summary>
+	/// Resamples per-vertex above-ground flags. Returns true when occupancy changed (or when
+	/// there is no heightfield, in which case every quad is kept).
+	/// </summary>
+	bool RefreshVertexOccupancy()
+	{
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+		{
+			bool changed = _vertAboveGround != null;
+			_vertAboveGround = null;
+			return changed;
+		}
+
+		int vertCount = _baseVerts.Length;
+		bool occupancyChanged = false;
+		if ( _vertAboveGround == null || _vertAboveGround.Length != vertCount )
+		{
+			_vertAboveGround = new bool[ vertCount ];
+			occupancyChanged = true;
+		}
+
+		float ground = _heightfield.GroundLevel;
+		for ( int i = 0; i < vertCount; i++ )
+		{
+			Vector3 v = _baseVerts[ i ];
+			bool above = _heightfield.SampleSurfaceHeight( v.x, v.z ) >= ground;
+			if ( above == _vertAboveGround[ i ] )
+				continue;
+
+			_vertAboveGround[ i ] = above;
+			occupancyChanged = true;
+		}
+
+		return occupancyChanged;
+	}
+
+	int AppendQuad( int t, int i, int resX )
+	{
+		_tris[ t++ ] = i;
+		_tris[ t++ ] = i + resX;
+		_tris[ t++ ] = i + 1;
+		_tris[ t++ ] = i + 1;
+		_tris[ t++ ] = i + resX;
+		_tris[ t++ ] = i + resX + 1;
+		return t;
+	}
+
+	void BuildColliderTiles( float sizeX, float sizeZ )
 	{
 		_colliderTiles.Build(
 			transform,
-			_colliderResolution,
-			size,
+			_colliderResolutionX,
+			_colliderResolutionZ,
+			sizeX,
+			sizeZ,
 			ColliderChunkSize,
 			gameObject.layer );
 		_colliderTiles.MarkAllDirty();
@@ -588,8 +713,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_mpb.SetFloat( DeformEnabledProp, 1f );
 		_mpb.SetTexture( DeformMapProp, _heightfield.Texture );
 		_mpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
-		_mpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
-		_mpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_mpb.SetVector( DeformWorldSizeProp, DeformWorldSizeVector( _heightfield ) );
+		_mpb.SetVector( DeformResolutionProp, DeformResolutionVector( _heightfield ) );
 		_mpb.SetFloat( DeformNormalSoftenProp, _deformNormalSoften );
 		_mpb.SetFloat( DeformSampleBlurProp, _deformSampleBlur );
 		_mpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
@@ -597,7 +722,19 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		SyncSparkleMaskDeform();
 
 		// Shader displacement is not reflected in vertex buffers; keep culling bounds tall enough.
-		ExpandVisualBounds( _heightfield.WorldSize, _heightfield.MaxHeight );
+		ExpandVisualBounds( _heightfield.WorldSizeX, _heightfield.WorldSizeZ, _heightfield.MaxHeight );
+	}
+
+	/// <summary>Deform footprint as a float2 (x, z) for shader `_DeformWorldSize`.</summary>
+	static Vector4 DeformWorldSizeVector( GoldPileHeightfield heightfield )
+	{
+		return new Vector4( heightfield.WorldSizeX, heightfield.WorldSizeZ, 0f, 0f );
+	}
+
+	/// <summary>Deform map resolution as a float2 (x, z) for shader `_DeformResolution`.</summary>
+	static Vector4 DeformResolutionVector( GoldPileHeightfield heightfield )
+	{
+		return new Vector4( heightfield.ResolutionX, heightfield.ResolutionZ, 0f, 0f );
 	}
 
 	void SyncSparkleMaskDeform()
@@ -612,8 +749,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_sparkleMaskMaterial.SetFloat( DeformEnabledProp, 1f );
 		_sparkleMaskMaterial.SetTexture( DeformMapProp, _heightfield.Texture );
 		_sparkleMaskMaterial.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
-		_sparkleMaskMaterial.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
-		_sparkleMaskMaterial.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_sparkleMaskMaterial.SetVector( DeformWorldSizeProp, DeformWorldSizeVector( _heightfield ) );
+		_sparkleMaskMaterial.SetVector( DeformResolutionProp, DeformResolutionVector( _heightfield ) );
 		_sparkleMaskMaterial.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
 		_sparkleMaskMaterial.SetFloat( TreasureSparkleMaskPass.MaskWriteValueId, TreasureSparkleDefinition.MaskPile );
 
@@ -624,8 +761,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_sparkleMaskMpb.SetFloat( DeformEnabledProp, 1f );
 		_sparkleMaskMpb.SetTexture( DeformMapProp, _heightfield.Texture );
 		_sparkleMaskMpb.SetFloat( DeformScaleProp, _heightfield.MaxHeight );
-		_sparkleMaskMpb.SetFloat( DeformWorldSizeProp, _heightfield.WorldSize );
-		_sparkleMaskMpb.SetFloat( DeformResolutionProp, _heightfield.Resolution );
+		_sparkleMaskMpb.SetVector( DeformWorldSizeProp, DeformWorldSizeVector( _heightfield ) );
+		_sparkleMaskMpb.SetVector( DeformResolutionProp, DeformResolutionVector( _heightfield ) );
 		_sparkleMaskMpb.SetFloat( GroundLevelProp, _heightfield.GroundLevel );
 		_sparkleMaskMpb.SetFloat( TreasureSparkleMaskPass.MaskWriteValueId, TreasureSparkleDefinition.MaskPile );
 	}
@@ -633,18 +770,19 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	/// <summary>
 	/// Flat topology + GPU Y displace: Unity culls against undisplaced bounds, so expand them.
 	/// </summary>
-	void ExpandVisualBounds( float worldSize, float maxHeight )
+	void ExpandVisualBounds( float worldSizeX, float worldSizeZ, float maxHeight )
 	{
 		if ( _visualMesh == null )
 			return;
 
-		float size = Mathf.Max( 0.1f, worldSize );
+		float sizeX = Mathf.Max( 0.1f, worldSizeX );
+		float sizeZ = Mathf.Max( 0.1f, worldSizeZ );
 		float height = Mathf.Max( 0.01f, maxHeight );
 		// Small pad so silhouette / normal-extrusion edge cases stay inside the AABB.
 		const float Pad = 1.05f;
 		_visualMesh.bounds = new Bounds(
 			new Vector3( 0f, height * 0.5f, 0f ),
-			new Vector3( size * Pad, height * Pad, size * Pad ) );
+			new Vector3( sizeX * Pad, height * Pad, sizeZ * Pad ) );
 	}
 
 	void QueueColliderDirty( int minX, int maxX, int minZ, int maxZ, bool full )
@@ -690,7 +828,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		else
 		{
 			_colliderTiles.MarkDirtyFromHeightfieldRect(
-				_heightfield.Resolution,
+				_heightfield.ResolutionX,
+				_heightfield.ResolutionZ,
 				_colliderDirtyMinX,
 				_colliderDirtyMaxX,
 				_colliderDirtyMinZ,

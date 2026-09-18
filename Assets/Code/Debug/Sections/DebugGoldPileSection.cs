@@ -60,6 +60,12 @@ public class DebugGoldPileSection : DebugOverlaySection
 		GUILayout.Label( $"Name: {visual.gameObject.name}" );
 		GUILayout.Label( $"Remaining: {visual.TotalRemainingLoot}" );
 		GUILayout.Label( $"Carve R: {visual.CarveRadius:0.00}" );
+		if ( visual.Heightfield != null && visual.Heightfield.IsInitialized )
+		{
+			GUILayout.Label(
+				$"HF: {visual.Heightfield.WorldSizeX:0.##}×{visual.Heightfield.WorldSizeZ:0.##}m " +
+				$"res {visual.Heightfield.ResolutionX}×{visual.Heightfield.ResolutionZ}" );
+		}
 		GoldPileCarveSettings globalCarve = GoldPileCarveSettings.FromGlobalDefinition().ResolvedForPile(
 			visual.Heightfield != null && visual.Heightfield.IsInitialized
 				? visual.Heightfield.WorldSize

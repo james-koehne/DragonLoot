@@ -5,8 +5,8 @@ Shader "DragonLoot/Treasure Sparkle Pile Mask"
 		[Toggle] _DeformEnabled("Runtime Deform Map", Float) = 0
 		_DeformMap("Deform Height Map", 2D) = "black" {}
 		_DeformScale("Deform Height Scale", Float) = 1.5
-		_DeformWorldSize("Deform World Size", Float) = 4
-		_DeformResolution("Deform Resolution", Float) = 64
+		[HideInInspector] _DeformWorldSize("Deform World Size", Vector) = (4,4,0,0)
+		[HideInInspector] _DeformResolution("Deform Resolution", Vector) = (64,64,0,0)
 		_GroundLevelHeight("Ground Level Height", Float) = 0.01
 		_MaskWriteValue("Mask Write Value", Float) = 0.25
 	}
@@ -40,8 +40,8 @@ Shader "DragonLoot/Treasure Sparkle Pile Mask"
 			CBUFFER_START(UnityPerMaterial)
 				half _DeformEnabled;
 				float _DeformScale;
-				float _DeformWorldSize;
-				float _DeformResolution;
+				float2 _DeformWorldSize;
+				float2 _DeformResolution;
 				float _GroundLevelHeight;
 				float _MaskWriteValue;
 			CBUFFER_END
