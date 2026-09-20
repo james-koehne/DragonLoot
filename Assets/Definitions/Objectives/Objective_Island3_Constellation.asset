@@ -20,14 +20,21 @@ MonoBehaviour:
   - obj_island_2_sorting
   subs:
   - id: fill_display
-    label: Fill the coin display
+    label: Display coins
     completeType: 1
     targetId: island3_coin_display
+    requiredCount: 0
   - id: complete_constellation
-    label: Complete the gem constellation
+    label: Place gems
     completeType: 3
     targetId: island3_constellation
-  rewards: []
-  rewardLabel: Platforms
-  completionToast: "Island complete \u2014 platforms activated"
+    requiredCount: 0
+  rewards:
+  - type: 0
+    abilityId: jump
+    upgradeId: 
+    upgradeLevel: 0
+  rewardLabel: Jump
+  showReward: 1
+  completionToast: Island complete - platforms activated
   onCompleteWorldEventIds: []

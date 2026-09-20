@@ -50,6 +50,9 @@ public class ProfileSaveData : IGameStats
 	/// <summary>Completed tutorial task keys as "tutorialId/taskId".</summary>
 	public List<string> completedTutorialTaskIds;
 
+	/// <summary>Progress toward counted tutorial tasks as "tutorialId/taskId" → count.</summary>
+	public Dictionary<string, int> tutorialTaskProgressCounts;
+
 	/// <summary>Objectives whose all sub-steps were completed.</summary>
 	public List<string> completedObjectiveIds;
 
@@ -131,6 +134,8 @@ public class ProfileSaveData : IGameStats
 			completedTutorialIds = new List<string>();
 		if ( completedTutorialTaskIds == null )
 			completedTutorialTaskIds = new List<string>();
+		if ( tutorialTaskProgressCounts == null )
+			tutorialTaskProgressCounts = new Dictionary<string, int>();
 	}
 
 	public void EnsureObjectiveProgress()
@@ -287,6 +292,23 @@ public class ProfileSaveData : IGameStats
 		bool changed = MergeIdList( discoveredTutorialIds, other.discoveredTutorialIds );
 		changed |= MergeIdList( completedTutorialIds, other.completedTutorialIds );
 		changed |= MergeIdList( completedTutorialTaskIds, other.completedTutorialTaskIds );
+
+		if ( other.tutorialTaskProgressCounts != null )
+		{
+			foreach ( KeyValuePair<string, int> pair in other.tutorialTaskProgressCounts )
+			{
+				if ( string.IsNullOrEmpty( pair.Key ) )
+					continue;
+				int incoming = pair.Value;
+				if ( incoming <= 0 )
+					continue;
+				if ( tutorialTaskProgressCounts.TryGetValue( pair.Key, out int existing ) && existing >= incoming )
+					continue;
+				tutorialTaskProgressCounts[ pair.Key ] = incoming;
+				changed = true;
+			}
+		}
+
 		return changed;
 	}
 

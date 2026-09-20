@@ -20,14 +20,17 @@ MonoBehaviour:
   - obj_island_3_constellation
   subs:
   - id: fill_display
-    label: Fill the coin display
+    label: Display coins
     completeType: 1
     targetId: island4_coin_display
+    requiredCount: 0
   - id: present_artifacts
-    label: Place the statue and attach the artifacts
+    label: Present artifacts
     completeType: 1
     targetId: island4_artifact_presentation
+    requiredCount: 0
   rewards: []
-  rewardLabel: Platforms
-  completionToast: "Island complete \u2014 platforms activated"
+  rewardLabel: 
+  showReward: 0
+  completionToast: Island complete - platforms activated
   onCompleteWorldEventIds: []

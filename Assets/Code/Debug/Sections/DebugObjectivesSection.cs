@@ -68,6 +68,14 @@ public class DebugObjectivesSection : DebugOverlaySection
 
 					string subLabel = string.IsNullOrEmpty( sub.label ) ? sub.id : sub.label;
 					bool subDone = system.IsSubCompleted( def.id, sub.id );
+					if ( ObjectiveProgress.HasCountProgress( sub.completeType ) )
+					{
+						int current;
+						int required;
+						if ( ObjectiveProgress.TryGetCounts( def, sub, out current, out required ) && required > 0 )
+							subLabel = subLabel + ": " + current + "/" + required;
+					}
+
 					GUILayout.BeginHorizontal();
 					GUILayout.Space( 12f );
 					GUILayout.Label( ( subDone ? "[x] " : "[ ] " ) + subLabel, GUILayout.ExpandWidth( true ) );

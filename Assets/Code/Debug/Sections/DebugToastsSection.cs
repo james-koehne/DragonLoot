@@ -16,29 +16,31 @@ public class DebugToastsSection : DebugOverlaySection
 		GUILayout.Label( "Stack: " + ( stackReady ? ( stack.VisibleCount + " visible / " + stack.QueuedCount + " queued" ) : "missing" ) );
 
 		GUILayout.Space( 6f );
-		GUILayout.Label( "DiscoveryToast" );
+		GUILayout.Label( "By Tier" );
+		GUI.enabled = discoveryReady;
+		if ( GUILayout.Button( "Discovery (first pickup)" ) )
+			DiscoveryToastUI.NotifyMessage( "New Discovery: Debug Coin", ToastStackUI.ToastTier.Discovery );
+		if ( GUILayout.Button( "Completion (constellation / display)" ) )
+			DiscoveryToastUI.NotifyMessage( "Constellation Complete: Debug Gem", ToastStackUI.ToastTier.Completion );
+		GUI.enabled = unlockReady;
+		if ( GUILayout.Button( "Unlock (ability)" ) )
+			PlayUnlockGlide();
+		if ( GUILayout.Button( "Milestone (island complete)" ) )
+			UnlockRewardToastUI.NotifyMessage( "Island complete — platforms activated", null, ToastStackUI.ToastTier.Milestone );
+		GUI.enabled = true;
+
+		GUILayout.Space( 6f );
+		GUILayout.Label( "Legacy / Sequence" );
 		GUI.enabled = discoveryReady;
 		if ( GUILayout.Button( "Play Discovery Message" ) )
 			DiscoveryToastUI.NotifyMessage( "Debug: Discovery Toast" );
-		if ( GUILayout.Button( "Play Constellation Complete" ) )
-			DiscoveryToastUI.NotifyMessage( "Constellation Complete: Debug Gem" );
-		GUI.enabled = true;
-
-		GUILayout.Space( 6f );
-		GUILayout.Label( "UnlockRewardToast" );
 		GUI.enabled = unlockReady;
 		if ( GUILayout.Button( "Play Unlock Message" ) )
 			UnlockRewardToastUI.NotifyMessage( "Unlocked: Debug Reward" );
-		if ( GUILayout.Button( "Play Unlock Ability (Glide)" ) )
-			PlayUnlockGlide();
-		GUI.enabled = true;
-
-		GUILayout.Space( 6f );
-		GUILayout.Label( "Sequence" );
 		GUI.enabled = discoveryReady && unlockReady;
 		if ( GUILayout.Button( "Play Discovery then Unlock" ) )
 		{
-			DiscoveryToastUI.NotifyMessage( "Constellation Complete: Debug Gem" );
+			DiscoveryToastUI.NotifyMessage( "Constellation Complete: Debug Gem", ToastStackUI.ToastTier.Completion );
 			UnlockRewardToastUI.NotifyMessage( "Unlocked: Double Jump", ResolveGlideIcon() );
 		}
 		if ( GUILayout.Button( "Play 3 Stacked Discovery" ) )
@@ -47,12 +49,12 @@ public class DebugToastsSection : DebugOverlaySection
 			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 2" );
 			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 3" );
 		}
-		if ( GUILayout.Button( "Play Mixed Stack (4, queues 1)" ) )
+		if ( GUILayout.Button( "Play Mixed Stack (4 tiers, queues 1)" ) )
 		{
-			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 1" );
-			UnlockRewardToastUI.NotifyMessage( "Unlocked: Debug A", ResolveGlideIcon() );
-			DiscoveryToastUI.NotifyMessage( "Debug: Discovery 2" );
-			UnlockRewardToastUI.NotifyMessage( "Unlocked: Debug B" );
+			DiscoveryToastUI.NotifyMessage( "New Discovery: Debug Coin", ToastStackUI.ToastTier.Discovery );
+			DiscoveryToastUI.NotifyMessage( "Display Complete: Coins", ToastStackUI.ToastTier.Completion );
+			UnlockRewardToastUI.NotifyMessage( "Unlocked: Double Jump", ResolveGlideIcon() );
+			UnlockRewardToastUI.NotifyMessage( "Island complete — platforms activated", null, ToastStackUI.ToastTier.Milestone );
 		}
 		GUI.enabled = true;
 	}

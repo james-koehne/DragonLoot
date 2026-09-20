@@ -1,0 +1,58 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+Built from '6000.3/staging' branch; Version is '6000.3.18f1 (5ebeb53e4c07) revision 6209205'; Using compiler version '194234433'; Build Type 'Release'
+OS: 'Windows 11  (10.0.26200) Core' Language: 'en' Physical Memory: 63133 MB
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-james" at "2026-09-18T05:32:22.3187408Z"
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1
+System  architecture: x64
+Process architecture: x64
+Date: 2026-09-18T05:32:22Z
+[Licensing::Client] Code 10 while verifying Licensing Client signature (process Id: 13376, path: "C:/Program Files/Unity Hub/UnityLicensingClient_V1/Unity.Licensing.Client.exe")
+[Licensing::Module] LicensingClient has failed validation; ignoring
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.18.3+d7ffd15
+  Session Id:              e23323eace4c4cd7bfc1d3344d34942e
+  Correlation Id:          2c2b6d1586ecade4e757ede2aa9e47dc
+  External correlation Id: 1352276148533829263
+  Machine Id:              UrgtFUiOCrAW6cT0WC2L54UENAA=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-james" (connect: 0.00s, validation: 0.00s, handshake: 0.03s)
+[Licensing::IpcConnector] Successfully connected to: "LicenseClient-james-notifications" at "2026-09-18T05:32:22.349317Z"
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: F4-2QVD-3KHS-KCWT-R46K-XXXX
+  Product: Unity Personal
+  Type: ULF
+  Expiration: Unlimited
+[Licensing::Module] License group:
+  Id: 6272015-UnityPersXXXX
+  Product: Unity Personal
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Client] Successfully updated license, isAsync: True, time: 0.00
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] License group:
+  Id: F4-2QVD-3KHS-KCWT-R46K-XXXX
+  Product: Unity Personal
+  Type: ULF
+  Expiration: Unlimited
+[Licensing::Module] License group:
+  Id: 6272015-UnityPersXXXX
+  Product: Unity Personal
+  Type: Assigned
+  Expiration: Unlimited
+[Licensing::Module] Licensing Background thread has ended after 0.04s
+
+COMMAND LINE ARGUMENTS:
+C:\Program Files\Unity\Hub\Editor\6000.3.18f1\Editor\Unity.exe
+-batchmode
+-nographics
+-quit
+-projectPath
+C:\GameDevelopment\FunkGames\DragonLoot\DragonLoot
+-executeMethod
+ToastFeedbackPostprocessor.EnsureFeedbacksOnPrefab
+-logFile
+C:\GameDevelopment\FunkGames\DragonLoot\DragonLoot\Temp_ToastFeedback.log
+Successfully changed project path to: C:\GameDevelopment\FunkGames\DragonLoot\DragonLoot
+C:/GameDevelopment/FunkGames/DragonLoot/DragonLoot
+Exiting without the bug reporter. Application will terminate with return code 1

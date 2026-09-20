@@ -49,6 +49,9 @@ public class DebugInteractionSection : DebugOverlaySection
 		if ( !Mathf.Approximately( nextThrowInitial, throwInitial ) )
 			interaction.SetThrowPlaceHoldInitialDelay( nextThrowInitial );
 
+		float pickupSpeed = PlayerDigPickupSpeed.ResolveMultiplier();
+		GUILayout.Label( $"Dig / Pickup Speed: {pickupSpeed:0.00}x" );
+
 		float pickupRepeat = interaction.PickupRepeatInterval;
 		GUILayout.Label( $"Pickup Repeat: {pickupRepeat:0.00}s" );
 		float nextPickupRepeat = GUILayout.HorizontalSlider( pickupRepeat, 0.05f, 2f );

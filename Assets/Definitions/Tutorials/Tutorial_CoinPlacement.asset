@@ -32,6 +32,7 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
+  prerequisiteVolumeId: volume_island_1
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 

@@ -33,6 +33,7 @@ public class TutorialManager : MonoBehaviour
 	readonly HashSet<string> _completedThisSession = new HashSet<string>();
 	readonly HashSet<string> _hadContextIds = new HashSet<string>();
 	readonly HashSet<string> _deferredUncheckedTaskIds = new HashSet<string>();
+	readonly Dictionary<string, int> _taskProgressCounts = new Dictionary<string, int>();
 	readonly List<TutorialDefinition> _matchingScratch = new List<TutorialDefinition>( 8 );
 	readonly List<TutorialDefinition> _cycleScratch = new List<TutorialDefinition>( 8 );
 	readonly List<TutorialDefinition> _openTutorials = new List<TutorialDefinition>( 8 );
@@ -51,8 +52,6 @@ public class TutorialManager : MonoBehaviour
 	bool _wasPlayerGliding;
 	bool _wasPlayerSliding;
 	bool _playerOnSlideSlope;
-	int _sorterCoinsSorted;
-	bool _sorterStackLoaded;
 	TreasureCategory _heldCategory;
 	bool _isHolding;
 	string _lastShownId;
@@ -133,8 +132,6 @@ public class TutorialManager : MonoBehaviour
 		_wasPlayerGliding = false;
 		_wasPlayerSliding = false;
 		_playerOnSlideSlope = false;
-		_sorterCoinsSorted = 0;
-		_sorterStackLoaded = false;
 		_isHolding = false;
 		_openTutorials.Clear();
 		_endedCinematicPresentationId = null;
@@ -145,6 +142,7 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintSeconds = 0f;
 		_walkWithoutSprintContext = false;
 		_deferredUncheckedTaskIds.Clear();
+		_taskProgressCounts.Clear();
 		_hadContextIds.Clear();
 		HydrateCompletedFromSave();
 		RefreshFromPlayerState();
@@ -176,6 +174,15 @@ public class TutorialManager : MonoBehaviour
 			if ( !string.IsNullOrEmpty( id ) )
 				_hadContextIds.Add( id );
 		}
+
+		if ( save.tutorialTaskProgressCounts == null )
+			return;
+		foreach ( KeyValuePair<string, int> pair in save.tutorialTaskProgressCounts )
+		{
+			if ( string.IsNullOrEmpty( pair.Key ) || pair.Value <= 0 )
+				continue;
+			_taskProgressCounts[ pair.Key ] = pair.Value;
+		}
 	}
 
 	public void BindPopup( TutorialPopupUI popup )
@@ -202,6 +209,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<PlacementCompletedEvent>( OnPlacementCompleted );
 		EventBus.Subscribe<TreasureThrownEvent>( OnThrown );
 		EventBus.Subscribe<CoinStackChangedEvent>( OnCoinStackChanged );
+		EventBus.Subscribe<CoinTakenFromStackEvent>( OnCoinTakenFromStack );
 		EventBus.Subscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
 		EventBus.Subscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Subscribe<ArtifactPresentationTableChangedEvent>( OnArtifactChanged );
@@ -233,6 +241,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<PlacementCompletedEvent>( OnPlacementCompleted );
 		EventBus.Unsubscribe<TreasureThrownEvent>( OnThrown );
 		EventBus.Unsubscribe<CoinStackChangedEvent>( OnCoinStackChanged );
+		EventBus.Unsubscribe<CoinTakenFromStackEvent>( OnCoinTakenFromStack );
 		EventBus.Unsubscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
 		EventBus.Unsubscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Unsubscribe<ArtifactPresentationTableChangedEvent>( OnArtifactChanged );
@@ -901,6 +910,13 @@ public class TutorialManager : MonoBehaviour
 		TryCompleteTask( TutorialTaskCompleteType.StackCoins );
 	}
 
+	void OnCoinTakenFromStack( CoinTakenFromStackEvent evt )
+	{
+		if ( evt.Stack == null )
+			return;
+		TryCompleteTask( TutorialTaskCompleteType.TakeCoinFromStack );
+	}
+
 	void OnCoinDisplayChanged( CoinDisplayTableChangedEvent evt )
 	{
 		TryCompleteTask( TutorialTaskCompleteType.PlaceCoinDisplay );
@@ -969,40 +985,14 @@ public class TutorialManager : MonoBehaviour
 
 	void OnCoinSorterUsed( CoinSorterUsedEvent evt )
 	{
-		_sorterCoinsSorted++;
-		TryCompleteSorterIfReady();
+		TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
 	}
 
 	void OnCoinSorterStackLoaded( CoinSorterStackLoadedEvent evt )
 	{
 		if ( evt.CoinCount < 2 )
 			return;
-		_sorterStackLoaded = true;
-		if ( _sorterCoinsSorted > 0 )
-			TryCompleteSorterIfReady();
-	}
-
-	void TryCompleteSorterIfReady()
-	{
-		if ( _catalog == null || _catalog.tutorials == null )
-		{
-			if ( _sorterStackLoaded || _sorterCoinsSorted >= 30 )
-				TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
-			return;
-		}
-
-		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
-		{
-			TutorialDefinition def = _catalog.tutorials[ i ];
-			if ( def == null || IsCompleted( def.id ) )
-				continue;
-			int need = def.sorterCoinsToComplete > 0 ? def.sorterCoinsToComplete : 30;
-			if ( _sorterStackLoaded || _sorterCoinsSorted >= need )
-			{
-				TryCompleteTask( TutorialTaskCompleteType.UseCoinSorter );
-				return;
-			}
-		}
+		ForceCompleteMatchingTasks( TutorialTaskCompleteType.UseCoinSorter );
 	}
 
 	void TryCompleteEnterVolumeTasks( string volumeId )
@@ -1200,6 +1190,12 @@ public class TutorialManager : MonoBehaviour
 
 		if ( _active != null )
 		{
+			if ( !IsPrerequisiteVolumeMet( _active ) )
+			{
+				RequestHide( complete: false );
+				return;
+			}
+
 			if ( force && IsEligible( _active ) )
 				RefreshActivePopup();
 			return;
@@ -1253,6 +1249,9 @@ public class TutorialManager : MonoBehaviour
 		bool primary = false;
 		switch ( def.trigger )
 		{
+			case TutorialTriggerType.None:
+				primary = IsPrerequisiteVolumeMet( def ) && !string.IsNullOrEmpty( def.prerequisiteVolumeId );
+				break;
 			case TutorialTriggerType.EnterVolume:
 				primary = !string.IsNullOrEmpty( def.volumeId ) && _insideVolumes.Contains( def.volumeId );
 				break;
@@ -1401,11 +1400,25 @@ public class TutorialManager : MonoBehaviour
 			return true;
 		if ( def.fallbackVolumeId == volumeId )
 			return true;
+		if ( def.prerequisiteVolumeId == volumeId )
+			return true;
 		return false;
+	}
+
+	bool IsPrerequisiteVolumeMet( TutorialDefinition def )
+	{
+		if ( def == null || string.IsNullOrEmpty( def.prerequisiteVolumeId ) )
+			return true;
+		return _insideVolumes.Contains( def.prerequisiteVolumeId );
 	}
 
 	bool ArePrerequisitesMet( TutorialDefinition def )
 	{
+		if ( def == null )
+			return false;
+		if ( !IsPrerequisiteVolumeMet( def ) )
+			return false;
+
 		if ( def.prerequisiteTutorialIds == null || def.prerequisiteTutorialIds.Length == 0 )
 			return true;
 
@@ -1509,7 +1522,7 @@ public class TutorialManager : MonoBehaviour
 			def.title,
 			def.body,
 			string.Empty,
-			TutorialPopupUI.FormatTasks( def.tasks, IsTaskCompleteInActive ),
+			FormatActiveTasks(),
 			animate );
 
 		_hadContextIds.Add( def.id );
@@ -1664,8 +1677,39 @@ public class TutorialManager : MonoBehaviour
 			TutorialTask task = def.tasks[ i ];
 			if ( task == null || string.IsNullOrEmpty( task.id ) )
 				continue;
-			_sessionCompletedTaskKeys.Remove( TaskKey( def.id, task.id ) );
+			string key = TaskKey( def.id, task.id );
+			_sessionCompletedTaskKeys.Remove( key );
+			_taskProgressCounts.Remove( key );
 		}
+	}
+
+	string FormatActiveTasks()
+	{
+		if ( _active == null )
+			return string.Empty;
+		return TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive, GetActiveTaskProgress, GetActiveTaskRequired );
+	}
+
+	int GetActiveTaskProgress( string taskId )
+	{
+		if ( _active == null )
+			return 0;
+		return GetTaskProgress( _active.id, taskId );
+	}
+
+	int GetActiveTaskRequired( string taskId )
+	{
+		if ( _active == null || _active.tasks == null || string.IsNullOrEmpty( taskId ) )
+			return 0;
+		for ( int i = 0; i < _active.tasks.Length; i++ )
+		{
+			TutorialTask task = _active.tasks[ i ];
+			if ( task == null || task.id != taskId )
+				continue;
+			return ResolveTaskRequiredCount( _active, task );
+		}
+
+		return 0;
 	}
 
 	void RefreshActivePopup()
@@ -1673,7 +1717,7 @@ public class TutorialManager : MonoBehaviour
 		if ( _active == null || _popup == null )
 			return;
 
-		string tasks = TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive );
+		string tasks = FormatActiveTasks();
 		if ( _popup.IsVisible )
 		{
 			_popup.SetTasks( tasks );
@@ -1706,36 +1750,45 @@ public class TutorialManager : MonoBehaviour
 			return;
 		}
 
-		bool activeHit = RecordMatchingTasks( completeType, null );
+		int outcome = RecordMatchingTasks( completeType, null );
 		CompleteFinishedOpenTutorials();
-		if ( !activeHit )
-			return;
-		if ( IsCeremonyBlocking )
-			return;
-
-		PlayActiveTaskCompleteCeremony();
+		ApplyActiveTaskRecord( outcome );
 	}
 
 	void TryCompleteActiveTaskOnly( TutorialTaskCompleteType completeType )
 	{
 		if ( _active == null || _active.tasks == null )
 			return;
-		if ( IsCeremonyBlocking )
-			return;
 
-		bool any = RecordTasksOnDefinition( _active, completeType, null );
-		if ( !any )
-			return;
-
-		PlayActiveTaskCompleteCeremony();
+		int outcome = RecordTasksOnDefinition( _active, completeType, null );
+		ApplyActiveTaskRecord( outcome );
 	}
 
-	bool RecordMatchingTasks( TutorialTaskCompleteType completeType, string volumeId )
+	void ApplyActiveTaskRecord( int outcome )
+	{
+		if ( outcome <= 0 )
+			return;
+
+		if ( outcome >= 2 )
+		{
+			if ( IsCeremonyBlocking )
+				return;
+			PlayActiveTaskCompleteCeremony();
+			return;
+		}
+
+		bool wasVisible = _popup != null && _popup.IsVisible;
+		RefreshActivePopup();
+		if ( wasVisible && _popup != null )
+			_popup.PlayTaskCountPop();
+	}
+
+	int RecordMatchingTasks( TutorialTaskCompleteType completeType, string volumeId )
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
 			return RecordTasksOnDefinition( _active, completeType, volumeId );
 
-		bool activeHit = false;
+		int activeOutcome = 0;
 		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
 			TutorialDefinition def = _catalog.tutorials[ i ];
@@ -1744,26 +1797,29 @@ public class TutorialManager : MonoBehaviour
 			if ( IsCompleted( def.id ) )
 				continue;
 
-			bool any = RecordTasksOnDefinition( def, completeType, volumeId );
-			if ( !any )
+			int outcome = RecordTasksOnDefinition( def, completeType, volumeId );
+			if ( outcome <= 0 )
 				continue;
 
 			if ( completeType == TutorialTaskCompleteType.EnterVolume && def.completeAllTasksOnVolumeEnter )
 				MarkAllTasksCompleted( def );
 
 			if ( _active != null && def.id == _active.id )
-				activeHit = true;
+			{
+				if ( outcome > activeOutcome )
+					activeOutcome = outcome;
+			}
 		}
 
-		return activeHit;
+		return activeOutcome;
 	}
 
-	bool RecordTasksOnDefinition( TutorialDefinition def, TutorialTaskCompleteType completeType, string volumeId )
+	int RecordTasksOnDefinition( TutorialDefinition def, TutorialTaskCompleteType completeType, string volumeId )
 	{
 		if ( def == null || def.tasks == null || completeType == TutorialTaskCompleteType.None )
-			return false;
+			return 0;
 
-		bool any = false;
+		int best = 0;
 		for ( int i = 0; i < def.tasks.Length; i++ )
 		{
 			TutorialTask task = def.tasks[ i ];
@@ -1780,11 +1836,131 @@ public class TutorialManager : MonoBehaviour
 			if ( IsTaskCompleted( def.id, task.id ) )
 				continue;
 
+			int need = ResolveTaskRequiredCount( def, task );
+			if ( need > 1 )
+			{
+				int next = IncrementTaskProgress( def.id, task.id );
+				if ( next < need )
+				{
+					if ( best < 1 )
+						best = 1;
+					continue;
+				}
+
+				FillTaskProgress( def.id, task.id, need );
+			}
+
+			MarkTaskCompleted( def.id, task.id );
+			best = 2;
+		}
+
+		return best;
+	}
+
+	void ForceCompleteMatchingTasks( TutorialTaskCompleteType completeType )
+	{
+		if ( completeType == TutorialTaskCompleteType.None )
+			return;
+
+		if ( _catalog == null || _catalog.tutorials == null )
+		{
+			if ( _active != null )
+				ForceCompleteTasksOfType( _active, completeType );
+			ApplyActiveTaskRecord( _active != null ? 2 : 0 );
+			return;
+		}
+
+		bool activeHit = false;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || string.IsNullOrEmpty( def.id ) )
+				continue;
+			if ( IsCompleted( def.id ) )
+				continue;
+			if ( !ForceCompleteTasksOfType( def, completeType ) )
+				continue;
+			if ( _active != null && def.id == _active.id )
+				activeHit = true;
+		}
+
+		CompleteFinishedOpenTutorials();
+		if ( activeHit )
+			ApplyActiveTaskRecord( 2 );
+	}
+
+	bool ForceCompleteTasksOfType( TutorialDefinition def, TutorialTaskCompleteType completeType )
+	{
+		if ( def == null || def.tasks == null )
+			return false;
+
+		bool any = false;
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
+			if ( task == null || task.completeTrigger != completeType )
+				continue;
+			if ( string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( IsTaskCompleted( def.id, task.id ) )
+				continue;
+			FillTaskProgress( def.id, task.id, ResolveTaskRequiredCount( def, task ) );
 			MarkTaskCompleted( def.id, task.id );
 			any = true;
 		}
 
 		return any;
+	}
+
+	static int ResolveTaskRequiredCount( TutorialDefinition def, TutorialTask task )
+	{
+		if ( task == null )
+			return 1;
+		if ( task.requiredCount > 1 )
+			return task.requiredCount;
+		if ( task.requiredCount == 1 )
+			return 1;
+		if ( task.completeTrigger == TutorialTaskCompleteType.UseCoinSorter )
+			return def != null && def.sorterCoinsToComplete > 0 ? def.sorterCoinsToComplete : 30;
+		return 1;
+	}
+
+	int GetTaskProgress( string tutorialId, string taskId )
+	{
+		string key = TaskKey( tutorialId, taskId );
+		if ( _taskProgressCounts.TryGetValue( key, out int count ) )
+			return count;
+		return 0;
+	}
+
+	int IncrementTaskProgress( string tutorialId, string taskId )
+	{
+		int next = GetTaskProgress( tutorialId, taskId ) + 1;
+		FillTaskProgress( tutorialId, taskId, next );
+		return next;
+	}
+
+	void FillTaskProgress( string tutorialId, string taskId, int count )
+	{
+		if ( string.IsNullOrEmpty( tutorialId ) || string.IsNullOrEmpty( taskId ) )
+			return;
+		if ( count < 0 )
+			count = 0;
+
+		string key = TaskKey( tutorialId, taskId );
+		_taskProgressCounts[ key ] = count;
+
+		if ( _activeIsReplay )
+			return;
+
+		ProfileSaveData save = GetSave();
+		if ( save == null )
+			return;
+
+		save.EnsureTutorialProgress();
+		save.tutorialTaskProgressCounts[ key ] = count;
+		if ( ProfileManager.Instance != null )
+			ProfileManager.Instance.SaveCurrentStatsToProfile();
 	}
 
 	void CompleteFinishedOpenTutorials()
@@ -1827,6 +2003,7 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( IsTaskCompleted( def.id, task.id ) )
 				continue;
+			FillTaskProgress( def.id, task.id, ResolveTaskRequiredCount( def, task ) );
 			MarkTaskCompleted( def.id, task.id );
 		}
 	}
@@ -1840,7 +2017,7 @@ public class TutorialManager : MonoBehaviour
 
 		if ( _popup != null )
 		{
-			_popup.SetTasks( TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive ) );
+			_popup.SetTasks( FormatActiveTasks() );
 			_popup.PlayTaskComplete();
 		}
 
@@ -1872,6 +2049,7 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( IsTaskCompleted( _active.id, task.id ) )
 				continue;
+			FillTaskProgress( _active.id, task.id, ResolveTaskRequiredCount( _active, task ) );
 			MarkTaskCompleted( _active.id, task.id );
 			any = true;
 		}
@@ -1887,7 +2065,7 @@ public class TutorialManager : MonoBehaviour
 
 		if ( _popup != null )
 		{
-			_popup.SetTasks( TutorialPopupUI.FormatTasks( _active.tasks, IsTaskCompleteInActive ) );
+			_popup.SetTasks( FormatActiveTasks() );
 			_popup.PlayTaskComplete();
 		}
 
@@ -2111,8 +2289,7 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintReady = false;
 		_walkWithoutSprintSeconds = 0f;
 		_walkWithoutSprintContext = false;
-		_sorterCoinsSorted = 0;
-		_sorterStackLoaded = false;
+		_taskProgressCounts.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
 		if ( _popup != null )
@@ -2125,6 +2302,7 @@ public class TutorialManager : MonoBehaviour
 			save.discoveredTutorialIds.Clear();
 			save.completedTutorialIds.Clear();
 			save.completedTutorialTaskIds.Clear();
+			save.tutorialTaskProgressCounts.Clear();
 			if ( ProfileManager.Instance != null )
 				ProfileManager.Instance.SaveCurrentStatsToProfile();
 		}

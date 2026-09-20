@@ -11,13 +11,12 @@ using UnityEngine.UI;
 /// </summary>
 public class DiscoveryToastUI : MonoBehaviour
 {
-	const float HoldSeconds = 2.5f;
-
 	struct ToastEntry
 	{
 		public string Message;
 		public CarryBucketKind Pouch;
 		public bool ShowPouchIcon;
+		public ToastStackUI.ToastTier Tier;
 	}
 
 	public static DiscoveryToastUI Instance { get; private set; }
@@ -44,7 +43,9 @@ public class DiscoveryToastUI : MonoBehaviour
 	[SerializeField] Sprite generalPouchSprite;
 	[SerializeField] Feedbacks showFeedback;
 	[SerializeField] Feedbacks hideFeedback;
-	[SerializeField] float holdDuration = HoldSeconds;
+	[SerializeField] Feedbacks completionShowFeedback;
+	[SerializeField] Feedbacks completionHideFeedback;
+	[SerializeField] float holdDuration;
 
 	bool _ready;
 	bool _subscribed;
@@ -104,16 +105,18 @@ public class DiscoveryToastUI : MonoBehaviour
 		{
 			Message = "New Discovery: " + ResolveName( treasure ),
 			Pouch = PlayerCarry.ResolveBucket( treasure ),
-			ShowPouchIcon = true
+			ShowPouchIcon = true,
+			Tier = ToastStackUI.ToastTier.Discovery
 		} );
 	}
 
-	public static void NotifyMessage( string message )
+	public static void NotifyMessage( string message, ToastStackUI.ToastTier tier = ToastStackUI.ToastTier.Discovery )
 	{
 		EnqueueStatic( new ToastEntry
 		{
 			Message = message,
-			ShowPouchIcon = false
+			ShowPouchIcon = false,
+			Tier = tier
 		} );
 	}
 
@@ -167,12 +170,12 @@ public class DiscoveryToastUI : MonoBehaviour
 			name = evt.Table.InteractionName;
 		if ( string.IsNullOrEmpty( name ) )
 			name = "Coins";
-		Enqueue( MessageOnly( "Display Complete: " + name ) );
+		Enqueue( CompletionMessage( "Display Complete: " + name ) );
 	}
 
 	void OnArtifactDisplayCompleted( ArtifactPresentationTableCompletedEvent evt )
 	{
-		Enqueue( MessageOnly( "Display Complete: Artifacts" ) );
+		Enqueue( CompletionMessage( "Display Complete: Artifacts" ) );
 	}
 
 	void OnConstellationCompleted( GemConstellationCompletedEvent evt )
@@ -190,15 +193,16 @@ public class DiscoveryToastUI : MonoBehaviour
 				name = evt.Constellation.InteractionName;
 		}
 
-		Enqueue( MessageOnly( "Constellation Complete: " + name ) );
+		Enqueue( CompletionMessage( "Constellation Complete: " + name ) );
 	}
 
-	static ToastEntry MessageOnly( string message )
+	static ToastEntry CompletionMessage( string message )
 	{
 		return new ToastEntry
 		{
 			Message = message,
-			ShowPouchIcon = false
+			ShowPouchIcon = false,
+			Tier = ToastStackUI.ToastTier.Completion
 		};
 	}
 
@@ -221,8 +225,7 @@ public class DiscoveryToastUI : MonoBehaviour
 		if ( string.IsNullOrEmpty( entry.Message ) )
 			return;
 
-		float hold = holdDuration > 0.1f ? holdDuration : HoldSeconds;
-		ToastStackUI.NotifyDiscovery( entry.Message, entry.Pouch, entry.ShowPouchIcon, hold );
+		ToastStackUI.NotifyDiscovery( entry.Message, entry.Pouch, entry.ShowPouchIcon, 0f, entry.Tier );
 	}
 
 	public Sprite ResolvePouchSprite( CarryBucketKind pouch )
@@ -277,21 +280,36 @@ public class DiscoveryToastUI : MonoBehaviour
 		if ( stack == null )
 			return;
 
-		if ( showFeedback == null )
-		{
-			Transform existing = transform.Find( "ShowFeedbacks" );
-			if ( existing != null )
-				showFeedback = existing.GetComponent<Feedbacks>();
-		}
+		ResolveFeedbackRef( ref showFeedback, "ShowFeedbacks" );
+		ResolveFeedbackRef( ref hideFeedback, "HideFeedbacks" );
+		ResolveFeedbackRef( ref completionShowFeedback, "CompletionShowFeedbacks" );
+		ResolveFeedbackRef( ref completionHideFeedback, "CompletionHideFeedbacks" );
 
-		if ( hideFeedback == null )
-		{
-			Transform existing = transform.Find( "HideFeedbacks" );
-			if ( existing != null )
-				hideFeedback = existing.GetComponent<Feedbacks>();
-		}
+		CanvasGroup group = GetComponent<CanvasGroup>();
+		RectTransform rect = transform as RectTransform;
+		Image accent = FindChildImage( "Accent" );
+		Image icon = FindChildImage( "PouchIcon" );
 
-		stack.RegisterKind( ToastStackUI.Kind.Discovery, showFeedback, hideFeedback, GetComponent<CanvasGroup>(), transform as RectTransform );
+		stack.RegisterTier( ToastStackUI.ToastTier.Discovery, showFeedback, hideFeedback, group, rect, accent, icon );
+		stack.RegisterTier( ToastStackUI.ToastTier.Completion, completionShowFeedback, completionHideFeedback, group, rect, accent, icon );
+	}
+
+	void ResolveFeedbackRef( ref Feedbacks field, string childName )
+	{
+		if ( field != null )
+			return;
+
+		Transform existing = transform.Find( childName );
+		if ( existing != null )
+			field = existing.GetComponent<Feedbacks>();
+	}
+
+	Image FindChildImage( string childName )
+	{
+		Transform existing = transform.Find( childName );
+		if ( existing == null )
+			return null;
+		return existing.GetComponent<Image>();
 	}
 
 	void HideChild( string childName )

@@ -10,18 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
-  m_Name: Tutorial_Digging
+  m_Name: Tutorial_ManualSorting
   m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
-  id: tut_digging
-  title: Digging
+  id: tut_manual_sorting
+  title: Manual Sorting
   tags:
-  - digging
-  trigger: 1
+  - coins
+  - sorting
+  trigger: 9
   holdingCategory: 0
-  volumeId: volume_main_cave
+  volumeId: 
   fallbackVolumeId: 
-  alsoShowWhenAimingTreasurePile: 1
-  alsoShowWhenAimingCoinStack: 0
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 1
   minWorldCoinsToShow: 100
   minCarriedCoinsToShow: 50
   minDisplayCoinsToShow: 50
@@ -31,17 +32,25 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
-  prerequisiteVolumeId: volume_island_1
+  prerequisiteVolumeId: volume_island_2
   prerequisiteTutorialIds:
-  - tut_movement
+  - tut_coin_stacking
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Aim at a gold pile and dig to pull treasure into your hands.
-  keybindHint: '[{Interact}] Dig'
+  body: Sort coins by stacking matching ones on the ground, then pick them off one
+    at a time.
+  keybindHint: 
   tasks:
-  - id: dig
-    label: Dig
-    keybindHint: '[{Interact}]'
-    completeTrigger: 1
+  - id: stack_coins
+    label: Stack coins on the ground
+    keybindHint: '[{SecondaryInteract}]'
+    completeTrigger: 4
     completeVolumeId: 
+    requiredCount: 0
+  - id: take_from_stack
+    label: Pull coins from a stack
+    keybindHint: '[{Interact}]'
+    completeTrigger: 25
+    completeVolumeId: 
+    requiredCount: 10

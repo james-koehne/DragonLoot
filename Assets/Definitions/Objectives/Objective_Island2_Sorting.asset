@@ -19,19 +19,22 @@ MonoBehaviour:
   prerequisiteObjectiveIds:
   - obj_island_1_copper
   subs:
-  - id: fill_display
+  - id: display_copper
     label: Display copper coins
     completeType: 1
     targetId: island2_coin_display_copper
-  - id: fill_display
+    requiredCount: 0
+  - id: display_silver
     label: Display silver coins
     completeType: 1
     targetId: island2_coin_display_silver
+    requiredCount: 0
   rewards:
   - type: 1
     abilityId: 
-    upgradeId: 
-    upgradeLevel: 0
-  rewardLabel: Platforms
-  completionToast: "Island complete \u2014 platforms activated"
+    upgradeId: dig_pickup_speed
+    upgradeLevel: 1
+  rewardLabel: Pickup speed 1.5x
+  showReward: 1
+  completionToast: Island complete - platforms activated
   onCompleteWorldEventIds: []

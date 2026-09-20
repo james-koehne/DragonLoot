@@ -1,5 +1,80 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &59335652217673421
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6359850976176406294}
+  - component: {fileID: 4991590857804272171}
+  - component: {fileID: 782452630294730759}
+  m_Layer: 0
+  m_Name: Accent
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &6359850976176406294
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 59335652217673421}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000852}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 6, y: 0}
+  m_Pivot: {x: 0, y: 0.5}
+--- !u!222 &4991590857804272171
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 59335652217673421}
+  m_CullTransparentMesh: 1
+--- !u!114 &782452630294730759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 59335652217673421}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.95, g: 0.78, b: 0.28, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &1610070638280361740
 GameObject:
   m_ObjectHideFlags: 0
@@ -75,6 +150,280 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!1 &1618675793556349236
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1348942745664235140}
+  - component: {fileID: 1942474750269322901}
+  m_Layer: 0
+  m_Name: CompletionShowFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1348942745664235140
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1618675793556349236}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000642}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1942474750269322901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1618675793556349236}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448766738202723
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448766738202723
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448766738202724
+        - rid: 8923448766738202725
+        - rid: 8923448766738202726
+        - rid: 8923448766738202727
+        - rid: 8923448766738202728
+        - rid: 8923448766738202729
+    - rid: 8923448766738202724
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000643}
+        From: 0
+        To: 1
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 1
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 1
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 0
+    - rid: 8923448766738202725
+      type: {class: UiAnchoredSlideFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000642}
+        FromOffset: {x: 0, y: 36}
+        ToOffset: {x: 0, y: 0}
+        Duration: 0.34
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 2.4
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.7
+            value: 1.05
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202726
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000642}
+        Punch: {x: 0.22, y: 0.22, z: 0}
+        Duration: 0.34
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202727
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 6401143048272936947}
+        PunchColor: {r: 1, g: 0.9, b: 0.45, a: 1}
+        Duration: 0.32
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+    - rid: 8923448766738202728
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000682}
+        Punch: {x: 0.2, y: 0.2, z: 0}
+        Duration: 0.3
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202729
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 90a53d89c1eb82d4eb2c1eb4d5545308, type: 3}
+        VolumeMin: 0.62
+        VolumeMax: 0.62
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
 --- !u!1 &3304682845713768523
 GameObject:
   m_ObjectHideFlags: 0
@@ -150,6 +499,345 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!1 &3417452909970484874
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 577084201097356309}
+  - component: {fileID: 4401414874672316564}
+  - component: {fileID: 6401143048272936947}
+  m_Layer: 0
+  m_Name: Accent
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &577084201097356309
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3417452909970484874}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000642}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 6, y: 0}
+  m_Pivot: {x: 0, y: 0.5}
+--- !u!222 &4401414874672316564
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3417452909970484874}
+  m_CullTransparentMesh: 1
+--- !u!114 &6401143048272936947
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3417452909970484874}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.95, g: 0.78, b: 0.28, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!1 &3496178027006208591
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2253098055355021919}
+  - component: {fileID: 7405924127215453956}
+  m_Layer: 0
+  m_Name: MilestoneHideFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2253098055355021919
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3496178027006208591}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000852}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7405924127215453956
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3496178027006208591}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448766738202752
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448766738202752
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448766738202753
+        - rid: 8923448766738202754
+    - rid: 8923448766738202753
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000853}
+        From: 1
+        To: 0
+        Duration: 0.3
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 1
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 1
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 1
+    - rid: 8923448766738202754
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000852}
+        Punch: {x: -0.06, y: -0.06, z: 0}
+        Duration: 0.3
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+--- !u!1 &3700921903024229429
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8722537698525626168}
+  - component: {fileID: 8474017232048747044}
+  m_Layer: 0
+  m_Name: CompletionHideFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8722537698525626168
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3700921903024229429}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000642}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8474017232048747044
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3700921903024229429}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448766738202730
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448766738202730
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448766738202731
+        - rid: 8923448766738202732
+    - rid: 8923448766738202731
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000643}
+        From: 1
+        To: 0
+        Duration: 0.26
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 1
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 1
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 1
+    - rid: 8923448766738202732
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000642}
+        Punch: {x: -0.05, y: -0.05, z: 0}
+        Duration: 0.26
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
 --- !u!1 &3883256519244745415
 GameObject:
   m_ObjectHideFlags: 0
@@ -274,8 +962,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
-  - rid: 8923448716616532088
-  _useUnscaledTime: 0
+  - rid: 8923448809617096790
+  _useUnscaledTime: 1
   references:
     version: 2
     RefIds:
@@ -292,6 +980,66 @@ MonoBehaviour:
         MinDistance: 1
         MaxDistance: 20
         AudioSource: {fileID: 0}
+    - rid: 8923448809617096790
+      type: {class: SequenceFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448809617096791
+        - rid: 8923448809617096792
+    - rid: 8923448809617096791
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448809617096793
+        - rid: 8923448716616532088
+    - rid: 8923448809617096792
+      type: {class: DelayFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Duration: 0.35
+    - rid: 8923448809617096793
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000202}
+        Punch: {x: 0.08, y: 0.1, z: 0}
+        Duration: 0.4
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
 --- !u!1 &4204570582936051790
 GameObject:
   m_ObjectHideFlags: 0
@@ -337,8 +1085,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
-  - rid: 8923448716616532087
-  _useUnscaledTime: 0
+  - rid: 8923448809617096788
+  _useUnscaledTime: 1
   references:
     version: 2
     RefIds:
@@ -355,6 +1103,54 @@ MonoBehaviour:
         MinDistance: 1
         MaxDistance: 20
         AudioSource: {fileID: 0}
+    - rid: 8923448809617096788
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448809617096789
+        - rid: 8923448716616532087
+    - rid: 8923448809617096789
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000202}
+        Punch: {x: 0.035, y: 0.045, z: 0}
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
 --- !u!1 &5277881177787326480
 GameObject:
   m_ObjectHideFlags: 0
@@ -673,6 +1469,353 @@ MonoBehaviour:
       m_Calls: []
   fadeGroup: {fileID: 0}
   loadingGroup: {fileID: 0}
+--- !u!1 &6860889145743721000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 611839931432403713}
+  m_Layer: 0
+  m_Name: ToastFeedbacksV2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &611839931432403713
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6860889145743721000}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000852}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &7093017745787053027
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7423734283875468216}
+  - component: {fileID: 4075624144666974361}
+  m_Layer: 0
+  m_Name: MilestoneShowFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7423734283875468216
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7093017745787053027}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000852}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4075624144666974361
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7093017745787053027}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448766738202744
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448766738202744
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448766738202745
+        - rid: 8923448766738202746
+        - rid: 8923448766738202747
+        - rid: 8923448766738202748
+        - rid: 8923448766738202749
+        - rid: 8923448766738202750
+        - rid: 8923448766738202751
+    - rid: 8923448766738202745
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000853}
+        From: 0
+        To: 1
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 1
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 1
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 0
+    - rid: 8923448766738202746
+      type: {class: UiAnchoredSlideFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000852}
+        FromOffset: {x: 0, y: 42}
+        ToOffset: {x: 0, y: 0}
+        Duration: 0.4
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 2.4
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.7
+            value: 1.05
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202747
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000852}
+        Punch: {x: 0.36, y: 0.36, z: 0}
+        Duration: 0.4
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202748
+      type: {class: UiPunchRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000852}
+        PunchEuler: {x: 0, y: 0, z: 5}
+        Duration: 0.28
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202749
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000855}
+        PunchColor: {r: 1, g: 0.9, b: 0.45, a: 1}
+        Duration: 0.32
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+    - rid: 8923448766738202750
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000862}
+        Punch: {x: 0.2, y: 0.2, z: 0}
+        Duration: 0.3
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202751
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: a56f6eea915e6d1468e4727a532c1139, type: 3}
+        VolumeMin: 0.7
+        VolumeMax: 0.7
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
 --- !u!1 &7101000000000000101
 GameObject:
   m_ObjectHideFlags: 0
@@ -972,6 +2115,8 @@ RectTransform:
   - {fileID: 7101000000000000222}
   - {fileID: 7054798882366521668}
   - {fileID: 1400649274888191716}
+  - {fileID: 5559084654441969662}
+  - {fileID: 3200860691633738092}
   m_Father: {fileID: 8603568719501364491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
@@ -1017,8 +2162,11 @@ MonoBehaviour:
   padding: {x: 22, y: 22}
   textSpacing: 8
   contextualSizePercent: 118
+  showFeedback: {fileID: 3093156060092059325}
+  hideFeedback: {fileID: 7467554563745056516}
   subObjectiveCompleteFeedback: {fileID: 6267923530146926140}
   objectiveCompleteFeedback: {fileID: 1987949476564358893}
+  taskCountPopFeedback: {fileID: 0}
 --- !u!1 &7101000000000000211
 GameObject:
   m_ObjectHideFlags: 0
@@ -2415,6 +3563,10 @@ RectTransform:
   - {fileID: 7101000000000000652}
   - {fileID: 7101000000000000692}
   - {fileID: 7101000000000000672}
+  - {fileID: 577084201097356309}
+  - {fileID: 1348942745664235140}
+  - {fileID: 8722537698525626168}
+  - {fileID: 7982021802669786535}
   m_Father: {fileID: 8603568719501364491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
@@ -2491,6 +3643,8 @@ MonoBehaviour:
   generalPouchSprite: {fileID: 21300000, guid: 69aea8e0a98cd724882fdd5fdf9409ca, type: 3}
   showFeedback: {fileID: 7101000000000000693}
   hideFeedback: {fileID: 7101000000000000673}
+  completionShowFeedback: {fileID: 1942474750269322901}
+  completionHideFeedback: {fileID: 8474017232048747044}
   holdDuration: 3
 --- !u!1 &7101000000000000651
 GameObject:
@@ -2695,19 +3849,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
-  - rid: 9202000000000000011
+  - rid: 8923448766738202720
   _useUnscaledTime: 1
   references:
     version: 2
     RefIds:
-    - rid: 9202000000000000011
+    - rid: 8923448766738202720
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
         _enabled: 1
         Feedbacks:
-        - rid: 9202000000000000012
-        - rid: 9202000000000000013
-    - rid: 9202000000000000012
+        - rid: 8923448766738202721
+        - rid: 8923448766738202722
+    - rid: 8923448766738202721
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
@@ -2722,7 +3876,7 @@ MonoBehaviour:
             time: 0
             value: 0
             inSlope: 0
-            outSlope: 0
+            outSlope: 1
             tangentMode: 0
             weightedMode: 0
             inWeight: 0
@@ -2730,7 +3884,7 @@ MonoBehaviour:
           - serializedVersion: 3
             time: 1
             value: 1
-            inSlope: 0
+            inSlope: 1
             outSlope: 0
             tangentMode: 0
             weightedMode: 0
@@ -2741,13 +3895,13 @@ MonoBehaviour:
           m_RotationOrder: 4
         UseUnscaledTime: 1
         CaptureCurrentAsFrom: 1
-    - rid: 9202000000000000013
+    - rid: 8923448766738202722
       type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000642}
         Punch: {x: -0.04, y: -0.04, z: 0}
-        Duration: 0.2
+        Duration: 0.22
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -2906,41 +4060,29 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
-  - rid: 9202000000000000001
+  - rid: 8923448766738202714
   _useUnscaledTime: 1
   references:
     version: 2
     RefIds:
-    - rid: 8923448716616532065
-      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
-      data:
-        _enabled: 1
-        Clip: {fileID: 8300000, guid: 9be77e0759833764783dbd7f769ac975, type: 3}
-        VolumeMin: 0.5
-        VolumeMax: 0.5
-        PitchMin: 0.95
-        PitchMax: 1.1
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        AudioSource: {fileID: 0}
-    - rid: 9202000000000000001
+    - rid: 8923448766738202714
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
         _enabled: 1
         Feedbacks:
-        - rid: 9202000000000000002
-        - rid: 9202000000000000003
-        - rid: 9202000000000000004
-        - rid: 8923448716616532065
-    - rid: 9202000000000000002
+        - rid: 8923448766738202715
+        - rid: 8923448766738202716
+        - rid: 8923448766738202717
+        - rid: 8923448766738202718
+        - rid: 8923448766738202719
+    - rid: 8923448766738202715
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000643}
         From: 0
         To: 1
-        Duration: 0.22
+        Duration: 0.21000001
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -2948,7 +4090,7 @@ MonoBehaviour:
             time: 0
             value: 0
             inSlope: 0
-            outSlope: 0
+            outSlope: 1
             tangentMode: 0
             weightedMode: 0
             inWeight: 0
@@ -2956,7 +4098,7 @@ MonoBehaviour:
           - serializedVersion: 3
             time: 1
             value: 1
-            inSlope: 0
+            inSlope: 1
             outSlope: 0
             tangentMode: 0
             weightedMode: 0
@@ -2967,7 +4109,7 @@ MonoBehaviour:
           m_RotationOrder: 4
         UseUnscaledTime: 1
         CaptureCurrentAsFrom: 0
-    - rid: 9202000000000000003
+    - rid: 8923448766738202716
       type: {class: UiAnchoredSlideFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
@@ -3009,13 +4151,13 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
-    - rid: 9202000000000000004
+    - rid: 8923448766738202717
       type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000642}
-        Punch: {x: 0.12, y: 0.12, z: 0}
-        Duration: 0.35
+        Punch: {x: 0.16, y: 0.16, z: 0}
+        Duration: 0.3
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -3050,6 +4192,61 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
+    - rid: 8923448766738202718
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 6401143048272936947}
+        PunchColor: {r: 1, g: 0.9, b: 0.45, a: 1}
+        Duration: 0.32
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+    - rid: 8923448766738202719
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 9be77e0759833764783dbd7f769ac975, type: 3}
+        VolumeMin: 0.5
+        VolumeMax: 0.5
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
 --- !u!1 &7101000000000000701
 GameObject:
   m_ObjectHideFlags: 0
@@ -3899,6 +5096,10 @@ RectTransform:
   - {fileID: 7101000000000000872}
   - {fileID: 7101000000000000882}
   - {fileID: 7101000000000000892}
+  - {fileID: 6359850976176406294}
+  - {fileID: 7423734283875468216}
+  - {fileID: 2253098055355021919}
+  - {fileID: 611839931432403713}
   m_Father: {fileID: 8603568719501364491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
@@ -3971,6 +5172,8 @@ MonoBehaviour:
   label: {fileID: 7101000000000000874}
   showFeedback: {fileID: 7101000000000000883}
   hideFeedback: {fileID: 7101000000000000893}
+  milestoneShowFeedback: {fileID: 4075624144666974361}
+  milestoneHideFeedback: {fileID: 7405924127215453956}
   holdDuration: 5
 --- !u!1 &7101000000000000861
 GameObject:
@@ -4175,34 +5378,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
-  - rid: 9204000000000000001
+  - rid: 8923448766738202733
   _useUnscaledTime: 1
   references:
     version: 2
     RefIds:
-    - rid: 8923448716616532064
-      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
-      data:
-        _enabled: 1
-        Clip: {fileID: 8300000, guid: c698c11d90f9f1a4581d30b84e15a24b, type: 3}
-        VolumeMin: 0.6
-        VolumeMax: 0.6
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        AudioSource: {fileID: 0}
-    - rid: 9204000000000000001
+    - rid: 8923448766738202733
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
         _enabled: 1
         Feedbacks:
-        - rid: 9204000000000000002
-        - rid: 9204000000000000003
-        - rid: 9204000000000000004
-        - rid: 8923448716616532064
-    - rid: 9204000000000000002
+        - rid: 8923448766738202734
+        - rid: 8923448766738202735
+        - rid: 8923448766738202736
+        - rid: 8923448766738202737
+        - rid: 8923448766738202738
+        - rid: 8923448766738202739
+        - rid: 8923448766738202740
+    - rid: 8923448766738202734
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
@@ -4217,7 +5410,7 @@ MonoBehaviour:
             time: 0
             value: 0
             inSlope: 0
-            outSlope: 0
+            outSlope: 1
             tangentMode: 0
             weightedMode: 0
             inWeight: 0
@@ -4225,7 +5418,7 @@ MonoBehaviour:
           - serializedVersion: 3
             time: 1
             value: 1
-            inSlope: 0
+            inSlope: 1
             outSlope: 0
             tangentMode: 0
             weightedMode: 0
@@ -4236,14 +5429,14 @@ MonoBehaviour:
           m_RotationOrder: 4
         UseUnscaledTime: 1
         CaptureCurrentAsFrom: 0
-    - rid: 9204000000000000003
+    - rid: 8923448766738202735
       type: {class: UiAnchoredSlideFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000852}
-        FromOffset: {x: 0, y: 28}
+        FromOffset: {x: 0, y: 32}
         ToOffset: {x: 0, y: 0}
-        Duration: 0.28
+        Duration: 0.32
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -4278,13 +5471,13 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
-    - rid: 9204000000000000004
+    - rid: 8923448766738202736
       type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000852}
-        Punch: {x: 0.12, y: 0.12, z: 0}
-        Duration: 0.35
+        Punch: {x: 0.28, y: 0.28, z: 0}
+        Duration: 0.32
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -4319,6 +5512,143 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
+    - rid: 8923448766738202737
+      type: {class: UiPunchRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000852}
+        PunchEuler: {x: 0, y: 0, z: 3.5}
+        Duration: 0.28
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202738
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000855}
+        PunchColor: {r: 1, g: 0.9, b: 0.45, a: 1}
+        Duration: 0.32
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+    - rid: 8923448766738202739
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000862}
+        Punch: {x: 0.2, y: 0.2, z: 0}
+        Duration: 0.3
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202740
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: c698c11d90f9f1a4581d30b84e15a24b, type: 3}
+        VolumeMin: 0.6
+        VolumeMax: 0.6
+        PitchMin: 0.95
+        PitchMax: 1.05
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
 --- !u!1 &7101000000000000891
 GameObject:
   m_ObjectHideFlags: 0
@@ -4368,26 +5698,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
-  - rid: 9204000000000000011
+  - rid: 8923448766738202741
   _useUnscaledTime: 1
   references:
     version: 2
     RefIds:
-    - rid: 9204000000000000011
+    - rid: 8923448766738202741
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
         _enabled: 1
         Feedbacks:
-        - rid: 9204000000000000012
-        - rid: 9204000000000000013
-    - rid: 9204000000000000012
+        - rid: 8923448766738202742
+        - rid: 8923448766738202743
+    - rid: 8923448766738202742
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000853}
         From: 1
         To: 0
-        Duration: 0.22
+        Duration: 0.24
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -4395,7 +5725,7 @@ MonoBehaviour:
             time: 0
             value: 0
             inSlope: 0
-            outSlope: 0
+            outSlope: 1
             tangentMode: 0
             weightedMode: 0
             inWeight: 0
@@ -4403,7 +5733,7 @@ MonoBehaviour:
           - serializedVersion: 3
             time: 1
             value: 1
-            inSlope: 0
+            inSlope: 1
             outSlope: 0
             tangentMode: 0
             weightedMode: 0
@@ -4414,13 +5744,13 @@ MonoBehaviour:
           m_RotationOrder: 4
         UseUnscaledTime: 1
         CaptureCurrentAsFrom: 1
-    - rid: 9204000000000000013
+    - rid: 8923448766738202743
       type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000852}
-        Punch: {x: -0.04, y: -0.04, z: 0}
-        Duration: 0.2
+        Punch: {x: -0.05, y: -0.05, z: 0}
+        Duration: 0.24
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -4549,6 +5879,7 @@ MonoBehaviour:
   showFeedback: {fileID: 7101000000000001003}
   hideFeedback: {fileID: 7101000000000001013}
   taskCompleteFeedback: {fileID: 7101000000000001023}
+  taskCountPopFeedback: {fileID: 0}
   tutorialCompleteFeedback: {fileID: 7101000000000001053}
   switchFeedback: {fileID: 0}
   stackAddFeedback: {fileID: 0}
@@ -8294,6 +9625,212 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: x1
+--- !u!1 &7254948223999847359
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5559084654441969662}
+  - component: {fileID: 3093156060092059325}
+  m_Layer: 0
+  m_Name: ShowObjectiveFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5559084654441969662
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7254948223999847359}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000202}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3093156060092059325
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7254948223999847359}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448766738202708
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448766738202708
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448766738202709
+        - rid: 8923448766738202710
+        - rid: 8923448766738202711
+    - rid: 8923448766738202709
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000205}
+        From: 0
+        To: 1
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 0
+    - rid: 8923448766738202710
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000202}
+        Punch: {x: 0.04, y: 0.06, z: 0}
+        Duration: 0.28
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.3
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202711
+      type: {class: UiAnchoredSlideFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000202}
+        FromOffset: {x: -28, y: 0}
+        ToOffset: {x: 0, y: 0}
+        Duration: 0.24
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 2.2
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.65
+            value: 1.04
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+--- !u!1 &7256322448892213763
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7982021802669786535}
+  m_Layer: 0
+  m_Name: ToastFeedbacksV2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7982021802669786535
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7256322448892213763}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000642}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &7497686292618624185
 GameObject:
   m_ObjectHideFlags: 0
@@ -8403,6 +9940,130 @@ MonoBehaviour:
   playerGlow: {fileID: 0}
   aimCone: {fileID: 3614224078119828446}
   labelsRoot: {fileID: 8973682780214797827}
+--- !u!1 &7584986089243776179
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3200860691633738092}
+  - component: {fileID: 7467554563745056516}
+  m_Layer: 0
+  m_Name: HideObjectiveFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3200860691633738092
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7584986089243776179}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000202}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7467554563745056516
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7584986089243776179}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448809617096794
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448809617096794
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448809617096795
+        - rid: 8923448809617096796
+    - rid: 8923448809617096795
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000205}
+        From: 1
+        To: 0
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 1
+    - rid: 8923448809617096796
+      type: {class: UiAnchoredSlideFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000202}
+        FromOffset: {x: 0, y: 0}
+        ToOffset: {x: -28, y: 0}
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
 --- !u!1 &8540326890992811749
 GameObject:
   m_ObjectHideFlags: 0

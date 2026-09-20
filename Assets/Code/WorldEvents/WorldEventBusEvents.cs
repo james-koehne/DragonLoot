@@ -38,6 +38,7 @@ public struct TutorialHudRow
 	public bool Optional;
 	public bool Complete;
 	public bool ContextualFocus;
+	public bool IsReward;
 }
 
 /// <summary>Contextual / tutorial objective HUD + marker changed.</summary>

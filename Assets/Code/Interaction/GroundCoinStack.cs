@@ -1310,6 +1310,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( !CanTakeFromIndex( player, index ) )
 			return false;
 
+		int countBefore = SettledCount;
 		_taking = true;
 		TreasureDefinition aimedDef = _slots[ index ];
 		Vector3 aimPos = GetSlotWorldPosition( index );
@@ -1332,6 +1333,15 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			TreasureItemFactory.ReturnVisualCoin( aimedCoin );
 
 		_taking = false;
+		if ( receivedActive && !_machineBuffer && countBefore >= 2 )
+		{
+			EventBus.Publish( new CoinTakenFromStackEvent
+			{
+				Stack = this,
+				Coin = aimedDef
+			} );
+		}
+
 		if ( Count <= 0 )
 			DestroyIfEmpty();
 		else

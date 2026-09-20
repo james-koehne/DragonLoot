@@ -2535,6 +2535,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			arcHeight = def != null ? def.itemArcHeight : CoinFlipMotion.DefaultItemArcHeight;
 		}
 
+		if ( playPickupFeedback )
+			duration = Mathf.Max( 0.05f, PlayerDigPickupSpeed.ScaleDuration( duration ) );
+
 		float elapsed = 0f;
 		float originalDuration = duration;
 

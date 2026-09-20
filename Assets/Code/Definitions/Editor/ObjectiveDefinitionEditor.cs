@@ -14,6 +14,7 @@ public class ObjectiveDefinitionEditor : Editor
 	SerializedProperty _subs;
 	SerializedProperty _rewards;
 	SerializedProperty _rewardLabel;
+	SerializedProperty _showReward;
 	SerializedProperty _completionToast;
 	SerializedProperty _onCompleteWorldEventIds;
 
@@ -27,6 +28,7 @@ public class ObjectiveDefinitionEditor : Editor
 		_subs = serializedObject.FindProperty( "subs" );
 		_rewards = serializedObject.FindProperty( "rewards" );
 		_rewardLabel = serializedObject.FindProperty( "rewardLabel" );
+		_showReward = serializedObject.FindProperty( "showReward" );
 		_completionToast = serializedObject.FindProperty( "completionToast" );
 		_onCompleteWorldEventIds = serializedObject.FindProperty( "onCompleteWorldEventIds" );
 	}
@@ -43,6 +45,7 @@ public class ObjectiveDefinitionEditor : Editor
 		EditorGUILayout.PropertyField( _subs, includeChildren: true );
 		EditorGUILayout.PropertyField( _rewards, includeChildren: true );
 		EditorGUILayout.PropertyField( _rewardLabel );
+		EditorGUILayout.PropertyField( _showReward );
 		EditorGUILayout.PropertyField( _completionToast );
 		EditorGUILayout.PropertyField( _onCompleteWorldEventIds, includeChildren: true );
 
@@ -64,6 +67,8 @@ public class ObjectiveSubDefinitionDrawer : PropertyDrawer
 
 		ObjectiveSubCompleteType type = (ObjectiveSubCompleteType)property.FindPropertyRelative( "completeType" ).enumValueIndex;
 		if ( type != ObjectiveSubCompleteType.None )
+			height += line;
+		if ( ObjectiveProgress.HasCountProgress( type ) )
 			height += line;
 
 		return height + 4f;
@@ -88,7 +93,9 @@ public class ObjectiveSubDefinitionDrawer : PropertyDrawer
 
 		ObjectiveSubCompleteType type = (ObjectiveSubCompleteType)property.FindPropertyRelative( "completeType" ).enumValueIndex;
 		if ( type != ObjectiveSubCompleteType.None )
-			DrawRelative( row, property, "targetId" );
+			row = DrawRelative( row, property, "targetId" );
+		if ( ObjectiveProgress.HasCountProgress( type ) )
+			DrawRelative( row, property, "requiredCount" );
 
 		EditorGUI.indentLevel--;
 		EditorGUI.EndProperty();
@@ -221,8 +228,15 @@ public static class ObjectiveCatalogBootstrap
 			null,
 			new ObjectiveSubDefinition
 			{
-				id = "fill_display",
-				label = "Fill the copper coin display",
+				id = "dig_copper",
+				label = "Dig copper coins",
+				completeType = ObjectiveSubCompleteType.PileEmptied,
+				targetId = "island1_copper_pile"
+			},
+			new ObjectiveSubDefinition
+			{
+				id = "display_copper",
+				label = "Display copper coins",
 				completeType = ObjectiveSubCompleteType.DisplayComplete,
 				targetId = "island1_coin_display"
 			} );
@@ -234,10 +248,17 @@ public static class ObjectiveCatalogBootstrap
 			new[] { "obj_island_1_copper" },
 			new ObjectiveSubDefinition
 			{
-				id = "fill_display",
-				label = "Fill the mixed coin display",
+				id = "display_copper",
+				label = "Display copper coins",
 				completeType = ObjectiveSubCompleteType.DisplayComplete,
-				targetId = "island2_coin_display"
+				targetId = "island2_coin_display_copper"
+			},
+			new ObjectiveSubDefinition
+			{
+				id = "display_silver",
+				label = "Display silver coins",
+				completeType = ObjectiveSubCompleteType.DisplayComplete,
+				targetId = "island2_coin_display_silver"
 			} );
 
 		ObjectiveDefinition island3 = EnsureObjective(
@@ -248,14 +269,14 @@ public static class ObjectiveCatalogBootstrap
 			new ObjectiveSubDefinition
 			{
 				id = "fill_display",
-				label = "Fill the coin display",
+				label = "Display coins",
 				completeType = ObjectiveSubCompleteType.DisplayComplete,
 				targetId = "island3_coin_display"
 			},
 			new ObjectiveSubDefinition
 			{
 				id = "complete_constellation",
-				label = "Complete the gem constellation",
+				label = "Place gems",
 				completeType = ObjectiveSubCompleteType.ConstellationComplete,
 				targetId = "island3_constellation"
 			} );
@@ -268,14 +289,14 @@ public static class ObjectiveCatalogBootstrap
 			new ObjectiveSubDefinition
 			{
 				id = "fill_display",
-				label = "Fill the coin display",
+				label = "Display coins",
 				completeType = ObjectiveSubCompleteType.DisplayComplete,
 				targetId = "island4_coin_display"
 			},
 			new ObjectiveSubDefinition
 			{
 				id = "present_artifacts",
-				label = "Place the statue and attach the artifacts",
+				label = "Present artifacts",
 				completeType = ObjectiveSubCompleteType.DisplayComplete,
 				targetId = "island4_artifact_presentation"
 			} );
@@ -331,10 +352,32 @@ public static class ObjectiveCatalogBootstrap
 		def.id = id;
 		def.title = title;
 		def.showRadius = 40f;
+		if ( id == "obj_island_1_copper" )
+			def.showVolumeId = "volume_island_1";
+		else if ( id == "obj_island_2_sorting" )
+			def.showVolumeId = "volume_island_2";
+		else if ( id == "obj_island_3_constellation" )
+			def.showVolumeId = "volume_island_3";
+		else if ( id == "obj_island_4_artifacts" )
+			def.showVolumeId = "volume_island_4";
 		def.prerequisiteObjectiveIds = prerequisites ?? System.Array.Empty<string>();
 		def.subs = subs;
 		def.rewards = System.Array.Empty<ObjectiveReward>();
-		def.rewardLabel = "Platforms";
+		if ( id == "obj_island_1_copper" )
+		{
+			def.rewards = new[]
+			{
+				new ObjectiveReward
+				{
+					type = ObjectiveRewardType.Ability,
+					abilityId = "jump"
+				}
+			};
+			def.showReward = false;
+		}
+		def.rewardLabel = id == "obj_island_1_copper" ? "Unlock Jumping" : "Platforms";
+		if ( def.rewards == null || def.rewards.Length == 0 )
+			def.showReward = true;
 		def.completionToast = CompletionToast;
 		def.onCompleteWorldEventIds = System.Array.Empty<string>();
 	}

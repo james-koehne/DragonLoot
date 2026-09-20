@@ -1242,10 +1242,10 @@ public class PlayerInteraction : MonoBehaviour
 		{
 			float initial = PickupHoldInitialDelay;
 			if ( initial > 0f )
-				return initial;
+				return PlayerDigPickupSpeed.ScaleDuration( initial );
 		}
 
-		return PickupRepeatInterval;
+		return PlayerDigPickupSpeed.ScaleDuration( PickupRepeatInterval );
 	}
 
 	float GetContextualHoldWait()
@@ -1254,10 +1254,10 @@ public class PlayerInteraction : MonoBehaviour
 		{
 			float initial = PickupHoldInitialDelay;
 			if ( initial > 0f )
-				return initial;
+				return PlayerDigPickupSpeed.ScaleDuration( initial );
 		}
 
-		return PickupRepeatInterval;
+		return PlayerDigPickupSpeed.ScaleDuration( PickupRepeatInterval );
 	}
 
 	float GetSecondaryHoldWait()

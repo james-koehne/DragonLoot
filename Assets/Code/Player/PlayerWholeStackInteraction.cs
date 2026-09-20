@@ -539,6 +539,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		CarryDefinition carryDef = null;
 		carryDef = RuntimeDefinition.Resolve( ref carryDef );
 		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
+		duration = PlayerDigPickupSpeed.ScaleDuration( duration );
 		Vector3 endLocal = carryDef != null ? carryDef.heldStackOffset : Vector3.zero;
 
 		if ( holdRoot == null )

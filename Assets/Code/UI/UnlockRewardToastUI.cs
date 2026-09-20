@@ -11,12 +11,11 @@ using UnityEngine.UI;
 /// </summary>
 public class UnlockRewardToastUI : MonoBehaviour
 {
-	const float HoldSeconds = 2.5f;
-
 	struct ToastEntry
 	{
 		public string Message;
 		public Sprite Icon;
+		public ToastStackUI.ToastTier Tier;
 	}
 
 	public static UnlockRewardToastUI Instance { get; private set; }
@@ -37,7 +36,9 @@ public class UnlockRewardToastUI : MonoBehaviour
 	[SerializeField] Text label;
 	[SerializeField] Feedbacks showFeedback;
 	[SerializeField] Feedbacks hideFeedback;
-	[SerializeField] float holdDuration = HoldSeconds;
+	[SerializeField] Feedbacks milestoneShowFeedback;
+	[SerializeField] Feedbacks milestoneHideFeedback;
+	[SerializeField] float holdDuration;
 
 	bool _ready;
 	bool _subscribed;
@@ -96,16 +97,18 @@ public class UnlockRewardToastUI : MonoBehaviour
 		EnqueueStatic( new ToastEntry
 		{
 			Message = "Unlocked: " + name,
-			Icon = definition.icon
+			Icon = definition.icon,
+			Tier = ToastStackUI.ToastTier.Unlock
 		} );
 	}
 
-	public static void NotifyMessage( string message, Sprite icon = null )
+	public static void NotifyMessage( string message, Sprite icon = null, ToastStackUI.ToastTier tier = ToastStackUI.ToastTier.Unlock )
 	{
 		EnqueueStatic( new ToastEntry
 		{
 			Message = message,
-			Icon = icon
+			Icon = icon,
+			Tier = tier
 		} );
 	}
 
@@ -164,8 +167,7 @@ public class UnlockRewardToastUI : MonoBehaviour
 		if ( string.IsNullOrEmpty( entry.Message ) )
 			return;
 
-		float hold = holdDuration > 0.1f ? holdDuration : HoldSeconds;
-		ToastStackUI.NotifyUnlock( entry.Message, entry.Icon, hold );
+		ToastStackUI.NotifyUnlock( entry.Message, entry.Icon, 0f, entry.Tier );
 	}
 
 	void HideLegacyVisual()
@@ -191,21 +193,37 @@ public class UnlockRewardToastUI : MonoBehaviour
 		if ( stack == null )
 			return;
 
-		if ( showFeedback == null )
-		{
-			Transform existing = transform.Find( "ShowFeedbacks" );
-			if ( existing != null )
-				showFeedback = existing.GetComponent<Feedbacks>();
-		}
+		ResolveFeedbackRef( ref showFeedback, "ShowFeedbacks" );
+		ResolveFeedbackRef( ref hideFeedback, "HideFeedbacks" );
+		ResolveFeedbackRef( ref milestoneShowFeedback, "MilestoneShowFeedbacks" );
+		ResolveFeedbackRef( ref milestoneHideFeedback, "MilestoneHideFeedbacks" );
 
-		if ( hideFeedback == null )
-		{
-			Transform existing = transform.Find( "HideFeedbacks" );
-			if ( existing != null )
-				hideFeedback = existing.GetComponent<Feedbacks>();
-		}
+		CanvasGroup group = GetComponent<CanvasGroup>();
+		RectTransform rect = transform as RectTransform;
+		Image accent = FindChildImage( "Accent" );
+		Image icon = FindChildImage( "RewardIcon" );
+		Image backdrop = GetComponent<Image>();
 
-		stack.RegisterKind( ToastStackUI.Kind.Unlock, showFeedback, hideFeedback, GetComponent<CanvasGroup>(), transform as RectTransform );
+		stack.RegisterTier( ToastStackUI.ToastTier.Unlock, showFeedback, hideFeedback, group, rect, accent, icon, backdrop );
+		stack.RegisterTier( ToastStackUI.ToastTier.Milestone, milestoneShowFeedback, milestoneHideFeedback, group, rect, accent, icon, backdrop );
+	}
+
+	void ResolveFeedbackRef( ref Feedbacks field, string childName )
+	{
+		if ( field != null )
+			return;
+
+		Transform existing = transform.Find( childName );
+		if ( existing != null )
+			field = existing.GetComponent<Feedbacks>();
+	}
+
+	Image FindChildImage( string childName )
+	{
+		Transform existing = transform.Find( childName );
+		if ( existing == null )
+			return null;
+		return existing.GetComponent<Image>();
 	}
 
 	void HideChild( string childName )

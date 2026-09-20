@@ -18,6 +18,14 @@ public class QuestVolume : MonoBehaviour
 
 	public string Id => id;
 
+	public bool ContainsWorldPoint( Vector3 worldPos )
+	{
+		Collider col = GetComponent<Collider>();
+		if ( col == null )
+			return false;
+		return col.bounds.Contains( worldPos );
+	}
+
 	void Reset()
 	{
 		Collider col = GetComponent<Collider>();

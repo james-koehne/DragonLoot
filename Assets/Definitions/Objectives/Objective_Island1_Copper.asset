@@ -18,11 +18,18 @@ MonoBehaviour:
   showRadius: 40
   prerequisiteObjectiveIds: []
   subs:
-  - id: fill_display
-    label: Fill the copper coin display
+  - id: dig_copper
+    label: Dig copper coins
+    completeType: 2
+    targetId: island1_copper_pile
+    requiredCount: 0
+  - id: display_copper
+    label: Display copper coins
     completeType: 1
     targetId: island1_coin_display
+    requiredCount: 0
   rewards: []
-  rewardLabel: Platforms
-  completionToast: "Island complete \u2014 platforms activated"
+  rewardLabel: 
+  showReward: 0
+  completionToast: Island complete - platforms activated
   onCompleteWorldEventIds: []

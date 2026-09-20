@@ -23,23 +23,38 @@ MonoBehaviour:
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 1
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: volume_island_2
   prerequisiteTutorialIds:
   - tut_coin_placement
   highlightMapLabel: 
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
   body: Stack matching coins. Hold on a stack to pick it all up, or look at the ground
     and hold to place your whole stack.
-  keybindHint: '[{SecondaryInteract}] Stack  Hold [{ContextualInteract}] Pick up or
-    place stack'
+  keybindHint: '[{SecondaryInteract}] Stack  Hold [{ContextualInteract}] Pick up
+    or place stack'
   tasks:
   - id: stack_coins
     label: Stack coins
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 4
+    completeVolumeId: 
   - id: whole_stack_place
     label: Hold to place a stack
     keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 6
+    completeVolumeId: 
   - id: whole_stack_pickup
     label: Hold to pick up a stack
     keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 5
+    completeVolumeId: 

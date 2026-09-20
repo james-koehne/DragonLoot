@@ -87,6 +87,7 @@ public class ObjectiveSystem : MonoBehaviour
 			return;
 
 		_nextNearbyRefreshUnscaled = Time.unscaledTime + NearbyRefreshInterval;
+		TryCompleteCountSubs();
 		RefreshNearbyHud( force: false );
 	}
 
@@ -99,6 +100,7 @@ public class ObjectiveSystem : MonoBehaviour
 		_started = true;
 		_nextNearbyRefreshUnscaled = 0f;
 		_lastHudFingerprint = null;
+		TryCompleteCountSubs();
 		RefreshNearbyHud( force: true );
 	}
 
@@ -254,11 +256,17 @@ public class ObjectiveSystem : MonoBehaviour
 			return;
 
 		EventBus.Subscribe<CoinDisplayTableCompletedEvent>( OnCoinDisplayCompleted );
+		EventBus.Subscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
 		EventBus.Subscribe<GemDisplayTableCompletedEvent>( OnGemDisplayCompleted );
+		EventBus.Subscribe<GemDisplayTableChangedEvent>( OnGemDisplayChanged );
 		EventBus.Subscribe<ArtifactPresentationTableCompletedEvent>( OnArtifactDisplayCompleted );
+		EventBus.Subscribe<ArtifactPresentationTableChangedEvent>( OnArtifactDisplayChanged );
 		EventBus.Subscribe<GoldBarDisplayTableCompletedEvent>( OnGoldBarDisplayCompleted );
+		EventBus.Subscribe<GoldBarDisplayTableChangedEvent>( OnGoldBarDisplayChanged );
 		EventBus.Subscribe<TreasurePileEmptiedEvent>( OnPileEmptied );
+		EventBus.Subscribe<TreasurePileDigEvent>( OnPileDig );
 		EventBus.Subscribe<GemConstellationCompletedEvent>( OnConstellationCompleted );
+		EventBus.Subscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Subscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Subscribe<WorldEventFiredEvent>( OnWorldEventFired );
@@ -271,11 +279,17 @@ public class ObjectiveSystem : MonoBehaviour
 			return;
 
 		EventBus.Unsubscribe<CoinDisplayTableCompletedEvent>( OnCoinDisplayCompleted );
+		EventBus.Unsubscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
 		EventBus.Unsubscribe<GemDisplayTableCompletedEvent>( OnGemDisplayCompleted );
+		EventBus.Unsubscribe<GemDisplayTableChangedEvent>( OnGemDisplayChanged );
 		EventBus.Unsubscribe<ArtifactPresentationTableCompletedEvent>( OnArtifactDisplayCompleted );
+		EventBus.Unsubscribe<ArtifactPresentationTableChangedEvent>( OnArtifactDisplayChanged );
 		EventBus.Unsubscribe<GoldBarDisplayTableCompletedEvent>( OnGoldBarDisplayCompleted );
+		EventBus.Unsubscribe<GoldBarDisplayTableChangedEvent>( OnGoldBarDisplayChanged );
 		EventBus.Unsubscribe<TreasurePileEmptiedEvent>( OnPileEmptied );
+		EventBus.Unsubscribe<TreasurePileDigEvent>( OnPileDig );
 		EventBus.Unsubscribe<GemConstellationCompletedEvent>( OnConstellationCompleted );
+		EventBus.Unsubscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Unsubscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Unsubscribe<WorldEventFiredEvent>( OnWorldEventFired );
@@ -285,31 +299,105 @@ public class ObjectiveSystem : MonoBehaviour
 	void OnCoinDisplayCompleted( CoinDisplayTableCompletedEvent evt )
 	{
 		TryMatchComponent( ObjectiveSubCompleteType.DisplayComplete, evt.Table as Component );
+		OnCountableProgressChanged();
+	}
+
+	void OnCoinDisplayChanged( CoinDisplayTableChangedEvent evt )
+	{
+		OnCountableProgressChanged();
 	}
 
 	void OnGemDisplayCompleted( GemDisplayTableCompletedEvent evt )
 	{
 		TryMatchComponent( ObjectiveSubCompleteType.DisplayComplete, evt.Table as Component );
+		OnCountableProgressChanged();
+	}
+
+	void OnGemDisplayChanged( GemDisplayTableChangedEvent evt )
+	{
+		OnCountableProgressChanged();
 	}
 
 	void OnArtifactDisplayCompleted( ArtifactPresentationTableCompletedEvent evt )
 	{
 		TryMatchComponent( ObjectiveSubCompleteType.DisplayComplete, evt.Table as Component );
+		OnCountableProgressChanged();
+	}
+
+	void OnArtifactDisplayChanged( ArtifactPresentationTableChangedEvent evt )
+	{
+		OnCountableProgressChanged();
 	}
 
 	void OnGoldBarDisplayCompleted( GoldBarDisplayTableCompletedEvent evt )
 	{
 		TryMatchComponent( ObjectiveSubCompleteType.DisplayComplete, evt.Table as Component );
+		OnCountableProgressChanged();
+	}
+
+	void OnGoldBarDisplayChanged( GoldBarDisplayTableChangedEvent evt )
+	{
+		OnCountableProgressChanged();
 	}
 
 	void OnPileEmptied( TreasurePileEmptiedEvent evt )
 	{
 		TryMatchComponent( ObjectiveSubCompleteType.PileEmptied, evt.Pile as Component );
+		OnCountableProgressChanged();
+	}
+
+	void OnPileDig( TreasurePileDigEvent evt )
+	{
+		OnCountableProgressChanged();
 	}
 
 	void OnConstellationCompleted( GemConstellationCompletedEvent evt )
 	{
 		TryMatchComponent( ObjectiveSubCompleteType.ConstellationComplete, evt.Constellation as Component );
+		OnCountableProgressChanged();
+	}
+
+	void OnConstellationChanged( GemConstellationChangedEvent evt )
+	{
+		OnCountableProgressChanged();
+	}
+
+	void OnCountableProgressChanged()
+	{
+		TryCompleteCountSubs();
+		RefreshNearbyHud( force: true );
+	}
+
+	void TryCompleteCountSubs()
+	{
+		if ( _catalog == null || _catalog.objectives == null )
+			return;
+
+		for ( int i = 0; i < _catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = _catalog.objectives[ i ];
+			if ( definition == null || IsCompleted( definition.id ) )
+				continue;
+			if ( !ArePrerequisitesMet( definition ) )
+				continue;
+			if ( definition.subs == null )
+				continue;
+
+			for ( int s = 0; s < definition.subs.Length; s++ )
+			{
+				ObjectiveSubDefinition sub = definition.subs[ s ];
+				if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+					continue;
+				if ( IsSubCompleted( definition.id, sub.id ) )
+					continue;
+				if ( !ObjectiveProgress.HasCountProgress( sub.completeType ) )
+					continue;
+				if ( !ObjectiveProgress.IsCountMet( definition, sub ) )
+					continue;
+
+				TryCompleteSub( definition, sub.id );
+			}
+		}
 	}
 
 	void OnVolumeEntered( VolumeEnteredEvent evt )
@@ -457,7 +545,7 @@ public class ObjectiveSystem : MonoBehaviour
 		FireWorldEvents( definition );
 
 		if ( !string.IsNullOrEmpty( definition.completionToast ) )
-			UnlockRewardToastUI.NotifyMessage( definition.completionToast );
+			UnlockRewardToastUI.NotifyMessage( definition.completionToast, null, ToastStackUI.ToastTier.Milestone );
 
 		EventBus.Publish( new ObjectiveCompletedEvent
 		{
@@ -662,29 +750,34 @@ public class ObjectiveSystem : MonoBehaviour
 					if ( sub == null || string.IsNullOrEmpty( sub.id ) )
 						continue;
 
-					string label = string.IsNullOrEmpty( sub.label ) ? sub.id : sub.label;
+					bool subComplete = IsSubCompleted( definition.id, sub.id );
+					string label = ObjectiveProgress.FormatLabel( definition, sub, subComplete );
 					_rowScratch.Add( new TutorialHudRow
 					{
 						ObjectiveId = definition.id + "/" + sub.id,
 						Text = label,
 						Indent = 1,
-						Complete = IsSubCompleted( definition.id, sub.id ),
+						Complete = subComplete,
 						ContextualFocus = false
 					} );
 				}
 			}
 
-			string reward = definition.ResolveRewardLabel();
-			if ( !string.IsNullOrEmpty( reward ) )
+			if ( definition.ShouldShowReward() )
 			{
-				_rowScratch.Add( new TutorialHudRow
+				string reward = definition.ResolveRewardLabel();
+				if ( !string.IsNullOrEmpty( reward ) )
 				{
-					ObjectiveId = definition.id + "/reward",
-					Text = reward,
-					Indent = 1,
-					Complete = false,
-					ContextualFocus = false
-				} );
+					_rowScratch.Add( new TutorialHudRow
+					{
+						ObjectiveId = definition.id + "/reward",
+						Text = reward,
+						Indent = 1,
+						Complete = false,
+						ContextualFocus = false,
+						IsReward = true
+					} );
+				}
 			}
 
 			if ( candidate.OutlineRoot != null && !_outlineScratch.Contains( candidate.OutlineRoot ) )
@@ -730,6 +823,13 @@ public class ObjectiveSystem : MonoBehaviour
 				if ( sub == null || string.IsNullOrEmpty( sub.id ) )
 					continue;
 				sb.Append( IsSubCompleted( candidate.Definition.id, sub.id ) ? '1' : '0' );
+				if ( !ObjectiveProgress.HasCountProgress( sub.completeType ) )
+					continue;
+				int current;
+				int required;
+				if ( !ObjectiveProgress.TryGetCounts( candidate.Definition, sub, out current, out required ) )
+					continue;
+				sb.Append( current ).Append( '/' ).Append( required );
 			}
 		}
 

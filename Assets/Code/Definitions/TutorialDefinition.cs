@@ -5,6 +5,7 @@ using UnityEngine;
 /// <summary>Condition that shows a contextual tutorial while true (and incomplete).</summary>
 public enum TutorialTriggerType
 {
+	/// <summary>No extra show trigger. Pair with prerequisiteVolumeId to show only while inside that QuestVolume.</summary>
 	None = 0,
 	EnterVolume = 1,
 	TreasurePileDig = 2,
@@ -56,7 +57,9 @@ public enum TutorialTaskCompleteType
 	Jump = 21,
 	Sprint = 22,
 	EnterDriveMinecart = 23,
-	Slide = 24
+	Slide = 24,
+	/// <summary>Tap-pickup of a single coin from a ground stack of 2+.</summary>
+	TakeCoinFromStack = 25
 }
 
 [Serializable]
@@ -73,6 +76,10 @@ public class TutorialTask
 
 	[Tooltip( "When completeTrigger is EnterVolume: volume id that completes this task." )]
 	public string completeVolumeId;
+
+	[Tooltip( "When > 1, this task needs this many matching actions. Label shows current/required (e.g. 3/10). 0 or 1 = complete on the first match." )]
+	[Min( 0 )]
+	public int requiredCount;
 }
 
 /// <summary>
@@ -131,6 +138,9 @@ public class TutorialDefinition : ScriptableObject
 
 	[Tooltip( "When trigger is WalkWithoutSprint: consecutive grounded walk seconds before showing." )]
 	public float walkSecondsToShow = 5f;
+
+	[Tooltip( "Optional QuestVolume id. When set, this tutorial is only eligible while the player is inside that volume. Can be the only prerequisite." )]
+	public string prerequisiteVolumeId;
 
 	public string[] prerequisiteTutorialIds;
 

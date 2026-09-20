@@ -60,6 +60,11 @@ public class FairyHelper : MonoBehaviour
 	float surfaceSnapMaxDistance = 2.5f;
 
 	[SerializeField]
+	[Min( 0.1f )]
+	[Tooltip( "If the player is this far above the sampled treasure surface, use view fallback instead of surface hover (ledge / mid-air)." )]
+	float surfaceMaxPlayerAbove = 1f;
+
+	[SerializeField]
 	Vector3 viewFallbackOffsetLocal = new Vector3( 0.85f, 0f, 1.1f );
 
 	[SerializeField]
@@ -192,6 +197,7 @@ public class FairyHelper : MonoBehaviour
 	bool _introActive;
 	bool _introBubbleSeen;
 	bool _talking;
+	Vector3 _introAnchorPosition;
 	readonly DisplayRequirementUI _displayProgress = new DisplayRequirementUI();
 	readonly StringBuilder _progressBuilder = new StringBuilder( 96 );
 
@@ -200,6 +206,7 @@ public class FairyHelper : MonoBehaviour
 	public bool IsTalking => _talking;
 	public bool IsHovered => IsFocusedByPlayer();
 	public bool IsFlying => _isMoving;
+	public bool IsIntroActive => _introActive;
 
 	void Awake()
 	{
@@ -484,6 +491,7 @@ public class FairyHelper : MonoBehaviour
 		_cameraSettledFor = 0f;
 		_introActive = true;
 		Vector3 desired = BuildViewFallback( player );
+		_introAnchorPosition = desired;
 		_logicalPosition = desired;
 		transform.position = desired;
 		_smoothVelocity = Vector3.zero;
@@ -521,11 +529,14 @@ public class FairyHelper : MonoBehaviour
 	Vector3 ResolveDesiredPosition( PlayerController player )
 	{
 		if ( _introActive )
-		{
-			EnsureFollowYaw( player );
-			// Intro always uses the authored override slot — never snap onto treasure surface.
+			return _introAnchorPosition;
+
+		EnsureFollowYaw( player );
+
+		// Fairy stuck/lagging on surface (or elsewhere) while the player has moved away:
+		// abandon that slot and chase the in-view fallback instead.
+		if ( HorizontalDistance( _logicalPosition, player.transform.position ) > farGlowDistance )
 			return BuildViewFallback( player );
-		}
 
 		if ( _perchedDisplay != null )
 		{
@@ -533,7 +544,6 @@ public class FairyHelper : MonoBehaviour
 			return perch.position + Vector3.up * perchHeight;
 		}
 
-		EnsureFollowYaw( player );
 		return ResolveSurfacePoint( player, BuildFollowTarget( player ) );
 	}
 
@@ -543,12 +553,9 @@ public class FairyHelper : MonoBehaviour
 		float lookYaw = GetCameraLookYaw( player );
 		UpdateCameraSettleTimer( lookYaw );
 
-		// Intro: ease toward camera look so the override slot doesn't feel hard-locked.
+		// Hold still during intro so the player can aim/hover the fairy.
 		if ( _introActive )
-		{
-			_followYaw = Mathf.LerpAngle( _followYaw, lookYaw, 1f - Mathf.Exp( -followYawLerp * Time.deltaTime ) );
 			return;
-		}
 
 		if ( IsHovered || _talking )
 			return;
@@ -652,66 +659,54 @@ public class FairyHelper : MonoBehaviour
 		if ( world == null || world.Sampler == null )
 			return BuildViewFallback( player );
 
-		// Only ride the treasure surface when the player is actually near it.
-		if ( !IsPlayerNearTreasureSurface( player, world ) )
+		Vector3 playerPos = player.transform.position;
+
+		// Strict: player must actually be standing on traversable surface.
+		// Do not use nearest-entry search — that can latch onto a distant pile.
+		if ( !world.Sampler.TrySample( playerPos, out TreasureSurfaceSample playerSample ) || !playerSample.Traversable )
+			return BuildViewFallback( player );
+
+		// Player on a ledge above painted surface — don't snap the fairy down to floor height.
+		if ( playerPos.y > playerSample.Height + surfaceMaxPlayerAbove )
 			return BuildViewFallback( player );
 
 		if ( world.TryGetChunkCoord( desired, out TreasureChunkCoord coord ) )
 			world.EnsureChunkLoaded( coord );
 
-		float maxSnapSq = surfaceSnapMaxDistance * surfaceSnapMaxDistance;
+		// Follow slot must also be on surface under the player. If the slot is off-surface
+		// (or only near a distant pile), fall back to the in-view hover offset.
+		if ( !world.Sampler.TrySample( desired, out TreasureSurfaceSample sample ) || !sample.Traversable )
+			return BuildViewFallback( player );
 
-		if ( world.TryResolveTraversableEntry( desired, out Vector3 resolved, out TreasureSurfaceSample sample, preferStable: true ) )
-		{
-			float dx = resolved.x - desired.x;
-			float dz = resolved.z - desired.z;
-			if ( dx * dx + dz * dz <= maxSnapSq && IsSurfacePointNearPlayer( player, resolved ) )
-			{
-				resolved.y = sample.Height + surfaceHoverHeight;
-				return resolved;
-			}
-		}
+		if ( playerPos.y > sample.Height + surfaceMaxPlayerAbove )
+			return BuildViewFallback( player );
 
-		if ( world.Sampler.TrySample( desired, out sample ) && sample.Traversable && IsSurfacePointNearPlayer( player, desired ) )
-		{
-			desired.y = sample.Height + surfaceHoverHeight;
-			return desired;
-		}
-
-		return BuildViewFallback( player );
-	}
-
-	bool IsPlayerNearTreasureSurface( PlayerController player, TreasureSurfaceWorld world )
-	{
-		Vector3 playerPos = player.transform.position;
-		float maxSnapSq = surfaceSnapMaxDistance * surfaceSnapMaxDistance;
-
-		if ( world.TryResolveTraversableEntry( playerPos, out Vector3 resolved, out _, preferStable: true ) )
-		{
-			float dx = resolved.x - playerPos.x;
-			float dz = resolved.z - playerPos.z;
-			if ( dx * dx + dz * dz <= maxSnapSq )
-				return true;
-		}
-
-		if ( world.Sampler.TrySample( playerPos, out TreasureSurfaceSample sample ) && sample.Traversable )
-			return true;
-
-		return false;
-	}
-
-	bool IsSurfacePointNearPlayer( PlayerController player, Vector3 surfacePoint )
-	{
-		float dx = surfacePoint.x - player.transform.position.x;
-		float dz = surfacePoint.z - player.transform.position.z;
+		float dx = desired.x - playerPos.x;
+		float dz = desired.z - playerPos.z;
 		float maxDist = surfaceSnapMaxDistance + Mathf.Max( Mathf.Abs( followOffsetLocal.x ), Mathf.Abs( followOffsetLocal.z ) );
-		return dx * dx + dz * dz <= maxDist * maxDist;
+		if ( dx * dx + dz * dz > maxDist * maxDist )
+			return BuildViewFallback( player );
+
+		desired.y = sample.Height + surfaceHoverHeight;
+		return desired;
 	}
 
 	void StepMove( Vector3 desired )
 	{
 		Vector3 current = _logicalPosition;
 		float dt = Mathf.Max( Time.deltaTime, 0.0001f );
+
+		if ( _introActive )
+		{
+			_logicalPosition = _introAnchorPosition;
+			_frameMoveDelta = Vector3.zero;
+			_smoothVelocity = Vector3.zero;
+			_planarVelocity = Vector3.zero;
+			_isMoving = false;
+			_bobPhase = 0f;
+			transform.position = _introAnchorPosition;
+			return;
+		}
 
 		Vector3 to = desired - current;
 		Vector3 planar = new Vector3( to.x, 0f, to.z );
@@ -725,19 +720,6 @@ public class FairyHelper : MonoBehaviour
 			_logicalPosition = desired;
 			UpdateMoveState( dt );
 			ApplyIdleBob( desired );
-			return;
-		}
-
-		// Intro eases into the override slot; skip wave/arc so it reads as a soft settle.
-		if ( _introActive )
-		{
-			Vector3 next = Vector3.SmoothDamp( current, desired, ref _smoothVelocity, followSmoothTime, moveSpeed, Time.deltaTime );
-			_frameMoveDelta = next - current;
-			_planarVelocity = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ) / dt;
-			_logicalPosition = next;
-			UpdateMoveState( dt );
-			_bobPhase = 0f;
-			transform.position = next;
 			return;
 		}
 

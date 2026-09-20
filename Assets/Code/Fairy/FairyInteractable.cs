@@ -30,12 +30,16 @@ public class FairyInteractable : InteractableBase
 
 	public override bool CanInteract( PlayerController player )
 	{
+		if ( helper != null && helper.IsIntroActive )
+			return false;
 		return IsAvailable && player != null && helper != null;
 	}
 
 	public override void Interact( PlayerController player )
 	{
 		if ( helper == null || player == null )
+			return;
+		if ( helper.IsIntroActive )
 			return;
 		if ( Time.unscaledTime < _nextTalkAllowedAt )
 			return;

@@ -28,8 +28,12 @@ public class ObjectiveSubDefinition
 
 	public ObjectiveSubCompleteType completeType;
 
-	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired. Empty = any matching event of that type." )]
+	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired. Empty = any matching event of that type. PileEmptied with an empty id uses piles inside showVolumeId." )]
 	public string targetId;
+
+	[Tooltip( "Count shown as label: current/required. 0 = use the target's capacity or pile size." )]
+	[Min( 0 )]
+	public int requiredCount;
 }
 
 [Serializable]
@@ -72,8 +76,11 @@ public class ObjectiveDefinition : ScriptableObject
 
 	public ObjectiveReward[] rewards;
 
-	[Tooltip( "Optional HUD reward line override (e.g. Unlock Glide). Empty = built from rewards." )]
+	[Tooltip( "Optional HUD reward line override (e.g. Platforms). Empty = built from ability/upgrade rewards." )]
 	public string rewardLabel;
+
+	[Tooltip( "When true, show rewardLabel on the HUD even if this objective only fires world events / platforms. Ability and upgrade rewards always show." )]
+	public bool showReward;
 
 	[Tooltip( "Optional unlock toast when this objective completes (e.g. Island complete — platforms activated). Empty = no toast." )]
 	public string completionToast;
@@ -90,38 +97,85 @@ public class ObjectiveDefinition : ScriptableObject
 		return name;
 	}
 
-	public string ResolveRewardLabel()
+	public bool HasGrantableReward()
 	{
-		if ( !string.IsNullOrEmpty( rewardLabel ) )
-			return rewardLabel;
-
-		if ( rewards == null || rewards.Length == 0 )
-			return string.Empty;
+		if ( rewards == null )
+			return false;
 
 		for ( int i = 0; i < rewards.Length; i++ )
 		{
 			ObjectiveReward reward = rewards[ i ];
 			if ( reward == null )
 				continue;
-
 			if ( reward.type == ObjectiveRewardType.Ability && !string.IsNullOrEmpty( reward.abilityId ) )
-			{
-				AbilitySystem abilities = AbilitySystem.Instance;
-				if ( abilities != null && abilities.TryGetDefinition( reward.abilityId, out AbilityDefinition ability ) && ability != null )
-					return "Reward: " + ability.ResolveDisplayName();
-				return "Reward: " + reward.abilityId;
-			}
-
+				return true;
 			if ( reward.type == ObjectiveRewardType.Upgrade && !string.IsNullOrEmpty( reward.upgradeId ) )
-			{
-				UpgradeSystem upgrades = UpgradeSystem.Instance;
-				if ( upgrades != null && upgrades.TryGetDefinition( reward.upgradeId, out UpgradeDefinition upgrade ) && upgrade != null )
-					return "Reward: " + upgrade.ResolveDisplayName();
-				return "Reward: " + reward.upgradeId;
-			}
+				return true;
+		}
+
+		return false;
+	}
+
+	public bool ShouldShowReward()
+	{
+		if ( HasGrantableReward() )
+			return true;
+		return showReward && !string.IsNullOrEmpty( rewardLabel );
+	}
+
+	public string ResolveRewardLabel()
+	{
+		if ( !string.IsNullOrEmpty( rewardLabel ) )
+			return PrefixReward( rewardLabel );
+		return ResolveFirstGrantableRewardLabel();
+	}
+
+	string ResolveFirstGrantableRewardLabel()
+	{
+		if ( rewards == null )
+			return string.Empty;
+
+		for ( int i = 0; i < rewards.Length; i++ )
+		{
+			string line = FormatRewardLine( rewards[ i ] );
+			if ( !string.IsNullOrEmpty( line ) )
+				return line;
 		}
 
 		return string.Empty;
+	}
+
+	public static string FormatRewardLine( ObjectiveReward reward )
+	{
+		if ( reward == null )
+			return string.Empty;
+
+		if ( reward.type == ObjectiveRewardType.Ability && !string.IsNullOrEmpty( reward.abilityId ) )
+		{
+			AbilitySystem abilities = AbilitySystem.Instance;
+			if ( abilities != null && abilities.TryGetDefinition( reward.abilityId, out AbilityDefinition ability ) && ability != null )
+				return PrefixReward( "Unlock " + ability.ResolveDisplayName() );
+			return PrefixReward( "Unlock " + reward.abilityId );
+		}
+
+		if ( reward.type == ObjectiveRewardType.Upgrade && !string.IsNullOrEmpty( reward.upgradeId ) )
+		{
+			UpgradeSystem upgrades = UpgradeSystem.Instance;
+			if ( upgrades != null && upgrades.TryGetDefinition( reward.upgradeId, out UpgradeDefinition upgrade ) && upgrade != null )
+				return PrefixReward( "Unlock " + upgrade.ResolveDisplayName() );
+			return PrefixReward( "Unlock " + reward.upgradeId );
+		}
+
+		return string.Empty;
+	}
+
+	static string PrefixReward( string label )
+	{
+		if ( string.IsNullOrEmpty( label ) )
+			return string.Empty;
+		if ( label.StartsWith( "Reward:" ) )
+			return label;
+		return "Reward: " + label;
 	}
 
 	void OnValidate()

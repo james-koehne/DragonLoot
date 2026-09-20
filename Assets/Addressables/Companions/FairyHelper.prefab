@@ -224,6 +224,7 @@ MonoBehaviour:
   arriveDistance: 0.12
   turnSpeed: 10
   surfaceSnapMaxDistance: 2.5
+  surfaceMaxPlayerAbove: 1
   viewFallbackOffsetLocal: {x: 0.5, y: 0, z: 0.8}
   cameraSettleSeconds: 0.5
   cameraRotateSpeedThreshold: 18

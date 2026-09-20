@@ -34,6 +34,8 @@ public static class DragonLootMenus
 	public const string GraphicsLightFlickerRecaptureSelection = Root + "/Graphics/Light Flicker/Recapture Bases In Selection";
 	public const string GraphicsLightFlickerRefreshPreviews = Root + "/Graphics/Light Flicker/Refresh Edit Previews In Open Scenes";
 
+	public const string GraphicsMagicalLanternAddToSelection = Root + "/Graphics/Lantern/Add Magical Motion To Selection";
+
 	// --- Audio ---
 	public const string AudioInstallDefinition = Root + "/Audio/Install Definition";
 	public const string AudioResetClipLists = Root + "/Audio/Reset Clip Lists To Defaults";
@@ -96,6 +98,8 @@ public static class DragonLootMenus
 	// --- Definitions ---
 	public const string DefinitionsEnsureJumpAbility = Root + "/Definitions/Ensure Jump Ability";
 	public const string DefinitionsEnsureIslandObjectives = Root + "/Definitions/Ensure Island Objectives";
+	public const string DefinitionsEnsureDigPickupSpeedUpgrade = Root + "/Definitions/Ensure Dig Pickup Speed Upgrade";
+	public const string DefinitionsEnsureObjectiveFeedbacks = Root + "/Definitions/Ensure Objective HUD Feedbacks";
 
 	// --- Companions ---
 	public const string CompanionsBuildFairyHelper = Root + "/Companions/Build Fairy Helper Prefab";

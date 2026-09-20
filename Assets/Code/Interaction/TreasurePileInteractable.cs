@@ -14,10 +14,12 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 	bool _bound;
 	bool _emptiedEventPublished;
 
+	static readonly List<TreasurePileInteractable> All = new List<TreasurePileInteractable>( 32 );
 	static readonly List<TreasureDefinition> StealDefs = new List<TreasureDefinition>( 128 );
 
 	public TreasurePileDefinition PileDefinition => pileDefinition;
 	public TreasurePileVisual PileVisual => pileVisual;
+	public static IReadOnlyList<TreasurePileInteractable> ActivePiles => All;
 
 	/// <summary>Authored coin units in <see cref="pileDefinition"/> (0 when not coin-driven).</summary>
 	public int ExpectedCoinCount
@@ -71,6 +73,22 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 	void Start()
 	{
 		TryBindVisual();
+	}
+
+	void OnEnable()
+	{
+		for ( int i = 0; i < All.Count; i++ )
+		{
+			if ( All[ i ] == this )
+				return;
+		}
+
+		All.Add( this );
+	}
+
+	void OnDisable()
+	{
+		All.Remove( this );
 	}
 
 	public void SetupPile( TreasurePileDefinition definition, TreasurePileVisual visual )
@@ -413,6 +431,7 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		CarryDefinition carryDef = null;
 		carryDef = RuntimeDefinition.Resolve( ref carryDef );
 		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
+		duration = PlayerDigPickupSpeed.ScaleDuration( duration );
 		Vector3 endLocal = carryDef != null ? carryDef.heldStackOffset : Vector3.zero;
 
 		if ( holdRoot == null )

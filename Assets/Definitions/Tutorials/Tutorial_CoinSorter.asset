@@ -46,3 +46,4 @@ MonoBehaviour:
     label: Sort coins with the sorter
     completeTrigger: 14
     completeVolumeId: 
+    requiredCount: 30 

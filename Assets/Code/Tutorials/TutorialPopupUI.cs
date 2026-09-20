@@ -39,6 +39,7 @@ public class TutorialPopupUI : MonoBehaviour
 	[SerializeField] Feedbacks showFeedback;
 	[SerializeField] Feedbacks hideFeedback;
 	[SerializeField] Feedbacks taskCompleteFeedback;
+	[SerializeField] Feedbacks taskCountPopFeedback;
 	[SerializeField] Feedbacks tutorialCompleteFeedback;
 	[SerializeField] Feedbacks switchFeedback;
 	[SerializeField] Feedbacks stackAddFeedback;
@@ -127,6 +128,7 @@ public class TutorialPopupUI : MonoBehaviour
 		CacheCardChrome();
 		EnsureActiveCard();
 		EnsureSwitchFeedback();
+		EnsureCountPopFeedback();
 		EnsureStackAddFeedback();
 		HideLegacyCycleHint();
 		EnsureMinimizedRoot();
@@ -365,6 +367,107 @@ public class TutorialPopupUI : MonoBehaviour
 		stackAddFeedback.AddFeedback( parallel );
 	}
 
+	void EnsureCountPopFeedback()
+	{
+		if ( taskCountPopFeedback != null && taskCountPopFeedback.FeedbackList != null && taskCountPopFeedback.FeedbackList.Count > 0 )
+		{
+			SetUnscaled( taskCountPopFeedback );
+			RetargetCountPop();
+			return;
+		}
+
+		Transform existing = transform.Find( "TaskCountPopFeedbacks" );
+		GameObject go = existing != null ? existing.gameObject : new GameObject( "TaskCountPopFeedbacks", typeof( RectTransform ) );
+		if ( existing == null )
+			go.transform.SetParent( transform, false );
+
+		if ( taskCountPopFeedback == null )
+			taskCountPopFeedback = go.GetComponent<Feedbacks>();
+		if ( taskCountPopFeedback == null )
+			taskCountPopFeedback = go.AddComponent<Feedbacks>();
+		taskCountPopFeedback.UseUnscaledTime = true;
+
+		if ( taskCountPopFeedback.FeedbackList != null && taskCountPopFeedback.FeedbackList.Count > 0 )
+		{
+			RetargetCountPop();
+			return;
+		}
+
+		ParallelFeedback parallel = new ParallelFeedback();
+		parallel.Feedbacks = new List<Feedback>();
+		parallel.Feedbacks.Add( CreateCountPopPunch() );
+		parallel.Feedbacks.Add( CreateCountPopColor() );
+		taskCountPopFeedback.AddFeedback( parallel );
+		RetargetCountPop();
+	}
+
+	UiPunchScaleFeedback CreateCountPopPunch()
+	{
+		UiPunchScaleFeedback punch = new UiPunchScaleFeedback();
+		punch.Punch = new Vector3( 0.06f, 0.14f, 0f );
+		punch.Duration = 0.16f;
+		punch.UseUnscaledTime = true;
+		punch.Curve = new AnimationCurve(
+			new Keyframe( 0f, 0f ),
+			new Keyframe( 0.28f, 1f ),
+			new Keyframe( 1f, 0f ) );
+		return punch;
+	}
+
+	UiGraphicColorPunchFeedback CreateCountPopColor()
+	{
+		UiGraphicColorPunchFeedback color = new UiGraphicColorPunchFeedback();
+		color.PunchColor = new Color( 1f, 0.92f, 0.55f, 1f );
+		color.Duration = 0.16f;
+		color.UseUnscaledTime = true;
+		color.CaptureRestOnPlay = true;
+		color.Curve = new AnimationCurve(
+			new Keyframe( 0f, 0f ),
+			new Keyframe( 0.3f, 1f ),
+			new Keyframe( 1f, 0f ) );
+		return color;
+	}
+
+	void RetargetCountPop()
+	{
+		if ( taskCountPopFeedback == null || taskCountPopFeedback.FeedbackList == null )
+			return;
+
+		RectTransform tasksRect = tasksText != null ? tasksText.rectTransform : null;
+		for ( int i = 0; i < taskCountPopFeedback.FeedbackList.Count; i++ )
+			RetargetCountPopRecursive( taskCountPopFeedback.FeedbackList[ i ], tasksRect, tasksText );
+	}
+
+	static void RetargetCountPopRecursive( Feedback feedback, RectTransform tasksRect, Graphic tasksGraphic )
+	{
+		if ( feedback == null )
+			return;
+
+		ParallelFeedback parallel = feedback as ParallelFeedback;
+		if ( parallel != null && parallel.Feedbacks != null )
+		{
+			for ( int i = 0; i < parallel.Feedbacks.Count; i++ )
+				RetargetCountPopRecursive( parallel.Feedbacks[ i ], tasksRect, tasksGraphic );
+			return;
+		}
+
+		SequenceFeedback sequence = feedback as SequenceFeedback;
+		if ( sequence != null && sequence.Feedbacks != null )
+		{
+			for ( int i = 0; i < sequence.Feedbacks.Count; i++ )
+				RetargetCountPopRecursive( sequence.Feedbacks[ i ], tasksRect, tasksGraphic );
+			return;
+		}
+
+		UiPunchScaleFeedback punch = feedback as UiPunchScaleFeedback;
+		if ( punch != null )
+			punch.Target = tasksRect;
+
+		UiGraphicColorPunchFeedback color = feedback as UiGraphicColorPunchFeedback;
+		if ( color != null )
+			color.Target = tasksGraphic;
+	}
+
 	void RetargetStackAddFeedback( RectTransform row )
 	{
 		if ( stackAddFeedback == null || stackAddFeedback.FeedbackList == null || row == null )
@@ -522,6 +625,7 @@ public class TutorialPopupUI : MonoBehaviour
 		SetUnscaled( showFeedback );
 		SetUnscaled( hideFeedback );
 		SetUnscaled( taskCompleteFeedback );
+		SetUnscaled( taskCountPopFeedback );
 		SetUnscaled( tutorialCompleteFeedback );
 		SetUnscaled( switchFeedback );
 		SetUnscaled( stackAddFeedback );
@@ -635,8 +739,17 @@ public class TutorialPopupUI : MonoBehaviour
 
 	public void PlayTaskComplete()
 	{
+		if ( taskCountPopFeedback != null )
+			taskCountPopFeedback.Stop();
 		if ( taskCompleteFeedback != null )
 			taskCompleteFeedback.Play();
+	}
+
+	public void PlayTaskCountPop()
+	{
+		EnsureCountPopFeedback();
+		if ( taskCountPopFeedback != null )
+			taskCountPopFeedback.Play();
 	}
 
 	public void PlayTutorialComplete()
@@ -682,6 +795,8 @@ public class TutorialPopupUI : MonoBehaviour
 			showFeedback.Stop();
 		if ( taskCompleteFeedback != null )
 			taskCompleteFeedback.Stop();
+		if ( taskCountPopFeedback != null )
+			taskCountPopFeedback.Stop();
 		if ( tutorialCompleteFeedback != null )
 			tutorialCompleteFeedback.Stop();
 		if ( switchFeedback != null )
@@ -713,6 +828,8 @@ public class TutorialPopupUI : MonoBehaviour
 			showFeedback.Stop();
 		if ( taskCompleteFeedback != null )
 			taskCompleteFeedback.Stop();
+		if ( taskCountPopFeedback != null )
+			taskCountPopFeedback.Stop();
 		if ( tutorialCompleteFeedback != null )
 			tutorialCompleteFeedback.Stop();
 		if ( switchFeedback != null )
@@ -790,6 +907,7 @@ public class TutorialPopupUI : MonoBehaviour
 		StopIfNot( showFeedback, keep );
 		StopIfNot( hideFeedback, keep );
 		StopIfNot( taskCompleteFeedback, keep );
+		StopIfNot( taskCountPopFeedback, keep );
 		StopIfNot( tutorialCompleteFeedback, keep );
 		StopIfNot( switchFeedback, keep );
 		StopIfNot( stackAddFeedback, keep );
@@ -1025,7 +1143,11 @@ public class TutorialPopupUI : MonoBehaviour
 		return max > 0.01f ? max : fallback;
 	}
 
-	public static string FormatTasks( TutorialTask[] tasks, Func<string, bool> isComplete )
+	public static string FormatTasks(
+		TutorialTask[] tasks,
+		Func<string, bool> isComplete,
+		Func<string, int> getProgress = null,
+		Func<string, int> getRequired = null )
 	{
 		if ( tasks == null || tasks.Length == 0 )
 			return string.Empty;
@@ -1047,6 +1169,30 @@ public class TutorialPopupUI : MonoBehaviour
 				sb.Append( "• " );
 
 			sb.Append( task.label ?? string.Empty );
+
+			int required = 0;
+			if ( getRequired != null && !string.IsNullOrEmpty( task.id ) )
+				required = getRequired( task.id );
+			else if ( task.requiredCount > 1 )
+				required = task.requiredCount;
+
+			if ( required > 1 )
+			{
+				int current = 0;
+				if ( done )
+					current = required;
+				else if ( getProgress != null && !string.IsNullOrEmpty( task.id ) )
+					current = getProgress( task.id );
+				if ( current < 0 )
+					current = 0;
+				if ( current > required )
+					current = required;
+				sb.Append( ' ' );
+				sb.Append( current );
+				sb.Append( '/' );
+				sb.Append( required );
+			}
+
 			if ( done )
 				sb.Append( "</color>" );
 
