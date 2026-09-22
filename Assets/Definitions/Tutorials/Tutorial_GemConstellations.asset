@@ -28,21 +28,22 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds: []
   highlightMapLabel: 
-  mapMarkerId: marker_gem_constellation
+  mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Gems socket into constellations. Open the map (M) and follow the glowing
-    pin to a constellation, then place a gem.
+  body: Find constellations around the level and fill them with gems to reveal their
+    secrets.
   keybindHint: '[{SecondaryInteract}] Place gem  [M] Open map'
   tasks:
-  - id: reach_constellation
-    label: Find a constellation
-    keybindHint: '[M]'
-    completeTrigger: 11
-    completeVolumeId: marker_gem_constellation
   - id: place_gem_constellation
     label: Put a gem in a constellation
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 9
     completeVolumeId: 
+    requiredCount: 0

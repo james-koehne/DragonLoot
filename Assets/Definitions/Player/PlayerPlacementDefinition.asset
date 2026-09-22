@@ -31,6 +31,7 @@ MonoBehaviour:
   ghostPulseSpeed: 0.85
   ghostRimIntensity: 1.1
   ghostCoreIntensity: 0.28
+  ghostVisualUpBias: 0.015
   stackVolumeOversize: 1.1
   stackOutline:
     outlineColor: {r: 0.3, g: 1.035, b: 0.42, a: 1}

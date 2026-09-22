@@ -73,7 +73,7 @@ Material:
     - _SideBumpScale: 0.35
     - _SideFacetFrequency: 12
     - _SideFacetStrength: 0.04
-    - _Smoothness: 0.75
+    - _Smoothness: 0.65
     - _SparkleCoverage: 0.3
     - _SparkleDensity: 14
     - _SparkleEnabled: 0
@@ -84,6 +84,7 @@ Material:
     - _SpecularIntensity: 0.75
     - _SpecularPower: 64
     - _TintVariation: 0
+    - _TypeCount: 3
     - _UseBakedCoinIndex: 0
     - _ValueVariation: 0
     - _VariationSeed: 1

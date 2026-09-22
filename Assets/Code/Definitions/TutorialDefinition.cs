@@ -27,7 +27,11 @@ public enum TutorialTriggerType
 	/// <summary>Show while looking down a slideable slope, or while already sliding.</summary>
 	SteepSlope = 18,
 	/// <summary>Show while the required ability id is unlocked.</summary>
-	AbilityUnlocked = 19
+	AbilityUnlocked = 19,
+	/// <summary>Show while aiming a drive minecart, or while seated and driving one.</summary>
+	DriveMinecart = 20,
+	/// <summary>Show while holdingCategory's pouch has items but is not the selected pouch.</summary>
+	UnselectedHoldingCategory = 21
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -59,7 +63,19 @@ public enum TutorialTaskCompleteType
 	EnterDriveMinecart = 23,
 	Slide = 24,
 	/// <summary>Tap-pickup of a single coin from a ground stack of 2+.</summary>
-	TakeCoinFromStack = 25
+	TakeCoinFromStack = 25,
+	/// <summary>While seated in a drive minecart, move forward to accelerate.</summary>
+	DriveMinecartAccelerate = 26,
+	/// <summary>While seated in a drive minecart, move back to brake or reverse.</summary>
+	DriveMinecartBrake = 27,
+	/// <summary>Hop out of a drive minecart.</summary>
+	ExitDriveMinecart = 28,
+	/// <summary>Selected pouch matches the tutorial's holdingCategory.</summary>
+	SelectHoldingCategory = 29,
+	/// <summary>Player is aiming at a coin sorting station (hopper, crank, body, or chute).</summary>
+	AimCoinSorter = 30,
+	/// <summary>Coins were loaded into a coin sorter hopper.</summary>
+	LoadCoinSorterHopper = 31
 }
 
 [Serializable]
@@ -69,7 +85,7 @@ public class TutorialTask
 
 	public string label;
 
-	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}." )]
+	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}, {CyclePouch}, {CategorySlot1}..{CategorySlot5}." )]
 	public string keybindHint;
 
 	public TutorialTaskCompleteType completeTrigger;
@@ -95,9 +111,12 @@ public class TutorialDefinition : ScriptableObject
 
 	public string[] tags;
 
+	[Tooltip( "Designer kill-switch. Disabled tutorials never show from gameplay. Pause replay hides them; debug force-show still works." )]
+	public bool disabled;
+
 	public TutorialTriggerType trigger;
 
-	[Tooltip( "When trigger is HoldingCategory: which treasure family must be held (selected bucket with items)." )]
+	[Tooltip( "When trigger is HoldingCategory: Active item in the selected pouch must match. When UnselectedHoldingCategory: that pouch has items but is not selected. Also used by SelectHoldingCategory tasks." )]
 	public TreasureCategory holdingCategory;
 
 	[Tooltip( "Volume id when trigger is EnterVolume, or optional fallback volume for any trigger." )]
@@ -133,7 +152,7 @@ public class TutorialDefinition : ScriptableObject
 	[Tooltip( "When trigger is AfterCinematic: presentation id that must finish (empty uses intro_ledge_cinematic)." )]
 	public string cinematicPresentationId;
 
-	[Tooltip( "When trigger is AfterCinematic: seconds to wait after the cinematic ends before showing." )]
+	[Tooltip( "AfterCinematic: seconds after the cinematic ends before showing. With prerequisite tutorials: seconds after the latest this-session prerequisite completion before this tutorial can show or join the stack." )]
 	public float showDelaySeconds = 0.75f;
 
 	[Tooltip( "When trigger is WalkWithoutSprint: consecutive grounded walk seconds before showing." )]

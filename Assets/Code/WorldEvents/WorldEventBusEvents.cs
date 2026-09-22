@@ -59,7 +59,7 @@ public struct CoinSorterUsedEvent
 	public TreasureDefinition Coin;
 }
 
-/// <summary>A ground coin stack (2+) was loaded into the coin sorter hopper.</summary>
+/// <summary>Coins were loaded into a coin sorter hopper (any count ≥ 1).</summary>
 public struct CoinSorterStackLoadedEvent
 {
 	public CoinSortingStation Station;

@@ -17,6 +17,7 @@ MonoBehaviour:
   tags:
   - coins
   - stacking
+  disabled: 0
   trigger: 9
   holdingCategory: 0
   volumeId: 
@@ -33,8 +34,7 @@ MonoBehaviour:
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
   prerequisiteVolumeId: volume_island_2
-  prerequisiteTutorialIds:
-  - tut_coin_placement
+  prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
@@ -48,13 +48,16 @@ MonoBehaviour:
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 4
     completeVolumeId: 
+    requiredCount: 0
   - id: whole_stack_place
-    label: Hold to place a stack
+    label: Hold E to place a stack
     keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 6
     completeVolumeId: 
+    requiredCount: 0
   - id: whole_stack_pickup
-    label: Hold to pick up a stack
+    label: Hold E to pick up a stack
     keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 5
     completeVolumeId: 
+    requiredCount: 0

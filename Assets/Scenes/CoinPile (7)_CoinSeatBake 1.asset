@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
   authoredLayoutSeed: 117311
   effectivePileSeed: -885648875
-  heightFingerprint: -1050237857
-  contentsFingerprint: 1704889434
+  heightFingerprint: -146961921
+  contentsFingerprint: -1583420722
   placementFingerprint: 244014156
   maxVisibleTotal: 32
   steadyVisibleBudget: 28
@@ -23,41 +23,21 @@ MonoBehaviour:
   seats:
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 0.44065735, y: 0.22632602, z: -1.9514023}
-    localRot: {x: -0.23580682, y: 0.61122966, z: -0.29061648, w: 0.6973776}
-    scale: 0.2682963
-    embedDepth: 0.042927414
-    placeSurfaceHeight: 0.26925343
-    probeRadius: 0.13593766
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    entryIndex: 0
-    localPos: {x: -1.8976508, y: 0.27602965, z: -0.440544}
-    localRot: {x: -0.35987464, y: 0.93163294, z: -0.0403493, w: -0.030371493}
-    scale: 0.26563603
-    embedDepth: 0.042501748
-    placeSurfaceHeight: 0.3185314
-    probeRadius: 0.13458978
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    entryIndex: 0
-    localPos: {x: -0.4250664, y: 1.214583, z: -1.0980444}
-    localRot: {x: -0.48354626, y: 0.3218107, z: -0.043816365, w: 0.8128352}
+    localPos: {x: -0.4250664, y: 0.5549339, z: -1.0980444}
+    localRot: {x: -0.46191624, y: 0.32696536, z: -0.04189729, w: 0.8233904}
     scale: 0.23820506
-    embedDepth: 0.03811276
-    placeSurfaceHeight: 1.2526958
+    embedDepth: 0.03811282
+    placeSurfaceHeight: 0.5930467
     probeRadius: 0.12069133
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: -0.3630617, y: 1.8847535, z: 0.48304054}
-    localRot: {x: -0.3371701, y: 0.54528767, z: -0.03309671, w: -0.7667349}
+    localPos: {x: -0.3630617, y: 1.1673821, z: 0.48304054}
+    localRot: {x: -0.31908956, y: 0.5485759, z: -0.034707732, w: -0.77203745}
     scale: 0.25683105
     embedDepth: 0.04109299
-    placeSurfaceHeight: 1.9258465
+    placeSurfaceHeight: 1.2084751
     probeRadius: 0.13012856
     fixedVolumePose: 0
     coinVisual: 1

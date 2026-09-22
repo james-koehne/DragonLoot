@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbf87695acde00b418d09e6f33dc495e, type: 3}
+  m_Name: CoinPile_Island4_LatentBake
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
+  authoredLayoutSeed: 116686
+  effectivePileSeed: -337377207
+  heightFingerprint: 964925915
+  contentsFingerprint: 629109949
+  sourceDefinitionName: TreasurePile_Island4_Artifacts
+  volumeMaxAttempts: 24
+  usedSpatialHash: 1
+  avoidedCoinSeats: 0
+  bakedNearSurface: 0
+  authoredFingerprint: 0
+  poses:
+  - definition: {fileID: 11400000, guid: acd587c172bbea34f8051248ca703cc7, type: 2}
+    localPos: {x: -0.91247636, y: 0.9998657, z: 1.6213616}
+    localRot: {x: -0.21266529, y: 0.11690385, z: -0.06804043, w: 0.9677177}
+    scale: 0.5
+    boundsCenter: {x: -0.91247636, y: 0.9998657, z: 1.6213616}
+    boundsSize: {x: 0.19130726, y: 0.20898901, z: 0.21195424}
+  - definition: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
+    localPos: {x: 0.55086404, y: 0.8960613, z: 1.4578012}
+    localRot: {x: 0.0836907, y: 0.18440358, z: -0.21873412, w: 0.95453995}
+    scale: 2
+    boundsCenter: {x: 0.55086404, y: 0.8960613, z: 1.4578012}
+    boundsSize: {x: 0.88507086, y: 0.85198426, z: 0.7992949}
+  - definition: {fileID: 11400000, guid: 708909205ca41f6458d828ac46dd70d6, type: 2}
+    localPos: {x: -1.2123069, y: 1.2595341, z: -0.026487429}
+    localRot: {x: -0.14378214, y: 0.22190256, z: 0.1022182, w: 0.9589772}
+    scale: 2
+    boundsCenter: {x: -1.2123069, y: 1.2595341, z: -0.026487429}
+    boundsSize: {x: 0.8596749, y: 0.80145097, z: 0.8632271}
+  - definition: {fileID: 11400000, guid: 24a987b32945df74897fe318bdf5ec63, type: 2}
+    localPos: {x: 2.1199367, y: 0.5394899, z: 0.47453943}
+    localRot: {x: -0.14343168, y: 0.007192882, z: -0.19932629, w: 0.96935266}
+    scale: 2
+    boundsCenter: {x: 2.1199367, y: 0.5394899, z: 0.47453943}
+    boundsSize: {x: 0.7953722, y: 0.86223817, z: 0.75817}

@@ -51,6 +51,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 192bebd9148aa584f8b9d2eae1311b83
+    m_Address: Assets/Addressables/Treasure/Artifacts/Statue_03Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1a2b3c4d5e6f7890abcdef1234567890
     m_Address: Assets/Definitions/CameraDefinition.asset
     m_ReadOnly: 0
@@ -141,6 +146,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/Statue_02Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 35b3e4f6fd524c2498fa84d5cc4c79f3
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_Island4Complete.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3704b071869de65498cb8732a68f9663
     m_Address: Assets/Definitions/WorldEvents/WorldEvent_IntroWelcome.asset
@@ -404,6 +415,12 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b9a93c68fac3e9f46a72aa0d3e955656
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_Island3Complete.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: bd87e61f6a7101541a36632d608c13f3
     m_Address: Assets/Definitions/GameDefinition.asset
     m_ReadOnly: 0
@@ -517,6 +534,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: df10a4dc34cd78e4586411c9b79771e8
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_Island1Complete.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: e017ebf56463832419dd4fa74d758d61
     m_Address: Assets/Addressables/Treasure/Artifacts/Statue_01Visual.prefab
     m_ReadOnly: 0
@@ -564,6 +587,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Gems/AmethystVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f0bca1154ea745a499e5ad5a8f18114e
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_Island2Complete.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: f2b8d46c9a7c1d95f6d0e453b8c1a792
     m_Address: Tables/GemDisplayTable

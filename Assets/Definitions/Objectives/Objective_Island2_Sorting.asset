@@ -34,7 +34,8 @@ MonoBehaviour:
     abilityId: 
     upgradeId: dig_pickup_speed
     upgradeLevel: 1
-  rewardLabel: Pickup speed 1.5x
+  rewardLabel: Pickup/Dig speed +50%
   showReward: 1
   completionToast: Island complete - platforms activated
-  onCompleteWorldEventIds: []
+  onCompleteWorldEventIds:
+  - island2_lanterns

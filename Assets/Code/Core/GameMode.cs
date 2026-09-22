@@ -213,41 +213,15 @@ public class GameMode : MonoBehaviour, IGameMode
 			else
 				Debug.LogWarning( "GameMode: TutorialPopupUI missing on Interface prefab." );
 
-			DiscoveryToastUI discoveryToast = interfacePrefab.GetComponentInChildren<DiscoveryToastUI>( true );
-			if ( discoveryToast == null )
-			{
-				Transform existing = interfacePrefab.transform.Find( "DiscoveryToast" );
-				GameObject toastGo = existing != null
-					? existing.gameObject
-					: new GameObject( "DiscoveryToast", typeof( RectTransform ), typeof( CanvasGroup ), typeof( DiscoveryToastUI ) );
-				if ( existing == null )
-					toastGo.transform.SetParent( interfacePrefab.transform, false );
-				discoveryToast = toastGo.GetComponent<DiscoveryToastUI>();
-				if ( discoveryToast == null )
-					discoveryToast = toastGo.AddComponent<DiscoveryToastUI>();
-			}
-
 			ToastStackUI.EnsureOnCanvas( interfacePrefab.transform );
 
+			DiscoveryToastUI discoveryToast = interfacePrefab.GetComponentInChildren<DiscoveryToastUI>( true );
 			if ( discoveryToast != null )
 				discoveryToast.Setup();
 			else
 				Debug.LogWarning( "GameMode: DiscoveryToastUI missing on Interface prefab." );
 
 			UnlockRewardToastUI unlockToast = interfacePrefab.GetComponentInChildren<UnlockRewardToastUI>( true );
-			if ( unlockToast == null )
-			{
-				Transform existingUnlock = interfacePrefab.transform.Find( "UnlockRewardToast" );
-				GameObject unlockGo = existingUnlock != null
-					? existingUnlock.gameObject
-					: new GameObject( "UnlockRewardToast", typeof( RectTransform ), typeof( CanvasGroup ), typeof( UnlockRewardToastUI ) );
-				if ( existingUnlock == null )
-					unlockGo.transform.SetParent( interfacePrefab.transform, false );
-				unlockToast = unlockGo.GetComponent<UnlockRewardToastUI>();
-				if ( unlockToast == null )
-					unlockToast = unlockGo.AddComponent<UnlockRewardToastUI>();
-			}
-
 			if ( unlockToast != null )
 				unlockToast.Setup();
 			else

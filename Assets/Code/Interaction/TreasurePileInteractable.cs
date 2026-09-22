@@ -399,10 +399,13 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 					CarryBucketKind.Coin,
 					promoteIfEmpty: true );
 			else
+			{
 				carry.TryAbsorbDefinitionsAtHeldBottom(
 					new List<TreasureDefinition> { def },
 					CarryBucketKind.Coin,
 					promoteIfEmpty: false );
+				TreasurePileDigSfx.PlayExtraStealClink( def, startPos );
+			}
 			if ( onDone != null )
 				onDone();
 			yield break;
@@ -440,6 +443,7 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 				new List<TreasureDefinition> { def },
 				CarryBucketKind.Coin,
 				promoteIfEmpty: false );
+			TreasurePileDigSfx.PlayExtraStealClink( def, startPos );
 			TreasureItemFactory.ReturnVisualCoin( rented );
 			if ( onDone != null )
 				onDone();
@@ -467,8 +471,11 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 			yield return null;
 		}
 
+		Vector3 landPos = holdRoot != null ? holdRoot.TransformPoint( endLocal ) : startPos;
+
 		if ( rented != null )
 		{
+			landPos = rented.transform.position;
 			rented.EndFlight();
 			TreasureItemFactory.ReturnVisualCoin( rented );
 		}
@@ -478,6 +485,8 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 				new List<TreasureDefinition> { def },
 				CarryBucketKind.Coin,
 				promoteIfEmpty: false );
+
+		TreasurePileDigSfx.PlayExtraStealClink( def, landPos );
 
 		if ( onDone != null )
 			onDone();
@@ -581,6 +590,8 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		Vector3 digPoint = transform.position;
 		if ( pileVisual != null && pileVisual.TryGetLastInteractPoint( out Vector3 hit ) )
 			digPoint = hit;
+
+		TreasurePileDigSfx.PlayDigPour( digPoint, amount );
 
 		EventBus.Publish( new TreasurePileDigEvent
 		{

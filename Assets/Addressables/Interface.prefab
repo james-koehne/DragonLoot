@@ -424,6 +424,378 @@ MonoBehaviour:
         MinDistance: 1
         MaxDistance: 20
         AudioSource: {fileID: 0}
+--- !u!1 &2807143647371928760
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2465789506447480719}
+  - component: {fileID: 7428661014832165739}
+  m_Layer: 5
+  m_Name: StarIdleFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2465789506447480719
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2807143647371928760}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002162}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &7428661014832165739
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2807143647371928760}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540544
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540544
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448842610540545
+        - rid: 8923448842610540546
+        - rid: 8923448842610540701
+    - rid: 8923448842610540545
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002162}
+        Punch: {x: 0.38, y: 0.38, z: 0}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.45
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540546
+      type: {class: UiPunchRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002162}
+        PunchEuler: {x: 0, y: 0, z: 26}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540701
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002164}
+        PunchColor: {r: 1, g: 1, b: 0.55, a: 1}
+        Duration: 0.65
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+--- !u!1 &3086504921400137079
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8117502668835395467}
+  - component: {fileID: 4526949116779866620}
+  m_Layer: 5
+  m_Name: StarIdleFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &8117502668835395467
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3086504921400137079}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002562}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &4526949116779866620
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3086504921400137079}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540556
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540556
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448842610540557
+        - rid: 8923448842610540558
+        - rid: 8923448842610540702
+    - rid: 8923448842610540557
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002562}
+        Punch: {x: 0.38, y: 0.38, z: 0}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.45
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540558
+      type: {class: UiPunchRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002562}
+        PunchEuler: {x: 0, y: 0, z: 26}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540702
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002564}
+        PunchColor: {r: 1, g: 1, b: 0.55, a: 1}
+        Duration: 0.65
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
 --- !u!1 &3304682845713768523
 GameObject:
   m_ObjectHideFlags: 0
@@ -1151,6 +1523,287 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
+--- !u!1 &4331197572232331765
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3190380864684010805}
+  - component: {fileID: 6432206024756675960}
+  m_Layer: 5
+  m_Name: StarIdleFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &3190380864684010805
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4331197572232331765}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002262}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &6432206024756675960
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4331197572232331765}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540548
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540548
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448842610540549
+        - rid: 8923448842610540550
+        - rid: 8923448842610540703
+    - rid: 8923448842610540549
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002262}
+        Punch: {x: 0.38, y: 0.38, z: 0}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.45
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540550
+      type: {class: UiPunchRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002262}
+        PunchEuler: {x: 0, y: 0, z: 26}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540703
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002264}
+        PunchColor: {r: 1, g: 1, b: 0.55, a: 1}
+        Duration: 0.65
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+--- !u!1 &4896249538192227405
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3481443434011628844}
+  - component: {fileID: 4724236917518232666}
+  m_Layer: 5
+  m_Name: ArriveFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &3481443434011628844
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4896249538192227405}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002202}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &4724236917518232666
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4896249538192227405}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540551
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540551
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002202}
+        Punch: {x: 0.2, y: 0.24, z: 0}
+        Duration: 0.34
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
 --- !u!1 &5277881177787326480
 GameObject:
   m_ObjectHideFlags: 0
@@ -1469,37 +2122,6 @@ MonoBehaviour:
       m_Calls: []
   fadeGroup: {fileID: 0}
   loadingGroup: {fileID: 0}
---- !u!1 &6860889145743721000
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 611839931432403713}
-  m_Layer: 0
-  m_Name: ToastFeedbacksV2
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &611839931432403713
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6860889145743721000}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7101000000000000852}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &7093017745787053027
 GameObject:
   m_ObjectHideFlags: 0
@@ -2092,6 +2714,8 @@ GameObject:
   - component: {fileID: 7101000000000000203}
   - component: {fileID: 7101000000000000205}
   - component: {fileID: 7101000000000000206}
+  - component: {fileID: 7101000000000000207}
+  - component: {fileID: 7101000000000000208}
   m_Layer: 5
   m_Name: QuestObjective
   m_TagString: Untagged
@@ -2111,6 +2735,7 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 7101000000000000252}
   - {fileID: 7101000000000000212}
   - {fileID: 7101000000000000222}
   - {fileID: 7054798882366521668}
@@ -2122,7 +2747,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 20, y: -96}
-  m_SizeDelta: {x: 560, y: 336}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!222 &7101000000000000203
 CanvasRenderer:
@@ -2166,7 +2791,49 @@ MonoBehaviour:
   hideFeedback: {fileID: 7467554563745056516}
   subObjectiveCompleteFeedback: {fileID: 6267923530146926140}
   objectiveCompleteFeedback: {fileID: 1987949476564358893}
-  taskCountPopFeedback: {fileID: 0}
+  attentionGroup: {fileID: 7101000000000000253}
+  attentionDiamond: {fileID: 7101000000000000260}
+  attentionGlow: {fileID: 7101000000000000256}
+--- !u!114 &7101000000000000207
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000201}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59f8146938fff824cb5fd77236b75775, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.VerticalLayoutGroup
+  m_Padding:
+    m_Left: 22
+    m_Right: 22
+    m_Top: 22
+    m_Bottom: 22
+  m_ChildAlignment: 0
+  m_Spacing: 8
+  m_ChildForceExpandWidth: 0
+  m_ChildForceExpandHeight: 0
+  m_ChildControlWidth: 1
+  m_ChildControlHeight: 1
+  m_ChildScaleWidth: 0
+  m_ChildScaleHeight: 0
+  m_ReverseArrangement: 0
+--- !u!114 &7101000000000000208
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000201}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3245ec927659c4140ac4f8d17403cc18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.ContentSizeFitter
+  m_HorizontalFit: 2
+  m_VerticalFit: 2
 --- !u!1 &7101000000000000211
 GameObject:
   m_ObjectHideFlags: 0
@@ -2201,10 +2868,10 @@ RectTransform:
   m_Father: {fileID: 7101000000000000202}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 141}
-  m_SizeDelta: {x: -44, y: -296}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0, y: 1}
 --- !u!222 &7101000000000000213
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2243,7 +2910,7 @@ MonoBehaviour:
     m_Alignment: 3
     m_AlignByGeometry: 0
     m_RichText: 1
-    m_HorizontalOverflow: 0
+    m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: Quest
@@ -2296,10 +2963,10 @@ RectTransform:
   m_Father: {fileID: 7101000000000000202}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -20.5}
-  m_SizeDelta: {x: -44, y: -67}
-  m_Pivot: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0, y: 1}
 --- !u!222 &7101000000000000223
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -2338,7 +3005,7 @@ MonoBehaviour:
     m_Alignment: 3
     m_AlignByGeometry: 0
     m_RichText: 1
-    m_HorizontalOverflow: 0
+    m_HorizontalOverflow: 1
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 
@@ -2357,6 +3024,227 @@ MonoBehaviour:
   m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
   m_EffectDistance: {x: 1.5, y: -0.5}
   m_UseGraphicAlpha: 1
+--- !u!1 &7101000000000000251
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7101000000000000252}
+  - component: {fileID: 7101000000000000253}
+  - component: {fileID: 7101000000000000254}
+  m_Layer: 5
+  m_Name: Attention
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &7101000000000000252
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000251}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7101000000000000256}
+  - {fileID: 7101000000000000260}
+  m_Father: {fileID: 7101000000000000202}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!225 &7101000000000000253
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000251}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!114 &7101000000000000254
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000251}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 306cc8c2b49d7114eaa3623786fc2126, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.LayoutElement
+  m_IgnoreLayout: 1
+  m_MinWidth: -1
+  m_MinHeight: -1
+  m_PreferredWidth: -1
+  m_PreferredHeight: -1
+  m_FlexibleWidth: -1
+  m_FlexibleHeight: -1
+  m_LayoutPriority: 1
+--- !u!1 &7101000000000000255
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7101000000000000256}
+  - component: {fileID: 7101000000000000257}
+  - component: {fileID: 7101000000000000258}
+  m_Layer: 5
+  m_Name: Glow
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &7101000000000000256
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000255}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000252}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 14, y: -14}
+  m_SizeDelta: {x: 56, y: 56}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &7101000000000000257
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000255}
+  m_CullTransparentMesh: 1
+--- !u!114 &7101000000000000258
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000255}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.941, g: 0.847, b: 0.471, a: 0.45}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: 7a13314703c6b4846b5cf2f101525c60, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 1
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!1 &7101000000000000259
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7101000000000000260}
+  - component: {fileID: 7101000000000000261}
+  - component: {fileID: 7101000000000000262}
+  m_Layer: 5
+  m_Name: Diamond
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &7101000000000000260
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000259}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000252}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 14, y: -14}
+  m_SizeDelta: {x: 28, y: 28}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &7101000000000000261
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000259}
+  m_CullTransparentMesh: 1
+--- !u!114 &7101000000000000262
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000259}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.941, g: 0.847, b: 0.471, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: b91c4e7a2d8f46b3a5e0c1d9f7b38421, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 1
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &7101000000000000301
 GameObject:
   m_ObjectHideFlags: 0
@@ -2399,7 +3287,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 1}
   m_AnchorMax: {x: 0.5, y: 1}
   m_AnchoredPosition: {x: 0, y: -16}
-  m_SizeDelta: {x: 960, y: 56}
+  m_SizeDelta: {x: 720, y: 56}
   m_Pivot: {x: 0.5, y: 1}
 --- !u!222 &7101000000000000303
 CanvasRenderer:
@@ -2416,7 +3304,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7101000000000000301}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
@@ -2852,9 +3740,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b91c4e7a2d8f46b3a5e0c1d9f7b38421, type: 3}
   m_Type: 0
-  m_PreserveAspect: 0
+  m_PreserveAspect: 1
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -3009,9 +3897,9 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 21300000, guid: b91c4e7a2d8f46b3a5e0c1d9f7b38421, type: 3}
   m_Type: 0
-  m_PreserveAspect: 0
+  m_PreserveAspect: 1
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -3139,6 +4027,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7101000000000000502}
   - component: {fileID: 7101000000000000503}
+  - component: {fileID: 7101000000000000505}
   - component: {fileID: 7101000000000000504}
   m_Layer: 5
   m_Name: Crosshair
@@ -3159,6 +4048,7 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 7101000000000000522}
   - {fileID: 7101000000000000512}
   - {fileID: 7101000000000000662}
   - {fileID: 7101000000000000622}
@@ -3181,11 +4071,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1d8a3caee91ccb64b88edda460f0b185, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CrosshairUI
-  idleColor: {r: 1, g: 1, b: 1, a: 1}
-  focusedColor: {r: 1, g: 0.85, b: 0.2, a: 1}
-  size: 8
-  contextualRingSize: 20
-  _canvasGroup: {fileID: 0}
+  _canvasGroup: {fileID: 7101000000000000505}
+  _image: {fileID: 7101000000000000514}
+  _contextualRing: {fileID: 7101000000000000524}
+--- !u!225 &7101000000000000505
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000501}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!114 &7101000000000000504
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3273,6 +4173,81 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_Sprite: {fileID: 21300000, guid: 7a13314703c6b4846b5cf2f101525c60, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!1 &7101000000000000521
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7101000000000000522}
+  - component: {fileID: 7101000000000000523}
+  - component: {fileID: 7101000000000000524}
+  m_Layer: 5
+  m_Name: ContextualRing
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &7101000000000000522
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000521}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000000502}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 20, y: 20}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!222 &7101000000000000523
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000521}
+  m_CullTransparentMesh: 1
+--- !u!114 &7101000000000000524
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000000521}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 0.85, b: 0.2, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: a4c8e2f19b7d4560a1e83c5f2d9b0476, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -3566,7 +4541,6 @@ RectTransform:
   - {fileID: 577084201097356309}
   - {fileID: 1348942745664235140}
   - {fileID: 8722537698525626168}
-  - {fileID: 7982021802669786535}
   m_Father: {fileID: 8603568719501364491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
@@ -5099,7 +6073,6 @@ RectTransform:
   - {fileID: 6359850976176406294}
   - {fileID: 7423734283875468216}
   - {fileID: 2253098055355021919}
-  - {fileID: 611839931432403713}
   m_Father: {fileID: 8603568719501364491}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
@@ -5879,7 +6852,6 @@ MonoBehaviour:
   showFeedback: {fileID: 7101000000000001003}
   hideFeedback: {fileID: 7101000000000001013}
   taskCompleteFeedback: {fileID: 7101000000000001023}
-  taskCountPopFeedback: {fileID: 0}
   tutorialCompleteFeedback: {fileID: 7101000000000001053}
   switchFeedback: {fileID: 0}
   stackAddFeedback: {fileID: 0}
@@ -7502,6 +8474,8 @@ MonoBehaviour:
     newItemRoot: {fileID: 7101000000000002152}
     newItemIcon: {fileID: 7101000000000002164}
     newItemCount: {fileID: 7101000000000002174}
+    arriveFeedback: {fileID: 8005536826056151051}
+    starIdleFeedback: {fileID: 7428661014832165739}
   - root: {fileID: 7101000000000002203}
     icon: {fileID: 7101000000000002224}
     binding: {fileID: 7101000000000002234}
@@ -7509,6 +8483,8 @@ MonoBehaviour:
     newItemRoot: {fileID: 7101000000000002252}
     newItemIcon: {fileID: 7101000000000002264}
     newItemCount: {fileID: 7101000000000002274}
+    arriveFeedback: {fileID: 4724236917518232666}
+    starIdleFeedback: {fileID: 6432206024756675960}
   - root: {fileID: 7101000000000002303}
     icon: {fileID: 7101000000000002324}
     binding: {fileID: 7101000000000002334}
@@ -7516,6 +8492,8 @@ MonoBehaviour:
     newItemRoot: {fileID: 7101000000000002352}
     newItemIcon: {fileID: 7101000000000002364}
     newItemCount: {fileID: 7101000000000002374}
+    arriveFeedback: {fileID: 8146894320261288004}
+    starIdleFeedback: {fileID: 5905616455688419693}
   - root: {fileID: 7101000000000002503}
     icon: {fileID: 7101000000000002524}
     binding: {fileID: 7101000000000002534}
@@ -7523,6 +8501,8 @@ MonoBehaviour:
     newItemRoot: {fileID: 7101000000000002552}
     newItemIcon: {fileID: 7101000000000002564}
     newItemCount: {fileID: 7101000000000002574}
+    arriveFeedback: {fileID: 8025801865989262780}
+    starIdleFeedback: {fileID: 4526949116779866620}
   cycleBinding: {fileID: 7101000000000002414}
   cycleLabel: {fileID: 7101000000000002424}
   newItemStarSprite: {fileID: 21300000, guid: 8206fcb5c634ec841bd4cf4fd20e18a9, type: 3}
@@ -7558,6 +8538,7 @@ RectTransform:
   - {fileID: 7101000000000002122}
   - {fileID: 7101000000000002132}
   - {fileID: 7101000000000002142}
+  - {fileID: 5543426792759497169}
   m_Father: {fileID: 7101000000000002002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -7820,6 +8801,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7101000000000002152}
+  - component: {fileID: 7101000000000002155}
   m_Layer: 5
   m_Name: NewItem
   m_TagString: Untagged
@@ -7848,6 +8830,18 @@ RectTransform:
   m_AnchoredPosition: {x: 2, y: 8}
   m_SizeDelta: {x: 56, y: 20}
   m_Pivot: {x: 0, y: 1}
+--- !u!225 &7101000000000002155
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000002151}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 1
 --- !u!1 &7101000000000002161
 GameObject:
   m_ObjectHideFlags: 0
@@ -7877,13 +8871,14 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 2465789506447480719}
   m_Father: {fileID: 7101000000000002152}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 9, y: 0}
-  m_SizeDelta: {x: 18, y: 18}
+  m_AnchoredPosition: {x: 10, y: 0}
+  m_SizeDelta: {x: 24, y: 24}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7101000000000002163
 CanvasRenderer:
@@ -7906,7 +8901,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 1, g: 0.84, b: 0.2, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -8034,6 +9029,7 @@ RectTransform:
   - {fileID: 7101000000000002222}
   - {fileID: 7101000000000002232}
   - {fileID: 7101000000000002242}
+  - {fileID: 3481443434011628844}
   m_Father: {fileID: 7101000000000002002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -8296,6 +9292,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7101000000000002252}
+  - component: {fileID: 7101000000000002255}
   m_Layer: 5
   m_Name: NewItem
   m_TagString: Untagged
@@ -8324,6 +9321,18 @@ RectTransform:
   m_AnchoredPosition: {x: 2, y: 8}
   m_SizeDelta: {x: 56, y: 20}
   m_Pivot: {x: 0, y: 1}
+--- !u!225 &7101000000000002255
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000002251}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 1
 --- !u!1 &7101000000000002261
 GameObject:
   m_ObjectHideFlags: 0
@@ -8353,13 +9362,14 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 3190380864684010805}
   m_Father: {fileID: 7101000000000002252}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 9, y: 0}
-  m_SizeDelta: {x: 18, y: 18}
+  m_AnchoredPosition: {x: 10, y: 0}
+  m_SizeDelta: {x: 24, y: 24}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7101000000000002263
 CanvasRenderer:
@@ -8382,7 +9392,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 1, g: 0.84, b: 0.2, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -8510,6 +9520,7 @@ RectTransform:
   - {fileID: 7101000000000002322}
   - {fileID: 7101000000000002332}
   - {fileID: 7101000000000002342}
+  - {fileID: 7697694639025058139}
   m_Father: {fileID: 7101000000000002002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -8772,6 +9783,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7101000000000002352}
+  - component: {fileID: 7101000000000002355}
   m_Layer: 5
   m_Name: NewItem
   m_TagString: Untagged
@@ -8800,6 +9812,18 @@ RectTransform:
   m_AnchoredPosition: {x: 2, y: 8}
   m_SizeDelta: {x: 56, y: 20}
   m_Pivot: {x: 0, y: 1}
+--- !u!225 &7101000000000002355
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000002351}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 1
 --- !u!1 &7101000000000002361
 GameObject:
   m_ObjectHideFlags: 0
@@ -8829,13 +9853,14 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 5874209559622075182}
   m_Father: {fileID: 7101000000000002352}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 9, y: 0}
-  m_SizeDelta: {x: 18, y: 18}
+  m_AnchoredPosition: {x: 10, y: 0}
+  m_SizeDelta: {x: 24, y: 24}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7101000000000002363
 CanvasRenderer:
@@ -8858,7 +9883,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 1, g: 0.84, b: 0.2, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -9181,6 +10206,7 @@ RectTransform:
   - {fileID: 7101000000000002522}
   - {fileID: 7101000000000002532}
   - {fileID: 7101000000000002542}
+  - {fileID: 4245933030559804016}
   m_Father: {fileID: 7101000000000002002}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -9443,6 +10469,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7101000000000002552}
+  - component: {fileID: 7101000000000002555}
   m_Layer: 5
   m_Name: NewItem
   m_TagString: Untagged
@@ -9471,6 +10498,18 @@ RectTransform:
   m_AnchoredPosition: {x: 2, y: 8}
   m_SizeDelta: {x: 56, y: 20}
   m_Pivot: {x: 0, y: 1}
+--- !u!225 &7101000000000002555
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7101000000000002551}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 1
 --- !u!1 &7101000000000002561
 GameObject:
   m_ObjectHideFlags: 0
@@ -9500,13 +10539,14 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 8117502668835395467}
   m_Father: {fileID: 7101000000000002552}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 9, y: 0}
-  m_SizeDelta: {x: 18, y: 18}
+  m_AnchoredPosition: {x: 10, y: 0}
+  m_SizeDelta: {x: 24, y: 24}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7101000000000002563
 CanvasRenderer:
@@ -9529,7 +10569,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 1, g: 0.84, b: 0.2, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -9683,6 +10723,14 @@ MonoBehaviour:
         - rid: 8923448766738202709
         - rid: 8923448766738202710
         - rid: 8923448766738202711
+        - rid: 8923448766738202800
+        - rid: 8923448766738202801
+        - rid: 8923448766738202802
+        - rid: 8923448766738202803
+        - rid: 8923448766738202804
+        - rid: 8923448766738202805
+        - rid: 8923448766738202808
+        - rid: 8923448766738202809
     - rid: 8923448766738202709
       type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
       data:
@@ -9722,8 +10770,8 @@ MonoBehaviour:
       data:
         _enabled: 1
         Target: {fileID: 7101000000000000202}
-        Punch: {x: 0.04, y: 0.06, z: 0}
-        Duration: 0.28
+        Punch: {x: 0.08, y: 0.1, z: 0}
+        Duration: 0.34
         Curve:
           serializedVersion: 2
           m_Curve:
@@ -9800,37 +10848,242 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
---- !u!1 &7256322448892213763
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 7982021802669786535}
-  m_Layer: 0
-  m_Name: ToastFeedbacksV2
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &7982021802669786535
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7256322448892213763}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7101000000000000642}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+    - rid: 8923448766738202800
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 5fe3a552acde97149b017b0e6b101798, type: 3}
+        VolumeMin: 0.85
+        VolumeMax: 1
+        PitchMin: 0.98
+        PitchMax: 1.02
+        SpatialBlend: 0
+        MinDistance: 1
+        MaxDistance: 20
+        AudioSource: {fileID: 0}
+    - rid: 8923448766738202801
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000214}
+        PunchColor: {r: 0.941, g: 0.847, b: 0.471, a: 1}
+        Duration: 0.45
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.3
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
+    - rid: 8923448766738202802
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000253}
+        From: 0
+        To: 0.9
+        Duration: 0.18
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 0
+    - rid: 8923448766738202803
+      type: {class: UiSpinRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000260}
+        DegreesPerSecond: 160
+        Duration: 8
+        UseUnscaledTime: 1
+        RestoreOnComplete: 1
+    - rid: 8923448766738202804
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000260}
+        Punch: {x: 0.18, y: 0.18, z: 0}
+        Duration: 0.35
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.35
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202805
+      type: {class: SequenceFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448766738202806
+        - rid: 8923448766738202807
+    - rid: 8923448766738202806
+      type: {class: DelayFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Duration: 7.3
+    - rid: 8923448766738202807
+      type: {class: CanvasGroupFadeFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000253}
+        From: 0.9
+        To: 0
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureCurrentAsFrom: 1
+    - rid: 8923448766738202808
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000222}
+        Punch: {x: 0.1, y: 0.14, z: 0}
+        Duration: 0.38
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448766738202809
+      type: {class: UiPulseScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000000256}
+        Amplitude: {x: 0.35, y: 0.35, z: 0}
+        CyclesPerSecond: 1.15
+        Duration: 8
+        UseUnscaledTime: 1
+        RestoreOnComplete: 1
 --- !u!1 &7497686292618624185
 GameObject:
   m_ObjectHideFlags: 0
@@ -10064,6 +11317,382 @@ MonoBehaviour:
           m_PostInfinity: 2
           m_RotationOrder: 4
         UseUnscaledTime: 1
+--- !u!1 &7839964975961923782
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4245933030559804016}
+  - component: {fileID: 8025801865989262780}
+  m_Layer: 5
+  m_Name: ArriveFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &4245933030559804016
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7839964975961923782}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002502}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8025801865989262780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7839964975961923782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540559
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540559
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002502}
+        Punch: {x: 0.2, y: 0.24, z: 0}
+        Duration: 0.34
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+--- !u!1 &8247565343818465621
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5543426792759497169}
+  - component: {fileID: 8005536826056151051}
+  m_Layer: 5
+  m_Name: ArriveFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &5543426792759497169
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8247565343818465621}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002102}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8005536826056151051
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8247565343818465621}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540547
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540547
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002102}
+        Punch: {x: 0.2, y: 0.24, z: 0}
+        Duration: 0.34
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+--- !u!1 &8323615996234850188
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5874209559622075182}
+  - component: {fileID: 5905616455688419693}
+  m_Layer: 5
+  m_Name: StarIdleFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &5874209559622075182
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8323615996234850188}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002362}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &5905616455688419693
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8323615996234850188}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540552
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540552
+      type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 8923448842610540553
+        - rid: 8923448842610540554
+        - rid: 8923448842610540704
+    - rid: 8923448842610540553
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002362}
+        Punch: {x: 0.38, y: 0.38, z: 0}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.45
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540554
+      type: {class: UiPunchRotationFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002362}
+        PunchEuler: {x: 0, y: 0, z: 26}
+        Duration: 0.7
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+    - rid: 8923448842610540704
+      type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002364}
+        PunchColor: {r: 1, g: 1, b: 0.55, a: 1}
+        Duration: 0.65
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.4
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1
+        CaptureRestOnPlay: 1
 --- !u!1 &8540326890992811749
 GameObject:
   m_ObjectHideFlags: 0
@@ -10143,3 +11772,98 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!1 &8641945991456887543
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7697694639025058139}
+  - component: {fileID: 8146894320261288004}
+  m_Layer: 5
+  m_Name: ArriveFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &7697694639025058139
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8641945991456887543}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7101000000000002302}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8146894320261288004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8641945991456887543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 8923448842610540555
+  _useUnscaledTime: 1
+  references:
+    version: 2
+    RefIds:
+    - rid: 8923448842610540555
+      type: {class: UiPunchScaleFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Target: {fileID: 7101000000000002302}
+        Punch: {x: 0.2, y: 0.24, z: 0}
+        Duration: 0.34
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.28
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+        UseUnscaledTime: 1

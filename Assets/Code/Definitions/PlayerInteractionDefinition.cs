@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [CreateAssetMenu( fileName = "PlayerInteractionDefinition", menuName = "Definitions/PlayerInteractionDefinition" )]
 public class PlayerInteractionDefinition : ScriptableObject
@@ -23,6 +24,11 @@ public class PlayerInteractionDefinition : ScriptableObject
 	[Tooltip( "Seconds between repeated pickup/interact after the initial hold delay. Tap still picks up once immediately." )]
 	[Min( 0.05f )]
 	public float pickupRepeatInterval = 0.25f;
+
+	[Tooltip( "Default hold time (progress ring) before any non-coin can be picked up with primary interact. Per-treasure overrides live on TreasureDefinition." )]
+	[Min( 0f )]
+	[FormerlySerializedAs( "digSpecialPickupHoldDelay" )]
+	public float nonCoinPickupHoldDelay = 0.5f;
 
 	[Header( "Release / Throw" )]
 	[Min( 0f )]
@@ -64,6 +70,10 @@ public class PlayerInteractionDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float throwPlaceRepeatInterval = 0.25f;
 
+	[Header( "Crosshair" )]
+	public Color crosshairIdleColor = Color.white;
+	public Color crosshairFocusedColor = new Color( 1f, 0.85f, 0.2f, 1f );
+
 	[Header( "Pickable Focus Outline" )]
 	public HoverOutlineVisualSettings pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
@@ -76,6 +86,7 @@ public class PlayerInteractionDefinition : ScriptableObject
 		placementAimRange = Mathf.Max( 0.1f, placementAimRange );
 		pickupHoldInitialDelay = Mathf.Max( 0f, pickupHoldInitialDelay );
 		pickupRepeatInterval = Mathf.Max( 0.05f, pickupRepeatInterval );
+		nonCoinPickupHoldDelay = Mathf.Max( 0f, nonCoinPickupHoldDelay );
 		dropUpBias = Mathf.Max( 0f, dropUpBias );
 		throwForce = Mathf.Max( 0f, throwForce );
 		heavyThrowForce = Mathf.Max( 0f, heavyThrowForce );

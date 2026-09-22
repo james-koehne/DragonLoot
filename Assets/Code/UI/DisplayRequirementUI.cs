@@ -350,7 +350,7 @@ public class DisplayRequirementUI
 			? Mathf.Clamp( Mathf.RoundToInt( 100f * filled / needed ), 0, 100 )
 			: ( filled > 0 ? 100 : 0 );
 		builder.Append( pct );
-		builder.Append( "% — " );
+		builder.Append( "% - " );
 		builder.Append( filled );
 		builder.Append( '/' );
 		builder.Append( needed );

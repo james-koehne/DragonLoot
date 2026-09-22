@@ -44,10 +44,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	bool _destroying;
 	bool _blockMergeAsTarget;
 	bool _machineBuffer;
+	bool _chuteOutput;
 	bool _cartHosted;
 	MinecartInteractable _cartHost;
 	int _maxCountOverride;
 	CoinSortingStation _machineStation;
+	TreasureDefinition _chuteCoinType;
 	CoinStackVisualDefinition _visualDef;
 	float _variationSeed;
 	bool _preferImperfectLod = true;
@@ -68,10 +70,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public bool HasInFlight => _inFlight.Count > 0 || _blockMergeAsTarget;
 	public bool IsHomogeneous => TryGetHomogeneousDefinition( out _ );
 	public bool IsMachineBuffer => _machineBuffer;
+	public bool IsChuteOutput => _chuteOutput;
 	public bool IsCartHosted => _cartHosted;
 	public MinecartInteractable CartHost => _cartHost;
 	public CoinSortingStation MachineStation => _machineStation;
-	bool ExcludedFromWorldJoin => _machineBuffer || _cartHosted;
+	public TreasureDefinition ChuteCoinType => _chuteCoinType;
+	bool ExcludedFromWorldJoin => _machineBuffer || _chuteOutput || _cartHosted;
 	public bool IsStreamPinned => ExcludedFromWorldJoin;
 	public bool IsReturningToPool => _returningToPool;
 	public bool CanWorldStream => !ExcludedFromWorldJoin
@@ -287,15 +291,34 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	}
 
 	/// <summary>
-	/// Marks this stack as a machine-owned buffer (e.g. sorting hopper): no player take,
-	/// excluded from world merges / FindNearest, persists when empty, optional capacity cap.
+	/// Marks this stack as a machine-owned buffer (e.g. sorting hopper): excluded from world
+	/// merges / FindNearest, persists when empty, optional capacity cap. Player LMB take is allowed.
 	/// </summary>
 	public void ConfigureAsMachineBuffer( int maxCount = 0, CoinSortingStation station = null )
 	{
 		_machineBuffer = true;
+		_chuteOutput = false;
+		_chuteCoinType = null;
 		_maxCountOverride = maxCount > 0 ? maxCount : 0;
 		_machineStation = station;
 		SetInteractionName( "Hopper" );
+		RefreshCollider();
+		WorldTreasureStreamer.NotifyCoinStackPinned( this );
+	}
+
+	/// <summary>
+	/// Marks this stack as a sorting-station chute output: type-locked, excluded from world
+	/// merges / FindNearest, persists when empty so sorted coins always land on the chute.
+	/// Player take/place match world stacks for the chute coin type only.
+	/// </summary>
+	public void ConfigureAsChuteOutput( TreasureDefinition coinType, CoinSortingStation station = null )
+	{
+		_chuteOutput = true;
+		_machineBuffer = false;
+		_chuteCoinType = coinType;
+		_machineStation = station;
+		_maxCountOverride = 0;
+		SetInteractionName( "Coin Stack" );
 		RefreshCollider();
 		WorldTreasureStreamer.NotifyCoinStackPinned( this );
 	}
@@ -480,7 +503,24 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	public bool CanAccept( TreasureDefinition definition )
 	{
-		return IsGroundStackableCoin( definition ) && !IsFull;
+		if ( !IsGroundStackableCoin( definition ) || IsFull )
+			return false;
+
+		if ( _chuteOutput && _chuteCoinType != null )
+			return SameCoinType( definition, _chuteCoinType );
+
+		return true;
+	}
+
+	static bool SameCoinType( TreasureDefinition a, TreasureDefinition b )
+	{
+		if ( a == b )
+			return true;
+		if ( a == null || b == null )
+			return false;
+		if ( !string.IsNullOrEmpty( a.id ) && a.id == b.id )
+			return true;
+		return false;
 	}
 
 	public bool CanPlace( TreasureItem item, in PlacementQuery query )
@@ -531,6 +571,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			}
 
 			BeginAppendFlight( one, transform.rotation );
+			if ( _machineStation != null )
+				_machineStation.PublishHopperLoaded( 1 );
 			return true;
 		}
 
@@ -999,7 +1041,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	/// </summary>
 	public bool TryAppendDefinition( TreasureDefinition definition )
 	{
-		if ( !IsGroundStackableCoin( definition ) || _destroying || IsFull )
+		if ( !CanAccept( definition ) || _destroying )
 			return false;
 
 		_slots.Add( definition );
@@ -1024,7 +1066,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
 			TreasureDefinition def = definitions[ i ];
-			if ( !IsGroundStackableCoin( def ) || IsFull )
+			if ( !CanAccept( def ) )
 				break;
 
 			_slots.Add( def );
@@ -1085,7 +1127,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshCollider();
 		if ( Count <= 0 )
 		{
-			if ( _machineBuffer )
+			if ( _machineBuffer || _chuteOutput )
 				PlayRemoveFeedback();
 			DestroyIfEmpty();
 		}
@@ -1096,7 +1138,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	/// <summary>
 	/// Copies every logical slot into <paramref name="into"/> (including mixed stacks),
-	/// despawns live / in-flight items, and destroys this stack. No world reclaim.
+	/// despawns live / in-flight items. Machine buffers and chute outputs persist empty;
+	/// world stacks are destroyed / released to the streamer.
 	/// </summary>
 	public bool TryConsumeAllDefinitions( System.Collections.Generic.List<TreasureDefinition> into )
 	{
@@ -1109,7 +1152,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				into.Add( _slots[ i ] );
 		}
 
-		_destroying = true;
+		if ( into.Count == 0 )
+			return false;
 
 		for ( int i = 0; i < _inFlight.Count; i++ )
 		{
@@ -1126,6 +1170,15 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_slots.Clear();
 		InvalidateHeightPrefix();
 		_settledLive.Clear();
+
+		if ( _machineBuffer || _chuteOutput )
+		{
+			RefreshCollider();
+			PlayRemoveFeedback();
+			return true;
+		}
+
+		_destroying = true;
 		Unregister();
 		if ( !IsStreamPinned )
 		{
@@ -1202,8 +1255,6 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 
 	public override bool CanInteract( PlayerController player )
 	{
-		if ( _machineBuffer )
-			return false;
 		if ( !IsAvailable || player == null || _taking || HasInFlight || Count <= 0 )
 			return false;
 
@@ -1333,7 +1384,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			TreasureItemFactory.ReturnVisualCoin( aimedCoin );
 
 		_taking = false;
-		if ( receivedActive && !_machineBuffer && countBefore >= 2 )
+		if ( receivedActive && countBefore >= 2 )
 		{
 			EventBus.Publish( new CoinTakenFromStackEvent
 			{
@@ -1947,7 +1998,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( Count > 0 )
 			return;
 
-		if ( _machineBuffer )
+		if ( _machineBuffer || _chuteOutput )
 		{
 			ClearAllVisuals();
 			RefreshCollider();
@@ -2030,6 +2081,13 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_absorbingNearby = false;
 		_joinDirty = false;
 		_blockMergeAsTarget = false;
+		_machineBuffer = false;
+		_chuteOutput = false;
+		_chuteCoinType = null;
+		_machineStation = null;
+		_maxCountOverride = 0;
+		_cartHosted = false;
+		_cartHost = null;
 		ClearAllVisuals();
 		_slots.Clear();
 		_settledLive.Clear();

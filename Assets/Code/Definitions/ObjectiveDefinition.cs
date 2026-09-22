@@ -22,13 +22,14 @@ public enum ObjectiveRewardType
 [Serializable]
 public class ObjectiveSubDefinition
 {
+	[Tooltip( "Unique within this objective. Duplicate ids share one completion flag - never reuse across display / pile / constellation subs." )]
 	public string id;
 
 	public string label;
 
 	public ObjectiveSubCompleteType completeType;
 
-	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired. Empty = any matching event of that type. PileEmptied with an empty id uses piles inside showVolumeId." )]
+	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired. Empty DisplayComplete / PileEmptied = all matching targets inside showVolumeId. Empty for other types = any matching event." )]
 	public string targetId;
 
 	[Tooltip( "Count shown as label: current/required. 0 = use the target's capacity or pile size." )]
@@ -85,7 +86,7 @@ public class ObjectiveDefinition : ScriptableObject
 	[Tooltip( "Optional unlock toast when this objective completes (e.g. Island complete — platforms activated). Empty = no toast." )]
 	public string completionToast;
 
-	[Tooltip( "World event ids to fire (if not already fired) when this objective completes." )]
+	[Tooltip( "World event ids to fire (if not already fired) when this objective completes. Use manual-only events such as island1_lanterns." )]
 	public string[] onCompleteWorldEventIds;
 
 	public string ResolveTitle()
@@ -182,5 +183,27 @@ public class ObjectiveDefinition : ScriptableObject
 	{
 		if ( string.IsNullOrEmpty( id ) && !string.IsNullOrEmpty( name ) )
 			id = name;
+
+		if ( subs == null || subs.Length <= 1 )
+			return;
+
+		for ( int i = 0; i < subs.Length; i++ )
+		{
+			ObjectiveSubDefinition a = subs[ i ];
+			if ( a == null || string.IsNullOrEmpty( a.id ) )
+				continue;
+
+			for ( int j = i + 1; j < subs.Length; j++ )
+			{
+				ObjectiveSubDefinition b = subs[ j ];
+				if ( b == null || string.IsNullOrEmpty( b.id ) )
+					continue;
+				if ( a.id != b.id )
+					continue;
+
+				Debug.LogWarning( "ObjectiveDefinition '" + name + "': duplicate sub id '" + a.id + "'. Each sub needs a unique id or completing one will complete them all.", this );
+				return;
+			}
+		}
 	}
 }

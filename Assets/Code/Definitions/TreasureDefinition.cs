@@ -76,6 +76,9 @@ public class TreasureDefinition : ScriptableObject
 	[Min( 0.01f )]
 	public float pickupRadius = 0.35f;
 
+	[Tooltip( "Hold time before primary interact picks this up. Negative uses PlayerInteractionDefinition.nonCoinPickupHoldDelay. Ignored for coins." )]
+	public float nonCoinPickupHoldDelayOverride = -1f;
+
 	[Tooltip( "When seated on a gold pile, solid-collide with the player. Leave off for small props you can walk through; enable for large obstacles." )]
 	public bool collideWithPlayerOnPile = false;
 
@@ -92,6 +95,9 @@ public class TreasureDefinition : ScriptableObject
 
 	[Header( "Visuals" )]
 	public Sprite icon;
+
+	[Tooltip( "UI / indicator tint for this treasure (display trim, HUD hints)." )]
+	public Color uiColorHint = Color.white;
 
 	[Tooltip( "Optional mesh override applied at bind when set." )]
 	public Mesh meshOverride;
@@ -148,6 +154,15 @@ public class TreasureDefinition : ScriptableObject
 
 	[Range( -3f, 3f )]
 	public float pickupPitchMax = 1f;
+
+	[Tooltip( "Optional obtain / ding layer played on top of pickupClips. Empty = physical layer only." )]
+	public AudioClip[] pickupRewardClips;
+
+	[Range( 0f, 1f )]
+	public float pickupRewardVolumeMin = 0.45f;
+
+	[Range( 0f, 1f )]
+	public float pickupRewardVolumeMax = 0.6f;
 
 	[Tooltip( "Random one-shots when this treasure is placed." )]
 	public AudioClip[] placeClips;
@@ -208,6 +223,13 @@ public class TreasureDefinition : ScriptableObject
 
 		float fallback = worldScale.y * 0.12f;
 		return fallback > 0.0001f ? fallback : 0.04f;
+	}
+
+	public float ResolveNonCoinPickupHoldDelay( float globalDefault )
+	{
+		if ( nonCoinPickupHoldDelayOverride >= 0f )
+			return nonCoinPickupHoldDelayOverride;
+		return Mathf.Max( 0f, globalDefault );
 	}
 
 	public Vector2Int GetCartGridSize()
@@ -302,6 +324,8 @@ public class TreasureDefinition : ScriptableObject
 		throwForceScale = Mathf.Max( 0f, throwForceScale );
 		throwUpBiasScale = Mathf.Max( 0f, throwUpBiasScale );
 		EnsurePhysicsDefaults();
+		if ( nonCoinPickupHoldDelayOverride >= 0f )
+			nonCoinPickupHoldDelayOverride = Mathf.Max( 0f, nonCoinPickupHoldDelayOverride );
 		rigidbodyMass = Mathf.Max( 0.01f, rigidbodyMass );
 		drag = Mathf.Max( 0f, drag );
 		angularDrag = Mathf.Max( 0f, angularDrag );

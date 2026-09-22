@@ -27,11 +27,7 @@ public class RavineDefinition : ScriptableObject
 	[Min( 0f )]
 	public float arcHeight = 2.5f;
 
-	[Tooltip( "Recovery arc peak is this many meters above the safe target Y so the CharacterController clears rim edges." )]
+	[Tooltip( "Recovery arc peak is this many meters above the safe target Y so the hop visually clears rim edges." )]
 	[Min( 0.05f )]
 	public float arcClearanceAboveTarget = 2f;
-
-	[Tooltip( "Extra padding on the player capsule during arc anti-clip casts." )]
-	[Min( 0f )]
-	public float playerCapsulePad = 0.05f;
 }

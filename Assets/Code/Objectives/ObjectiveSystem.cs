@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -10,6 +11,7 @@ public class ObjectiveSystem : MonoBehaviour
 	const float NearbyRefreshInterval = 0.25f;
 	const int NearbyCap = 3;
 	const float DefaultShowRadius = 40f;
+	const float LastTaskToCompleteDelay = 1.75f;
 
 	static ObjectiveSystem _instance;
 
@@ -19,12 +21,12 @@ public class ObjectiveSystem : MonoBehaviour
 		public float Distance;
 		public string MarkerTargetId;
 		public Vector3 MarkerWorldPosition;
-		public Transform OutlineRoot;
 	}
 
 	readonly HashSet<string> _completedObjectives = new HashSet<string>();
 	readonly HashSet<string> _completedSubs = new HashSet<string>();
 	readonly HashSet<string> _enteredVolumes = new HashSet<string>();
+	readonly HashSet<string> _pendingCompleteIds = new HashSet<string>();
 	readonly List<NearbyCandidate> _nearbyScratch = new List<NearbyCandidate>( 16 );
 	readonly List<Transform> _outlineScratch = new List<Transform>( 8 );
 	readonly List<TutorialHudRow> _rowScratch = new List<TutorialHudRow>( 32 );
@@ -101,6 +103,8 @@ public class ObjectiveSystem : MonoBehaviour
 		_nextNearbyRefreshUnscaled = 0f;
 		_lastHudFingerprint = null;
 		TryCompleteCountSubs();
+		CompleteObjectivesWithAllSubsDone();
+		FireCompletedObjectiveWorldEvents();
 		RefreshNearbyHud( force: true );
 	}
 
@@ -227,12 +231,15 @@ public class ObjectiveSystem : MonoBehaviour
 			}
 		}
 
+		_pendingCompleteIds.Remove( objectiveId );
 		if ( !IsCompleted( objectiveId ) )
-			CompleteObjective( definition );
+			CompleteObjective( definition, ignoreWorldState: true );
 	}
 
 	public void DebugResetProgress()
 	{
+		StopAllCoroutines();
+		_pendingCompleteIds.Clear();
 		_completedObjectives.Clear();
 		_completedSubs.Clear();
 
@@ -365,6 +372,7 @@ public class ObjectiveSystem : MonoBehaviour
 	void OnCountableProgressChanged()
 	{
 		TryCompleteCountSubs();
+		ScheduleObjectivesWithAllSubsDone();
 		RefreshNearbyHud( force: true );
 	}
 
@@ -390,10 +398,19 @@ public class ObjectiveSystem : MonoBehaviour
 					continue;
 				if ( IsSubCompleted( definition.id, sub.id ) )
 					continue;
-				if ( !ObjectiveProgress.HasCountProgress( sub.completeType ) )
+				if ( sub.completeType == ObjectiveSubCompleteType.DisplayComplete )
+				{
+					if ( !ObjectiveProgress.IsDisplayTargetComplete( definition, sub ) )
+						continue;
+				}
+				else if ( !ObjectiveProgress.HasCountProgress( sub.completeType ) )
+				{
 					continue;
-				if ( !ObjectiveProgress.IsCountMet( definition, sub ) )
+				}
+				else if ( !ObjectiveProgress.IsCountMet( definition, sub ) )
+				{
 					continue;
+				}
 
 				TryCompleteSub( definition, sub.id );
 			}
@@ -458,9 +475,13 @@ public class ObjectiveSystem : MonoBehaviour
 					if ( sub.targetId != eventTargetId )
 						continue;
 				}
-				else if ( !allowEmptyTarget )
+				else
 				{
-					continue;
+					// Empty DisplayComplete / PileEmptied targets aggregate via counts — never complete from a single event.
+					if ( type == ObjectiveSubCompleteType.DisplayComplete || type == ObjectiveSubCompleteType.PileEmptied )
+						continue;
+					if ( !allowEmptyTarget )
+						continue;
 				}
 
 				TryCompleteSub( definition, sub.id );
@@ -493,9 +514,8 @@ public class ObjectiveSystem : MonoBehaviour
 		} );
 
 		if ( AreAllSubsComplete( definition ) )
-			CompleteObjective( definition );
-		else
-			RefreshNearbyHud( force: true );
+			ScheduleCompleteObjective( definition );
+		RefreshNearbyHud( force: true );
 
 		return true;
 	}
@@ -527,25 +547,115 @@ public class ObjectiveSystem : MonoBehaviour
 				continue;
 			if ( !IsSubCompleted( definition.id, sub.id ) )
 				return false;
+			if ( !IsSubWorldStateSatisfied( definition, sub ) )
+				return false;
 		}
 
 		return true;
 	}
 
-	void CompleteObjective( ObjectiveDefinition definition )
+	static bool IsSubWorldStateSatisfied( ObjectiveDefinition definition, ObjectiveSubDefinition sub )
+	{
+		if ( sub == null )
+			return false;
+
+		if ( sub.completeType == ObjectiveSubCompleteType.DisplayComplete )
+			return ObjectiveProgress.IsDisplayTargetComplete( definition, sub );
+
+		if ( ObjectiveProgress.HasCountProgress( sub.completeType ) )
+			return ObjectiveProgress.IsCountMet( definition, sub );
+
+		return true;
+	}
+
+	void CompleteObjectivesWithAllSubsDone()
+	{
+		if ( _catalog == null || _catalog.objectives == null )
+			return;
+
+		for ( int i = 0; i < _catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = _catalog.objectives[ i ];
+			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+			if ( IsCompleted( definition.id ) )
+				continue;
+			if ( !ArePrerequisitesMet( definition ) )
+				continue;
+			if ( !AreAllSubsComplete( definition ) )
+				continue;
+			CompleteObjective( definition );
+		}
+	}
+
+	void ScheduleObjectivesWithAllSubsDone()
+	{
+		if ( _catalog == null || _catalog.objectives == null )
+			return;
+
+		for ( int i = 0; i < _catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = _catalog.objectives[ i ];
+			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+			if ( IsCompleted( definition.id ) )
+				continue;
+			if ( !ArePrerequisitesMet( definition ) )
+				continue;
+			if ( !AreAllSubsComplete( definition ) )
+				continue;
+			ScheduleCompleteObjective( definition );
+		}
+	}
+
+	void ScheduleCompleteObjective( ObjectiveDefinition definition )
 	{
 		if ( definition == null || string.IsNullOrEmpty( definition.id ) )
 			return;
 		if ( IsCompleted( definition.id ) )
 			return;
+		if ( !_pendingCompleteIds.Add( definition.id ) )
+			return;
 
+		StartCoroutine( DelayedCompleteObjective( definition ) );
+	}
+
+	IEnumerator DelayedCompleteObjective( ObjectiveDefinition definition )
+	{
+		float elapsed = 0f;
+		while ( elapsed < LastTaskToCompleteDelay )
+		{
+			elapsed += Time.unscaledDeltaTime;
+			yield return null;
+		}
+
+		if ( definition != null && !string.IsNullOrEmpty( definition.id ) )
+			_pendingCompleteIds.Remove( definition.id );
+
+		if ( definition == null || !AreAllSubsComplete( definition ) )
+			yield break;
+
+		CompleteObjective( definition );
+	}
+
+	void CompleteObjective( ObjectiveDefinition definition, bool ignoreWorldState = false )
+	{
+		if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+			return;
+		if ( IsCompleted( definition.id ) )
+			return;
+		if ( !ignoreWorldState && !AreAllSubsComplete( definition ) )
+			return;
+
+		_pendingCompleteIds.Remove( definition.id );
 		_completedObjectives.Add( definition.id );
 		PersistObjective( definition.id );
-		GrantRewards( definition );
-		FireWorldEvents( definition );
 
 		if ( !string.IsNullOrEmpty( definition.completionToast ) )
 			UnlockRewardToastUI.NotifyMessage( definition.completionToast, null, ToastStackUI.ToastTier.Milestone );
+
+		GrantRewards( definition );
+		FireWorldEvents( definition );
 
 		EventBus.Publish( new ObjectiveCompletedEvent
 		{
@@ -584,26 +694,38 @@ public class ObjectiveSystem : MonoBehaviour
 			if ( upgrades == null )
 				continue;
 
-			string displayName = reward.upgradeId;
-			Sprite icon = null;
-			if ( upgrades.TryGetDefinition( reward.upgradeId, out UpgradeDefinition upgradeDef ) && upgradeDef != null )
-			{
-				displayName = upgradeDef.ResolveDisplayName();
-				icon = upgradeDef.icon;
-			}
+			UpgradeDefinition upgradeDef = null;
+			upgrades.TryGetDefinition( reward.upgradeId, out upgradeDef );
 
 			if ( reward.upgradeLevel > 0 )
 				upgrades.SetUpgradeLevel( reward.upgradeId, reward.upgradeLevel );
 			else
 				upgrades.UnlockUpgrade( reward.upgradeId );
 
-			UnlockRewardToastUI.NotifyMessage( "Unlocked: " + displayName, icon );
+			if ( upgradeDef != null )
+				UnlockRewardToastUI.NotifyUnlock( upgradeDef );
+			else
+				UnlockRewardToastUI.NotifyMessage( "Unlocked: " + reward.upgradeId );
+		}
+	}
+
+	void FireCompletedObjectiveWorldEvents()
+	{
+		if ( _catalog == null || _catalog.objectives == null )
+			return;
+
+		for ( int i = 0; i < _catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = _catalog.objectives[ i ];
+			if ( definition == null || !IsCompleted( definition.id ) )
+				continue;
+			FireWorldEvents( definition );
 		}
 	}
 
 	void FireWorldEvents( ObjectiveDefinition definition )
 	{
-		if ( definition.onCompleteWorldEventIds == null )
+		if ( definition == null || definition.onCompleteWorldEventIds == null )
 			return;
 
 		WorldEventSystem worldEvents = WorldEventSystem.Instance;
@@ -679,9 +801,8 @@ public class ObjectiveSystem : MonoBehaviour
 
 				string markerId = null;
 				Vector3 markerPos = Vector3.zero;
-				Transform outlineRoot = null;
 				float distance = 0f;
-				if ( !TryResolveNearbyAnchor( definition, out markerId, out markerPos, out outlineRoot, out distance ) )
+				if ( !TryResolveNearbyAnchor( definition, out markerId, out markerPos, out distance ) )
 				{
 					// Volume-gated objectives can still list with no marker if subs have no QuestTarget yet.
 					if ( string.IsNullOrEmpty( definition.showVolumeId ) )
@@ -699,8 +820,7 @@ public class ObjectiveSystem : MonoBehaviour
 					Definition = definition,
 					Distance = distance,
 					MarkerTargetId = markerId,
-					MarkerWorldPosition = markerPos,
-					OutlineRoot = outlineRoot
+					MarkerWorldPosition = markerPos
 				} );
 			}
 		}
@@ -780,8 +900,7 @@ public class ObjectiveSystem : MonoBehaviour
 				}
 			}
 
-			if ( candidate.OutlineRoot != null && !_outlineScratch.Contains( candidate.OutlineRoot ) )
-				_outlineScratch.Add( candidate.OutlineRoot );
+			CollectIncompleteSubOutlines( definition, _outlineScratch );
 
 			if ( !hasMarker && !string.IsNullOrEmpty( candidate.MarkerTargetId ) )
 			{
@@ -844,7 +963,7 @@ public class ObjectiveSystem : MonoBehaviour
 		if ( !string.IsNullOrEmpty( definition.showVolumeId ) )
 			return _enteredVolumes.Contains( definition.showVolumeId );
 
-		if ( !TryResolveNearbyAnchor( definition, out _, out Vector3 markerPos, out _, out float distance ) )
+		if ( !TryResolveNearbyAnchor( definition, out _, out Vector3 markerPos, out float distance ) )
 			return false;
 
 		float radius = definition.showRadius > 0f ? definition.showRadius : DefaultShowRadius;
@@ -859,11 +978,10 @@ public class ObjectiveSystem : MonoBehaviour
 		return string.CompareOrdinal( a.Definition.id, b.Definition.id );
 	}
 
-	bool TryResolveNearbyAnchor( ObjectiveDefinition definition, out string markerId, out Vector3 markerPos, out Transform outlineRoot, out float distance )
+	bool TryResolveNearbyAnchor( ObjectiveDefinition definition, out string markerId, out Vector3 markerPos, out float distance )
 	{
 		markerId = null;
 		markerPos = Vector3.zero;
-		outlineRoot = null;
 		distance = float.MaxValue;
 
 		if ( definition.subs == null )
@@ -877,11 +995,10 @@ public class ObjectiveSystem : MonoBehaviour
 			if ( IsSubCompleted( definition.id, sub.id ) )
 				continue;
 
-			if ( TryResolveSubAnchor( sub, out string id, out Vector3 pos, out Transform outline ) )
+			if ( TryResolveSubAnchor( sub, out string id, out Vector3 pos, out _ ) )
 			{
 				markerId = id;
 				markerPos = pos;
-				outlineRoot = outline;
 				distance = TutorialHudDistance.HorizontalTo( pos );
 				return true;
 			}
@@ -893,17 +1010,38 @@ public class ObjectiveSystem : MonoBehaviour
 			ObjectiveSubDefinition sub = definition.subs[ i ];
 			if ( sub == null )
 				continue;
-			if ( !TryResolveSubAnchor( sub, out string id, out Vector3 pos, out Transform outline ) )
+			if ( !TryResolveSubAnchor( sub, out string id, out Vector3 pos, out _ ) )
 				continue;
 
 			markerId = id;
 			markerPos = pos;
-			outlineRoot = outline;
 			distance = TutorialHudDistance.HorizontalTo( pos );
 			return true;
 		}
 
 		return false;
+	}
+
+	void CollectIncompleteSubOutlines( ObjectiveDefinition definition, List<Transform> destination )
+	{
+		if ( definition == null || definition.subs == null || destination == null )
+			return;
+
+		for ( int i = 0; i < definition.subs.Length; i++ )
+		{
+			ObjectiveSubDefinition sub = definition.subs[ i ];
+			if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+				continue;
+			if ( IsSubCompleted( definition.id, sub.id ) )
+				continue;
+			if ( !TryResolveSubAnchor( sub, out _, out _, out Transform outline ) )
+				continue;
+			if ( outline == null )
+				continue;
+			if ( destination.Contains( outline ) )
+				continue;
+			destination.Add( outline );
+		}
 	}
 
 	static bool TryResolveSubAnchor( ObjectiveSubDefinition sub, out string markerId, out Vector3 markerPos, out Transform outlineRoot )

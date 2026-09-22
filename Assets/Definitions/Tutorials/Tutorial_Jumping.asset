@@ -32,8 +32,7 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
-  prerequisiteTutorialIds:
-  - tut_movement
+  prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0

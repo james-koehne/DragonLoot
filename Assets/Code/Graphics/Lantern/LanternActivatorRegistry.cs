@@ -4,11 +4,13 @@ using UnityEngine;
 
 /// <summary>
 /// Distance-based lantern activation with optional <see cref="LanternActivator.GroupId"/> unison.
+/// World event IgniteLanterns matches Group Id or Reveal Id.
 /// </summary>
 public static class LanternActivatorRegistry
 {
 	static readonly List<LanternActivator> Activators = new List<LanternActivator>();
 	static readonly Dictionary<string, GroupEntry> Groups = new Dictionary<string, GroupEntry>();
+	static readonly HashSet<string> IgnitedGroupIds = new HashSet<string>();
 	static LanternActivatorRegistryDriver _driver;
 
 #if UNITY_EDITOR
@@ -17,6 +19,7 @@ public static class LanternActivatorRegistry
 	{
 		Activators.Clear();
 		Groups.Clear();
+		IgnitedGroupIds.Clear();
 		_driver = null;
 	}
 #endif
@@ -39,6 +42,9 @@ public static class LanternActivatorRegistry
 				group.Members.Add( activator );
 		}
 
+		if ( IsIgnited( activator ) )
+			activator.SetLitInstant( true );
+
 		EnsureDriver();
 	}
 
@@ -58,6 +64,79 @@ public static class LanternActivatorRegistry
 	}
 
 	public static IReadOnlyList<LanternActivator> GetAll() => Activators;
+
+	public static void ClearIgnitedGroups()
+	{
+		IgnitedGroupIds.Clear();
+	}
+
+	public static bool IsGroupIgnited( string groupId )
+	{
+		return !string.IsNullOrEmpty( groupId ) && IgnitedGroupIds.Contains( groupId );
+	}
+
+	public static void MarkGroupIgnited( string groupId )
+	{
+		if ( string.IsNullOrEmpty( groupId ) )
+			return;
+
+		IgnitedGroupIds.Add( groupId );
+	}
+
+	public static void SnapIgnitedGroups()
+	{
+		foreach ( string groupId in IgnitedGroupIds )
+			IgniteMatchingLanterns( groupId, 0f, false );
+	}
+
+	/// <summary>Lights every registered lantern whose Group Id or Reveal Id matches. 0 duration is instant.</summary>
+	public static int IgniteGroup( string groupId, float duration, bool playFeedback )
+	{
+		if ( string.IsNullOrEmpty( groupId ) )
+			return 0;
+
+		MarkGroupIgnited( groupId );
+		int count = IgniteMatchingLanterns( groupId, duration, playFeedback );
+		if ( count == 0 )
+			Debug.LogWarning( "LanternActivatorRegistry: no lanterns found for group id '" + groupId + "'." );
+		return count;
+	}
+
+	static int IgniteMatchingLanterns( string id, float duration, bool playFeedback )
+	{
+		if ( string.IsNullOrEmpty( id ) )
+			return 0;
+
+		int count = 0;
+		for ( int i = 0; i < Activators.Count; i++ )
+		{
+			LanternActivator member = Activators[ i ];
+			if ( member == null || !MatchesIgniteId( member, id ) )
+				continue;
+
+			if ( duration <= 0f && !playFeedback )
+				member.SetLitInstant( true );
+			else
+				member.Ignite( duration, playFeedback );
+			count++;
+		}
+
+		return count;
+	}
+
+	static bool IsIgnited( LanternActivator activator )
+	{
+		if ( activator == null )
+			return false;
+		return IsGroupIgnited( activator.GroupId ) || IsGroupIgnited( activator.RevealId );
+	}
+
+	static bool MatchesIgniteId( LanternActivator activator, string id )
+	{
+		if ( activator == null || string.IsNullOrEmpty( id ) )
+			return false;
+		return activator.GroupId == id || activator.RevealId == id;
+	}
 
 	static void EnsureDriver()
 	{

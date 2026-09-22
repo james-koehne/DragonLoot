@@ -97,7 +97,7 @@ public class ArtifactPresentationTableEditor : Editor
 			}
 			EditorGUILayout.EndHorizontal();
 
-			if ( GUILayout.Button( "Ensure slot aim volumes" ) )
+			if ( GUILayout.Button( "Ensure slot aim colliders" ) )
 			{
 				EnsureSlotVolumesOnTable( table );
 				EditorUtility.SetDirty( table );
@@ -277,27 +277,24 @@ public class ArtifactPresentationTableEditor : Editor
 		if ( slots == null )
 			return;
 
-		const float volumeSize = 0.22f;
-		const float volumeHeight = 0.06f;
-
 		for ( int i = 0; i < slots.Count; i++ )
 		{
 			Transform anchor = slots[ i ].anchor;
 			if ( anchor == null )
 				continue;
 
-			BoxCollider box = anchor.GetComponent<BoxCollider>();
-			if ( box == null )
-			{
-				box = anchor.gameObject.AddComponent<BoxCollider>();
-				box.center = Vector3.zero;
-				box.size = new Vector3( volumeSize, volumeHeight, volumeSize );
-			}
-
 			ArtifactPresentationSlotVolume volume = anchor.GetComponent<ArtifactPresentationSlotVolume>();
 			if ( volume == null )
-				volume = anchor.gameObject.AddComponent<ArtifactPresentationSlotVolume>();
+				volume = Undo.AddComponent<ArtifactPresentationSlotVolume>( anchor.gameObject );
+
 			volume.Configure( table, i );
+			volume.RebuildAimCollider(
+				table.GetRequiredArtifact( i ),
+				table.SocketRotation,
+				slots[ i ].rotationOffset );
+			volume.SetAimCollidersEnabled( !table.IsSlotOccupied( i ) );
+			EditorUtility.SetDirty( volume );
+			EditorUtility.SetDirty( anchor.gameObject );
 		}
 	}
 }

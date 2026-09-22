@@ -34,6 +34,7 @@ public class TutorialManager : MonoBehaviour
 	readonly HashSet<string> _hadContextIds = new HashSet<string>();
 	readonly HashSet<string> _deferredUncheckedTaskIds = new HashSet<string>();
 	readonly Dictionary<string, int> _taskProgressCounts = new Dictionary<string, int>();
+	readonly Dictionary<string, float> _completedUnscaledTimes = new Dictionary<string, float>();
 	readonly List<TutorialDefinition> _matchingScratch = new List<TutorialDefinition>( 8 );
 	readonly List<TutorialDefinition> _cycleScratch = new List<TutorialDefinition>( 8 );
 	readonly List<TutorialDefinition> _openTutorials = new List<TutorialDefinition>( 8 );
@@ -48,12 +49,16 @@ public class TutorialManager : MonoBehaviour
 	bool _aimingTreasurePile;
 	bool _aimingCoinStack;
 	bool _aimingMinecart;
+	bool _aimingDriveMinecart;
+	bool _drivingMinecart;
 	bool _playerAboveHeight;
 	bool _wasPlayerGliding;
 	bool _wasPlayerSliding;
 	bool _playerOnSlideSlope;
 	TreasureCategory _heldCategory;
 	bool _isHolding;
+	TreasureCategory _pendingSelectHoldingCategory;
+	bool _hasPendingSelectHoldingCategory;
 	string _lastShownId;
 	string _lastActivatedId;
 	CeremonyPhase _phase;
@@ -66,6 +71,7 @@ public class TutorialManager : MonoBehaviour
 	bool _walkWithoutSprintReady;
 	float _walkWithoutSprintSeconds;
 	bool _walkWithoutSprintContext;
+	bool _driveMinecartContext;
 
 	public static TutorialManager Instance => _instance;
 
@@ -128,6 +134,8 @@ public class TutorialManager : MonoBehaviour
 		_aimingTreasurePile = false;
 		_aimingCoinStack = false;
 		_aimingMinecart = false;
+		_aimingDriveMinecart = false;
+		_drivingMinecart = false;
 		_playerAboveHeight = false;
 		_wasPlayerGliding = false;
 		_wasPlayerSliding = false;
@@ -141,8 +149,10 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintReady = false;
 		_walkWithoutSprintSeconds = 0f;
 		_walkWithoutSprintContext = false;
+		_driveMinecartContext = false;
 		_deferredUncheckedTaskIds.Clear();
 		_taskProgressCounts.Clear();
+		_completedUnscaledTimes.Clear();
 		_hadContextIds.Clear();
 		HydrateCompletedFromSave();
 		RefreshFromPlayerState();
@@ -204,6 +214,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Subscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Subscribe<PlayerHeldCategoryChangedEvent>( OnHeldChanged );
+		EventBus.Subscribe<PouchChangedEvent>( OnPouchChanged );
 		EventBus.Subscribe<TreasurePileAimChangedEvent>( OnPileAimChanged );
 		EventBus.Subscribe<TreasurePileDigEvent>( OnDig );
 		EventBus.Subscribe<PlacementCompletedEvent>( OnPlacementCompleted );
@@ -224,6 +235,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<MinecartHoldPushStartedEvent>( OnMinecartHoldPushStarted );
 		EventBus.Subscribe<MinecartCargoLoadedEvent>( OnMinecartCargoLoaded );
 		EventBus.Subscribe<MinecartDriveEnteredEvent>( OnMinecartDriveEntered );
+		EventBus.Subscribe<MinecartDriveExitedEvent>( OnMinecartDriveExited );
 		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Subscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
 		_subscribed = true;
@@ -236,6 +248,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Unsubscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Unsubscribe<PlayerHeldCategoryChangedEvent>( OnHeldChanged );
+		EventBus.Unsubscribe<PouchChangedEvent>( OnPouchChanged );
 		EventBus.Unsubscribe<TreasurePileAimChangedEvent>( OnPileAimChanged );
 		EventBus.Unsubscribe<TreasurePileDigEvent>( OnDig );
 		EventBus.Unsubscribe<PlacementCompletedEvent>( OnPlacementCompleted );
@@ -256,6 +269,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<MinecartHoldPushStartedEvent>( OnMinecartHoldPushStarted );
 		EventBus.Unsubscribe<MinecartCargoLoadedEvent>( OnMinecartCargoLoaded );
 		EventBus.Unsubscribe<MinecartDriveEnteredEvent>( OnMinecartDriveEntered );
+		EventBus.Unsubscribe<MinecartDriveExitedEvent>( OnMinecartDriveExited );
 		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Unsubscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
 		_subscribed = false;
@@ -278,10 +292,12 @@ public class TutorialManager : MonoBehaviour
 		PollMoveLookTasks();
 		PollGlideSlideTasks();
 		PollJumpSprintTasks();
+		PollMinecartDriveTasks();
 		TickWalkWithoutSprint();
 		TickAfterCinematicActivation();
 		TickWalkWithoutSprintActivation();
 		TickSteepSlopeActivation();
+		TickDriveMinecartActivation();
 
 		if ( _phase != CeremonyPhase.None )
 			return;
@@ -365,17 +381,25 @@ public class TutorialManager : MonoBehaviour
 			if ( aimingStack && !_aimingCoinStack )
 				NoteActivationForAimCoinStack();
 			_aimingCoinStack = aimingStack;
-			bool aimingCart = interaction.Current is MinecartInteractable;
+			MinecartInteractable aimedCart = interaction.Current as MinecartInteractable;
+			bool aimingCart = aimedCart != null;
 			if ( aimingCart && !_aimingMinecart )
 				NoteActivationForAimMinecart();
 			_aimingMinecart = aimingCart;
+			_aimingDriveMinecart = aimedCart != null && aimedCart.IsDriveCart;
+			if ( IsAimingCoinSorter( interaction.Current ) )
+				TryCompleteTask( TutorialTaskCompleteType.AimCoinSorter );
 		}
 		else
 		{
 			_aimingTreasurePile = false;
 			_aimingCoinStack = false;
 			_aimingMinecart = false;
+			_aimingDriveMinecart = false;
 		}
+
+		PlayerMinecartDrive drive = player != null ? player.MinecartDrive : null;
+		_drivingMinecart = drive != null && drive.IsDriving;
 
 		bool above = player != null && IsPlayerAboveAnyHeightTrigger( player.transform.position.y );
 		if ( above && !_playerAboveHeight )
@@ -438,6 +462,14 @@ public class TutorialManager : MonoBehaviour
 		if ( current is CoinStackInteractable )
 			return true;
 		return false;
+	}
+
+	static bool IsAimingCoinSorter( IInteractable current )
+	{
+		Component component = current as Component;
+		if ( component == null )
+			return false;
+		return component.GetComponentInParent<CoinSortingStation>() != null;
 	}
 
 	void PollMoveLookTasks()
@@ -525,7 +557,7 @@ public class TutorialManager : MonoBehaviour
 
 	void EnsureOpen( TutorialDefinition def )
 	{
-		if ( def == null || !IsEligible( def ) )
+		if ( def == null || !IsEligible( def ) || !IsShowDelayElapsed( def ) )
 			return;
 		for ( int i = 0; i < _openTutorials.Count; i++ )
 		{
@@ -732,7 +764,10 @@ public class TutorialManager : MonoBehaviour
 			}
 		}
 
-		if ( jump == null )
+		if ( jump == null || jump.disabled )
+			return true;
+
+		if ( jump.trigger == TutorialTriggerType.AbilityUnlocked && !IsAbilityUnlockedContext( jump ) )
 			return true;
 
 		return IsCompleted( JumpTutorialId );
@@ -779,6 +814,33 @@ public class TutorialManager : MonoBehaviour
 		_playerOnSlideSlope = onSlope;
 	}
 
+	void TickDriveMinecartActivation()
+	{
+		bool ready = IsDriveMinecartContext();
+		if ( ready && !_driveMinecartContext )
+			NoteActivationForTrigger( TutorialTriggerType.DriveMinecart );
+		_driveMinecartContext = ready;
+	}
+
+	void PollMinecartDriveTasks()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		PlayerMinecartDrive drive = player != null ? player.MinecartDrive : null;
+		if ( drive == null || !drive.IsDriving )
+			return;
+
+		GameInput input = InputController.Instance != null ? InputController.Instance.GameInput : null;
+		if ( input == null || input.Move == null )
+			return;
+
+		float axis = input.Move.ReadValue<Vector2>().y;
+		const float deadzone = 0.12f;
+		if ( axis > deadzone )
+			TryCompleteTask( TutorialTaskCompleteType.DriveMinecartAccelerate );
+		else if ( axis < -deadzone )
+			TryCompleteTask( TutorialTaskCompleteType.DriveMinecartBrake );
+	}
+
 	bool IsAnyAfterCinematicContext()
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
@@ -810,6 +872,7 @@ public class TutorialManager : MonoBehaviour
 		if ( string.IsNullOrEmpty( evt.AbilityId ) )
 			return;
 		NoteActivationForAbilityUnlocked( evt.AbilityId );
+		TryShowAbilityUnlockedTutorial( evt.AbilityId );
 		EvaluateContext( force: true );
 	}
 
@@ -826,8 +889,48 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( def.requiredAbilityId != abilityId )
 				continue;
-			MarkRecentlyActivated( def.id );
+			MarkRecentlyActivated( def.id, force: true );
 		}
+	}
+
+	void TryShowAbilityUnlockedTutorial( string abilityId )
+	{
+		if ( DebugDefinition.TutorialsDisabled )
+			return;
+		if ( _activeIsReplay )
+			return;
+		if ( CinematicPresentationController.IsAnyPlaying )
+			return;
+		if ( _catalog == null || _popup == null || string.IsNullOrEmpty( abilityId ) )
+			return;
+
+		TutorialDefinition match = null;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.AbilityUnlocked )
+				continue;
+			if ( def.requiredAbilityId != abilityId )
+				continue;
+			match = def;
+			break;
+		}
+
+		if ( match == null )
+			return;
+		if ( _active != null && _active.id == match.id )
+			return;
+
+		EnsureOpen( match );
+		if ( _phase != CeremonyPhase.None )
+		{
+			_pendingShow = match;
+			return;
+		}
+
+		ShowTutorialNow( match, isReplay: false );
 	}
 
 	void OnVolumeEntered( VolumeEnteredEvent evt )
@@ -856,6 +959,15 @@ public class TutorialManager : MonoBehaviour
 			_heldCategory = ResolveHeldCategory( evt.Carry );
 		if ( evt.IsHolding )
 			NoteActivationForHolding( _heldCategory );
+		NoteActivationForUnselectedHolding();
+		EvaluateContext( force: true );
+	}
+
+	void OnPouchChanged( PouchChangedEvent evt )
+	{
+		TreasureCategory selected = PlayerCarry.MapBucketToCategory( evt.Bucket );
+		TryCompleteSelectHoldingCategory( selected );
+		NoteActivationForUnselectedHolding();
 		EvaluateContext( force: true );
 	}
 
@@ -950,6 +1062,7 @@ public class TutorialManager : MonoBehaviour
 			return;
 		if ( evt.Treasure.category == TreasureCategory.Artifact )
 			NoteActivationForHolding( TreasureCategory.Artifact );
+		NoteActivationForUnselectedHolding();
 		EvaluateContext( force: true );
 	}
 
@@ -981,6 +1094,53 @@ public class TutorialManager : MonoBehaviour
 	void OnMinecartDriveEntered( MinecartDriveEnteredEvent evt )
 	{
 		TryCompleteTask( TutorialTaskCompleteType.EnterDriveMinecart );
+		NoteActivationForTrigger( TutorialTriggerType.DriveMinecart );
+		TryShowDrivingTutorial();
+		EvaluateContext( force: true );
+	}
+
+	void OnMinecartDriveExited( MinecartDriveExitedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.ExitDriveMinecart );
+	}
+
+	void TryShowDrivingTutorial()
+	{
+		if ( DebugDefinition.TutorialsDisabled )
+			return;
+		if ( _activeIsReplay )
+			return;
+		if ( CinematicPresentationController.IsAnyPlaying )
+			return;
+		if ( _catalog == null || _popup == null )
+			return;
+
+		TutorialDefinition match = null;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.DriveMinecart )
+				continue;
+			match = def;
+			break;
+		}
+
+		if ( match == null )
+			return;
+		if ( _active != null && _active.id == match.id )
+			return;
+
+		EnsureOpen( match );
+		MarkRecentlyActivated( match.id, force: true );
+		if ( _phase != CeremonyPhase.None )
+		{
+			_pendingShow = match;
+			return;
+		}
+
+		ShowTutorialNow( match, isReplay: false );
 	}
 
 	void OnCoinSorterUsed( CoinSorterUsedEvent evt )
@@ -990,9 +1150,9 @@ public class TutorialManager : MonoBehaviour
 
 	void OnCoinSorterStackLoaded( CoinSorterStackLoadedEvent evt )
 	{
-		if ( evt.CoinCount < 2 )
+		if ( evt.CoinCount < 1 )
 			return;
-		ForceCompleteMatchingTasks( TutorialTaskCompleteType.UseCoinSorter );
+		TryCompleteTask( TutorialTaskCompleteType.LoadCoinSorterHopper );
 	}
 
 	void TryCompleteEnterVolumeTasks( string volumeId )
@@ -1083,6 +1243,29 @@ public class TutorialManager : MonoBehaviour
 		}
 	}
 
+	void NoteActivationForUnselectedHolding()
+	{
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry == null )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.UnselectedHoldingCategory )
+				continue;
+			if ( !IsUnselectedHoldingCategoryContext( def, carry ) )
+				continue;
+			MarkRecentlyActivated( def.id );
+		}
+	}
+
 	void NoteActivationForAimPile()
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
@@ -1142,11 +1325,11 @@ public class TutorialManager : MonoBehaviour
 		}
 	}
 
-	void MarkRecentlyActivated( string id )
+	void MarkRecentlyActivated( string id, bool force = false )
 	{
 		if ( string.IsNullOrEmpty( id ) )
 			return;
-		if ( _active != null && !_activeIsReplay )
+		if ( !force && _active != null && !_activeIsReplay )
 			return;
 		_lastActivatedId = id;
 	}
@@ -1177,6 +1360,8 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( !IsContextActive( def ) )
 				continue;
+			if ( !IsShowDelayElapsed( def ) )
+				continue;
 			NoteHadContext( def );
 			EnsureOpen( def );
 			_matchingScratch.Add( def );
@@ -1190,6 +1375,12 @@ public class TutorialManager : MonoBehaviour
 
 		if ( _active != null )
 		{
+			if ( _active.disabled )
+			{
+				RequestHide( complete: false );
+				return;
+			}
+
 			if ( !IsPrerequisiteVolumeMet( _active ) )
 			{
 				RequestHide( complete: false );
@@ -1232,6 +1423,8 @@ public class TutorialManager : MonoBehaviour
 	{
 		if ( def == null || string.IsNullOrEmpty( def.id ) )
 			return false;
+		if ( def.disabled )
+			return false;
 		if ( def.tasks == null || def.tasks.Length == 0 )
 			return false;
 		if ( IsCompleted( def.id ) )
@@ -1239,6 +1432,43 @@ public class TutorialManager : MonoBehaviour
 		if ( !ArePrerequisitesMet( def ) )
 			return false;
 		return true;
+	}
+
+	/// <summary>
+	/// When showDelaySeconds &gt; 0 and this tutorial has prerequisite tutorials, wait that long
+	/// after the latest this-session prerequisite completion before showing or joining the stack.
+	/// Completions hydrated from save (no session timestamp) count as already elapsed.
+	/// </summary>
+	bool IsShowDelayElapsed( TutorialDefinition def )
+	{
+		if ( def == null )
+			return false;
+		if ( def.showDelaySeconds <= 0f )
+			return true;
+		if ( def.prerequisiteTutorialIds == null || def.prerequisiteTutorialIds.Length == 0 )
+			return true;
+
+		float latestSession = float.NegativeInfinity;
+		bool anyPrereq = false;
+		for ( int i = 0; i < def.prerequisiteTutorialIds.Length; i++ )
+		{
+			string prereq = def.prerequisiteTutorialIds[ i ];
+			if ( string.IsNullOrEmpty( prereq ) )
+				continue;
+			if ( IsTutorialDisabled( prereq ) )
+				continue;
+			anyPrereq = true;
+			if ( !_completedUnscaledTimes.TryGetValue( prereq, out float completedAt ) )
+				continue;
+			if ( completedAt > latestSession )
+				latestSession = completedAt;
+		}
+
+		if ( !anyPrereq )
+			return true;
+		if ( latestSession == float.NegativeInfinity )
+			return true;
+		return Time.unscaledTime >= latestSession + def.showDelaySeconds;
 	}
 
 	bool IsContextActive( TutorialDefinition def )
@@ -1256,7 +1486,10 @@ public class TutorialManager : MonoBehaviour
 				primary = !string.IsNullOrEmpty( def.volumeId ) && _insideVolumes.Contains( def.volumeId );
 				break;
 			case TutorialTriggerType.HoldingCategory:
-				primary = _isHolding && CategoriesMatchForHold( def.holdingCategory, _heldCategory );
+				primary = IsHoldingCategoryActiveContext( def.holdingCategory );
+				break;
+			case TutorialTriggerType.UnselectedHoldingCategory:
+				primary = IsUnselectedHoldingCategoryContext( def );
 				break;
 			case TutorialTriggerType.AimTreasurePile:
 				primary = _aimingTreasurePile;
@@ -1275,6 +1508,9 @@ public class TutorialManager : MonoBehaviour
 				break;
 			case TutorialTriggerType.AimMinecart:
 				primary = _aimingMinecart;
+				break;
+			case TutorialTriggerType.DriveMinecart:
+				primary = IsDriveMinecartContext();
 				break;
 			case TutorialTriggerType.AfterCinematic:
 				primary = IsAfterCinematicContext( def );
@@ -1326,6 +1562,13 @@ public class TutorialManager : MonoBehaviour
 	{
 		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
 		return player != null && player.IsSlideTutorialContext;
+	}
+
+	bool IsDriveMinecartContext()
+	{
+		if ( _drivingMinecart )
+			return true;
+		return _aimingDriveMinecart;
 	}
 
 	static bool IsAboveHeightContext( TutorialDefinition def )
@@ -1392,6 +1635,35 @@ public class TutorialManager : MonoBehaviour
 		return false;
 	}
 
+	bool IsHoldingCategoryActiveContext( TreasureCategory required )
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry == null )
+			return false;
+		if ( !carry.TryPeekActive( out TreasureDefinition activeDef, out _ ) || activeDef == null )
+			return false;
+		return CategoriesMatchForHold( required, activeDef.category );
+	}
+
+	bool IsUnselectedHoldingCategoryContext( TutorialDefinition def )
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		PlayerCarry carry = player != null ? player.Carry : null;
+		return IsUnselectedHoldingCategoryContext( def, carry );
+	}
+
+	static bool IsUnselectedHoldingCategoryContext( TutorialDefinition def, PlayerCarry carry )
+	{
+		if ( def == null || carry == null )
+			return false;
+		if ( !PlayerCarry.TryMapCategoryToBucket( def.holdingCategory, out CarryBucketKind bucket ) )
+			return false;
+		if ( carry.SelectedBucket == bucket )
+			return false;
+		return carry.GetBucketCount( bucket ) > 0;
+	}
+
 	bool IsVolumeContext( TutorialDefinition def, string volumeId )
 	{
 		if ( def == null || string.IsNullOrEmpty( volumeId ) )
@@ -1427,8 +1699,11 @@ public class TutorialManager : MonoBehaviour
 			string prereq = def.prerequisiteTutorialIds[ i ];
 			if ( string.IsNullOrEmpty( prereq ) )
 				continue;
-			if ( !IsCompleted( prereq ) )
-				return false;
+			if ( IsCompleted( prereq ) )
+				continue;
+			if ( IsTutorialDisabled( prereq ) )
+				continue;
+			return false;
 		}
 
 		return true;
@@ -1453,6 +1728,8 @@ public class TutorialManager : MonoBehaviour
 	void RequestShow( TutorialDefinition def )
 	{
 		if ( def == null || IsCompleted( def.id ) )
+			return;
+		if ( !IsShowDelayElapsed( def ) )
 			return;
 
 		EnsureOpen( def );
@@ -1755,6 +2032,14 @@ public class TutorialManager : MonoBehaviour
 		ApplyActiveTaskRecord( outcome );
 	}
 
+	void TryCompleteSelectHoldingCategory( TreasureCategory selectedCategory )
+	{
+		_pendingSelectHoldingCategory = selectedCategory;
+		_hasPendingSelectHoldingCategory = true;
+		TryCompleteTask( TutorialTaskCompleteType.SelectHoldingCategory );
+		_hasPendingSelectHoldingCategory = false;
+	}
+
 	void TryCompleteActiveTaskOnly( TutorialTaskCompleteType completeType )
 	{
 		if ( _active == null || _active.tasks == null )
@@ -1792,9 +2077,7 @@ public class TutorialManager : MonoBehaviour
 		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
 			TutorialDefinition def = _catalog.tutorials[ i ];
-			if ( def == null || string.IsNullOrEmpty( def.id ) )
-				continue;
-			if ( IsCompleted( def.id ) )
+			if ( def == null || !IsEligible( def ) )
 				continue;
 
 			int outcome = RecordTasksOnDefinition( def, completeType, volumeId );
@@ -1816,7 +2099,7 @@ public class TutorialManager : MonoBehaviour
 
 	int RecordTasksOnDefinition( TutorialDefinition def, TutorialTaskCompleteType completeType, string volumeId )
 	{
-		if ( def == null || def.tasks == null || completeType == TutorialTaskCompleteType.None )
+		if ( def == null || def.disabled || def.tasks == null || completeType == TutorialTaskCompleteType.None )
 			return 0;
 
 		int best = 0;
@@ -1830,6 +2113,13 @@ public class TutorialManager : MonoBehaviour
 			if ( completeType == TutorialTaskCompleteType.EnterVolume )
 			{
 				if ( string.IsNullOrEmpty( volumeId ) || task.completeVolumeId != volumeId )
+					continue;
+			}
+
+			if ( completeType == TutorialTaskCompleteType.SelectHoldingCategory )
+			{
+				if ( !_hasPendingSelectHoldingCategory
+				     || !CategoriesMatchForHold( def.holdingCategory, _pendingSelectHoldingCategory ) )
 					continue;
 			}
 
@@ -1874,9 +2164,7 @@ public class TutorialManager : MonoBehaviour
 		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
 		{
 			TutorialDefinition def = _catalog.tutorials[ i ];
-			if ( def == null || string.IsNullOrEmpty( def.id ) )
-				continue;
-			if ( IsCompleted( def.id ) )
+			if ( def == null || !IsEligible( def ) )
 				continue;
 			if ( !ForceCompleteTasksOfType( def, completeType ) )
 				continue;
@@ -1891,7 +2179,7 @@ public class TutorialManager : MonoBehaviour
 
 	bool ForceCompleteTasksOfType( TutorialDefinition def, TutorialTaskCompleteType completeType )
 	{
-		if ( def == null || def.tasks == null )
+		if ( def == null || def.disabled || def.tasks == null )
 			return false;
 
 		bool any = false;
@@ -2210,6 +2498,15 @@ public class TutorialManager : MonoBehaviour
 		return save.completedTutorialIds != null && save.completedTutorialIds.Contains( tutorialId );
 	}
 
+	bool IsTutorialDisabled( string tutorialId )
+	{
+		if ( string.IsNullOrEmpty( tutorialId ) || _catalog == null )
+			return false;
+		if ( !_catalog.TryGetById( tutorialId, out TutorialDefinition def ) || def == null )
+			return false;
+		return def.disabled;
+	}
+
 	void MarkDiscovered( string tutorialId )
 	{
 		ProfileSaveData save = GetSave();
@@ -2231,6 +2528,8 @@ public class TutorialManager : MonoBehaviour
 
 		bool alreadyCompleted = _completedThisSession.Contains( tutorialId );
 		_completedThisSession.Add( tutorialId );
+		if ( !_completedUnscaledTimes.ContainsKey( tutorialId ) )
+			_completedUnscaledTimes[ tutorialId ] = Time.unscaledTime;
 
 		ProfileSaveData save = GetSave();
 		if ( save != null )
@@ -2276,6 +2575,7 @@ public class TutorialManager : MonoBehaviour
 		_openTutorials.Clear();
 		_sessionCompletedTaskKeys.Clear();
 		_completedThisSession.Clear();
+		_completedUnscaledTimes.Clear();
 		_hadContextIds.Clear();
 		_insideVolumes.Clear();
 		_deferredUncheckedTaskIds.Clear();
@@ -2289,6 +2589,7 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintReady = false;
 		_walkWithoutSprintSeconds = 0f;
 		_walkWithoutSprintContext = false;
+		_driveMinecartContext = false;
 		_taskProgressCounts.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
@@ -2338,6 +2639,13 @@ public static class TutorialKeybindFormatter
 		result = ReplaceToken( result, "Clean", gameInput.Clean );
 		result = ReplaceToken( result, "Jump", gameInput.Jump );
 		result = ReplaceToken( result, "Sprint", gameInput.Sprint );
+		result = ReplaceToken( result, "CyclePouch", gameInput.CyclePouch );
+		if ( gameInput.CategorySlots != null )
+		{
+			for ( int i = 0; i < gameInput.CategorySlots.Length; i++ )
+				result = ReplaceToken( result, "CategorySlot" + ( i + 1 ), gameInput.CategorySlots[ i ] );
+		}
+
 		return result;
 	}
 

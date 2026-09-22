@@ -16,6 +16,7 @@ MonoBehaviour:
   displayName: GoldCoin
   category: 0
   variant: Gold
+  suppressDiscoveryPopup: 0
   value: 5
   weight: 1
   exclusiveCarry: 0
@@ -37,6 +38,7 @@ MonoBehaviour:
   isSkeletonKey: 0
   chestDefinition: {fileID: 0}
   icon: {fileID: 0}
+  uiColorHint: {r: 1, g: 0.82, b: 0.45, a: 1}
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
   prefab:
@@ -65,10 +67,15 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 0d205f7e56d7b914d9f4e55adc916957, type: 3}
   - {fileID: 8300000, guid: 0e14a86851c6b7c498e2e14cd36c0b54, type: 3}
   - {fileID: 8300000, guid: ed39b02063c6a124bac103dbddc777c5, type: 3}
-  pickupVolumeMin: 0.7
-  pickupVolumeMax: 0.8
-  pickupPitchMin: 0.9
-  pickupPitchMax: 1.1
+  pickupVolumeMin: 0.55
+  pickupVolumeMax: 0.7
+  pickupPitchMin: 0.98
+  pickupPitchMax: 1.02
+  pickupRewardClips:
+  - {fileID: 8300000, guid: f698fc57c01ebbd4da6856536edb86ea, type: 3}
+  - {fileID: 8300000, guid: dbe75518a953d424f85e7eb0ac457256, type: 3}
+  pickupRewardVolumeMin: 0.45
+  pickupRewardVolumeMax: 0.6
   placeClips:
   - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}
   - {fileID: 8300000, guid: 449644be6cb6b8a43886fef376fec4e6, type: 3}

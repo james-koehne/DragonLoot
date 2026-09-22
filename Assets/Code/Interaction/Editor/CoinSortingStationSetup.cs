@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 /// <summary>
 /// Builds a placeholder Coin Sorting Station prefab and ensures one exists in Level.
@@ -305,6 +306,9 @@ static class CoinSortingStationSetup
 		if ( EnsureEnergyGauge( root, station ) )
 			dirty = true;
 
+		if ( EnsureWorldTimer( root, station ) )
+			dirty = true;
+
 		if ( EnsureCrankCube( root, station ) )
 			dirty = true;
 
@@ -427,6 +431,7 @@ static class CoinSortingStationSetup
 		move.BindStation( station );
 		station.EditorSetCrankSpin( spin );
 		EnsureEnergyGauge( root, station );
+		EnsureWorldTimer( root, station );
 		EnsureSortedFeedbacks( root, station, crank );
 		EnsureCrankClickFeedbacks( root, station );
 		EnsureGaugeFullFeedbacks( root, station );
@@ -556,6 +561,127 @@ static class CoinSortingStationSetup
 		gauge.EditorSetParts( well, fill, fillRenderer );
 		gauge.BindStation( station );
 		station.EditorSetEnergyGauge( gauge );
+		return dirty;
+	}
+
+	static bool EnsureWorldTimer( GameObject root, CoinSortingStation station )
+	{
+		if ( root == null || station == null )
+			return false;
+
+		CoinSortingEnergyGauge gauge = root.GetComponentInChildren<CoinSortingEnergyGauge>( true );
+		Transform parent = gauge != null ? gauge.transform : root.transform;
+		Transform existing = parent.Find( "WorldTimer" );
+		bool dirty = false;
+
+		GameObject host;
+		if ( existing == null )
+		{
+			host = new GameObject( "WorldTimer", typeof( RectTransform ) );
+			host.transform.SetParent( parent, false );
+			dirty = true;
+		}
+		else
+		{
+			host = existing.gameObject;
+		}
+
+		float wellTop = 0.24f;
+		Transform well = parent.Find( "Well" );
+		if ( well != null )
+			wellTop = well.localPosition.y + Mathf.Abs( well.localScale.y ) * 0.5f;
+
+		Vector3 wantPos = new Vector3( 0f, wellTop + 0.06f, 0f );
+		Vector3 wantScale = Vector3.one * 0.0025f;
+		RectTransform rect = host.GetComponent<RectTransform>();
+		if ( rect == null )
+			return dirty;
+
+		if ( ( host.transform.localPosition - wantPos ).sqrMagnitude > 0.0001f
+			|| ( host.transform.localScale - wantScale ).sqrMagnitude > 0.0000001f )
+		{
+			host.transform.localPosition = wantPos;
+			host.transform.localRotation = Quaternion.identity;
+			host.transform.localScale = wantScale;
+			dirty = true;
+		}
+
+		rect.sizeDelta = new Vector2( 72f, 24f );
+		rect.pivot = new Vector2( 0.5f, 0.5f );
+
+		Canvas canvas = host.GetComponent<Canvas>();
+		if ( canvas == null )
+		{
+			canvas = host.AddComponent<Canvas>();
+			dirty = true;
+		}
+
+		canvas.renderMode = RenderMode.WorldSpace;
+		canvas.overrideSorting = true;
+		canvas.sortingOrder = 40;
+
+		CanvasGroup group = host.GetComponent<CanvasGroup>();
+		if ( group == null )
+		{
+			group = host.AddComponent<CanvasGroup>();
+			dirty = true;
+		}
+
+		group.blocksRaycasts = false;
+		group.interactable = false;
+		group.ignoreParentGroups = true;
+
+		Transform labelTransform = host.transform.Find( "Label" );
+		GameObject labelGo;
+		if ( labelTransform == null )
+		{
+			labelGo = new GameObject( "Label", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
+			labelGo.transform.SetParent( host.transform, false );
+			dirty = true;
+		}
+		else
+		{
+			labelGo = labelTransform.gameObject;
+		}
+
+		RectTransform labelRect = labelGo.GetComponent<RectTransform>();
+		labelRect.anchorMin = Vector2.zero;
+		labelRect.anchorMax = Vector2.one;
+		labelRect.offsetMin = Vector2.zero;
+		labelRect.offsetMax = Vector2.zero;
+
+		Text text = labelGo.GetComponent<Text>();
+		if ( text.font == null )
+		{
+			text.font = Resources.GetBuiltinResource<Font>( "LegacyRuntime.ttf" );
+			if ( text.font == null )
+				text.font = Resources.GetBuiltinResource<Font>( "Arial.ttf" );
+			dirty = true;
+		}
+
+		if ( text.fontSize != 20 )
+		{
+			text.fontSize = 20;
+			dirty = true;
+		}
+
+		text.fontStyle = FontStyle.Bold;
+		text.alignment = TextAnchor.MiddleCenter;
+		text.raycastTarget = false;
+		text.horizontalOverflow = HorizontalWrapMode.Overflow;
+		text.verticalOverflow = VerticalWrapMode.Overflow;
+		text.supportRichText = false;
+
+		CoinSortingStationWorldTimer timer = host.GetComponent<CoinSortingStationWorldTimer>();
+		if ( timer == null )
+		{
+			timer = host.AddComponent<CoinSortingStationWorldTimer>();
+			dirty = true;
+		}
+
+		timer.EditorBind( canvas, group, text );
+		timer.BindStation( station );
+		station.EditorSetWorldTimer( timer );
 		return dirty;
 	}
 

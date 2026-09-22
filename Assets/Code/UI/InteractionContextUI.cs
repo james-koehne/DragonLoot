@@ -79,7 +79,14 @@ public class InteractionContextUI : MonoBehaviour
 
 		if ( minecartDrive != null && minecartDrive.IsDriving )
 		{
-			AppendBound( gameInput.ContextualInteract, "Exit minecart" );
+			string exitInteract = FormatBinding( gameInput.ContextualInteract );
+			string exitJump = FormatBinding( gameInput.Jump );
+			if ( !string.IsNullOrEmpty( exitInteract ) && !string.IsNullOrEmpty( exitJump ) )
+				AppendLine( exitInteract + " / " + exitJump, "Exit minecart" );
+			else if ( !string.IsNullOrEmpty( exitInteract ) )
+				AppendLine( exitInteract, "Exit minecart" );
+			else if ( !string.IsNullOrEmpty( exitJump ) )
+				AppendLine( exitJump, "Exit minecart" );
 			AppendPlain( "W accelerate · S brake / reverse" );
 			FinishRefresh();
 			return;

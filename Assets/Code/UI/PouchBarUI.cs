@@ -1,16 +1,24 @@
+using FeedbackSystem;
+
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 /// <summary>
 /// Bottom-center pouch HUD: icon, binding, and label per pouch, plus the cycle control.
-/// Hidden until the player enters <see cref="EventSceneAutoWire.IdVolumeMainCave"/>, then stays visible.
+/// Hidden until the opening cinematic ends, then stays visible. Debug skip-intro / teleports
+/// treat the intro as already watched. Main-cave overlap is a fallback when the cinematic
+/// never plays. Hidden again while a cinematic owns the HUD.
 /// Wire children on the Interface prefab; assign pouch icons on each slot Image.
 /// Assign <see cref="newItemStarSprite"/> (or each slot's NewItem/Star Image) for the new-item badge.
+/// Assign per-slot ArriveFeedbacks / StarIdleFeedbacks on the Interface prefab.
 /// </summary>
 public class PouchBarUI : MonoBehaviour
 {
 	const float UnselectedAlpha = 0.4f;
+	static readonly Color NewItemStarColor = new Color( 1f, 0.84f, 0.2f, 1f );
+	static readonly Color NewItemCountColor = new Color( 1f, 0.95f, 0.55f, 1f );
+	static readonly Vector2 NewItemStarSize = new Vector2( 24f, 24f );
 
 	[System.Serializable]
 	public class Slot
@@ -22,6 +30,8 @@ public class PouchBarUI : MonoBehaviour
 		public RectTransform newItemRoot;
 		public Image newItemIcon;
 		public Text newItemCount;
+		public Feedbacks arriveFeedback;
+		public Feedbacks starIdleFeedback;
 	}
 
 	[SerializeField] Slot[] slots = new Slot[ PlayerCarry.BucketCount ];
@@ -33,10 +43,30 @@ public class PouchBarUI : MonoBehaviour
 
 	public static PouchBarUI Instance { get; private set; }
 
+	static bool s_introComplete;
+
 	bool _ready;
 	bool _unlocked;
+	bool _cinematicHidden;
 	bool _subscribed;
 	CanvasGroup _group;
+	readonly int[] _lastNewCounts = new int[ PlayerCarry.BucketCount ];
+
+#if UNITY_EDITOR
+	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.SubsystemRegistration )]
+	static void ResetStatics()
+	{
+		s_introComplete = false;
+	}
+#endif
+
+	/// <summary>Treat the intro cinematic as watched (debug skip-intro / teleports).</summary>
+	public static void NotifyIntroComplete()
+	{
+		s_introComplete = true;
+		if ( Instance != null )
+			Instance.Unlock();
+	}
 
 	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotGeneral", "SlotJunk" };
 	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "General", "Junk" };
@@ -47,12 +77,22 @@ public class PouchBarUI : MonoBehaviour
 		EnsureUi();
 		BindChildren();
 		CacheGroup();
-		SetBarVisible( false );
+		ApplyVisibility();
 		RefreshBindings();
 		RefreshState();
 		Subscribe();
 		_ready = true;
-		TryUnlockFromOverlap();
+		if ( s_introComplete )
+			Unlock();
+		else
+			TryUnlockFromOverlap();
+	}
+
+	/// <summary>Hides the pouch bar while a cinematic owns the HUD.</summary>
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		ApplyVisibility();
 	}
 
 	/// <summary>Pouch HUD sprite for the given carry bucket, or null if unwired.</summary>
@@ -103,6 +143,7 @@ public class PouchBarUI : MonoBehaviour
 		if ( _subscribed )
 			return;
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		_subscribed = true;
 	}
 
@@ -111,6 +152,7 @@ public class PouchBarUI : MonoBehaviour
 		if ( !_subscribed )
 			return;
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		_subscribed = false;
 	}
 
@@ -121,10 +163,22 @@ public class PouchBarUI : MonoBehaviour
 		Unlock();
 	}
 
+	void OnCinematicPresentationEnded( CinematicPresentationEndedEvent evt )
+	{
+		if ( evt.PresentationId != CinematicPresentationController.IntroLedgePresentationId )
+			return;
+		Unlock();
+	}
+
 	void TryUnlockFromOverlap()
 	{
 		if ( _unlocked )
 			return;
+		if ( s_introComplete )
+		{
+			Unlock();
+			return;
+		}
 		if ( !EventTargetRegistry.TryGetVolume( EventSceneAutoWire.IdVolumeMainCave, out QuestVolume volume ) )
 			return;
 		if ( volume == null )
@@ -150,7 +204,7 @@ public class PouchBarUI : MonoBehaviour
 			return;
 
 		_unlocked = true;
-		SetBarVisible( true );
+		ApplyVisibility();
 		RefreshState();
 	}
 
@@ -164,11 +218,11 @@ public class PouchBarUI : MonoBehaviour
 		_group.interactable = false;
 	}
 
-	void SetBarVisible( bool visible )
+	void ApplyVisibility()
 	{
 		CacheGroup();
 		if ( _group != null )
-			_group.alpha = visible ? 1f : 0f;
+			_group.alpha = _unlocked && !_cinematicHidden ? 1f : 0f;
 	}
 
 	void RefreshState()
@@ -204,7 +258,11 @@ public class PouchBarUI : MonoBehaviour
 			slot.root.gameObject.SetActive( visible );
 
 		if ( !visible )
+		{
+			StopSlotAttention( slot );
+			_lastNewCounts[ index ] = 0;
 			return;
+		}
 
 		bool isSelected = selected == kind;
 		slot.root.alpha = isSelected ? 1f : UnselectedAlpha;
@@ -212,7 +270,7 @@ public class PouchBarUI : MonoBehaviour
 		slot.root.interactable = false;
 
 		int newCount = ( carry != null && !isSelected ) ? carry.GetNewItemTypeCount( kind ) : 0;
-		ApplyNewItemBadge( slot, newCount );
+		ApplyNewItemBadge( slot, index, newCount );
 	}
 
 	void RefreshCycle( PlayerCarry carry )
@@ -228,17 +286,26 @@ public class PouchBarUI : MonoBehaviour
 			_cycleRoot.gameObject.SetActive( show );
 	}
 
-	void ApplyNewItemBadge( Slot slot, int newCount )
+	void ApplyNewItemBadge( Slot slot, int index, int newCount )
 	{
 		bool show = newCount > 0;
 		if ( slot.newItemRoot != null && slot.newItemRoot.gameObject.activeSelf != show )
 			slot.newItemRoot.gameObject.SetActive( show );
 
 		if ( !show )
+		{
+			StopSlotAttention( slot );
+			_lastNewCounts[ index ] = 0;
 			return;
+		}
+
+		EnsureNewItemBright( slot );
 
 		if ( slot.newItemCount != null )
+		{
 			slot.newItemCount.text = "x" + newCount;
+			slot.newItemCount.color = NewItemCountColor;
+		}
 
 		if ( slot.newItemIcon != null )
 		{
@@ -247,7 +314,47 @@ public class PouchBarUI : MonoBehaviour
 			bool hasSprite = slot.newItemIcon.sprite != null;
 			slot.newItemIcon.enabled = hasSprite;
 			slot.newItemIcon.gameObject.SetActive( hasSprite );
+			slot.newItemIcon.color = NewItemStarColor;
+			RectTransform starRect = slot.newItemIcon.transform as RectTransform;
+			if ( starRect != null )
+				starRect.sizeDelta = NewItemStarSize;
 		}
+
+		int previous = _lastNewCounts[ index ];
+		if ( newCount > previous && slot.arriveFeedback != null )
+			slot.arriveFeedback.Play();
+
+		_lastNewCounts[ index ] = newCount;
+
+		if ( slot.starIdleFeedback != null && !slot.starIdleFeedback.IsPlaying )
+			slot.starIdleFeedback.Play();
+	}
+
+	/// <summary>
+	/// Keeps the new-item badge full-bright even when the unselected pouch CanvasGroup is faded.
+	/// </summary>
+	static void EnsureNewItemBright( Slot slot )
+	{
+		if ( slot == null || slot.newItemRoot == null )
+			return;
+
+		CanvasGroup group = slot.newItemRoot.GetComponent<CanvasGroup>();
+		if ( group == null )
+			group = slot.newItemRoot.gameObject.AddComponent<CanvasGroup>();
+		group.ignoreParentGroups = true;
+		group.alpha = 1f;
+		group.blocksRaycasts = false;
+		group.interactable = false;
+	}
+
+	static void StopSlotAttention( Slot slot )
+	{
+		if ( slot == null )
+			return;
+		if ( slot.arriveFeedback != null )
+			slot.arriveFeedback.Stop();
+		if ( slot.starIdleFeedback != null )
+			slot.starIdleFeedback.Stop();
 	}
 
 	void RefreshBindings()
@@ -323,6 +430,7 @@ public class PouchBarUI : MonoBehaviour
 				slot.label = FindChildText( slotT, "Label" );
 
 			EnsureNewItem( slot );
+			BindSlotFeedbacks( slot, slotT );
 
 			if ( slot.label != null )
 				slot.label.text = SlotLabels[ i ];
@@ -474,11 +582,12 @@ public class PouchBarUI : MonoBehaviour
 			rootRect.anchorMax = new Vector2( 1f, 1f );
 			rootRect.pivot = new Vector2( 0f, 1f );
 			rootRect.anchoredPosition = new Vector2( 2f, 8f );
-			rootRect.sizeDelta = new Vector2( 56f, 20f );
+			rootRect.sizeDelta = new Vector2( 64f, 24f );
 			rootGo.SetActive( false );
 		}
 
 		slot.newItemRoot = rootT as RectTransform;
+		EnsureNewItemBright( slot );
 		if ( slot.newItemIcon == null )
 			slot.newItemIcon = FindChildImage( rootT, "Star" );
 		if ( slot.newItemCount == null )
@@ -486,21 +595,57 @@ public class PouchBarUI : MonoBehaviour
 
 		if ( slot.newItemIcon == null )
 		{
-			slot.newItemIcon = CreateImage( rootT, "Star", new Vector2( 0f, 0.5f ), new Vector2( 0f, 0.5f ), new Vector2( 9f, 0f ), new Vector2( 18f, 18f ), Color.white );
+			slot.newItemIcon = CreateImage( rootT, "Star", new Vector2( 0f, 0.5f ), new Vector2( 0f, 0.5f ), new Vector2( 10f, 0f ), NewItemStarSize, NewItemStarColor );
 			slot.newItemIcon.preserveAspect = true;
 			RectTransform starRect = slot.newItemIcon.transform as RectTransform;
 			if ( starRect != null )
 				starRect.pivot = new Vector2( 0.5f, 0.5f );
 		}
+		else
+		{
+			slot.newItemIcon.color = NewItemStarColor;
+			RectTransform starRect = slot.newItemIcon.transform as RectTransform;
+			if ( starRect != null )
+				starRect.sizeDelta = NewItemStarSize;
+		}
 
 		if ( slot.newItemCount == null )
 		{
-			slot.newItemCount = CreateText( rootT, "Count", "x1", new Vector2( 0f, 0.5f ), new Vector2( 38f, 0f ), new Vector2( 36f, 20f ), 14 );
+			slot.newItemCount = CreateText( rootT, "Count", "x1", new Vector2( 0f, 0.5f ), new Vector2( 42f, 0f ), new Vector2( 36f, 22f ), 15 );
 			slot.newItemCount.alignment = TextAnchor.MiddleLeft;
+			slot.newItemCount.color = NewItemCountColor;
+		}
+		else
+		{
+			slot.newItemCount.color = NewItemCountColor;
 		}
 
 		if ( slot.newItemIcon.sprite == null && newItemStarSprite != null )
 			slot.newItemIcon.sprite = newItemStarSprite;
+	}
+
+	static void BindSlotFeedbacks( Slot slot, Transform slotT )
+	{
+		if ( slot == null || slotT == null )
+			return;
+
+		if ( slot.arriveFeedback == null )
+		{
+			Transform arriveT = slotT.Find( "ArriveFeedbacks" );
+			if ( arriveT != null )
+				slot.arriveFeedback = arriveT.GetComponent<Feedbacks>();
+		}
+
+		if ( slot.starIdleFeedback == null )
+		{
+			Transform starIdleT = null;
+			if ( slot.newItemRoot != null )
+				starIdleT = slot.newItemRoot.Find( "StarIdleFeedbacks" );
+			if ( starIdleT == null && slot.newItemIcon != null )
+				starIdleT = slot.newItemIcon.transform.Find( "StarIdleFeedbacks" );
+			if ( starIdleT != null )
+				slot.starIdleFeedback = starIdleT.GetComponent<Feedbacks>();
+		}
 	}
 
 	void CreateCycle()

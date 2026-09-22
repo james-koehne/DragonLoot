@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Circular progress ring around the crosshair for hold charges
-/// (sorter pickup and whole-stack E/F).
+/// (sorter pickup, whole-stack E/F, and non-coin pickup hold).
 /// </summary>
 public class InteractionProgressRingUI : MonoBehaviour
 {
@@ -58,6 +58,13 @@ public class InteractionProgressRingUI : MonoBehaviour
 		if ( wholeStack != null && wholeStack.ChargeProgress01 > 0.001f )
 		{
 			SetProgress( wholeStack.ChargeProgress01, valid: !wholeStack.IsPlaceChargeInvalid );
+			return;
+		}
+
+		PlayerInteraction interaction = player.Interaction;
+		if ( interaction != null && interaction.NonCoinPickupHoldProgress > 0.001f )
+		{
+			SetProgress( interaction.NonCoinPickupHoldProgress, valid: true );
 			return;
 		}
 

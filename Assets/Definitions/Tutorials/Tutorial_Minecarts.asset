@@ -28,33 +28,37 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds:
   - tut_movement
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Tap to shove the cart along the track. Hold to push or pull it with you. Place
-    treasure into a cargo cart to haul it around. Sit in a drive cart to ride the rails.
+  body: Tap to shove a cart along the track. Hold to push or pull it with you. Place
+    treasure into cargo carts to haul it around. Drive carts have a seat — look at
+    the side to ride. Call posts summon carts; unload stations dump cargo.
   keybindHint: '[{ContextualInteract}] Tap to shove  Hold [{ContextualInteract}] Push
-    [{ContextualInteract}] Ride  [{SecondaryInteract}] Place in cart'
+    [{SecondaryInteract}] Place in cart'
   tasks:
   - id: shove_cart
     label: Tap to shove the cart
     keybindHint: '[{ContextualInteract}]'
     completeTrigger: 18
     completeVolumeId: 
+    requiredCount: 0
   - id: hold_push
     label: Hold to push the cart
     keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 19
     completeVolumeId: 
+    requiredCount: 0
   - id: load_cart
     label: Put something in the cart
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 20
     completeVolumeId: 
-  - id: ride_cart
-    label: Sit in a drive cart
-    keybindHint: '[{ContextualInteract}]'
-    completeTrigger: 23
-    completeVolumeId: 
+    requiredCount: 0

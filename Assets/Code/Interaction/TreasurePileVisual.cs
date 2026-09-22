@@ -286,8 +286,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		spatialHash = def.latentUseSpatialHash;
 		avoidCoins = def.latentAvoidCoinSeats;
 		authoredFp = ComputeAuthoredFingerprint();
-		if ( latentBakeSettings != null )
-			nearSurface = latentBakeSettings.spawnTreasureNearSurface;
+		nearSurface = def.ResolveSpawnTreasureNearSurface( latentBakeSettings );
 		return true;
 	}
 
@@ -966,6 +965,17 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		if ( _pile != null )
 			_pile.OnEmptiedFromVisual();
+	}
+
+	/// <summary>
+	/// Drops all seated/unspawned gems and artifacts as loose world loot (pile clear).
+	/// </summary>
+	public void ReleaseAllArtifactPropsToWorld()
+	{
+		if ( artifactProps == null )
+			return;
+
+		artifactProps.ReleaseAllOwnedLootToWorld();
 	}
 
 	public void OnCoinsTaken( int amount )

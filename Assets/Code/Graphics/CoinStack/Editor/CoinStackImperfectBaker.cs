@@ -15,7 +15,7 @@ public static class CoinStackImperfectBaker
 	const string OutputFolder = "Assets/Art/CoinStack/Imperfect";
 	static readonly int[] ChunkSizes = { 8, 16, 32 };
 
-	[MenuItem( "DragonLoot/Coin Stack/Rebuild Imperfect Chunks" )]
+	[MenuItem( DragonLootMenus.CoinStackRebuildImperfectChunks )]
 	public static void RebuildImperfectChunks()
 	{
 		CoinStackVisualDefinition def = AssetDatabase.LoadAssetAtPath<CoinStackVisualDefinition>( DefinitionPath );

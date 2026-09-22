@@ -32,4 +32,5 @@ MonoBehaviour:
   rewardLabel: 
   showReward: 0
   completionToast: Island complete - platforms activated
-  onCompleteWorldEventIds: []
+  onCompleteWorldEventIds:
+  - island1_lanterns

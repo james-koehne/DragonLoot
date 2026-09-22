@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Look-at text under the crosshair (display fill, sorter timer; optional stack counts)
+/// Look-at text under the crosshair (display fill; optional stack counts)
 /// and a glide/slide icon above it.
 /// </summary>
 public class CrosshairContextUI : MonoBehaviour
@@ -68,7 +68,6 @@ public class CrosshairContextUI : MonoBehaviour
 		if ( showCoinStackCount )
 			TryAppendCoinStack( player, _builder );
 		_displayRequirements.TryAppendSummary( player, _builder );
-		TryAppendSorterTimer( player, _builder );
 
 		if ( _builder.Length == 0 )
 		{
@@ -215,117 +214,6 @@ public class CrosshairContextUI : MonoBehaviour
 			return TryGetCoinStackCountFromItem( item, out count );
 
 		return false;
-	}
-
-	static bool TryAppendSorterTimer( PlayerController player, StringBuilder builder )
-	{
-		CoinSortingStation station = ResolveSorter( player );
-		if ( station == null )
-			return false;
-
-		AppendLine( builder, station.ReserveSeconds.ToString( "0.0" ) + "s" );
-		return true;
-	}
-
-	static CoinSortingStation ResolveSorter( PlayerController player )
-	{
-		if ( player == null )
-			return null;
-
-		PlayerInteraction interaction = player.Interaction;
-		if ( interaction != null )
-		{
-			CoinSortingStation fromFocus = ResolveStationFromObject( interaction.Current );
-			if ( fromFocus != null )
-				return fromFocus;
-
-			IInteractable focus = interaction.Current;
-			TreasureItemInteractable itemFocus = focus as TreasureItemInteractable;
-			if ( itemFocus != null )
-			{
-				CoinSortingStation fromItem = ResolveStationFromObject( itemFocus.Item );
-				if ( fromItem == null && itemFocus.Item != null )
-					fromItem = ResolveStationFromObject( itemFocus.Item.Owner );
-				if ( fromItem != null )
-					return fromItem;
-			}
-
-			if ( interaction.TryGetLastHit( out RaycastHit lastHit ) )
-			{
-				CoinSortingStation fromHit = ResolveStationFromCollider( lastHit.collider );
-				if ( fromHit != null )
-					return fromHit;
-			}
-
-			if ( interaction.TryGetPlacementAimHit( out RaycastHit aimHit ) )
-			{
-				CoinSortingStation fromAim = ResolveStationFromCollider( aimHit.collider );
-				if ( fromAim != null )
-					return fromAim;
-			}
-		}
-
-		PlayerPlacement placement = player.Placement;
-		if ( placement != null )
-		{
-			CoinSortingStation fromTarget = ResolveStationFromObject( placement.ActiveTarget );
-			if ( fromTarget != null )
-				return fromTarget;
-		}
-
-		return null;
-	}
-
-	static CoinSortingStation ResolveStationFromObject( object target )
-	{
-		if ( target == null )
-			return null;
-
-		CoinSortingStation station = target as CoinSortingStation;
-		if ( station != null )
-			return station;
-
-		Component component = target as Component;
-		if ( component != null )
-		{
-			station = component.GetComponentInParent<CoinSortingStation>();
-			if ( station != null )
-				return station;
-		}
-
-		GroundCoinStack stack = target as GroundCoinStack;
-		if ( stack != null && stack.MachineStation != null )
-			return stack.MachineStation;
-
-		CoinSortingHopper hopper = target as CoinSortingHopper;
-		if ( hopper != null && hopper.Station != null )
-			return hopper.Station;
-
-		TreasureItem item = target as TreasureItem;
-		if ( item != null )
-			return ResolveStationFromObject( item.Owner );
-
-		return null;
-	}
-
-	static CoinSortingStation ResolveStationFromCollider( Collider collider )
-	{
-		if ( collider == null )
-			return null;
-
-		CoinSortingStation station = collider.GetComponentInParent<CoinSortingStation>();
-		if ( station != null )
-			return station;
-
-		GroundCoinStack stack = collider.GetComponentInParent<GroundCoinStack>();
-		if ( stack != null && stack.MachineStation != null )
-			return stack.MachineStation;
-
-		CoinSortingHopper hopper = collider.GetComponentInParent<CoinSortingHopper>();
-		if ( hopper != null && hopper.Station != null )
-			return hopper.Station;
-
-		return null;
 	}
 
 	static void AppendLine( StringBuilder builder, string text )

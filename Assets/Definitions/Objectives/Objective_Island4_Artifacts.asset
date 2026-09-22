@@ -19,18 +19,29 @@ MonoBehaviour:
   prerequisiteObjectiveIds:
   - obj_island_3_constellation
   subs:
-  - id: fill_display
-    label: Display coins
-    completeType: 1
-    targetId: island4_coin_display
-    requiredCount: 0
   - id: present_artifacts
-    label: Present artifacts
+    label: Setup artifact display
     completeType: 1
     targetId: island4_artifact_presentation
+    requiredCount: 0
+  - id: fill_display_copper
+    label: Display copper coins
+    completeType: 1
+    targetId: island4_coin_display_copper
+    requiredCount: 0
+  - id: fill_display_silver
+    label: Display silver coins
+    completeType: 1
+    targetId: island4_coin_display_silver
+    requiredCount: 0
+  - id: fill_display_gold
+    label: Display gold coins
+    completeType: 1
+    targetId: island4_coin_display_gold
     requiredCount: 0
   rewards: []
   rewardLabel: 
   showReward: 0
   completionToast: Island complete - platforms activated
-  onCompleteWorldEventIds: []
+  onCompleteWorldEventIds:
+  - island4_lanterns

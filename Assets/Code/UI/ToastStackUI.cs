@@ -8,6 +8,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Shared top-center toast list for discovery and unlock messages. Up to 3 visible rows.
+/// Same-moment shows share one SFX. Ability/upgrade toasts wait briefly after an island-complete milestone
+/// and include a subtle description line when authored.
 /// </summary>
 public class ToastStackUI : MonoBehaviour
 {
@@ -15,6 +17,8 @@ public class ToastStackUI : MonoBehaviour
 	public const float TopInset = 72f;
 	public const float ToastWidth = 720f;
 	public const float Spacing = 8f;
+	const float ShowSfxWindow = 0.05f;
+	const float UnlockAfterMilestoneDelay = 1.25f;
 
 	const float AccentWidthDiscovery = 6f;
 	const float AccentWidthUnlock = 8f;
@@ -22,9 +26,11 @@ public class ToastStackUI : MonoBehaviour
 	const float IconPadding = 12f;
 	const float TextRightPad = 16f;
 	const float KickerGap = 2f;
+	const float DescriptionExtraHeight = 44f;
 
 	static readonly Color GoldOutline = new Color( 0.92f, 0.78f, 0.32f, 0.85f );
 	static readonly Color GoldKicker = new Color( 1f, 0.88f, 0.45f, 1f );
+	static readonly Color DescriptionColor = new Color( 0.78f, 0.74f, 0.62f, 0.82f );
 	static readonly Color CoinAccent = new Color( 0.95f, 0.78f, 0.28f, 1f );
 	static readonly Color GemAccent = new Color( 0.35f, 0.82f, 0.95f, 1f );
 	static readonly Color ArtifactAccent = new Color( 0.82f, 0.55f, 0.32f, 1f );
@@ -56,6 +62,7 @@ public class ToastStackUI : MonoBehaviour
 		public Kind Kind;
 		public ToastTier Tier;
 		public string Message;
+		public string Description;
 		public Sprite Icon;
 		public CarryBucketKind Pouch;
 		public bool ShowPouchIcon;
@@ -73,6 +80,7 @@ public class ToastStackUI : MonoBehaviour
 		public Image Icon;
 		public Text Kicker;
 		public Text Label;
+		public Text Description;
 		public Feedbacks DiscoveryShow;
 		public Feedbacks DiscoveryHide;
 		public Feedbacks CompletionShow;
@@ -84,15 +92,17 @@ public class ToastStackUI : MonoBehaviour
 		public bool InUse;
 		public Kind Kind;
 		public ToastTier Tier;
+		public string Message;
 		public float Height;
 		public Coroutine Routine;
+		public List<Feedback> MutedAudio;
 	}
 
 	static readonly Queue<Entry> s_pendingBeforeInstance = new Queue<Entry>( 8 );
 
 	public static ToastStackUI Instance { get; private set; }
 
-	readonly Queue<Entry> _queue = new Queue<Entry>( 8 );
+	readonly List<Entry> _queue = new List<Entry>( 8 );
 	readonly List<ToastItem> _active = new List<ToastItem>( MaxVisible );
 	ToastItem[] _items;
 	Font _labelFont;
@@ -118,6 +128,9 @@ public class ToastStackUI : MonoBehaviour
 
 	Feedbacks _milestoneShowTemplate;
 	Feedbacks _milestoneHideTemplate;
+
+	float _lastShowSfxUnscaled = -999f;
+	float _milestoneShownUnscaled = -999f;
 
 	public int VisibleCount => _active.Count;
 	public int QueuedCount => _queue.Count + s_pendingBeforeInstance.Count;
@@ -157,13 +170,14 @@ public class ToastStackUI : MonoBehaviour
 		} );
 	}
 
-	public static void NotifyUnlock( string message, Sprite icon, float holdDuration, ToastTier tier = ToastTier.Unlock )
+	public static void NotifyUnlock( string message, Sprite icon, float holdDuration, ToastTier tier = ToastTier.Unlock, string description = null )
 	{
 		EnqueueStatic( new Entry
 		{
 			Kind = Kind.Unlock,
 			Tier = tier,
 			Message = message,
+			Description = description,
 			Icon = icon,
 			HoldDuration = holdDuration > 0.1f ? holdDuration : DefaultHoldForTier( tier )
 		} );
@@ -174,13 +188,13 @@ public class ToastStackUI : MonoBehaviour
 		switch ( tier )
 		{
 			case ToastTier.Completion:
-				return 3.2f;
+				return 6.4f;
 			case ToastTier.Unlock:
-				return 3.5f;
+				return 10.5f;
 			case ToastTier.Milestone:
-				return 4f;
+				return 8f;
 			default:
-				return 2.5f;
+				return 5f;
 		}
 	}
 
@@ -197,6 +211,21 @@ public class ToastStackUI : MonoBehaviour
 			default:
 				return 68f;
 		}
+	}
+
+	public static float HeightForEntry( Entry entry )
+	{
+		float height = HeightForTier( entry.Tier );
+		if ( !string.IsNullOrEmpty( entry.Description ) )
+			height += DescriptionExtraHeight;
+		return height;
+	}
+
+	public static float MaxSlotHeight()
+	{
+		float max = HeightForTier( ToastTier.Milestone );
+		float unlockWithDesc = HeightForTier( ToastTier.Unlock ) + DescriptionExtraHeight;
+		return unlockWithDesc > max ? unlockWithDesc : max;
 	}
 
 	public static float IconSizeForTier( ToastTier tier )
@@ -240,10 +269,7 @@ public class ToastStackUI : MonoBehaviour
 		if ( !_ready )
 			Setup();
 		else
-		{
 			FlushPending();
-			TryShowQueued();
-		}
 	}
 
 	void OnDisable()
@@ -268,6 +294,12 @@ public class ToastStackUI : MonoBehaviour
 	{
 		if ( Instance == this )
 			Instance = null;
+	}
+
+	void LateUpdate()
+	{
+		if ( _queue.Count > 0 && _active.Count < MaxVisible )
+			TryShowQueued();
 	}
 
 	public void Setup()
@@ -359,6 +391,8 @@ public class ToastStackUI : MonoBehaviour
 				item.Label.font = font;
 			if ( item.Kicker != null )
 				item.Kicker.font = font;
+			if ( item.Description != null )
+				item.Description.font = font;
 		}
 	}
 
@@ -385,6 +419,33 @@ public class ToastStackUI : MonoBehaviour
 		return false;
 	}
 
+	public bool HasMessage( Kind kind, string message )
+	{
+		if ( string.IsNullOrEmpty( message ) )
+			return false;
+
+		for ( int i = 0; i < _active.Count; i++ )
+		{
+			ToastItem item = _active[ i ];
+			if ( item != null && item.Kind == kind && item.Message == message )
+				return true;
+		}
+
+		foreach ( Entry entry in _queue )
+		{
+			if ( entry.Kind == kind && entry.Message == message )
+				return true;
+		}
+
+		foreach ( Entry entry in s_pendingBeforeInstance )
+		{
+			if ( entry.Kind == kind && entry.Message == message )
+				return true;
+		}
+
+		return false;
+	}
+
 	void Enqueue( Entry entry )
 	{
 		if ( !_ready )
@@ -402,8 +463,7 @@ public class ToastStackUI : MonoBehaviour
 			return;
 		}
 
-		_queue.Enqueue( entry );
-		TryShowQueued();
+		_queue.Add( entry );
 	}
 
 	void FlushPending()
@@ -416,19 +476,82 @@ public class ToastStackUI : MonoBehaviour
 	{
 		while ( _queue.Count > 0 && _active.Count < MaxVisible )
 		{
+			int index = FindNextReadyIndex();
+			if ( index < 0 )
+				return;
+
 			ToastItem item = AcquireIdle();
 			if ( item == null )
 				return;
 
-			Entry entry = _queue.Dequeue();
+			Entry entry = _queue[ index ];
+			_queue.RemoveAt( index );
 			item.InUse = true;
 			item.Kind = entry.Kind;
 			item.Tier = entry.Tier;
-			item.Height = HeightForTier( entry.Tier );
+			item.Message = entry.Message;
+			item.Height = HeightForEntry( entry );
 			_active.Add( item );
 			Relayout();
 			item.Routine = StartCoroutine( RunToast( item, entry ) );
 		}
+	}
+
+	int FindNextReadyIndex()
+	{
+		bool holdUnlock = ShouldHoldUnlockToasts();
+		int milestoneIndex = -1;
+		int fallbackIndex = -1;
+		for ( int i = 0; i < _queue.Count; i++ )
+		{
+			ToastTier tier = _queue[ i ].Tier;
+			if ( holdUnlock && tier == ToastTier.Unlock )
+				continue;
+			if ( tier == ToastTier.Milestone )
+			{
+				if ( milestoneIndex < 0 )
+					milestoneIndex = i;
+				continue;
+			}
+			if ( fallbackIndex < 0 )
+				fallbackIndex = i;
+		}
+
+		if ( milestoneIndex >= 0 )
+			return milestoneIndex;
+		return fallbackIndex;
+	}
+
+	bool ShouldHoldUnlockToasts()
+	{
+		if ( QueueContainsTier( ToastTier.Milestone ) )
+			return true;
+		if ( !HasActiveTier( ToastTier.Milestone ) )
+			return false;
+		return Time.unscaledTime - _milestoneShownUnscaled < UnlockAfterMilestoneDelay;
+	}
+
+	bool QueueContainsTier( ToastTier tier )
+	{
+		for ( int i = 0; i < _queue.Count; i++ )
+		{
+			if ( _queue[ i ].Tier == tier )
+				return true;
+		}
+
+		return false;
+	}
+
+	bool HasActiveTier( ToastTier tier )
+	{
+		for ( int i = 0; i < _active.Count; i++ )
+		{
+			ToastItem item = _active[ i ];
+			if ( item != null && item.Tier == tier )
+				return true;
+		}
+
+		return false;
 	}
 
 	IEnumerator RunToast( ToastItem item, Entry entry )
@@ -472,9 +595,89 @@ public class ToastStackUI : MonoBehaviour
 			item.Group.alpha = 1f;
 		}
 
+		if ( entry.Tier == ToastTier.Milestone )
+			_milestoneShownUnscaled = Time.unscaledTime;
+
 		Feedbacks show = ResolveShow( item );
-		if ( show != null )
-			show.Play();
+		if ( show == null )
+			return;
+
+		RestoreMutedAudio( item );
+		if ( !TryConsumeShowSfx() )
+			MuteAudioFeedbacks( show.FeedbackList, item );
+		show.Play();
+	}
+
+	bool TryConsumeShowSfx()
+	{
+		float now = Time.unscaledTime;
+		if ( now - _lastShowSfxUnscaled < ShowSfxWindow )
+			return false;
+
+		_lastShowSfxUnscaled = now;
+		return true;
+	}
+
+	static void MuteAudioFeedbacks( List<Feedback> list, ToastItem item )
+	{
+		if ( list == null || item == null )
+			return;
+
+		if ( item.MutedAudio == null )
+			item.MutedAudio = new List<Feedback>( 8 );
+
+		CollectAndMuteAudio( list, item.MutedAudio );
+	}
+
+	static void CollectAndMuteAudio( List<Feedback> list, List<Feedback> muted )
+	{
+		if ( list == null || muted == null )
+			return;
+
+		for ( int i = 0; i < list.Count; i++ )
+		{
+			Feedback feedback = list[ i ];
+			if ( feedback == null )
+				continue;
+
+			if ( IsAudioFeedback( feedback ) && feedback.Enabled )
+			{
+				feedback.Enabled = false;
+				muted.Add( feedback );
+			}
+
+			ParallelFeedback parallel = feedback as ParallelFeedback;
+			if ( parallel != null )
+				CollectAndMuteAudio( parallel.Feedbacks, muted );
+
+			SequenceFeedback sequence = feedback as SequenceFeedback;
+			if ( sequence != null )
+				CollectAndMuteAudio( sequence.Feedbacks, muted );
+		}
+	}
+
+	static bool IsAudioFeedback( Feedback feedback )
+	{
+		if ( feedback is PlaySFXFeedback )
+			return true;
+		if ( feedback is PlayRandomSFXFeedback )
+			return true;
+		return false;
+	}
+
+	static void RestoreMutedAudio( ToastItem item )
+	{
+		if ( item == null || item.MutedAudio == null )
+			return;
+
+		for ( int i = 0; i < item.MutedAudio.Count; i++ )
+		{
+			Feedback feedback = item.MutedAudio[ i ];
+			if ( feedback != null )
+				feedback.Enabled = true;
+		}
+
+		item.MutedAudio.Clear();
 	}
 
 	void Hide( ToastItem item )
@@ -498,6 +701,7 @@ public class ToastStackUI : MonoBehaviour
 	void HideImmediate( ToastItem item )
 	{
 		StopItemFeedbacks( item );
+		RestoreMutedAudio( item );
 		RestoreItemRest( item );
 
 		if ( item.Group != null )
@@ -508,6 +712,12 @@ public class ToastStackUI : MonoBehaviour
 		}
 
 		ApplyIcon( item, null, ToastTier.Discovery );
+		item.Message = null;
+		if ( item.Description != null )
+		{
+			item.Description.text = string.Empty;
+			item.Description.gameObject.SetActive( false );
+		}
 	}
 
 	void Release( ToastItem item )
@@ -557,9 +767,10 @@ public class ToastStackUI : MonoBehaviour
 
 	void ApplyVisual( ToastItem item, Entry entry )
 	{
-		float height = HeightForTier( entry.Tier );
+		float height = HeightForEntry( entry );
 		item.Height = height;
 		item.Tier = entry.Tier;
+		item.Message = entry.Message;
 		ApplySize( item, height );
 
 		if ( item.Backdrop != null )
@@ -592,6 +803,8 @@ public class ToastStackUI : MonoBehaviour
 		string message = entry.Message ?? string.Empty;
 		SplitMessage( message, out string kicker, out string body );
 		bool hasKicker = !string.IsNullOrEmpty( kicker );
+		string description = entry.Description ?? string.Empty;
+		bool hasDescription = !string.IsNullOrEmpty( description );
 
 		if ( item.Kicker != null )
 		{
@@ -608,9 +821,18 @@ public class ToastStackUI : MonoBehaviour
 			item.Label.color = Color.white;
 		}
 
+		if ( item.Description != null )
+		{
+			item.Description.gameObject.SetActive( hasDescription );
+			item.Description.text = description;
+			item.Description.color = DescriptionColor;
+			item.Description.fontSize = 16;
+			item.Description.fontStyle = FontStyle.Normal;
+		}
+
 		Sprite icon = ResolveIcon( entry );
 		ApplyIcon( item, icon, entry.Tier );
-		ApplyLabelLayout( item, icon != null, hasKicker, entry.Tier );
+		ApplyLabelLayout( item, icon != null, hasKicker, hasDescription, entry.Tier );
 	}
 
 	static Color BackdropForTier( ToastTier tier )
@@ -755,7 +977,7 @@ public class ToastStackUI : MonoBehaviour
 		iconRect.sizeDelta = new Vector2( size, size );
 	}
 
-	static void ApplyLabelLayout( ToastItem item, bool iconVisible, bool hasKicker, ToastTier tier )
+	static void ApplyLabelLayout( ToastItem item, bool iconVisible, bool hasKicker, bool hasDescription, ToastTier tier )
 	{
 		float accentW = AccentWidthForTier( tier );
 		float iconSize = IconSizeForTier( tier );
@@ -768,15 +990,38 @@ public class ToastStackUI : MonoBehaviour
 		if ( item.Kicker != null )
 		{
 			RectTransform kickerRect = item.Kicker.transform as RectTransform;
-			if ( kickerRect != null )
+			if ( kickerRect != null && hasKicker )
 			{
-				if ( hasKicker )
+				if ( hasDescription )
+				{
+					kickerRect.anchorMin = new Vector2( 0f, 0.72f );
+					kickerRect.anchorMax = new Vector2( 1f, 1f );
+					kickerRect.offsetMin = new Vector2( left, 0f );
+					kickerRect.offsetMax = new Vector2( -TextRightPad, -6f );
+				}
+				else
 				{
 					kickerRect.anchorMin = new Vector2( 0f, 0.55f );
 					kickerRect.anchorMax = new Vector2( 1f, 1f );
 					kickerRect.offsetMin = new Vector2( left, KickerGap );
 					kickerRect.offsetMax = new Vector2( -TextRightPad, -6f );
-					item.Kicker.alignment = TextAnchor.LowerLeft;
+				}
+				item.Kicker.alignment = TextAnchor.LowerLeft;
+			}
+		}
+
+		if ( item.Description != null )
+		{
+			RectTransform descRect = item.Description.transform as RectTransform;
+			if ( descRect != null )
+			{
+				if ( hasDescription )
+				{
+					descRect.anchorMin = new Vector2( 0f, 0f );
+					descRect.anchorMax = new Vector2( 1f, hasKicker ? 0.38f : 0.42f );
+					descRect.offsetMin = new Vector2( left, 8f );
+					descRect.offsetMax = new Vector2( -TextRightPad, -2f );
+					item.Description.alignment = TextAnchor.UpperLeft;
 				}
 			}
 		}
@@ -788,13 +1033,29 @@ public class ToastStackUI : MonoBehaviour
 		if ( labelRect == null )
 			return;
 
-		if ( hasKicker )
+		if ( hasKicker && hasDescription )
+		{
+			labelRect.anchorMin = new Vector2( 0f, 0.36f );
+			labelRect.anchorMax = new Vector2( 1f, 0.74f );
+			labelRect.offsetMin = new Vector2( left, 0f );
+			labelRect.offsetMax = new Vector2( -TextRightPad, -2f );
+			item.Label.alignment = TextAnchor.MiddleLeft;
+		}
+		else if ( hasKicker )
 		{
 			labelRect.anchorMin = new Vector2( 0f, 0f );
 			labelRect.anchorMax = new Vector2( 1f, 0.58f );
 			labelRect.offsetMin = new Vector2( left, 8f );
 			labelRect.offsetMax = new Vector2( -TextRightPad, -KickerGap );
 			item.Label.alignment = TextAnchor.UpperLeft;
+		}
+		else if ( hasDescription )
+		{
+			labelRect.anchorMin = new Vector2( 0f, 0.4f );
+			labelRect.anchorMax = new Vector2( 1f, 1f );
+			labelRect.offsetMin = new Vector2( left, 2f );
+			labelRect.offsetMax = new Vector2( -TextRightPad, -8f );
+			item.Label.alignment = TextAnchor.LowerLeft;
 		}
 		else
 		{
@@ -827,7 +1088,7 @@ public class ToastStackUI : MonoBehaviour
 		if ( root == null )
 			root = gameObject.AddComponent<RectTransform>();
 
-		float height = MaxVisible * HeightForTier( ToastTier.Milestone ) + ( MaxVisible - 1 ) * Spacing;
+		float height = MaxVisible * MaxSlotHeight() + ( MaxVisible - 1 ) * Spacing;
 		root.anchorMin = new Vector2( 0.5f, 1f );
 		root.anchorMax = new Vector2( 0.5f, 1f );
 		root.pivot = new Vector2( 0.5f, 1f );
@@ -893,6 +1154,7 @@ public class ToastStackUI : MonoBehaviour
 		Image icon = CreateIcon( content );
 		Text kicker = CreateKicker( content );
 		Text label = CreateLabel( content );
+		Text description = CreateDescription( content );
 
 		ToastItem item = new ToastItem
 		{
@@ -905,6 +1167,7 @@ public class ToastStackUI : MonoBehaviour
 			Icon = icon,
 			Kicker = kicker,
 			Label = label,
+			Description = description,
 			Height = height,
 			Tier = ToastTier.Discovery
 		};
@@ -1123,8 +1386,27 @@ public class ToastStackUI : MonoBehaviour
 		label.supportRichText = false;
 
 		ToastItem layout = new ToastItem { Label = label };
-		ApplyLabelLayout( layout, false, false, ToastTier.Discovery );
+		ApplyLabelLayout( layout, false, false, false, ToastTier.Discovery );
 		return label;
+	}
+
+	Text CreateDescription( RectTransform parent )
+	{
+		GameObject descGo = new GameObject( "Description", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
+		descGo.transform.SetParent( parent, false );
+
+		Text description = descGo.GetComponent<Text>();
+		description.font = ResolveFont();
+		description.fontSize = 16;
+		description.fontStyle = FontStyle.Normal;
+		description.color = DescriptionColor;
+		description.horizontalOverflow = HorizontalWrapMode.Wrap;
+		description.verticalOverflow = VerticalWrapMode.Truncate;
+		description.raycastTarget = false;
+		description.supportRichText = false;
+		description.alignment = TextAnchor.UpperLeft;
+		descGo.SetActive( false );
+		return description;
 	}
 
 	Font ResolveFont()

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -6,10 +7,14 @@ using UnityEngine;
 /// </summary>
 public class ConstellationAbilityReward : MonoBehaviour
 {
+	const float RewardDelaySeconds = 1.75f;
+
 	[SerializeField] GemConstellationInteractable constellation;
 	[SerializeField] AbilityDefinition rewardAbility;
 
 	bool _subscribed;
+	bool _rewardAnnounced;
+	Coroutine _rewardRoutine;
 
 	void Awake()
 	{
@@ -27,6 +32,11 @@ public class ConstellationAbilityReward : MonoBehaviour
 	void OnDisable()
 	{
 		Unsubscribe();
+		if ( _rewardRoutine != null )
+		{
+			StopCoroutine( _rewardRoutine );
+			_rewardRoutine = null;
+		}
 	}
 
 	void Subscribe()
@@ -53,11 +63,32 @@ public class ConstellationAbilityReward : MonoBehaviour
 			return;
 		if ( rewardAbility == null || string.IsNullOrEmpty( rewardAbility.id ) )
 			return;
+		if ( _rewardAnnounced || _rewardRoutine != null )
+			return;
+
+		_rewardRoutine = StartCoroutine( GrantRewardAfterDelayRoutine() );
+	}
+
+	IEnumerator GrantRewardAfterDelayRoutine()
+	{
+		yield return new WaitForSeconds( RewardDelaySeconds );
+		_rewardRoutine = null;
+
+		if ( _rewardAnnounced )
+			yield break;
+		if ( rewardAbility == null || string.IsNullOrEmpty( rewardAbility.id ) )
+			yield break;
 
 		AbilitySystem system = AbilitySystem.Instance;
 		if ( system == null )
-			return;
+			yield break;
 
 		system.UnlockAbility( rewardAbility.id );
+
+		if ( _rewardAnnounced )
+			yield break;
+
+		_rewardAnnounced = true;
+		UnlockRewardToastUI.NotifyUnlock( rewardAbility );
 	}
 }

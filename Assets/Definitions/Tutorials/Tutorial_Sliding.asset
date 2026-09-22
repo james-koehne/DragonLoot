@@ -17,6 +17,7 @@ MonoBehaviour:
   tags:
   - movement
   - slide
+  disabled: 0
   trigger: 18
   holdingCategory: 0
   volumeId: 
@@ -28,19 +29,22 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds:
   - tut_sprinting
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
   body: Look down a steep slope, then hold Sprint and move downhill to start sliding.
-  keybindHint: 'Look down  Hold [{Sprint}] + move downhill'
+  keybindHint: Look down  Hold [{Sprint}] + move downhill
   tasks:
   - id: slide
     label: Slide
-    keybindHint: 'Look down  Hold [{Sprint}] + move downhill'
+    keybindHint: Look down  Hold [{Sprint}] + move downhill
     completeTrigger: 24
     completeVolumeId: 
+    requiredCount: 0

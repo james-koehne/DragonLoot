@@ -24,9 +24,11 @@ public class LanternActivator : MonoBehaviour
 	static readonly int EmissionIntensityId = Shader.PropertyToID( "_EmissionIntensity" );
 
 	[SerializeField]
+	[Tooltip( "Distance = proximity. RevealOnly = lantern sweep. Manual = world event IgniteLanterns (or debug)." )]
 	LanternActivationMode _activationMode = LanternActivationMode.Distance;
 
 	[SerializeField]
+	[Tooltip( "Distance unison group, and the id used by world event IgniteLanterns." )]
 	string _groupId;
 
 	[SerializeField]
@@ -227,6 +229,24 @@ public class LanternActivator : MonoBehaviour
 		}
 
 		BeginFade( target, duration );
+	}
+
+	public void Ignite( float duration, bool playFeedback )
+	{
+		_distanceLitState = true;
+		if ( duration <= 0f )
+		{
+			if ( playFeedback && !IsFullyLit )
+			{
+				PrepareIgniteVisuals();
+				PlayTransitionFeedback( true );
+			}
+
+			SetLitInstant( true );
+			return;
+		}
+
+		FadeToLit( true, duration );
 	}
 
 	public void SetLit( float t )

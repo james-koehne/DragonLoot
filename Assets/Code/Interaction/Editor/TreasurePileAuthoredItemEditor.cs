@@ -13,7 +13,7 @@ public class TreasurePileAuthoredItemEditor : Editor
 		EditorGUILayout.HelpBox(
 			"Curated pile prop. Keep this object visible while you position it.\n"
 			+ "Required: Treasure Definition (the loot type, e.g. CrystalCandelabrum).\n"
-			+ "The Addressable *Visual prefab is enough for the mesh — TreasureItem is optional in the editor.",
+			+ "The Addressable *Visual prefab (Collectable layer) is enough for the mesh — TreasureItem is optional in the editor.",
 			MessageType.Info );
 
 		EditorGUILayout.PropertyField( serializedObject.FindProperty( "definition" ) );

@@ -18,4 +18,3 @@ MonoBehaviour:
   arcDuration: 2.2
   arcHeight: 5
   arcClearanceAboveTarget: 2
-  playerCapsulePad: 0.05

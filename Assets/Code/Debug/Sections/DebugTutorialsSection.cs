@@ -49,6 +49,8 @@ public class DebugTutorialsSection : DebugOverlaySection
 				if ( def == null || string.IsNullOrEmpty( def.id ) )
 					continue;
 				string label = string.IsNullOrEmpty( def.title ) ? def.id : def.title;
+				if ( def.disabled )
+					label += " (disabled)";
 				if ( GUILayout.Button( label ) )
 					system.DebugForceShow( def.id );
 			}

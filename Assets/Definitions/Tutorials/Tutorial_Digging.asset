@@ -16,6 +16,7 @@ MonoBehaviour:
   title: Digging
   tags:
   - digging
+  disabled: 0
   trigger: 1
   holdingCategory: 0
   volumeId: volume_main_cave
@@ -37,7 +38,7 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Aim at a gold pile and dig to pull treasure into your hands.
+  body: Aim at a treasure pile and dig to pull treasure into your hands.
   keybindHint: '[{Interact}] Dig'
   tasks:
   - id: dig
@@ -45,3 +46,4 @@ MonoBehaviour:
     keybindHint: '[{Interact}]'
     completeTrigger: 1
     completeVolumeId: 
+    requiredCount: 0

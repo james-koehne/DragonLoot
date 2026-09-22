@@ -115,6 +115,8 @@ public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlaceme
 		}
 
 		stack.BeginAppendFlight( removed, stack.transform.rotation );
+		if ( station != null )
+			station.PublishHopperLoaded( 1 );
 		return true;
 	}
 }

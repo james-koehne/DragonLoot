@@ -286,25 +286,36 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 672a510b8ef3c7147afa8797de05fa4c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArtifactPresentationTableInteractable
-  interactionName: Artifact Presentation Table
+  interactionName: Artifact Display
+  sameArtifactForAllSlots: 0
+  sharedRequiredArtifact: {fileID: 0}
   slots:
   - anchor: {fileID: 484279995071452982}
     requiredArtifact: {fileID: 0}
     rotationOffset: {x: 0, y: 0, z: 0}
+    requirePrerequisiteSlot: 0
+    prerequisiteSlotIndex: 0
   - anchor: {fileID: 1972869236055328803}
     requiredArtifact: {fileID: 0}
     rotationOffset: {x: 0, y: 0, z: 0}
+    requirePrerequisiteSlot: 0
+    prerequisiteSlotIndex: 0
   - anchor: {fileID: 465788391158783535}
     requiredArtifact: {fileID: 0}
     rotationOffset: {x: 0, y: 0, z: 0}
+    requirePrerequisiteSlot: 0
+    prerequisiteSlotIndex: 0
   - anchor: {fileID: 7689392384370621117}
     requiredArtifact: {fileID: 0}
     rotationOffset: {x: 0, y: 0, z: 0}
+    requirePrerequisiteSlot: 0
+    prerequisiteSlotIndex: 0
   snapDuration: 0.25
   bounceScale: 1.15
   socketRotation: {x: 0, y: 0, z: 0}
   countLabel: {fileID: 0}
   completedHighlight: {fileID: 0}
+  showSlotIndicators: 1
   slotIndicators: {fileID: 6906128306887942199}
   drawGizmosAlways: 0
 --- !u!114 &6906128306887942199

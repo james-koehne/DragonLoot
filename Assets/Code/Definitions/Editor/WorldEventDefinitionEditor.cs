@@ -11,6 +11,7 @@ public class WorldEventDefinitionEditor : Editor
 	SerializedProperty _conditions;
 	SerializedProperty _actions;
 	SerializedProperty _sessionOnly;
+	SerializedProperty _manualOnly;
 
 	void OnEnable()
 	{
@@ -19,6 +20,7 @@ public class WorldEventDefinitionEditor : Editor
 		_conditions = serializedObject.FindProperty( "conditions" );
 		_actions = serializedObject.FindProperty( "actions" );
 		_sessionOnly = serializedObject.FindProperty( "sessionOnly" );
+		_manualOnly = serializedObject.FindProperty( "manualOnly" );
 	}
 
 	public override void OnInspectorGUI()
@@ -28,6 +30,9 @@ public class WorldEventDefinitionEditor : Editor
 		EditorGUILayout.PropertyField( _id );
 		EditorGUILayout.PropertyField( _tags );
 		EditorGUILayout.PropertyField( _sessionOnly );
+		EditorGUILayout.PropertyField( _manualOnly );
+		if ( _manualOnly.boolValue )
+			EditorGUILayout.HelpBox( "Not evaluated from conditions. Fire from objective On Complete World Event Ids or debug.", MessageType.Info );
 		EditorGUILayout.PropertyField( _conditions, includeChildren: true );
 
 		EditorGUILayout.Space( 8f );
@@ -96,6 +101,8 @@ public class WorldEventDefinitionEditor : Editor
 				return "PlayAudio " + ( action.audioClip != null ? action.audioClip.name : "(no clip)" );
 			case WorldEventActionType.LanternRevealSweep:
 				return "LanternReveal " + ( string.IsNullOrEmpty( action.lanternRevealId ) ? "(no id)" : action.lanternRevealId );
+			case WorldEventActionType.IgniteLanterns:
+				return "IgniteLanterns " + ( string.IsNullOrEmpty( action.lanternGroupId ) ? "(no group)" : action.lanternGroupId );
 			case WorldEventActionType.CinematicPresentation:
 				return "Cinematic " + ( string.IsNullOrEmpty( action.cinematicPresentationId ) ? "(no id)" : action.cinematicPresentationId );
 			case WorldEventActionType.BrakePlayerMovement:
@@ -180,6 +187,9 @@ public class WorldEventActionDrawer : PropertyDrawer
 			case WorldEventActionType.LanternRevealSweep:
 				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
+			case WorldEventActionType.IgniteLanterns:
+				height += line * 2f + EditorGUIUtility.singleLineHeight * 2f + 4f;
+				break;
 			case WorldEventActionType.CinematicPresentation:
 				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
@@ -253,6 +263,15 @@ public class WorldEventActionDrawer : PropertyDrawer
 				{
 					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
 					EditorGUI.HelpBox( help, "Timing lives on LanternRevealSweepController.", MessageType.Info );
+					row.y += help.height + 2f;
+				}
+				break;
+			case WorldEventActionType.IgniteLanterns:
+				row = DrawRelative( row, property, "lanternGroupId" );
+				row = DrawRelative( row, property, "lanternIgniteFadeDuration" );
+				{
+					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
+					EditorGUI.HelpBox( help, "Matches lantern Group Id or Reveal Id. Use Manual mode. 0 fade = instant.", MessageType.Info );
 					row.y += help.height + 2f;
 				}
 				break;

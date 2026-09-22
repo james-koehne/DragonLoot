@@ -70,7 +70,7 @@ public class FairyInteractable : InteractableBase
 
 	string ResolveTalkLine()
 	{
-		// Prefer standing on / next to a pile when both are in range.
+		// Prefer the pile the fairy is over, then perched display, then free-roam hints.
 		TreasurePileVisual pile = helper.NearbyPile;
 		if ( pile != null )
 			return BuildPileProgressLine( pile );
@@ -78,6 +78,9 @@ public class FairyInteractable : InteractableBase
 		Component display = helper.PerchedDisplay;
 		if ( display != null )
 			return BuildDisplayProgressLine( display );
+
+		if ( helper.TryBuildHintTalkLine( out string hint ) && !string.IsNullOrEmpty( hint ) )
+			return hint;
 
 		return "Need a hand? Look at me near a display or gold pile.";
 	}

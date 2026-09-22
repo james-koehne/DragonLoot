@@ -40,7 +40,7 @@ public class DebugObjectivesSection : DebugOverlaySection
 
 		GUILayout.Space( 4f );
 		GUILayout.Label( "Force complete:" );
-		_scroll = GUILayout.BeginScrollView( _scroll, GUILayout.MaxHeight( 220f ) );
+		_scroll = GUILayout.BeginScrollView( _scroll, GUILayout.Height( 220f ) );
 		if ( catalog != null && catalog.objectives != null )
 		{
 			for ( int i = 0; i < catalog.objectives.Count; i++ )

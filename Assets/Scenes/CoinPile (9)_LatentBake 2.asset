@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbf87695acde00b418d09e6f33dc495e, type: 3}
+  m_Name: CoinPile (9)_LatentBake 2
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
+  authoredLayoutSeed: 122792
+  effectivePileSeed: -152310106
+  heightFingerprint: 916131393
+  contentsFingerprint: -2128831035
+  sourceDefinitionName: TreasurePile_Island2_CopperSilver
+  volumeMaxAttempts: 24
+  usedSpatialHash: 1
+  avoidedCoinSeats: 0
+  bakedNearSurface: 1
+  authoredFingerprint: 0
+  poses: []

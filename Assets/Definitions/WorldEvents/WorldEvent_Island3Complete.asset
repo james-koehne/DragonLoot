@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01449b8dcbcb86042a2df930c3e785bd, type: 3}
+  m_Name: WorldEvent_Island3Complete
+  m_EditorClassIdentifier: Assembly-CSharp::WorldEventDefinition
+  id: island3_lanterns
+  tags: []
+  conditions: []
+  actions:
+  - type: 7
+    delayBefore: 0
+    onlyDelayThisAction: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    spawnAtPlayer: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternGroupId: island3_lanterns
+    lanternIgniteFadeDuration: 0
+    cinematicPresentationId: 
+    playerBrakeDuration: 1
+  sessionOnly: 0
+  manualOnly: 1

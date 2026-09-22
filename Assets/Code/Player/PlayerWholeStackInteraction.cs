@@ -73,6 +73,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				&& ShouldPreferDisplayPlaceOverPickup() )
 				return false;
 
+			// While carrying coins and the hopper has room, prefer dump over take-all.
+			if ( stack != null
+				&& stack.IsMachineBuffer
+				&& ShouldPreferHopperDumpOverPickup( stack ) )
+				return false;
+
 			return stack != null
 				|| barStack != null
 				|| pyramid != null
@@ -203,6 +209,28 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return false;
 
 		return valid && display != null && displaySlot >= 0;
+	}
+
+	/// <summary>
+	/// While carrying coins and looking at a hopper stack that still has room, dump instead of take-all.
+	/// </summary>
+	bool ShouldPreferHopperDumpOverPickup( GroundCoinStack hopperStack )
+	{
+		if ( hopperStack == null || !hopperStack.IsMachineBuffer )
+			return false;
+
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
+			return false;
+
+		CoinSortingStation station = hopperStack.MachineStation;
+		if ( station == null || station.IsRepositioning || station.RemainingCapacity <= 0 )
+			return false;
+
+		if ( HasBlockingContextualFocus() )
+			return false;
+
+		return true;
 	}
 
 	int GetWholeStackPlaceQuantity( PlayerCarry carry )
@@ -997,6 +1025,37 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( definitions == null || definitions.Count == 0 )
 			return;
 
+		if ( preferred != null && preferred.IsChuteOutput )
+		{
+			TypeBatchScratch.Clear();
+			RemainderScratch.Clear();
+			for ( int i = 0; i < definitions.Count; i++ )
+			{
+				TreasureDefinition def = definitions[ i ];
+				if ( preferred.CanAccept( def ) )
+					TypeBatchScratch.Add( def );
+				else
+					RemainderScratch.Add( def );
+			}
+
+			if ( RemainderScratch.Count > 0 )
+			{
+				PlayerCarry carry = _player != null ? _player.Carry : null;
+				if ( carry != null )
+					carry.TryAbsorbDefinitionsAtHeldBottom( RemainderScratch, CarryBucketKind.Coin, promoteIfEmpty: true );
+				RemainderScratch.Clear();
+			}
+
+			if ( TypeBatchScratch.Count == 0 )
+			{
+				TypeBatchScratch.Clear();
+				return;
+			}
+
+			definitions = new List<TreasureDefinition>( TypeBatchScratch );
+			TypeBatchScratch.Clear();
+		}
+
 		GroundCoinStack stack = preferred;
 		if ( preferred != null && preferred.IsCartHosted )
 			stack = preferred;
@@ -1221,7 +1280,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return false;
 
 		GroundCoinStack coinStack = focus as GroundCoinStack;
-		if ( coinStack != null && !coinStack.IsMachineBuffer && coinStack.Count > 0 )
+		if ( coinStack != null && coinStack.Count > 0 )
 		{
 			stack = coinStack;
 			return true;

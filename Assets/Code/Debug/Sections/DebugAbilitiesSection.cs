@@ -35,7 +35,7 @@ public class DebugAbilitiesSection : DebugOverlaySection
 
 		GUILayout.Space( 6f );
 		GUILayout.Label( "Catalog" );
-		s_listScroll = GUILayout.BeginScrollView( s_listScroll, GUILayout.MaxHeight( 220f ) );
+		s_listScroll = GUILayout.BeginScrollView( s_listScroll, GUILayout.Height( 220f ) );
 		for ( int i = 0; i < catalog.Count; i++ )
 		{
 			AbilityDefinition def = catalog[ i ];

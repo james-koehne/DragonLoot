@@ -49,6 +49,18 @@ public class DebugWorldEventsSection : DebugOverlaySection
 			system.DebugFireEvent( "intro_fairy" );
 		GUILayout.EndHorizontal();
 
+		GUILayout.Label( "Ignite island lanterns:" );
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Island 1" ) )
+			system.DebugFireEvent( "island1_lanterns" );
+		if ( GUILayout.Button( "Island 2" ) )
+			system.DebugFireEvent( "island2_lanterns" );
+		if ( GUILayout.Button( "Island 3" ) )
+			system.DebugFireEvent( "island3_lanterns" );
+		if ( GUILayout.Button( "Island 4" ) )
+			system.DebugFireEvent( "island4_lanterns" );
+		GUILayout.EndHorizontal();
+
 		if ( GUILayout.Button( "Fly Camera" ) )
 			CinematicPresentationController.TryPlay( CinematicPresentationController.IntroLedgePresentationId );
 

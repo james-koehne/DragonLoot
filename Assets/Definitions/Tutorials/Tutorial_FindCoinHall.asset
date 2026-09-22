@@ -17,11 +17,23 @@ MonoBehaviour:
   tags:
   - coins
   - map
+  disabled: 1
   trigger: 9
   holdingCategory: 0
   volumeId: 
   fallbackVolumeId: volume_coin_hall
   alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds:
   - tut_digging
   - tut_coin_placement
@@ -38,8 +50,10 @@ MonoBehaviour:
     keybindHint: '[M]'
     completeTrigger: 10
     completeVolumeId: 
+    requiredCount: 0
   - id: reach_coin_hall
     label: Find the Coin Hall
     keybindHint: '[M]'
     completeTrigger: 11
     completeVolumeId: volume_coin_hall
+    requiredCount: 0

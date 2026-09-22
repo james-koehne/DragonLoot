@@ -30,7 +30,7 @@ MonoBehaviour:
   minHeightY: 30
   requiredAbilityId: 
   cinematicPresentationId: 
-  showDelaySeconds: 0.75
+  showDelaySeconds: 2.5
   walkSecondsToShow: 5
   prerequisiteVolumeId: volume_island_2
   prerequisiteTutorialIds:
@@ -38,18 +38,17 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Sort coins by stacking matching ones on the ground, then pick them off one
-    at a time.
+  body: Put down a big stack, then pick coins off one at a time to sort them.
   keybindHint: 
   tasks:
-  - id: stack_coins
-    label: Stack coins on the ground
-    keybindHint: '[{SecondaryInteract}]'
-    completeTrigger: 4
+  - id: place_whole_stack
+    label: Put down a stack
+    keybindHint: 'Hold [{ContextualInteract}]'
+    completeTrigger: 6
     completeVolumeId: 
     requiredCount: 0
   - id: take_from_stack
-    label: Pull coins from a stack
+    label: Pick coins from the stack
     keybindHint: '[{Interact}]'
     completeTrigger: 25
     completeVolumeId: 

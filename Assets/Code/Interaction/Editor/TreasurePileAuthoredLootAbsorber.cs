@@ -8,6 +8,7 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Edit-mode: parents overlapping curated props under a pile's _AuthoredLoot.
+/// Only Collectable-layer loot (or objects already marked TreasurePileAuthoredItem).
 /// Only tests objects that actually changed — never scans every renderer in the scene.
 /// </summary>
 [InitializeOnLoad]
@@ -158,15 +159,15 @@ static class TreasurePileAuthoredLootAbsorber
 	{
 		if ( go == null )
 			return false;
+		if ( !TreasurePileAuthoredItem.CanBecomeAuthoredLoot( go ) )
+			return false;
 		if ( go.GetComponent<TreasurePileAuthoredItem>() != null )
 			return true;
 		if ( go.GetComponent<TreasureItem>() != null )
 			return true;
 
 		string name = StripCloneSuffix( go.name );
-		if ( name.EndsWith( "Visual" ) )
-			return true;
-		return false;
+		return name.EndsWith( "Visual" );
 	}
 
 	static void EnsureAuthoredChildrenMarked( TreasurePileVisual pile )
@@ -181,6 +182,8 @@ static class TreasurePileAuthoredLootAbsorber
 			if ( child == null )
 				continue;
 			if ( child.name == TreasurePileVisual.LatentBakePreviewRootName )
+				continue;
+			if ( !IsAbsorbCandidate( child.gameObject ) )
 				continue;
 
 			EnsureMarkerOnGameObject( child.gameObject );
@@ -236,6 +239,8 @@ static class TreasurePileAuthoredLootAbsorber
 	{
 		if ( go == null || pile == null )
 			return;
+		if ( !IsCuratableOrUnknown( go ) )
+			return;
 
 		Transform authoredRoot = pile.EnsureAuthoredLootRoot();
 		Transform itemTransform = go.transform;
@@ -257,9 +262,25 @@ static class TreasurePileAuthoredLootAbsorber
 		}
 	}
 
+	static bool IsCuratableOrUnknown( GameObject go )
+	{
+		if ( go == null )
+			return false;
+		if ( go.GetComponent<TreasurePileAuthoredItem>() != null )
+			return true;
+
+		TreasureItem item = go.GetComponent<TreasureItem>();
+		TreasureDefinition def = item != null ? item.Definition : FindDefinitionForVisual( go );
+		if ( def != null && !TreasurePileAuthoredItem.IsCuratable( def ) )
+			return false;
+		return true;
+	}
+
 	static bool EnsureMarkerOnGameObject( GameObject go )
 	{
 		if ( go == null )
+			return false;
+		if ( !IsCuratableOrUnknown( go ) )
 			return false;
 
 		bool changed = false;
@@ -277,7 +298,7 @@ static class TreasurePileAuthoredLootAbsorber
 		if ( marker.Definition == null )
 		{
 			TreasureDefinition def = FindDefinitionForVisual( go );
-			if ( def != null )
+			if ( def != null && TreasurePileAuthoredItem.IsCuratable( def ) )
 			{
 				marker.BindDefinition( def );
 				changed = true;

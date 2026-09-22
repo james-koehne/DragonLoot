@@ -79,6 +79,9 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !query.HasHit || query.Hit.collider == null )
 			return ItemCanThrow( item ) ? SecondaryContextAction.Throw : SecondaryContextAction.CannotPlace;
 
+		if ( IsBlockedPileAim( in query, _activeTarget ) )
+			return SecondaryContextAction.CannotPlace;
+
 		if ( _hasPreview )
 		{
 			if ( ShouldThrowAtRejectedConstellation( _activeTarget, item ) )
@@ -87,13 +90,13 @@ public class PlayerPlacement : MonoBehaviour
 			if ( CanAutoFindValidSlot( _activeTarget, item ) )
 				return SecondaryContextAction.Place;
 
-			if ( ShouldThrowAtRejectedDedicatedTarget( _activeTarget, item ) )
-				return ItemCanThrow( item ) ? SecondaryContextAction.Throw : SecondaryContextAction.CannotPlace;
-
 			return SecondaryContextAction.CannotPlace;
 		}
 
 		ITreasurePlacementTarget aimTarget = ResolveTarget( in query, allowGroundStack: true );
+
+		if ( IsBlockedPileAimTarget( aimTarget ) )
+			return SecondaryContextAction.CannotPlace;
 
 		if ( aimTarget != null && aimTarget != _floorTarget )
 		{
@@ -105,8 +108,6 @@ public class PlayerPlacement : MonoBehaviour
 			{
 				if ( ShouldThrowAtRejectedConstellation( aimTarget, item ) )
 					return SecondaryContextAction.Throw;
-				if ( ShouldThrowAtRejectedDedicatedTarget( aimTarget, item ) )
-					return ItemCanThrow( item ) ? SecondaryContextAction.Throw : SecondaryContextAction.CannotPlace;
 				return SecondaryContextAction.CannotPlace;
 			}
 
@@ -568,6 +569,7 @@ public class PlayerPlacement : MonoBehaviour
 		float pulseSpeed = def != null ? def.ghostPulseSpeed : 0.85f;
 		float rimIntensity = def != null ? def.ghostRimIntensity : 1.15f;
 		float coreIntensity = def != null ? def.ghostCoreIntensity : 0.28f;
+		float visualUpBias = def != null ? def.ghostVisualUpBias : 0.015f;
 
 		_ghost.ConfigureVisuals(
 			valid,
@@ -578,6 +580,7 @@ public class PlayerPlacement : MonoBehaviour
 			pulseSpeed,
 			rimIntensity,
 			coreIntensity );
+		_ghost.SetVisualUpBias( visualUpBias );
 	}
 
 	PlacementPreview SmoothPreview( in PlacementPreview preview )
@@ -631,6 +634,7 @@ public class PlayerPlacement : MonoBehaviour
 	/// <summary>
 	/// Right-click: place on aimed surface when valid; throw into empty space, walls, and non-traversable floor.
 	/// Invalid constellation aim with a non-gem throws normally. Rejecting stations/tables do nothing.
+	/// Coin piles never accept place or throw — dig is primary only.
 	/// </summary>
 	public bool TrySecondaryPlace()
 	{
@@ -651,6 +655,9 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !query.HasHit || query.Hit.collider == null )
 			return ItemCanThrow( item ) && TryThrowActive();
 
+		if ( IsBlockedPileAim( in query, _activeTarget ) )
+			return false;
+
 		// Honor the LateUpdate ghost — preview and place must use the same target.
 		if ( _hasPreview )
 		{
@@ -663,9 +670,6 @@ public class PlayerPlacement : MonoBehaviour
 			if ( TryPlaceWithAutoFindValidSlot( _activeTarget, item ) )
 				return true;
 
-			if ( ShouldThrowAtRejectedDedicatedTarget( _activeTarget, item ) )
-				return ItemCanThrow( item ) && TryThrowActive();
-
 			return false;
 		}
 
@@ -673,6 +677,9 @@ public class PlayerPlacement : MonoBehaviour
 			return true;
 
 		ITreasurePlacementTarget aimTarget = ResolveTarget( in query, allowGroundStack: true );
+
+		if ( IsBlockedPileAimTarget( aimTarget ) )
+			return false;
 
 		// Aimed at a dedicated surface: place only if accepted.
 		if ( aimTarget != null && aimTarget != _floorTarget )
@@ -685,8 +692,6 @@ public class PlayerPlacement : MonoBehaviour
 			{
 				if ( ShouldThrowAtRejectedConstellation( aimTarget, item ) )
 					return TryThrowActive();
-				if ( ShouldThrowAtRejectedDedicatedTarget( aimTarget, item ) )
-					return ItemCanThrow( item ) && TryThrowActive();
 				return false;
 			}
 
@@ -722,10 +727,23 @@ public class PlayerPlacement : MonoBehaviour
 		return ItemCanThrow( item );
 	}
 
-	static bool ShouldThrowAtRejectedDedicatedTarget( ITreasurePlacementTarget target, TreasureItem item )
+	/// <summary>
+	/// Aiming at a heightfield coin pile blocks secondary place/throw entirely (dig is primary).
+	/// </summary>
+	static bool IsBlockedPileAimTarget( ITreasurePlacementTarget target )
 	{
-		if ( target is TreasurePileInteractable )
-			return ItemCanThrow( item );
+		return target is TreasurePileInteractable
+			|| PlacementFloorSurface.IsHeightfieldPilePlacementTarget( target );
+	}
+
+	static bool IsBlockedPileAim( in PlacementQuery query, ITreasurePlacementTarget previewTarget )
+	{
+		if ( IsBlockedPileAimTarget( previewTarget ) )
+			return true;
+
+		if ( query.HasHit && query.Hit.collider != null
+			&& PlacementFloorSurface.IsHeightfieldPileCollider( query.Hit.collider ) )
+			return true;
 
 		return false;
 	}

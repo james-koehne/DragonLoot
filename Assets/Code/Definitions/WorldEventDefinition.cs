@@ -22,7 +22,8 @@ public enum WorldEventActionType
 	PlayAudio = 3,
 	LanternRevealSweep = 4,
 	CinematicPresentation = 5,
-	BrakePlayerMovement = 6
+	BrakePlayerMovement = 6,
+	IgniteLanterns = 7
 }
 
 [Serializable]
@@ -83,7 +84,7 @@ public class WorldEventAction
 	[Tooltip( "When true, delayBefore only delays this action; later actions continue immediately without waiting for the delay." )]
 	public bool onlyDelayThisAction;
 
-	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; cinematic waits until presentation ends; brake waits brake duration." )]
+	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; cinematic waits until presentation ends; brake waits brake duration; IgniteLanterns waits fade duration." )]
 	public bool waitUntilFinished;
 
 	[Tooltip( "Dialogue lines when type is Dialogue." )]
@@ -146,6 +147,13 @@ public class WorldEventAction
 	[Tooltip( "Reveal id for LanternRevealSweep. Matches LanternRevealSweepController / reveal lanterns. Timing lives on the controller." )]
 	public string lanternRevealId;
 
+	[Tooltip( "LanternActivator Group Id or Reveal Id for IgniteLanterns. Lights every matching lantern; use Manual mode so they do not also ignite by distance." )]
+	public string lanternGroupId;
+
+	[Tooltip( "Fade seconds for IgniteLanterns. 0 = instant." )]
+	[Min( 0f )]
+	public float lanternIgniteFadeDuration;
+
 	[Tooltip( "Presentation id for CinematicPresentation. Matches CinematicPresentationController. Timing and cues live on the controller." )]
 	public string cinematicPresentationId;
 
@@ -171,6 +179,9 @@ public class WorldEventDefinition : ScriptableObject
 
 	[Tooltip( "When true, firing only marks progress for this session (not saved). Use for repeatable spawns like companions." )]
 	public bool sessionOnly;
+
+	[Tooltip( "When true, conditions are not evaluated. Fire from objective On Complete World Event Ids or debug." )]
+	public bool manualOnly;
 
 	void OnValidate()
 	{

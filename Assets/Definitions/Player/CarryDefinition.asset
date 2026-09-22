@@ -152,3 +152,14 @@ MonoBehaviour:
   stackHandLandPickupStaggerSeconds: 0.04
   stackHandLandPickupVolumeScale: 0.45
   stackHandLandPickupSpatialBlend: 0
+  coinPickupComboEnabled: 1
+  coinPickupComboWindowSeconds: 0.4
+  coinPickupComboMaxSteps: 10
+  pileDigPourClips:
+  - {fileID: 8300000, guid: 58792f3caa7a6ec46a24f0b1aac8ce51, type: 3}
+  pileDigPourVolumeAtOne: 0.5
+  pileDigPourVolumeAtBatch: 0.85
+  pileDigPourAmountForMaxVolume: 8
+  pileDigPourPitchMin: 0.95
+  pileDigPourPitchMax: 1.05
+  pileStealExtraClinkVolumeScale: 0.4

@@ -30,6 +30,8 @@ Shader "DragonLoot/Placement Ghost"
 
 			Blend SrcAlpha OneMinusSrcAlpha
 			ZWrite Off
+			ZTest LEqual
+			Offset -1, -1
 			Cull Off
 
 			HLSLPROGRAM

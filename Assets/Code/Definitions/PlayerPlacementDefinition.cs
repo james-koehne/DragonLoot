@@ -71,6 +71,10 @@ public class PlayerPlacementDefinition : ScriptableObject
 	[Range( 0f, 1f )]
 	public float ghostCoreIntensity = 0.28f;
 
+	[Tooltip( "World-up lift applied only to the ghost mesh so it does not z-fight with the floor or coins." )]
+	[Min( 0f )]
+	public float ghostVisualUpBias = 0.015f;
+
 	[Header( "Stack Volume Outline" )]
 	[Tooltip( "Diameter scale for coin-stack placement preview volume." )]
 	[Range( 1f, 1.5f )]
@@ -95,6 +99,7 @@ public class PlayerPlacementDefinition : ScriptableObject
 		ghostPulseSpeed = Mathf.Max( 0f, ghostPulseSpeed );
 		ghostRimIntensity = Mathf.Clamp( ghostRimIntensity, 0f, 2f );
 		ghostCoreIntensity = Mathf.Clamp01( ghostCoreIntensity );
+		ghostVisualUpBias = Mathf.Max( 0f, ghostVisualUpBias );
 		stackVolumeOversize = Mathf.Clamp( stackVolumeOversize, 1f, 1.5f );
 		if ( stackOutline == null )
 			stackOutline = HoverOutlineVisualSettings.DefaultStack();

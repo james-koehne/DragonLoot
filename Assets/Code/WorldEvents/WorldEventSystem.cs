@@ -111,6 +111,7 @@ public class WorldEventSystem : MonoBehaviour
 		_firedThisSession.Clear();
 		_playerHasMadeGameplayInput = false;
 		_catalogStartUnscaledTime = Time.unscaledTime;
+		RestoreFiredLanternIgnites();
 		EvaluateAll();
 	}
 
@@ -193,6 +194,8 @@ public class WorldEventSystem : MonoBehaviour
 		{
 			WorldEventDefinition definition = _catalog.events[ i ];
 			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+			if ( definition.manualOnly )
 				continue;
 			if ( HasFired( definition.id ) )
 				continue;
@@ -515,6 +518,9 @@ public class WorldEventSystem : MonoBehaviour
 			case WorldEventActionType.LanternRevealSweep:
 				StartLanternRevealSweep( action );
 				break;
+			case WorldEventActionType.IgniteLanterns:
+				StartLanternIgnite( action, sequence );
+				break;
 			case WorldEventActionType.CinematicPresentation:
 				StartCinematicPresentation( action, sequence );
 				break;
@@ -591,6 +597,48 @@ public class WorldEventSystem : MonoBehaviour
 			return;
 
 		LanternRevealSweepController.TryStartReveal( action.lanternRevealId );
+	}
+
+	static void StartLanternIgnite( WorldEventAction action, RunningActionSequence sequence )
+	{
+		if ( action == null || string.IsNullOrEmpty( action.lanternGroupId ) )
+			return;
+
+		LanternActivatorRegistry.IgniteGroup( action.lanternGroupId, action.lanternIgniteFadeDuration, true );
+		BeginDurationWait( sequence, action, action.lanternIgniteFadeDuration );
+	}
+
+	void RestoreFiredLanternIgnites()
+	{
+		LanternActivatorRegistry.ClearIgnitedGroups();
+		if ( _catalog == null || _catalog.events == null )
+			return;
+
+		for ( int i = 0; i < _catalog.events.Count; i++ )
+		{
+			WorldEventDefinition definition = _catalog.events[ i ];
+			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+			if ( !HasFired( definition.id ) )
+				continue;
+
+			WorldEventAction[] actions = definition.actions;
+			if ( actions == null )
+				continue;
+
+			for ( int j = 0; j < actions.Length; j++ )
+			{
+				WorldEventAction action = actions[ j ];
+				if ( action == null || action.type != WorldEventActionType.IgniteLanterns )
+					continue;
+				if ( string.IsNullOrEmpty( action.lanternGroupId ) )
+					continue;
+
+				LanternActivatorRegistry.MarkGroupIgnited( action.lanternGroupId );
+			}
+		}
+
+		LanternActivatorRegistry.SnapIgnitedGroups();
 	}
 
 	static void StartCinematicPresentation( WorldEventAction action, RunningActionSequence sequence )
@@ -731,6 +779,7 @@ public class WorldEventSystem : MonoBehaviour
 		_dialogue.Stop();
 		TutorialHud.Clear();
 		LanternRevealSweepController.DebugResetAll();
+		LanternActivatorRegistry.ClearIgnitedGroups();
 
 		ProfileSaveData save = GetSave();
 		if ( save != null )

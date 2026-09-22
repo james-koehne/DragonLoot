@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_Pouches
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_pouches
+  title: Pouches
+  tags:
+  - pouches
+  - gems
+  disabled: 0
+  trigger: 21
+  holdingCategory: 1
+  volumeId: 
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: volume_island_3
+  prerequisiteTutorialIds: []
+  highlightMapLabel: 
+  mapMarkerId: 
+  completeAllTasksOnVolumeEnter: 0
+  body: Gems go in their own pouch. Switch to the gem pouch to hold them.
+  keybindHint: '[{CategorySlot2}] or [{CyclePouch}] Switch pouch'
+  tasks:
+  - id: switch_gem_pouch
+    label: Switch to the gem pouch
+    keybindHint: '[{CategorySlot2}] or [{CyclePouch}]'
+    completeTrigger: 29
+    completeVolumeId: 
+    requiredCount: 0

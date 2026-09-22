@@ -26,7 +26,11 @@ public class QuestObjectiveUI : MonoBehaviour
 	[SerializeField] Feedbacks hideFeedback;
 	[SerializeField] Feedbacks subObjectiveCompleteFeedback;
 	[SerializeField] Feedbacks objectiveCompleteFeedback;
-	[SerializeField] Feedbacks taskCountPopFeedback;
+
+	[Header( "Attention" )]
+	[SerializeField] CanvasGroup attentionGroup;
+	[SerializeField] Transform attentionDiamond;
+	[SerializeField] Transform attentionGlow;
 
 	RectTransform _panel;
 	Vector2 _restAnchored;
@@ -41,15 +45,14 @@ public class QuestObjectiveUI : MonoBehaviour
 	bool _hasPendingHud;
 	bool _playingCompleteSequence;
 	Coroutine _completeSequenceRoutine;
+	string _objectiveFormatted = string.Empty;
+	readonly UiCountChunkPop _countPop = new UiCountChunkPop();
 
 	public void Setup()
 	{
-		EnsureLayout();
+		BindLayout();
 		ResolveFeedbackRefs();
-		EnsureShowFeedback();
-		EnsureHideFeedback();
-		EnsureCompleteFeedback();
-		EnsureCountPopFeedback();
+		ResolveAttentionRefs();
 		Subscribe();
 		_wantVisible = false;
 		_shownObjectiveKey = null;
@@ -123,18 +126,34 @@ public class QuestObjectiveUI : MonoBehaviour
 				objectiveCompleteFeedback = existing.GetComponent<Feedbacks>();
 		}
 
-		if ( taskCountPopFeedback == null )
-		{
-			Transform existing = transform.Find( "TaskCountPopFeedbacks" );
-			if ( existing != null )
-				taskCountPopFeedback = existing.GetComponent<Feedbacks>();
-		}
-
 		SetUnscaled( showFeedback );
 		SetUnscaled( hideFeedback );
 		SetUnscaled( subObjectiveCompleteFeedback );
 		SetUnscaled( objectiveCompleteFeedback );
-		SetUnscaled( taskCountPopFeedback );
+	}
+
+	void ResolveAttentionRefs()
+	{
+		if ( attentionGroup == null )
+		{
+			Transform existing = transform.Find( "Attention" );
+			if ( existing != null )
+				attentionGroup = existing.GetComponent<CanvasGroup>();
+		}
+
+		if ( attentionDiamond == null )
+		{
+			Transform existing = transform.Find( "Attention/Diamond" );
+			if ( existing != null )
+				attentionDiamond = existing;
+		}
+
+		if ( attentionGlow == null )
+		{
+			Transform existing = transform.Find( "Attention/Glow" );
+			if ( existing != null )
+				attentionGlow = existing;
+		}
 	}
 
 	static void SetUnscaled( Feedbacks feedbacks )
@@ -165,9 +184,7 @@ public class QuestObjectiveUI : MonoBehaviour
 
 	void OnSubCompleted( ObjectiveSubCompletedEvent evt )
 	{
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
-		RestoreObjectiveTransform();
+		StopCountChunkPop( restore: true );
 		PaintRowComplete( evt.ObjectiveId, evt.ObjectiveId + "/" + evt.SubId );
 		if ( _playingCompleteSequence )
 			return;
@@ -197,8 +214,9 @@ public class QuestObjectiveUI : MonoBehaviour
 
 	void ApplyHud( TutorialHudChangedEvent evt, bool playShow )
 	{
-		EnsureLayout();
-		bool countsIncreased = CountsIncreased( _lastHud, evt );
+		BindLayout();
+		string previousText = FormatRows( _lastHud );
+		string nextText = FormatRows( evt );
 		StoreHud( evt, asPending: false );
 
 		bool wasShown = IsShown;
@@ -208,8 +226,9 @@ public class QuestObjectiveUI : MonoBehaviour
 
 		if ( title != null )
 			title.text = string.IsNullOrEmpty( evt.Title ) ? "Nearby" : evt.Title;
+		_objectiveFormatted = nextText;
 		if ( objective != null )
-			objective.text = FormatRows( evt );
+			objective.text = nextText;
 
 		RefreshLayout();
 
@@ -217,13 +236,13 @@ public class QuestObjectiveUI : MonoBehaviour
 			PlayShowFeedback();
 		else if ( !IsShown )
 			HideImmediate();
-		else if ( wasShown && sameObjective && countsIncreased && !_playingCompleteSequence )
-			PlayTaskCountPop();
+		else if ( wasShown && sameObjective && !_playingCompleteSequence )
+			PlayTaskCountPop( previousText, nextText );
 
 		_shownObjectiveKey = newKey;
 	}
 
-	void EnsureLayout()
+	void BindLayout()
 	{
 		if ( _layoutReady )
 			return;
@@ -231,50 +250,14 @@ public class QuestObjectiveUI : MonoBehaviour
 		_panel = transform as RectTransform;
 
 		VerticalLayoutGroup layout = GetComponent<VerticalLayoutGroup>();
-		if ( layout == null )
-			layout = gameObject.AddComponent<VerticalLayoutGroup>();
-		layout.padding = new RectOffset( Mathf.RoundToInt( padding.x ), Mathf.RoundToInt( padding.x ), Mathf.RoundToInt( padding.y ), Mathf.RoundToInt( padding.y ) );
-		layout.spacing = textSpacing;
-		layout.childAlignment = TextAnchor.UpperLeft;
-		layout.childControlHeight = true;
-		layout.childControlWidth = true;
-		layout.childForceExpandHeight = false;
-		layout.childForceExpandWidth = false;
-
-		ContentSizeFitter fitter = GetComponent<ContentSizeFitter>();
-		if ( fitter == null )
-			fitter = gameObject.AddComponent<ContentSizeFitter>();
-		fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-		fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-		ConfigureTextLayout( title );
-		ConfigureTextLayout( objective );
+		if ( layout != null )
+		{
+			layout.padding = new RectOffset( Mathf.RoundToInt( padding.x ), Mathf.RoundToInt( padding.x ), Mathf.RoundToInt( padding.y ), Mathf.RoundToInt( padding.y ) );
+			layout.spacing = textSpacing;
+		}
 
 		_layoutReady = true;
 		CaptureRestPose();
-	}
-
-	static void ConfigureTextLayout( Text text )
-	{
-		if ( text == null )
-			return;
-
-		RectTransform rect = text.rectTransform;
-		rect.anchorMin = new Vector2( 0f, 1f );
-		rect.anchorMax = new Vector2( 0f, 1f );
-		rect.pivot = new Vector2( 0f, 1f );
-		rect.anchoredPosition = Vector2.zero;
-		rect.sizeDelta = Vector2.zero;
-
-		text.horizontalOverflow = HorizontalWrapMode.Overflow;
-		text.verticalOverflow = VerticalWrapMode.Overflow;
-		text.supportRichText = true;
-
-		ContentSizeFitter fitter = text.GetComponent<ContentSizeFitter>();
-		if ( fitter == null )
-			fitter = text.gameObject.AddComponent<ContentSizeFitter>();
-		fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-		fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 	}
 
 	void CaptureRestPose()
@@ -299,8 +282,8 @@ public class QuestObjectiveUI : MonoBehaviour
 	{
 		RestoreRestPose();
 		RestoreObjectiveTransform();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
+		ResetAttentionChrome();
+		StopCountChunkPop( restore: true );
 		if ( showFeedback != null )
 		{
 			if ( group != null )
@@ -313,322 +296,13 @@ public class QuestObjectiveUI : MonoBehaviour
 			group.alpha = 1f;
 	}
 
-	void PlayTaskCountPop()
+	void PlayTaskCountPop( string previousText, string nextText )
 	{
-		EnsureCountPopFeedback();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Play();
-	}
-
-	void EnsureShowFeedback()
-	{
-		if ( showFeedback != null && showFeedback.FeedbackList != null && showFeedback.FeedbackList.Count > 0 )
-		{
-			SetUnscaled( showFeedback );
+		if ( !_countPop.Begin( previousText, nextText ) )
 			return;
-		}
-
-		Transform existing = transform.Find( "ShowObjectiveFeedbacks" );
-		GameObject go = existing != null ? existing.gameObject : new GameObject( "ShowObjectiveFeedbacks" );
-		if ( existing == null )
-			go.transform.SetParent( transform, false );
-
-		if ( showFeedback == null )
-			showFeedback = go.GetComponent<Feedbacks>();
-		if ( showFeedback == null )
-			showFeedback = go.AddComponent<Feedbacks>();
-		showFeedback.UseUnscaledTime = true;
-
-		if ( showFeedback.FeedbackList != null && showFeedback.FeedbackList.Count > 0 )
-			return;
-
-		RectTransform rect = transform as RectTransform;
-		ParallelFeedback parallel = new ParallelFeedback();
-		parallel.Feedbacks = new List<Feedback>();
-
-		CanvasGroupFadeFeedback fade = new CanvasGroupFadeFeedback();
-		fade.Target = group;
-		fade.From = 0f;
-		fade.To = 1f;
-		fade.Duration = 0.22f;
-		fade.UseUnscaledTime = true;
-		fade.Curve = AnimationCurve.EaseInOut( 0f, 0f, 1f, 1f );
-		parallel.Feedbacks.Add( fade );
-
-		UiPunchScaleFeedback punch = new UiPunchScaleFeedback();
-		punch.Target = rect;
-		punch.Punch = new Vector3( 0.04f, 0.06f, 0f );
-		punch.Duration = 0.28f;
-		punch.UseUnscaledTime = true;
-		punch.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f ),
-			new Keyframe( 0.3f, 1f ),
-			new Keyframe( 1f, 0f ) );
-		parallel.Feedbacks.Add( punch );
-
-		UiAnchoredSlideFeedback slide = new UiAnchoredSlideFeedback();
-		slide.Target = rect;
-		slide.FromOffset = new Vector2( -28f, 0f );
-		slide.ToOffset = Vector2.zero;
-		slide.Duration = 0.24f;
-		slide.UseUnscaledTime = true;
-		slide.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f, 0f, 2.2f ),
-			new Keyframe( 0.65f, 1.04f ),
-			new Keyframe( 1f, 1f ) );
-		parallel.Feedbacks.Add( slide );
-
-		showFeedback.AddFeedback( parallel );
-	}
-
-	void EnsureHideFeedback()
-	{
-		if ( hideFeedback != null && hideFeedback.FeedbackList != null && hideFeedback.FeedbackList.Count > 0 )
-		{
-			SetUnscaled( hideFeedback );
-			return;
-		}
-
-		hideFeedback = EnsureFeedbacksChild( "HideObjectiveFeedbacks" );
-		if ( hideFeedback.FeedbackList != null && hideFeedback.FeedbackList.Count > 0 )
-			return;
-
-		RectTransform rect = transform as RectTransform;
-		ParallelFeedback parallel = new ParallelFeedback();
-		parallel.Feedbacks = new List<Feedback>();
-
-		CanvasGroupFadeFeedback fade = new CanvasGroupFadeFeedback();
-		fade.Target = group;
-		fade.From = 1f;
-		fade.To = 0f;
-		fade.Duration = 0.22f;
-		fade.UseUnscaledTime = true;
-		fade.CaptureCurrentAsFrom = true;
-		fade.Curve = AnimationCurve.EaseInOut( 0f, 0f, 1f, 1f );
-		parallel.Feedbacks.Add( fade );
-
-		UiAnchoredSlideFeedback slide = new UiAnchoredSlideFeedback();
-		slide.Target = rect;
-		slide.FromOffset = Vector2.zero;
-		slide.ToOffset = new Vector2( -28f, 0f );
-		slide.Duration = 0.22f;
-		slide.UseUnscaledTime = true;
-		slide.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f, 0f, 0f ),
-			new Keyframe( 1f, 1f, 1.8f, 0f ) );
-		parallel.Feedbacks.Add( slide );
-
-		hideFeedback.AddFeedback( parallel );
-	}
-
-	void EnsureCompleteFeedback()
-	{
-		objectiveCompleteFeedback = EnsureFeedbacksChild( "ObjectiveCompleteFeedbacks", objectiveCompleteFeedback );
-		SetUnscaled( objectiveCompleteFeedback );
-		EnsurePunchOnFeedback( objectiveCompleteFeedback, new Vector3( 0.08f, 0.1f, 0f ), 0.4f, 0.35f );
-
-		subObjectiveCompleteFeedback = EnsureFeedbacksChild( "SubObjectiveCompleteFeedbacks", subObjectiveCompleteFeedback );
-		SetUnscaled( subObjectiveCompleteFeedback );
-		EnsurePunchOnFeedback( subObjectiveCompleteFeedback, new Vector3( 0.035f, 0.045f, 0f ), 0.22f, 0f );
-	}
-
-	void EnsureCountPopFeedback()
-	{
-		if ( taskCountPopFeedback != null && taskCountPopFeedback.FeedbackList != null && taskCountPopFeedback.FeedbackList.Count > 0 )
-		{
-			SetUnscaled( taskCountPopFeedback );
-			RetargetCountPop();
-			return;
-		}
-
-		Transform existing = transform.Find( "TaskCountPopFeedbacks" );
-		GameObject go = existing != null ? existing.gameObject : new GameObject( "TaskCountPopFeedbacks", typeof( RectTransform ) );
-		if ( existing == null )
-			go.transform.SetParent( transform, false );
-
-		if ( taskCountPopFeedback == null )
-			taskCountPopFeedback = go.GetComponent<Feedbacks>();
-		if ( taskCountPopFeedback == null )
-			taskCountPopFeedback = go.AddComponent<Feedbacks>();
-		taskCountPopFeedback.UseUnscaledTime = true;
-
-		if ( taskCountPopFeedback.FeedbackList != null && taskCountPopFeedback.FeedbackList.Count > 0 )
-		{
-			RetargetCountPop();
-			return;
-		}
-
-		ParallelFeedback parallel = new ParallelFeedback();
-		parallel.Feedbacks = new List<Feedback>();
-		parallel.Feedbacks.Add( CreateCountPopPunch() );
-		parallel.Feedbacks.Add( CreateCountPopColor() );
-		taskCountPopFeedback.AddFeedback( parallel );
-		RetargetCountPop();
-	}
-
-	UiPunchScaleFeedback CreateCountPopPunch()
-	{
-		UiPunchScaleFeedback punch = new UiPunchScaleFeedback();
-		punch.Punch = new Vector3( 0.06f, 0.14f, 0f );
-		punch.Duration = 0.16f;
-		punch.UseUnscaledTime = true;
-		punch.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f ),
-			new Keyframe( 0.28f, 1f ),
-			new Keyframe( 1f, 0f ) );
-		return punch;
-	}
-
-	UiGraphicColorPunchFeedback CreateCountPopColor()
-	{
-		UiGraphicColorPunchFeedback color = new UiGraphicColorPunchFeedback();
-		color.PunchColor = new Color( 1f, 0.92f, 0.55f, 1f );
-		color.Duration = 0.16f;
-		color.UseUnscaledTime = true;
-		color.CaptureRestOnPlay = true;
-		color.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f ),
-			new Keyframe( 0.3f, 1f ),
-			new Keyframe( 1f, 0f ) );
-		return color;
-	}
-
-	void RetargetCountPop()
-	{
-		if ( taskCountPopFeedback == null || taskCountPopFeedback.FeedbackList == null )
-			return;
-
-		RectTransform objectiveRect = objective != null ? objective.rectTransform : null;
-		for ( int i = 0; i < taskCountPopFeedback.FeedbackList.Count; i++ )
-			RetargetCountPopRecursive( taskCountPopFeedback.FeedbackList[ i ], objectiveRect, objective );
-	}
-
-	static void RetargetCountPopRecursive( Feedback feedback, RectTransform targetRect, Graphic targetGraphic )
-	{
-		if ( feedback == null )
-			return;
-
-		ParallelFeedback parallel = feedback as ParallelFeedback;
-		if ( parallel != null && parallel.Feedbacks != null )
-		{
-			for ( int i = 0; i < parallel.Feedbacks.Count; i++ )
-				RetargetCountPopRecursive( parallel.Feedbacks[ i ], targetRect, targetGraphic );
-			return;
-		}
-
-		SequenceFeedback sequence = feedback as SequenceFeedback;
-		if ( sequence != null && sequence.Feedbacks != null )
-		{
-			for ( int i = 0; i < sequence.Feedbacks.Count; i++ )
-				RetargetCountPopRecursive( sequence.Feedbacks[ i ], targetRect, targetGraphic );
-			return;
-		}
-
-		UiPunchScaleFeedback punch = feedback as UiPunchScaleFeedback;
-		if ( punch != null )
-			punch.Target = targetRect;
-
-		UiGraphicColorPunchFeedback color = feedback as UiGraphicColorPunchFeedback;
-		if ( color != null )
-			color.Target = targetGraphic;
-	}
-
-	Feedbacks EnsureFeedbacksChild( string childName )
-	{
-		return EnsureFeedbacksChild( childName, null );
-	}
-
-	Feedbacks EnsureFeedbacksChild( string childName, Feedbacks existing )
-	{
-		if ( existing != null )
-		{
-			SetUnscaled( existing );
-			return existing;
-		}
-
-		Transform child = transform.Find( childName );
-		GameObject go = child != null ? child.gameObject : new GameObject( childName );
-		if ( child == null )
-			go.transform.SetParent( transform, false );
-
-		Feedbacks feedbacks = go.GetComponent<Feedbacks>();
-		if ( feedbacks == null )
-			feedbacks = go.AddComponent<Feedbacks>();
-		feedbacks.UseUnscaledTime = true;
-		return feedbacks;
-	}
-
-	void EnsurePunchOnFeedback( Feedbacks feedbacks, Vector3 punchAmount, float punchDuration, float holdAfter )
-	{
-		if ( feedbacks == null )
-			return;
-		if ( ContainsPunch( feedbacks.FeedbackList ) )
-			return;
-
-		UiPunchScaleFeedback punch = new UiPunchScaleFeedback();
-		punch.Target = transform as RectTransform;
-		punch.Punch = punchAmount;
-		punch.Duration = punchDuration;
-		punch.UseUnscaledTime = true;
-		punch.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f ),
-			new Keyframe( 0.28f, 1f ),
-			new Keyframe( 1f, 0f ) );
-
-		List<Feedback> existing = new List<Feedback>();
-		if ( feedbacks.FeedbackList != null )
-		{
-			for ( int i = 0; i < feedbacks.FeedbackList.Count; i++ )
-			{
-				Feedback feedback = feedbacks.FeedbackList[ i ];
-				if ( feedback != null )
-					existing.Add( feedback );
-			}
-		}
-
-		ParallelFeedback parallel = new ParallelFeedback();
-		parallel.Feedbacks = new List<Feedback>();
-		parallel.Feedbacks.Add( punch );
-		for ( int i = 0; i < existing.Count; i++ )
-			parallel.Feedbacks.Add( existing[ i ] );
-
-		feedbacks.FeedbackList.Clear();
-		if ( holdAfter > 0f )
-		{
-			SequenceFeedback sequence = new SequenceFeedback();
-			sequence.Feedbacks = new List<Feedback>();
-			sequence.Feedbacks.Add( parallel );
-			DelayFeedback delay = new DelayFeedback();
-			delay.Duration = holdAfter;
-			sequence.Feedbacks.Add( delay );
-			feedbacks.AddFeedback( sequence );
-			return;
-		}
-
-		feedbacks.AddFeedback( parallel );
-	}
-
-	static bool ContainsPunch( List<Feedback> list )
-	{
-		if ( list == null )
-			return false;
-
-		for ( int i = 0; i < list.Count; i++ )
-		{
-			Feedback feedback = list[ i ];
-			if ( feedback is UiPunchScaleFeedback )
-				return true;
-
-			ParallelFeedback parallel = feedback as ParallelFeedback;
-			if ( parallel != null && ContainsPunch( parallel.Feedbacks ) )
-				return true;
-
-			SequenceFeedback sequence = feedback as SequenceFeedback;
-			if ( sequence != null && ContainsPunch( sequence.Feedbacks ) )
-				return true;
-		}
-
-		return false;
+		int fontSize = objective != null ? objective.fontSize : 14;
+		Color restColor = objective != null ? objective.color : Color.white;
+		ApplyCountChunkDisplay( _countPop.CurrentDisplay( fontSize, restColor ) );
 	}
 
 	void StoreHud( TutorialHudChangedEvent evt, bool asPending )
@@ -679,8 +353,9 @@ public class QuestObjectiveUI : MonoBehaviour
 			return;
 
 		_wantVisible = true;
+		_objectiveFormatted = FormatRows( _lastHud );
 		if ( objective != null )
-			objective.text = FormatRows( _lastHud );
+			objective.text = _objectiveFormatted;
 		RefreshLayout();
 		if ( group != null && group.alpha < 1f )
 			group.alpha = 1f;
@@ -725,10 +400,10 @@ public class QuestObjectiveUI : MonoBehaviour
 			showFeedback.Stop();
 		if ( subObjectiveCompleteFeedback != null )
 			subObjectiveCompleteFeedback.Stop();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
+		StopCountChunkPop( restore: true );
 		if ( hideFeedback != null )
 			hideFeedback.Stop();
+		ResetAttentionChrome();
 
 		if ( objectiveCompleteFeedback != null )
 			objectiveCompleteFeedback.Play();
@@ -740,7 +415,7 @@ public class QuestObjectiveUI : MonoBehaviour
 		{
 			_playingCompleteSequence = false;
 			_completeSequenceRoutine = null;
-			ApplyHud( _pendingHud, playShow: false );
+			ApplyHud( _pendingHud, playShow: true );
 			yield break;
 		}
 
@@ -755,7 +430,7 @@ public class QuestObjectiveUI : MonoBehaviour
 		_completeSequenceRoutine = null;
 		HideImmediate();
 		if ( _hasPendingHud )
-			ApplyHud( _pendingHud, playShow: false );
+			ApplyHud( _pendingHud, playShow: true );
 	}
 
 	static IEnumerator WaitUnscaled( float seconds )
@@ -819,10 +494,10 @@ public class QuestObjectiveUI : MonoBehaviour
 			subObjectiveCompleteFeedback.Stop();
 		if ( objectiveCompleteFeedback != null )
 			objectiveCompleteFeedback.Stop();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
+		StopCountChunkPop( restore: false );
 		RestoreRestPose();
 		RestoreObjectiveTransform();
+		ResetAttentionChrome();
 		if ( group != null )
 			group.alpha = 0f;
 	}
@@ -832,6 +507,56 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( objective == null )
 			return;
 		objective.transform.localScale = Vector3.one;
+	}
+
+	void ResetAttentionChrome()
+	{
+		if ( attentionGroup != null )
+			attentionGroup.alpha = 0f;
+		if ( attentionDiamond != null )
+		{
+			attentionDiamond.localRotation = Quaternion.identity;
+			attentionDiamond.localScale = Vector3.one;
+		}
+		if ( attentionGlow != null )
+			attentionGlow.localScale = Vector3.one;
+	}
+
+	void ApplyCountChunkDisplay( string display )
+	{
+		if ( objective != null )
+		{
+			objective.supportRichText = true;
+			objective.text = display ?? string.Empty;
+		}
+		RefreshLayout();
+	}
+
+	void StopCountChunkPop( bool restore )
+	{
+		bool wasActive = _countPop.Active;
+		_countPop.Stop();
+		if ( restore && wasActive )
+			ApplyCountChunkDisplay( _objectiveFormatted );
+	}
+
+	void Update()
+	{
+		TickCountChunkPop();
+	}
+
+	void TickCountChunkPop()
+	{
+		if ( !_countPop.Active )
+			return;
+
+		int fontSize = objective != null ? objective.fontSize : 14;
+		Color restColor = objective != null ? objective.color : Color.white;
+		string display;
+		bool running = _countPop.Tick( Time.unscaledDeltaTime, fontSize, restColor, out display );
+		ApplyCountChunkDisplay( display );
+		if ( !running )
+			ApplyCountChunkDisplay( _objectiveFormatted );
 	}
 
 	void RefreshLayout()
@@ -918,62 +643,6 @@ public class QuestObjectiveUI : MonoBehaviour
 		}
 
 		return sb.ToString();
-	}
-
-	static bool CountsIncreased( TutorialHudChangedEvent previous, TutorialHudChangedEvent next )
-	{
-		if ( previous.Rows == null || next.Rows == null )
-			return false;
-
-		for ( int i = 0; i < next.Rows.Length; i++ )
-		{
-			TutorialHudRow nextRow = next.Rows[ i ];
-			if ( nextRow.Indent <= 0 || nextRow.Complete || nextRow.IsReward )
-				continue;
-			if ( string.IsNullOrEmpty( nextRow.ObjectiveId ) )
-				continue;
-
-			int nextCount;
-			if ( !TryReadProgressCount( nextRow.Text, out nextCount ) )
-				continue;
-
-			int previousCount = 0;
-			bool found = false;
-			for ( int p = 0; p < previous.Rows.Length; p++ )
-			{
-				TutorialHudRow previousRow = previous.Rows[ p ];
-				if ( previousRow.ObjectiveId != nextRow.ObjectiveId )
-					continue;
-				found = true;
-				TryReadProgressCount( previousRow.Text, out previousCount );
-				break;
-			}
-
-			if ( found && nextCount > previousCount )
-				return true;
-		}
-
-		return false;
-	}
-
-	static bool TryReadProgressCount( string text, out int current )
-	{
-		current = 0;
-		if ( string.IsNullOrEmpty( text ) )
-			return false;
-
-		int slash = text.LastIndexOf( '/' );
-		if ( slash <= 0 )
-			return false;
-
-		int start = slash - 1;
-		while ( start >= 0 && char.IsDigit( text[ start ] ) )
-			start--;
-		start++;
-		if ( start >= slash )
-			return false;
-
-		return int.TryParse( text.Substring( start, slash - start ), out current );
 	}
 
 	int ResolveContextualFontSize()

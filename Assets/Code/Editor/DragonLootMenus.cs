@@ -36,6 +36,10 @@ public static class DragonLootMenus
 
 	public const string GraphicsMagicalLanternAddToSelection = Root + "/Graphics/Lantern/Add Magical Motion To Selection";
 
+	// --- Coin Stack ---
+	public const string CoinStackRebuildImperfectChunks = Root + "/Coin Stack/Rebuild Imperfect Chunks";
+	public const string CoinStackRebuildTextureArrays = Root + "/Coin Stack/Rebuild Texture Arrays";
+
 	// --- Audio ---
 	public const string AudioInstallDefinition = Root + "/Audio/Install Definition";
 	public const string AudioResetClipLists = Root + "/Audio/Reset Clip Lists To Defaults";
@@ -97,9 +101,13 @@ public static class DragonLootMenus
 
 	// --- Definitions ---
 	public const string DefinitionsEnsureJumpAbility = Root + "/Definitions/Ensure Jump Ability";
+	public const string DefinitionsEnsureDrivingTutorial = Root + "/Definitions/Ensure Driving Tutorial";
+	public const string DefinitionsEnsurePouchesTutorial = Root + "/Definitions/Ensure Pouches Tutorial";
+	public const string DefinitionsEnsureIsland4CoinSorterTutorial = Root + "/Definitions/Ensure Island 4 Coin Sorter Tutorial";
 	public const string DefinitionsEnsureIslandObjectives = Root + "/Definitions/Ensure Island Objectives";
 	public const string DefinitionsEnsureDigPickupSpeedUpgrade = Root + "/Definitions/Ensure Dig Pickup Speed Upgrade";
 	public const string DefinitionsEnsureObjectiveFeedbacks = Root + "/Definitions/Ensure Objective HUD Feedbacks";
+	public const string DefinitionsEnsureIslandCompleteWorldEvents = Root + "/Definitions/Ensure Island Complete World Events";
 
 	// --- Companions ---
 	public const string CompanionsBuildFairyHelper = Root + "/Companions/Build Fairy Helper Prefab";

@@ -12,8 +12,9 @@ using UnityEngine;
 /// pile (left-to-right, top-left wins ties).
 /// Hold-R whole-stack place lands on the aimed pile when stacking, otherwise the shortest
 /// matching pile. Auto-level waits until the table is idle (no new coins for a short delay),
-/// then peels excess coins into shorter columns of the same coin type. Adding more coins
-/// cancels an in-progress level and restarts the idle timer.
+/// then peels excess coins into shorter columns of the same coin type. A leveling pass starts
+/// at Auto Level Speed and ramps up to Auto Level Ramp Max Multiplier over that pass.
+/// Adding more coins cancels an in-progress level and restarts the idle timer.
 /// Each display levels independently; placing on another table does not interrupt this one.
 /// Setup: collider on root, child DisplayArea, assign accepted treasure + grid settings
 /// (or enable mixed column requirements and assign one coin per column).
@@ -79,6 +80,11 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	[SerializeField]
 	[Min( 0.1f )]
 	float autoLevelSpeed = 2f;
+
+	[Tooltip( "A leveling pass starts at Auto Level Speed and ramps to this multiplier over the coins in that pass." )]
+	[SerializeField]
+	[Min( 1f )]
+	float autoLevelRampMaxMultiplier = 3f;
 
 	[Tooltip( "Delay between starting each leveling coin flight." )]
 	[SerializeField]
@@ -239,6 +245,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		emptySlotChance = Mathf.Clamp01( emptySlotChance );
 		autoLevelIdleDelay = Mathf.Max( 0f, autoLevelIdleDelay );
 		autoLevelSpeed = Mathf.Max( 0.1f, autoLevelSpeed );
+		autoLevelRampMaxMultiplier = Mathf.Max( 1f, autoLevelRampMaxMultiplier );
 		levelCoinStagger = Mathf.Max( 0f, levelCoinStagger );
 		levelStartDelay = Mathf.Max( 0f, levelStartDelay );
 		levelCrossSlotArcHeight = Mathf.Max( 0.05f, levelCrossSlotArcHeight );
@@ -450,9 +457,18 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		}
 	}
 
-	float ResolveAutoLevelSpeed()
+	float ResolveAutoLevelSpeed( float rampProgress )
 	{
-		return Mathf.Max( 0.1f, autoLevelSpeed );
+		float baseSpeed = Mathf.Max( 0.1f, autoLevelSpeed );
+		float max = Mathf.Max( 1f, autoLevelRampMaxMultiplier );
+		return baseSpeed * Mathf.Lerp( 1f, max, Mathf.Clamp01( rampProgress ) );
+	}
+
+	static float ResolveAutoLevelRampProgress( int moveIndex, int moveCount )
+	{
+		if ( moveCount <= 1 )
+			return 0f;
+		return Mathf.Clamp01( moveIndex / (float)( moveCount - 1 ) );
 	}
 
 	IEnumerator AutoLevelStacksRoutine()
@@ -468,7 +484,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 				continue;
 			}
 
-			float speed = ResolveAutoLevelSpeed();
+			float speed = ResolveAutoLevelSpeed( 0f );
 			float startDelay = levelStartDelay / speed;
 			if ( !_levelStartDelayApplied && startDelay > 0f )
 			{
@@ -492,10 +508,11 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 				}
 
 				LevelMove move = _levelMoves[ moveIndex ];
-				yield return AnimateLevelMoveRoutine( move.FromSlot, move.ToSlot );
+				float rampSpeed = ResolveAutoLevelSpeed( ResolveAutoLevelRampProgress( moveIndex, _levelMoves.Count ) );
+				yield return AnimateLevelMoveRoutine( move.FromSlot, move.ToSlot, rampSpeed );
 				moveIndex++;
 
-				float stagger = levelCoinStagger / speed;
+				float stagger = levelCoinStagger / rampSpeed;
 				if ( stagger > 0f && moveIndex < _levelMoves.Count )
 					yield return new WaitForSeconds( stagger );
 			}
@@ -513,7 +530,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		ClearLevelFlightTracking();
 	}
 
-	IEnumerator AnimateLevelMoveRoutine( int fromSlot, int toSlot )
+	IEnumerator AnimateLevelMoveRoutine( int fromSlot, int toSlot, float speedScale )
 	{
 		if ( !TryPopSlotTopItem( fromSlot, out TreasureItem coin ) || coin == null )
 			yield break;
@@ -537,7 +554,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 			destStackIndex,
 			requireReservedInSlot: false,
 			arcHeightOverride: arcHeight,
-			speedScale: ResolveAutoLevelSpeed() );
+			speedScale: Mathf.Max( 0.1f, speedScale ) );
 
 		if ( coin == null || _levelFlightCoin != coin )
 			yield break;

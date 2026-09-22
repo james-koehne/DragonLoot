@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Marks a scene-authored large prop as curated pile loot (artifacts, chests, keys, etc.).
 /// Poses stay on the scene object; bake/runtime treat them as pinned occupancy.
-/// The Addressable *Visual prefab is enough in the editor — assign <see cref="definition"/>.
+/// The Addressable *Visual prefab (Collectable layer) is enough in the editor — assign <see cref="definition"/>.
 /// </summary>
 [DisallowMultipleComponent]
 public class TreasurePileAuthoredItem : MonoBehaviour
@@ -75,5 +75,42 @@ public class TreasurePileAuthoredItem : MonoBehaviour
 	public bool IsValidCurated()
 	{
 		return IsCuratable( Definition );
+	}
+
+	/// <summary>
+	/// Treasure visual prefabs and pickups live on Collectable. Scene props on any other
+	/// layer are not auto-absorbed as authored pile loot.
+	/// </summary>
+	public static bool IsOnCollectableLayer( GameObject go )
+	{
+		if ( go == null )
+			return false;
+
+		int collectable = PhysicsLayers.CollectableLayer;
+		if ( collectable < 0 )
+			return false;
+
+		return go.layer == collectable;
+	}
+
+	/// <summary>
+	/// Objects the editor absorber may parent under a pile's _AuthoredLoot.
+	/// Explicit markers always qualify. Unmarked objects must be Collectable;
+	/// a TreasureItem must also be curatable (no coins/gems).
+	/// </summary>
+	public static bool CanBecomeAuthoredLoot( GameObject go )
+	{
+		if ( go == null )
+			return false;
+		if ( go.GetComponent<TreasurePileAuthoredItem>() != null )
+			return true;
+		if ( !IsOnCollectableLayer( go ) )
+			return false;
+
+		TreasureItem item = go.GetComponent<TreasureItem>();
+		if ( item != null )
+			return IsCuratable( item.Definition );
+
+		return true;
 	}
 }

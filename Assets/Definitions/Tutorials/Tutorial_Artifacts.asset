@@ -16,6 +16,7 @@ MonoBehaviour:
   title: Artifacts
   tags:
   - artifacts
+  disabled: 1
   trigger: 9
   holdingCategory: 5
   volumeId: 
@@ -27,6 +28,11 @@ MonoBehaviour:
   minDisplayCoinsToShow: 50
   sorterCoinsToComplete: 30
   minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds: []
   highlightMapLabel: Artifact Museum
   mapMarkerId: 
@@ -40,8 +46,10 @@ MonoBehaviour:
     keybindHint: '[M]'
     completeTrigger: 11
     completeVolumeId: volume_artifact_museum
+    requiredCount: 0
   - id: place_artifact
     label: Put an artifact on a stand
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 8
     completeVolumeId: 
+    requiredCount: 0

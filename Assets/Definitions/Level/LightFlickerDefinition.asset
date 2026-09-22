@@ -29,8 +29,8 @@ MonoBehaviour:
     tintB: {r: 1, g: 0.7181749, b: 0.518, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 1
-    emissionTintA: {r: 3.9999995, g: 2.1091888, b: 1.0052353, a: 1}
-    emissionTintB: {r: 3.9999995, g: 2.1039686, b: 0.29319355, a: 1}
+    emissionTintA: {r: 3.4258614, g: 2.1626656, b: 1.4080291, a: 1}
+    emissionTintB: {r: 3.9999995, g: 2.320839, b: 1.3319999, a: 1}
     affectRange: 0
     rangeMin: 0.95
     rangeMax: 1.05
@@ -235,8 +235,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 0.55
-    tintA: {r: 0.55, g: 0.85, b: 1.4, a: 1}
-    tintB: {r: 0.51861894, g: 0.45235607, b: 1.3500001, a: 1}
+    tintA: {r: 0.80359995, g: 1.0110434, b: 1.3999999, a: 1}
+    tintB: {r: 0.80907327, g: 0.7654501, b: 1.3500001, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 0.7
     emissionTintA: {r: 0.35, g: 1.4, b: 2.4, a: 1}

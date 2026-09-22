@@ -29,7 +29,6 @@ public class RavineRecoveryController : MonoBehaviour
 	float ArcDuration => RuntimeDefinition.Get( Definition, d => d.arcDuration, 1.1f );
 	float ArcHeight => RuntimeDefinition.Get( Definition, d => d.arcHeight, 2.5f );
 	float ArcClearanceAboveTarget => RuntimeDefinition.Get( Definition, d => d.arcClearanceAboveTarget, 2f );
-	float PlayerCapsulePad => RuntimeDefinition.Get( Definition, d => d.playerCapsulePad, 0.05f );
 	float WalkGroundProbeDistance => RuntimeDefinition.Get( Definition, d => d.walkGroundProbeDistance, 1.25f );
 
 	public bool IsRecovering => _recovering;
@@ -142,6 +141,7 @@ public class RavineRecoveryController : MonoBehaviour
 
 		player.SetCinematicBodyLock( true );
 
+		// Ignore world collision while yanking back so overhangs cannot abort the recovery.
 		Vector3 start = player.transform.position;
 		Vector3 end = _safePosition;
 		float duration = Mathf.Max( ArcDuration, 0.05f );
@@ -151,40 +151,20 @@ public class RavineRecoveryController : MonoBehaviour
 		hopHeight = Mathf.Max( hopHeight, 0.05f );
 		float secondaryArc = Mathf.Min( ArcHeight, clearance * 0.35f );
 		float elapsed = 0f;
-		Vector3 previous = start;
-
-		CharacterController cc = player.GetComponent<CharacterController>();
-		float radius = 0.3f;
-		float heightCc = 1.8f;
-		float skin = 0.08f;
-		Vector3 center = Vector3.up * 0.9f;
-		if ( cc != null )
-		{
-			radius = cc.radius;
-			heightCc = cc.height;
-			skin = cc.skinWidth;
-			center = cc.center;
-		}
-
-		float pad = PlayerCapsulePad;
-		radius = Mathf.Max( 0.05f, radius - skin + pad );
 
 		while ( elapsed < duration )
 		{
 			elapsed += Time.deltaTime;
 			float u = Mathf.Clamp01( elapsed / duration );
 			Vector3 desired = CoinFlipMotion.EvaluateHopThenArcPosition( start, end, u, hopHeight, 0.45f, secondaryArc );
-			Vector3 resolved = ResolveArcPosition( previous, desired, center, heightCc, radius );
-			Vector3 delta = resolved - player.transform.position;
-			player.SnapToWorldPosition( resolved );
+			Vector3 delta = desired - player.transform.position;
+			player.SnapToWorldPosition( desired );
 			player.NotifyCinematicTravel( delta, Time.deltaTime );
-			previous = resolved;
 			yield return null;
 		}
 
-		Vector3 finalPos = ResolveArcPosition( previous, end, center, heightCc, radius );
-		Vector3 finalDelta = finalPos - player.transform.position;
-		player.SnapToWorldPosition( finalPos );
+		Vector3 finalDelta = end - player.transform.position;
+		player.SnapToWorldPosition( end );
 		player.NotifyCinematicTravel( finalDelta, Time.deltaTime );
 
 		player.SetCinematicBodyLock( false );
@@ -196,69 +176,6 @@ public class RavineRecoveryController : MonoBehaviour
 
 		// CC was disabled during the arc, so OnTriggerExit often never fired — rearm explicitly.
 		RavineFallTrigger.RearmAll();
-	}
-
-	static Vector3 ResolveArcPosition(
-		Vector3 from,
-		Vector3 to,
-		Vector3 capsuleCenter,
-		float capsuleHeight,
-		float radius )
-	{
-		Vector3 delta = to - from;
-		float distance = delta.magnitude;
-		if ( distance <= 1e-5f )
-			return to;
-
-		Vector3 direction = delta / distance;
-		GetCapsuleEnds( from, capsuleCenter, capsuleHeight, radius, out Vector3 p1, out Vector3 p2 );
-
-		if ( Physics.CapsuleCast(
-			    p1,
-			    p2,
-			    radius,
-			    direction,
-			    out RaycastHit hit,
-			    distance,
-			    Physics.DefaultRaycastLayers,
-			    QueryTriggerInteraction.Ignore ) )
-		{
-			float travel = Mathf.Max( 0f, hit.distance - 0.02f );
-			return from + direction * travel;
-		}
-
-		GetCapsuleEnds( to, capsuleCenter, capsuleHeight, radius, out Vector3 endP1, out Vector3 endP2 );
-		if ( Physics.CheckCapsule( endP1, endP2, radius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore ) )
-		{
-			float lo = 0f;
-			float hi = 1f;
-			Vector3 best = from;
-			for ( int i = 0; i < 8; i++ )
-			{
-				float mid = ( lo + hi ) * 0.5f;
-				Vector3 sample = Vector3.Lerp( from, to, mid );
-				GetCapsuleEnds( sample, capsuleCenter, capsuleHeight, radius, out Vector3 s1, out Vector3 s2 );
-				if ( Physics.CheckCapsule( s1, s2, radius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore ) )
-					hi = mid;
-				else
-				{
-					best = sample;
-					lo = mid;
-				}
-			}
-
-			return best;
-		}
-
-		return to;
-	}
-
-	static void GetCapsuleEnds( Vector3 position, Vector3 center, float height, float radius, out Vector3 p1, out Vector3 p2 )
-	{
-		float half = Mathf.Max( height * 0.5f - radius, 0f );
-		Vector3 worldCenter = position + center;
-		p1 = worldCenter + Vector3.up * half;
-		p2 = worldCenter - Vector3.up * half;
 	}
 
 	static bool TryResolveSpawnFallback( out Vector3 position )

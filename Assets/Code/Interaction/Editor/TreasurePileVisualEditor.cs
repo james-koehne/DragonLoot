@@ -36,7 +36,7 @@ public class TreasurePileVisualEditor : Editor
 		EditorGUILayout.Space( 8f );
 		EditorGUILayout.LabelField( "Artifact Latent Bake", EditorStyles.boldLabel );
 		EditorGUILayout.HelpBox(
-			"Curated loot: drop an artifact/chest/key *Visual prefab so it overlaps the mound "
+			"Curated loot: drop an artifact/chest/key *Visual prefab (Collectable layer) so it overlaps the mound "
 			+ "(or parent it under _AuthoredLoot). Assign Treasure Definition on TreasurePileAuthoredItem. "
 			+ "Move with gizmos — the mesh stays visible. Then Bake Latents For This Pile. "
 			+ "Bake fills definition gems/artifacts around your piece, only where Treasure surface paint is below. "

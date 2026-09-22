@@ -123,53 +123,111 @@ public static class ObjectiveProgress
 		return true;
 	}
 
+	public static bool IsDisplayTargetComplete( ObjectiveDefinition objective, ObjectiveSubDefinition sub )
+	{
+		if ( sub == null )
+			return false;
+
+		if ( !string.IsNullOrEmpty( sub.targetId ) )
+		{
+			TypedDisplayTableInteractable typed = ResolveOnTarget<TypedDisplayTableInteractable>( sub.targetId );
+			if ( typed != null )
+				return typed.IsComplete;
+
+			ArtifactPresentationTableInteractable artifact = ResolveOnTarget<ArtifactPresentationTableInteractable>( sub.targetId );
+			if ( artifact != null )
+				return artifact.IsComplete;
+
+			return false;
+		}
+
+		return AreAllCoinDisplaysCompleteInVolume( objective );
+	}
+
 	static bool TryGetDisplayCounts( ObjectiveDefinition objective, ObjectiveSubDefinition sub, out int current, out int required )
 	{
 		current = 0;
 		required = 0;
 
-		TypedDisplayTableInteractable typed = ResolveOnTarget<TypedDisplayTableInteractable>( sub.targetId );
-		if ( typed == null )
-			typed = FindUniqueCoinTableInVolume( objective );
-
-		if ( typed != null )
+		if ( !string.IsNullOrEmpty( sub.targetId ) )
 		{
-			required = sub.requiredCount > 0 ? sub.requiredCount : typed.Capacity;
-			current = Mathf.Clamp( typed.CurrentCount, 0, Mathf.Max( 0, required ) );
-			return required > 0;
+			TypedDisplayTableInteractable typed = ResolveOnTarget<TypedDisplayTableInteractable>( sub.targetId );
+			if ( typed != null )
+			{
+				required = sub.requiredCount > 0 ? sub.requiredCount : typed.Capacity;
+				current = Mathf.Clamp( typed.CurrentCount, 0, Mathf.Max( 0, required ) );
+				return required > 0;
+			}
+
+			ArtifactPresentationTableInteractable artifact = ResolveOnTarget<ArtifactPresentationTableInteractable>( sub.targetId );
+			if ( artifact != null )
+			{
+				required = sub.requiredCount > 0 ? sub.requiredCount : artifact.Capacity;
+				current = Mathf.Clamp( artifact.CurrentCount, 0, Mathf.Max( 0, required ) );
+				return required > 0;
+			}
+
+			return false;
 		}
 
-		ArtifactPresentationTableInteractable artifact = ResolveOnTarget<ArtifactPresentationTableInteractable>( sub.targetId );
-		if ( artifact != null )
-		{
-			required = sub.requiredCount > 0 ? sub.requiredCount : artifact.Capacity;
-			current = Mathf.Clamp( artifact.CurrentCount, 0, Mathf.Max( 0, required ) );
-			return required > 0;
-		}
-
-		return false;
+		return TryGetVolumeCoinDisplayCounts( objective, sub.requiredCount, out current, out required );
 	}
 
-	static CoinDisplayTableInteractable FindUniqueCoinTableInVolume( ObjectiveDefinition objective )
+	static bool TryGetVolumeCoinDisplayCounts( ObjectiveDefinition objective, int requiredOverride, out int current, out int required )
 	{
+		current = 0;
+		required = 0;
 		if ( objective == null || string.IsNullOrEmpty( objective.showVolumeId ) )
-			return null;
+			return false;
 		if ( !EventTargetRegistry.TryGetVolume( objective.showVolumeId, out QuestVolume volume ) || volume == null )
-			return null;
+			return false;
 
-		CoinDisplayTableInteractable unique = null;
+		int filled = 0;
+		int capacity = 0;
 		IReadOnlyList<CoinDisplayTableInteractable> tables = CoinDisplayTableInteractable.ActiveTables;
 		for ( int i = 0; i < tables.Count; i++ )
 		{
 			CoinDisplayTableInteractable candidate = tables[ i ];
 			if ( candidate == null || !volume.ContainsWorldPoint( candidate.transform.position ) )
 				continue;
-			if ( unique != null )
-				return null;
-			unique = candidate;
+			if ( candidate.Capacity <= 0 )
+				continue;
+
+			capacity += candidate.Capacity;
+			filled += Mathf.Clamp( candidate.CurrentCount, 0, candidate.Capacity );
 		}
 
-		return unique;
+		if ( capacity <= 0 )
+			return false;
+
+		required = requiredOverride > 0 ? requiredOverride : capacity;
+		current = Mathf.Clamp( filled, 0, required );
+		return true;
+	}
+
+	static bool AreAllCoinDisplaysCompleteInVolume( ObjectiveDefinition objective )
+	{
+		if ( objective == null || string.IsNullOrEmpty( objective.showVolumeId ) )
+			return false;
+		if ( !EventTargetRegistry.TryGetVolume( objective.showVolumeId, out QuestVolume volume ) || volume == null )
+			return false;
+
+		int found = 0;
+		IReadOnlyList<CoinDisplayTableInteractable> tables = CoinDisplayTableInteractable.ActiveTables;
+		for ( int i = 0; i < tables.Count; i++ )
+		{
+			CoinDisplayTableInteractable candidate = tables[ i ];
+			if ( candidate == null || !volume.ContainsWorldPoint( candidate.transform.position ) )
+				continue;
+			if ( candidate.Capacity <= 0 )
+				continue;
+
+			found++;
+			if ( !candidate.IsComplete )
+				return false;
+		}
+
+		return found > 0;
 	}
 
 	static bool TryGetConstellationCounts( ObjectiveSubDefinition sub, out int current, out int required )

@@ -397,6 +397,33 @@ public class CinematicPresentationController : MonoBehaviour
 		return true;
 	}
 
+	/// <summary>
+	/// Stops a playing presentation, restores HUD/camera/input, and leaves the player where they are.
+	/// Used by debug skip-intro / teleports so pouches and look are post-intro.
+	/// </summary>
+	public static void DebugAbortPlayingKeepPlayer()
+	{
+		foreach ( KeyValuePair<string, CinematicPresentationController> pair in Controllers )
+		{
+			CinematicPresentationController controller = pair.Value;
+			if ( controller == null || !controller.IsPlaying )
+				continue;
+			controller.AbortPlayingKeepPlayer();
+		}
+	}
+
+	void AbortPlayingKeepPlayer()
+	{
+		if ( _presentationRoutine != null )
+		{
+			StopCoroutine( _presentationRoutine );
+			_presentationRoutine = null;
+		}
+
+		_placePlayerAtLedge = false;
+		ResetPresentationState();
+	}
+
 	public void StartPresentation()
 	{
 		if ( _presentationRoutine != null )
@@ -1109,6 +1136,10 @@ public class CinematicPresentationController : MonoBehaviour
 		QuestWorldMarker marker = root.GetComponentInChildren<QuestWorldMarker>( true );
 		if ( marker != null )
 			marker.SetCinematicHidden( hidden );
+
+		PouchBarUI pouchBar = root.GetComponentInChildren<PouchBarUI>( true );
+		if ( pouchBar != null )
+			pouchBar.SetCinematicHidden( hidden );
 	}
 
 	static PlayerController ResolvePlayer()

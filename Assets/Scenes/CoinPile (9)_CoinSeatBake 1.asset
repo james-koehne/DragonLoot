@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05c4da76aeca66445817545844fe0270, type: 3}
+  m_Name: CoinPile (9)_CoinSeatBake 1
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
+  authoredLayoutSeed: 122792
+  effectivePileSeed: -152310106
+  heightFingerprint: 916131393
+  contentsFingerprint: -841728574
+  placementFingerprint: 244014156
+  maxVisibleTotal: 32
+  steadyVisibleBudget: 28
+  sourceDefinitionName: TreasurePile_Island2_CopperSilver
+  seats:
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: -2.144898, y: 0.23583151, z: -0.5645368}
+    localRot: {x: -0.31149027, y: 0.68240494, z: 0.21270485, w: 0.62614214}
+    scale: 0.2589553
+    embedDepth: 0.041432843
+    placeSurfaceHeight: 0.27726436
+    probeRadius: 0.13120484
+    fixedVolumePose: 0
+    coinVisual: 1

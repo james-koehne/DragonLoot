@@ -192,9 +192,12 @@ public static class DebugSpawnRegistry
 		if ( player == null )
 			return false;
 
+		CinematicPresentationController.DebugAbortPlayingKeepPlayer();
 		player.TeleportTo( position, rotation );
 		if ( SpawnSkipsIntro( spawnId ) )
 			ApplySkipIntro();
+		else
+			PouchBarUI.NotifyIntroComplete();
 		return true;
 	}
 
@@ -210,6 +213,8 @@ public static class DebugSpawnRegistry
 
 	public static void ApplySkipIntro()
 	{
+		CinematicPresentationController.DebugAbortPlayingKeepPlayer();
+
 		WorldEventSystem system = WorldEventSystem.Instance;
 		if ( system != null )
 		{
@@ -230,6 +235,8 @@ public static class DebugSpawnRegistry
 			if ( lantern != null )
 				lantern.FadeToLit( true, 0f );
 		}
+
+		PouchBarUI.NotifyIntroComplete();
 	}
 
 	static Quaternion FlattenYaw( Quaternion rotation )

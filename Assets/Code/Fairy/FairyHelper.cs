@@ -42,9 +42,9 @@ public class FairyHelper : MonoBehaviour
 	float catchUpSpeed = 8.5f;
 
 	[SerializeField]
-	[Min( 0.05f )]
-	[Tooltip( "SmoothDamp time — higher = softer approach into the follow slot." )]
-	float followSmoothTime = 0.28f;
+	[Min( 1f )]
+	[Tooltip( "Planar distance beyond which catchUpSpeed is used. Below this the fairy keeps moveSpeed and never mirrors the player." )]
+	float farCatchUpDistance = 20f;
 
 	[SerializeField]
 	[Min( 0.01f )]
@@ -93,6 +93,17 @@ public class FairyHelper : MonoBehaviour
 	[SerializeField]
 	[Min( 0.5f )]
 	float pileAskRadius = 6f;
+
+	[Header( "Hints" )]
+	[SerializeField]
+	[Min( 1f )]
+	[Tooltip( "How far from the fairy to look for almost-complete piles/displays when giving free-roam hints." )]
+	float hintSeekRadius = 12f;
+
+	[SerializeField]
+	[Range( 0f, 1f )]
+	[Tooltip( "Minimum progress (0-1) for an almost-complete hint. Falls back to any incomplete nearby if none qualify." )]
+	float almostCompleteThreshold = 0.7f;
 
 	[Header( "Glow" )]
 	[SerializeField]
@@ -175,13 +186,13 @@ public class FairyHelper : MonoBehaviour
 	const float MoveEnterPlanarSpeed = 0.12f;
 	const float MoveExitPlanarSpeed = 0.035f;
 	const float SurfaceRaiseEpsilon = 0.001f;
+	const string TutorialIslandObjectiveId = "obj_island_4_artifacts";
 
 	FairyInteractable _interactable;
 	Component _perchedDisplay;
 	TreasurePileVisual _nearbyPile;
 	Vector3 _logicalPosition;
 	Vector3 _planarVelocity;
-	Vector3 _smoothVelocity;
 	Vector3 _frameMoveDelta;
 	float _bobPhase;
 	float _curvePhase;
@@ -256,14 +267,16 @@ public class FairyHelper : MonoBehaviour
 			followYawLerp = 6f;
 		if ( surfaceHoverHeight < 0.05f )
 			surfaceHoverHeight = 0.7f;
-		if ( followSmoothTime < 0.05f )
-			followSmoothTime = 0.28f;
+		if ( farCatchUpDistance < 1f )
+			farCatchUpDistance = 20f;
 		if ( closeArcDistance < 0.1f )
 			closeArcDistance = 2.5f;
 		if ( waveFrequency < 0.05f )
 			waveFrequency = 1.4f;
 		if ( curveLookAhead < 0.1f )
 			curveLookAhead = 1.1f;
+		if ( hintSeekRadius < 1f )
+			hintSeekRadius = 12f;
 	}
 
 	void EnsureRuntimeSetup()
@@ -385,6 +398,257 @@ public class FairyHelper : MonoBehaviour
 		return !string.IsNullOrEmpty( text );
 	}
 
+	/// <summary>
+	/// Free-roam talk hint when not over a pile/display: tutorial island early, then nearby almost-complete work.
+	/// </summary>
+	public bool TryBuildHintTalkLine( out string line )
+	{
+		line = null;
+		ObjectiveSystem objectives = ObjectiveSystem.Instance;
+		if ( objectives != null && !objectives.IsCompleted( TutorialIslandObjectiveId ) )
+		{
+			line = BuildTutorialIslandHint( objectives );
+			return !string.IsNullOrEmpty( line );
+		}
+
+		if ( TryFindNearbyProgressHint( _logicalPosition, hintSeekRadius, almostCompleteThreshold, out line ) )
+			return true;
+		if ( TryFindNearbyProgressHint( _logicalPosition, hintSeekRadius, 0f, out line ) )
+			return true;
+		if ( TryBuildNearbyObjectiveHint( objectives, out line ) )
+			return true;
+		return false;
+	}
+
+	static string BuildTutorialIslandHint( ObjectiveSystem objectives )
+	{
+		if ( objectives == null || objectives.Catalog == null )
+			return "Focus on your tutorial objectives.";
+
+		if ( !objectives.Catalog.TryGetById( TutorialIslandObjectiveId, out ObjectiveDefinition definition ) || definition == null )
+			return "Focus on your tutorial objectives.";
+
+		if ( definition.subs != null )
+		{
+			for ( int i = 0; i < definition.subs.Length; i++ )
+			{
+				ObjectiveSubDefinition sub = definition.subs[ i ];
+				if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+					continue;
+				if ( objectives.IsSubCompleted( definition.id, sub.id ) )
+					continue;
+				string label = ObjectiveProgress.FormatLabel( definition, sub, complete: false );
+				if ( string.IsNullOrEmpty( label ) )
+					continue;
+				return "Focus on your tutorial objectives: " + label;
+			}
+		}
+
+		return "Focus on your tutorial objectives: " + definition.ResolveTitle();
+	}
+
+	bool TryFindNearbyProgressHint( Vector3 origin, float radius, float minProgress01, out string line )
+	{
+		line = null;
+		float bestDistSq = radius * radius;
+		string bestLine = null;
+
+		TryConsiderNearbyDisplays( origin, radius, minProgress01, ref bestDistSq, ref bestLine );
+		TryConsiderNearbyPiles( origin, radius, minProgress01, ref bestDistSq, ref bestLine );
+
+		if ( string.IsNullOrEmpty( bestLine ) )
+			return false;
+		line = bestLine;
+		return true;
+	}
+
+	void TryConsiderNearbyDisplays( Vector3 origin, float radius, float minProgress01, ref float bestDistSq, ref string bestLine )
+	{
+		int hitCount = Physics.OverlapSphereNonAlloc( origin, radius, OverlapScratch, ~0, QueryTriggerInteraction.Collide );
+		for ( int i = 0; i < hitCount; i++ )
+		{
+			Collider hit = OverlapScratch[ i ];
+			if ( hit == null )
+				continue;
+
+			Component display = ResolveCompletableDisplay( hit );
+			if ( display == null )
+				continue;
+			if ( !TryGetDisplayProgressCounts( display, out int current, out int capacity, out bool complete ) )
+				continue;
+			if ( complete || capacity <= 0 )
+				continue;
+
+			float progress = ( float )current / capacity;
+			if ( progress < minProgress01 )
+				continue;
+
+			float sq = HorizontalDistanceSq( origin, display.transform.position );
+			if ( sq > bestDistSq )
+				continue;
+
+			bestDistSq = sq;
+			int pct = Mathf.Clamp( Mathf.RoundToInt( progress * 100f ), 0, 100 );
+			bestLine = "That display is " + pct + "% full — finish it off!";
+		}
+	}
+
+	void TryConsiderNearbyPiles( Vector3 origin, float radius, float minProgress01, ref float bestDistSq, ref string bestLine )
+	{
+		IReadOnlyList<TreasurePileSurfaceBridge> bridges = TreasurePileSurfaceBridge.Active;
+		for ( int i = 0; i < bridges.Count; i++ )
+		{
+			TreasurePileSurfaceBridge bridge = bridges[ i ];
+			if ( bridge == null )
+				continue;
+			TreasurePileVisual visual = bridge.Visual;
+			if ( visual == null )
+				visual = bridge.GetComponent<TreasurePileVisual>();
+			if ( visual == null )
+				continue;
+
+			int remaining = visual.TotalRemainingLoot;
+			int initial = visual.TotalInitialLoot;
+			if ( initial <= 0 )
+				initial = remaining;
+			if ( initial <= 0 || remaining <= 0 )
+				continue;
+
+			int cleared = Mathf.Max( 0, initial - remaining );
+			float progress = ( float )cleared / initial;
+			if ( progress < minProgress01 )
+				continue;
+
+			float centerSq = HorizontalDistanceSq( origin, visual.transform.position );
+			float halfExtent = EstimatePileHalfExtent( visual );
+			float edgeDist = Mathf.Max( 0f, Mathf.Sqrt( centerSq ) - halfExtent );
+			if ( edgeDist > radius )
+				continue;
+
+			float scoreSq = edgeDist * edgeDist;
+			if ( scoreSq > bestDistSq )
+				continue;
+
+			bestDistSq = scoreSq;
+			int pct = Mathf.Clamp( Mathf.RoundToInt( progress * 100f ), 0, 100 );
+			bestLine = "That pile is " + pct + "% cleared — keep digging!";
+		}
+	}
+
+	bool TryBuildNearbyObjectiveHint( ObjectiveSystem objectives, out string line )
+	{
+		line = null;
+		if ( objectives == null || objectives.Catalog == null || objectives.Catalog.objectives == null )
+			return false;
+
+		PlayerController player = ResolvePlayer();
+		Vector3 playerPos = player != null ? player.transform.position : _logicalPosition;
+		float bestDist = float.MaxValue;
+		ObjectiveDefinition best = null;
+		ObjectiveSubDefinition bestSub = null;
+
+		for ( int i = 0; i < objectives.Catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = objectives.Catalog.objectives[ i ];
+			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+			if ( objectives.IsCompleted( definition.id ) )
+				continue;
+			if ( !objectives.ArePrerequisitesMet( definition ) )
+				continue;
+			if ( !IsObjectiveInShowContext( definition, playerPos ) )
+				continue;
+
+			float distance = EstimateObjectiveDistance( definition, _logicalPosition );
+			if ( distance >= bestDist )
+				continue;
+
+			ObjectiveSubDefinition incompleteSub = null;
+			if ( definition.subs != null )
+			{
+				for ( int s = 0; s < definition.subs.Length; s++ )
+				{
+					ObjectiveSubDefinition sub = definition.subs[ s ];
+					if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+						continue;
+					if ( objectives.IsSubCompleted( definition.id, sub.id ) )
+						continue;
+					incompleteSub = sub;
+					break;
+				}
+			}
+
+			bestDist = distance;
+			best = definition;
+			bestSub = incompleteSub;
+		}
+
+		if ( best == null )
+			return false;
+
+		if ( bestSub != null )
+		{
+			string label = ObjectiveProgress.FormatLabel( best, bestSub, complete: false );
+			line = "Nearby: " + label;
+		}
+		else
+		{
+			line = "Nearby: " + best.ResolveTitle();
+		}
+
+		return !string.IsNullOrEmpty( line );
+	}
+
+	static bool IsObjectiveInShowContext( ObjectiveDefinition definition, Vector3 playerPos )
+	{
+		if ( definition == null )
+			return false;
+
+		if ( !string.IsNullOrEmpty( definition.showVolumeId ) )
+		{
+			if ( !EventTargetRegistry.TryGetVolume( definition.showVolumeId, out QuestVolume volume ) || volume == null )
+				return false;
+			return volume.ContainsWorldPoint( playerPos );
+		}
+
+		float distance = EstimateObjectiveDistance( definition, playerPos );
+		float radius = definition.showRadius > 0f ? definition.showRadius : 40f;
+		return distance <= radius;
+	}
+
+	static float EstimateObjectiveDistance( ObjectiveDefinition definition, Vector3 from )
+	{
+		if ( definition == null )
+			return float.MaxValue;
+
+		if ( !string.IsNullOrEmpty( definition.showVolumeId )
+			&& EventTargetRegistry.TryGetMarkerTransform( definition.showVolumeId, out Transform volumeMarker )
+			&& volumeMarker != null )
+		{
+			return HorizontalDistance( from, volumeMarker.position );
+		}
+
+		if ( definition.subs != null )
+		{
+			float best = float.MaxValue;
+			for ( int i = 0; i < definition.subs.Length; i++ )
+			{
+				ObjectiveSubDefinition sub = definition.subs[ i ];
+				if ( sub == null || string.IsNullOrEmpty( sub.targetId ) )
+					continue;
+				if ( !EventTargetRegistry.TryGetMarkerTransform( sub.targetId, out Transform marker ) || marker == null )
+					continue;
+				float d = HorizontalDistance( from, marker.position );
+				if ( d < best )
+					best = d;
+			}
+			if ( best < float.MaxValue )
+				return best;
+		}
+
+		return float.MaxValue;
+	}
+
 	public static bool TryGetDisplayProgressCounts( Component display, out int current, out int capacity, out bool complete )
 	{
 		current = 0;
@@ -494,7 +758,6 @@ public class FairyHelper : MonoBehaviour
 		_introAnchorPosition = desired;
 		_logicalPosition = desired;
 		transform.position = desired;
-		_smoothVelocity = Vector3.zero;
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
 		_curvePhase = 0f;
@@ -512,7 +775,6 @@ public class FairyHelper : MonoBehaviour
 		Vector3 desired = ResolveSurfacePoint( player, BuildFollowTarget( player ) );
 		_logicalPosition = desired;
 		transform.position = desired;
-		_smoothVelocity = Vector3.zero;
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
 		_curvePhase = 0f;
@@ -522,7 +784,7 @@ public class FairyHelper : MonoBehaviour
 
 	void RefreshNearbyTargets( PlayerController player )
 	{
-		_nearbyPile = FindNearestPile( player.transform.position, pileAskRadius );
+		_nearbyPile = FindNearestPile( _logicalPosition, pileAskRadius );
 		_perchedDisplay = FindNearestIncompleteDisplay( player.transform.position, displaySeekRadius );
 	}
 
@@ -700,7 +962,6 @@ public class FairyHelper : MonoBehaviour
 		{
 			_logicalPosition = _introAnchorPosition;
 			_frameMoveDelta = Vector3.zero;
-			_smoothVelocity = Vector3.zero;
 			_planarVelocity = Vector3.zero;
 			_isMoving = false;
 			_bobPhase = 0f;
@@ -712,14 +973,14 @@ public class FairyHelper : MonoBehaviour
 		Vector3 planar = new Vector3( to.x, 0f, to.z );
 		float planarDist = planar.magnitude;
 
+		// Hold when close enough. Never latch onto the moving follow slot — that would
+		// make the fairy inherit the player's speed regardless of moveSpeed.
 		if ( planarDist <= arriveDistance && Mathf.Abs( to.y ) <= arriveDistance )
 		{
-			_frameMoveDelta = desired - current;
+			_frameMoveDelta = Vector3.zero;
 			_planarVelocity = Vector3.zero;
-			_smoothVelocity = Vector3.zero;
-			_logicalPosition = desired;
 			UpdateMoveState( dt );
-			ApplyIdleBob( desired );
+			ApplyIdleBob( current );
 			return;
 		}
 
@@ -727,8 +988,8 @@ public class FairyHelper : MonoBehaviour
 			PickCurveSide( planar );
 
 		Vector3 seek = BuildCurvedSeekPoint( current, desired, planar, planarDist );
-		float maxSpeed = planarDist > farGlowDistance ? catchUpSpeed : moveSpeed;
-		Vector3 nextFree = Vector3.SmoothDamp( current, seek, ref _smoothVelocity, followSmoothTime, maxSpeed, Time.deltaTime );
+		float speed = planarDist > farCatchUpDistance ? catchUpSpeed : moveSpeed;
+		Vector3 nextFree = Vector3.MoveTowards( current, seek, speed * dt );
 
 		_frameMoveDelta = nextFree - current;
 		_planarVelocity = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ) / dt;

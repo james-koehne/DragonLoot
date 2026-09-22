@@ -123,6 +123,15 @@ public class TreasurePileDefinition : ScriptableObject
 	[Range( 0.5f, 1f )]
 	public float treasureReleaseOutsideFraction = 0.9f;
 
+	[Header( "Column / Pile Clear" )]
+	[Tooltip( "When a column is near the loot floor and its coin reserve is below this, flush the reserve as loose coins and hide GPU seats." )]
+	[Min( 0.5f )]
+	public float columnNearEmptyReserve = 2f;
+
+	[Tooltip( "When remaining coin inventory drops below this after a dig/spill, clear the pile and drop all leftover loot as loose world items." )]
+	[Min( 1 )]
+	public int pileClearRemainingCoins = 10;
+
 	[Header( "Coin Seat Bake" )]
 	[Tooltip( "Prefer a TreasurePileCoinSeatBake when fingerprint matches. Huge runtime win — skips thousands of placement probes. Bake assets are per-pile on TreasurePileVisual." )]
 	public bool preferBakedCoinSeats = true;
@@ -134,6 +143,9 @@ public class TreasurePileDefinition : ScriptableObject
 
 	[Tooltip( "Prefer a TreasurePileLatentBake when fingerprint matches. Huge runtime win. Bake assets are per-pile on TreasurePileVisual." )]
 	public bool preferBakedLatents = true;
+
+	[Tooltip( "When on, remainder latents ignore TreasurePileLatentBakeSettings.spawnTreasureNearSurface and bury as usual. Rebake after changing." )]
+	public bool ignoreSpawnTreasureNearSurface = false;
 
 	[Tooltip( "Volume sample rounds per latent during procedural bind (was 64)." )]
 	[Min( 1 )]
@@ -212,6 +224,18 @@ public class TreasurePileDefinition : ScriptableObject
 	public int ResolveLatentSurfaceNeighborhoodCells()
 	{
 		return Mathf.Max( 1, latentSurfaceNeighborhoodCells );
+	}
+
+	/// <summary>
+	/// Effective near-surface remainder seating. Pile override wins so a definition can bury even when bake settings request surface spawn.
+	/// </summary>
+	public bool ResolveSpawnTreasureNearSurface( TreasurePileLatentBakeSettings bakeSettings )
+	{
+		if ( ignoreSpawnTreasureNearSurface )
+			return false;
+		if ( bakeSettings == null )
+			return false;
+		return bakeSettings.spawnTreasureNearSurface;
 	}
 
 	public int SteadyCoinVisibleBudget()

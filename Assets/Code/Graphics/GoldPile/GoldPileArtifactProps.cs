@@ -6,7 +6,7 @@ using UnityEngine.Profiling;
 
 /// <summary>
 /// Real MeshRenderer treasure objects for large pile props (artifacts, crowns, gems, etc.).
-/// Latent seeded volume poses spawn when bounds touch outside the mound and are in stream range;
+/// Latent poses expose when they touch/near the mound surface, then seat in stream range;
 /// out-of-range props lazy-despawn back to latent poses. Once stolen they leave the pile.
 /// </summary>
 [DisallowMultipleComponent]
@@ -15,6 +15,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 	const int MaxStreamSpawnsPerFrame = 3;
 	const int MaxStreamDespawnsPerFrame = 3;
 	const int MaxStreamLatentChecksPerFrame = 64;
+	/// <summary>When never-cull is on, drain exposed seats quickly so all visible props appear.</summary>
+	const int MaxNeverCullStreamSpawnsPerFrame = 64;
 	const float StreamFocusMoveEpsilon = 0.25f;
 	const float StreamFocusMoveEpsilonSqr = StreamFocusMoveEpsilon * StreamFocusMoveEpsilon;
 	const float CullCameraMoveEpsilonSqr = 0.0025f;
@@ -111,6 +113,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 	readonly List<int> _streamChunkScratch = new List<int>( 64 );
 	readonly HashSet<int> _streamChunkSet = new HashSet<int>();
 	readonly List<int> _streamCandidateScratch = new List<int>( 128 );
+	readonly HashSet<int> _streamCandidateSet = new HashSet<int>();
 	bool _hasLatentWorldCacheRoot;
 	Vector3 _latentWorldCacheRootPos;
 	Quaternion _latentWorldCacheRootRot;
@@ -350,8 +353,11 @@ public class GoldPileArtifactProps : MonoBehaviour
 		worldPos = _pileRoot.TransformPoint( latent.LocalPos );
 		worldRot = _pileRoot.rotation * latent.LocalRot;
 
-		float outside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds ) ? 1f : 0f;
-		if ( outside <= 0f )
+		float outsideFraction = _heightfield != null
+			? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
+			: 0f;
+		bool touchesOutside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		if ( !ShouldExposeLatent( latent.Definition, touchesOutside, outsideFraction ) )
 			return true;
 
 		becameVisible = true;
@@ -381,10 +387,15 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 		LatentEntry latent = _latent[ latentIndex ];
 		latent.Taken = false;
+		latent.Exposed = EvaluateLatentExposed( latent.LocalBounds, latent.Definition );
 		_latent[ latentIndex ] = latent;
 
-		float outside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds ) ? 1f : 0f;
-		if ( outside <= 0f || !IsLatentInStreamRange( latentIndex, currentlyResident: false ) )
+		float outsideFraction = _heightfield != null
+			? GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, latent.LocalBounds )
+			: 0f;
+		bool touchesOutside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		if ( !ShouldExposeLatent( latent.Definition, touchesOutside, outsideFraction )
+			|| !IsLatentInStreamRange( latentIndex, currentlyResident: false ) )
 		{
 			TreasureItemFactory.Despawn( item );
 			return true;
@@ -423,8 +434,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		latent.Taken = false;
 		latent.Spawned = false;
 		latent.PropIndex = -1;
-		latent.Exposed = _heightfield != null
-			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		latent.Exposed = EvaluateLatentExposed( latent.LocalBounds, latent.Definition );
 		_latent[ latentIndex ] = latent;
 
 		TreasureItemFactory.Despawn( item );
@@ -454,8 +464,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		latent.Taken = false;
 		latent.Spawned = false;
 		latent.PropIndex = -1;
-		latent.Exposed = _heightfield != null
-			&& GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, latent.LocalBounds );
+		latent.Exposed = EvaluateLatentExposed( latent.LocalBounds, latent.Definition );
 		_latent[ latentIndex ] = latent;
 		return true;
 	}
@@ -705,7 +714,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _pendingReveal )
 			RunPendingReveal();
 
-		_streamSpawnBudget = MaxStreamSpawnsPerFrame;
+		_streamSpawnBudget = ResolveStreamSpawnBudget();
 		_streamDespawnBudget = MaxStreamDespawnsPerFrame;
 		GoldPileEditTiming.Begin( "GoldPile.RefreshStreamResidency" );
 		RefreshStreamResidency();
@@ -717,6 +726,20 @@ public class GoldPileArtifactProps : MonoBehaviour
 		GoldPileEditTiming.Begin( "GoldPile.RefreshCulling" );
 		RefreshCulling();
 		GoldPileEditTiming.End();
+	}
+
+	int ResolveStreamSpawnBudget()
+	{
+		if ( _streamSettings != null
+			&& ( _streamSettings.artifactNeverCull || _streamSettings.gemNeverCull ) )
+			return MaxNeverCullStreamSpawnsPerFrame;
+
+		return MaxStreamSpawnsPerFrame;
+	}
+
+	int ResolveMaxSeatingInFlight()
+	{
+		return ResolveStreamSpawnBudget();
 	}
 
 	void RunPendingReveal()
@@ -800,12 +823,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _definition == null )
 			return s;
 
-		if ( _owner != null )
-		{
-			TreasurePileLatentBakeSettings bakeSettings = _owner.LatentBakeSettings;
-			if ( bakeSettings != null )
-				s.NearSurface = bakeSettings.spawnTreasureNearSurface;
-		}
+		TreasurePileLatentBakeSettings bakeSettings = _owner != null ? _owner.LatentBakeSettings : null;
+		s.NearSurface = _definition.ResolveSpawnTreasureNearSurface( bakeSettings );
 
 		s.PreferBake = _definition.preferBakedLatents;
 		s.VolumeMaxAttempts = Mathf.Max( 1, _definition.latentVolumeMaxAttempts );
@@ -1426,7 +1445,9 @@ public class GoldPileArtifactProps : MonoBehaviour
 					continue;
 				}
 
-				if ( !touchesOutside )
+				if ( !latent.IsAuthored
+					&& !ShouldExposeLatent( latent.Definition, touchesOutside, outsideFraction )
+					&& !IsNearSurfaceForExpose( latent.LocalBounds, latent.Definition ) )
 					continue;
 
 				if ( !CanSpawnBakedLatent( latent ) )
@@ -1437,6 +1458,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 				_latent[ i ] = latent;
 				_streamResidencyDirty = true;
 				exposedThisPass++;
+
+				// Seat immediately when stream-eligible — do not wait for LateUpdate soft-window collect.
+				if ( IsLatentInStreamRange( i, currentlyResident: false ) )
+					TryRequestSeat( i, null );
 			}
 
 			if ( !IsRevealStillValid( bindId, generation ) )
@@ -1474,14 +1499,62 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 	bool IsNewlyPickable( TreasureDefinition definition, bool touchesOutside, float outsideFraction )
 	{
-		if ( definition == null || !touchesOutside )
+		if ( definition == null )
 			return false;
 
 		// Gems: any outside contact. Artifacts / other large props: fraction threshold.
 		if ( definition.category == TreasureCategory.Gem )
-			return true;
+			return touchesOutside || outsideFraction > 0f;
 
 		return outsideFraction >= _treasurePickupOutsideFraction;
+	}
+
+	/// <summary>
+	/// Spawn/expose when any AABB volume is outside the mound. Pickability still uses pickup fraction for artifacts.
+	/// </summary>
+	bool ShouldExposeLatent( TreasureDefinition definition, bool touchesOutside, float outsideFraction )
+	{
+		if ( definition == null )
+			return false;
+
+		return touchesOutside || outsideFraction > 0f;
+	}
+
+	/// <summary>
+	/// Baked near-surface seats can sit under the heightfield while the visual still reads as exposed.
+	/// Large artifacts use a larger slack because bake AABBs often understate mesh height.
+	/// </summary>
+	bool IsNearSurfaceForExpose( Bounds localBounds, TreasureDefinition definition )
+	{
+		if ( _heightfield == null )
+			return false;
+
+		Vector3 c = localBounds.center;
+		float surface = _heightfield.SampleNormalized( c.x, c.z ) * _heightfield.MaxHeight;
+		if ( surface < _heightfield.GroundLevel )
+			surface = _heightfield.GroundLevel;
+
+		// Statue_03 logged surfDelta=-0.183 with 0.15 slack — still rejected until dig.
+		float slack = IsPrioritySeatDefinition( definition ) ? 0.45f : 0.2f;
+		return localBounds.max.y >= surface - slack;
+	}
+
+	bool EvaluateLatentExposed( Bounds localBounds, TreasureDefinition definition )
+	{
+		if ( _heightfield == null )
+			return false;
+
+		bool touchesOutside = GoldPileTreasurePlacement.TouchesOutsideAabb( _heightfield, localBounds );
+		float outsideFraction = GoldPileTreasurePlacement.OutsideFractionAabb( _heightfield, localBounds );
+		return ShouldExposeLatent( definition, touchesOutside, outsideFraction )
+			|| IsNearSurfaceForExpose( localBounds, definition );
+	}
+
+	static bool IsPrioritySeatDefinition( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return false;
+		return GoldPileLootStreamSettings.IsArtifactStreamBucket( definition.category );
 	}
 
 	void FlushPendingWorldReleases()
@@ -1545,6 +1618,85 @@ public class GoldPileArtifactProps : MonoBehaviour
 			_owner.NotifyPropReleasedToWorld( worldPos );
 	}
 
+	/// <summary>
+	/// Drops every seated prop and remaining unspawned latent as loose world loot (pile clear).
+	/// </summary>
+	public void ReleaseAllOwnedLootToWorld()
+	{
+		if ( _props.Count > 0 )
+		{
+			List<TreasureItem> seated = new List<TreasureItem>( _props.Count );
+			for ( int i = 0; i < _props.Count; i++ )
+			{
+				TreasureItem item = _props[ i ].Item;
+				if ( item != null )
+					seated.Add( item );
+			}
+
+			for ( int i = 0; i < seated.Count; i++ )
+				ReleasePropToWorld( seated[ i ] );
+		}
+
+		if ( _latent == null || _pileRoot == null )
+			return;
+
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			LatentEntry latent = _latent[ i ];
+			if ( latent.Taken || latent.Spawned || latent.Definition == null )
+				continue;
+
+			Vector3 worldPos = _pileRoot.TransformPoint( latent.LocalPos );
+			Quaternion worldRot = _pileRoot.rotation * latent.LocalRot;
+			TreasureItem item = TreasureItemFactory.SpawnSync( latent.Definition, worldPos, worldRot, null );
+			if ( item == null )
+				continue;
+
+			latent.Taken = true;
+			latent.Spawned = false;
+			latent.PropIndex = -1;
+			_latent[ i ] = latent;
+
+			if ( _loot != null )
+				_loot.ConsumeFallbackDefinition( latent.Definition );
+
+			ApplyReleasedWorldMotion( item, worldPos, worldRot );
+			if ( _owner != null )
+				_owner.NotifyPropReleasedToWorld( worldPos );
+		}
+	}
+
+	void ApplyReleasedWorldMotion( TreasureItem item, Vector3 worldPos, Quaternion worldRot )
+	{
+		if ( item == null )
+			return;
+
+		TreasureDefinition def = item.Definition;
+		Vector3 velocity = Vector3.zero;
+		if ( TreasureItem.UsesSurfaceSimulation( def ) )
+		{
+			TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+			if ( world == null )
+				world = TreasureSurfaceWorld.EnsureExists();
+
+			if ( world != null
+				&& world.Sampler != null
+				&& world.Sampler.TrySample( worldPos, out TreasureSurfaceSample sample )
+				&& sample.Valid )
+			{
+				TreasureSurfaceDefinition surfaceDef = world.Definition;
+				float seatLift = TreasureSurfaceSeat.GetStableContactLift( item );
+				float heightAbove = worldPos.y - ( sample.Height + seatLift );
+				if ( heightAbove > 0.05f && surfaceDef != null )
+					velocity.y = -Mathf.Min( surfaceDef.gravity * 0.15f, 2.5f );
+			}
+
+			item.EnterSurface( worldPos, worldRot, velocity, snapToSeat: false, fromRest: true );
+		}
+		else
+			item.EnterPhysics( worldPos, worldRot, velocity );
+	}
+
 	void RequestSeat( int latentIndex, TreasureItem reuse )
 	{
 		TryRequestSeat( latentIndex, reuse );
@@ -1563,7 +1715,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( latent.Spawned && reuse == null )
 			return false;
 
-		if ( _seatingInFlight.Count >= MaxStreamSpawnsPerFrame && reuse == null )
+		if ( _seatingInFlight.Count >= ResolveMaxSeatingInFlight() && reuse == null )
 			return false;
 
 		_seatingInFlight.Add( latentIndex );
@@ -2296,13 +2448,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _cachedCamera != null )
 			return _cachedCamera;
 
-		Camera main = Camera.main;
-		if ( main != null )
-		{
-			_cachedCamera = main;
-			return _cachedCamera;
-		}
-
+		// Prefer CameraController gameplay cam — Camera.main can be a different scene camera.
 		if ( GameMode.Instance != null && GameMode.Instance.cameraController != null )
 		{
 			CameraController controller = GameMode.Instance.cameraController;
@@ -2317,6 +2463,20 @@ public class GoldPileArtifactProps : MonoBehaviour
 					return _cachedCamera;
 				}
 			}
+
+			Camera onController = controller.GetComponentInChildren<Camera>();
+			if ( onController != null )
+			{
+				_cachedCamera = onController;
+				return _cachedCamera;
+			}
+		}
+
+		Camera main = Camera.main;
+		if ( main != null )
+		{
+			_cachedCamera = main;
+			return _cachedCamera;
 		}
 
 		return null;
@@ -2338,11 +2498,10 @@ public class GoldPileArtifactProps : MonoBehaviour
 	{
 		if ( _pileRoot == null || _heightfield == null )
 			return;
-		if ( _loot != null && !_loot.StreamingEnabled )
-			return;
 
+		// Seat exposed latents even when coin streaming is off, or when focus is not ready yet.
 		if ( !TryGetStreamFocusPosition( out Vector3 focusPos ) )
-			return;
+			focusPos = _pileRoot.position;
 
 		bool focusMoved = !_hasLastStreamFocusPos
 			|| PlanarDistanceSqr( focusPos, _lastStreamFocusPos ) >= StreamFocusMoveEpsilonSqr;
@@ -2358,7 +2517,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 		float enterRadius = GetMaxPropStreamEnterRadius();
 
-		// Stream out live props past distance (live count is small vs latents).
+		// Distance-despawn for culled categories (never-cull props always pass IsCategoryInStreamRange).
 		bool despawnBudgetHit = false;
 		for ( int i = _props.Count - 1; i >= 0 && _streamDespawnBudget > 0; i-- )
 		{
@@ -2399,6 +2558,26 @@ public class GoldPileArtifactProps : MonoBehaviour
 		int seatsAttempted = 0;
 		bool spawnBudgetHit = false;
 		bool wrapped = false;
+
+		// Large artifacts seat before gem densify flood fills the spawn budget.
+		for ( int ai = 0; ai < _latent.Count && _streamSpawnBudget > 0; ai++ )
+		{
+			LatentEntry priority = _latent[ ai ];
+			if ( priority.Taken || priority.Spawned || !priority.Exposed || priority.Definition == null )
+				continue;
+			if ( !priority.IsAuthored && !IsPrioritySeatDefinition( priority.Definition ) )
+				continue;
+			if ( _seatingInFlight.Contains( ai ) )
+				continue;
+			float priorityDistSqr = LatentPlanarDistanceSqr( priority, focusPos );
+			if ( !IsCategoryInStreamRange( priority.Definition.category, priorityDistSqr, currentlyResident: false ) )
+				continue;
+			if ( !TryRequestSeat( ai, null ) )
+				continue;
+
+			_streamSpawnBudget--;
+			seatsAttempted++;
+		}
 
 		if ( candidateCount > 0 && _streamSpawnBudget > 0 )
 		{
@@ -2453,11 +2632,13 @@ public class GoldPileArtifactProps : MonoBehaviour
 			RecountStreamCounters( focusPos );
 
 		bool seatingBusy = _seatingInFlight.Count > 0;
+		bool pendingExposedSeats = HasUnspawnedExposedSeats( focusPos );
 		if ( ( wrapped || candidateCount == 0 )
 			&& seatsAttempted == 0
 			&& !despawnBudgetHit
 			&& !spawnBudgetHit
-			&& !seatingBusy )
+			&& !seatingBusy
+			&& !pendingExposedSeats )
 		{
 			_streamResidencyDirty = false;
 		}
@@ -2465,6 +2646,28 @@ public class GoldPileArtifactProps : MonoBehaviour
 		{
 			_streamResidencyDirty = true;
 		}
+	}
+
+	bool HasUnspawnedExposedSeats( Vector3 focusPos )
+	{
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			LatentEntry latent = _latent[ i ];
+			if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+				continue;
+			if ( _seatingInFlight.Contains( i ) )
+				continue;
+			if ( !latent.SurfaceOk && !CanSpawnBakedLatent( latent ) )
+				continue;
+
+			float distSqr = LatentPlanarDistanceSqr( latent, focusPos );
+			if ( !IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident: false ) )
+				continue;
+
+			return true;
+		}
+
+		return false;
 	}
 
 	float GetMaxPropStreamEnterRadius()
@@ -2478,7 +2681,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( !_streamSettings.artifactNeverCull )
 			max = Mathf.Max( max, _streamSettings.artifactMaxStreamDistance );
 
-		// Both never-cull: still wake nearby seats; use the larger authored distance as a soft window.
+		// Soft window for chunk queries. Never-cull props are collected separately (see CollectStreamCandidateLatents).
 		if ( max < 0.1f )
 			max = Mathf.Max( _streamSettings.gemMaxStreamDistance, _streamSettings.artifactMaxStreamDistance );
 		return Mathf.Max( 0.1f, max );
@@ -2490,6 +2693,33 @@ public class GoldPileArtifactProps : MonoBehaviour
 		if ( _latent.Count == 0 )
 			return;
 
+		_streamCandidateSet.Clear();
+
+		void TryAddCandidate( int latentIndex )
+		{
+			if ( latentIndex < 0 || latentIndex >= _latent.Count )
+				return;
+
+			LatentEntry latent = _latent[ latentIndex ];
+			if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+				return;
+			if ( !_streamCandidateSet.Add( latentIndex ) )
+				return;
+
+			_streamCandidateScratch.Add( latentIndex );
+		}
+
+		// Never-cull + large artifacts bypass soft chunk window; distance still gates seat.
+		for ( int i = 0; i < _latent.Count; i++ )
+		{
+			LatentEntry latent = _latent[ i ];
+			if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
+				continue;
+			bool neverCull = _streamSettings != null && _streamSettings.NeverCullsProp( latent.Definition.category );
+			if ( neverCull || latent.IsAuthored || IsPrioritySeatDefinition( latent.Definition ) )
+				TryAddCandidate( i );
+		}
+
 		if ( _latentByChunk == null || _latentByChunk.Length == 0 )
 		{
 			for ( int i = 0; i < _latent.Count; i++ )
@@ -2497,7 +2727,12 @@ public class GoldPileArtifactProps : MonoBehaviour
 				LatentEntry latent = _latent[ i ];
 				if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
 					continue;
-				_streamCandidateScratch.Add( i );
+				if ( _streamSettings != null && _streamSettings.NeverCullsProp( latent.Definition.category ) )
+					continue;
+				float distSqr = LatentPlanarDistanceSqr( latent, focusPos );
+				if ( !IsCategoryInStreamRange( latent.Definition.category, distSqr, currentlyResident: false ) )
+					continue;
+				TryAddCandidate( i );
 			}
 
 			return;
@@ -2515,17 +2750,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 				continue;
 
 			for ( int i = 0; i < list.Count; i++ )
-			{
-				int latentIndex = list[ i ];
-				if ( latentIndex < 0 || latentIndex >= _latent.Count )
-					continue;
-
-				LatentEntry latent = _latent[ latentIndex ];
-				if ( latent.Taken || latent.Spawned || !latent.Exposed || latent.Definition == null )
-					continue;
-
-				_streamCandidateScratch.Add( latentIndex );
-			}
+				TryAddCandidate( list[ i ] );
 		}
 	}
 
@@ -2633,6 +2858,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		_latentChunkCountX = 0;
 		_latentChunkCountZ = 0;
 		_streamCandidateScratch.Clear();
+		_streamCandidateSet.Clear();
 		_streamChunkScratch.Clear();
 		_streamChunkSet.Clear();
 		_hasLatentWorldCacheRoot = false;

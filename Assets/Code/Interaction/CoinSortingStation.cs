@@ -62,6 +62,9 @@ public class CoinSortingStation : MonoBehaviour
 	CoinSortingEnergyGauge energyGauge;
 
 	[SerializeField]
+	CoinSortingStationWorldTimer worldTimer;
+
+	[SerializeField]
 	CoinSortingCrankSpin crankSpin;
 
 	[Tooltip( "Played on each crank click (quarter-turn while holding)." )]
@@ -87,7 +90,9 @@ public class CoinSortingStation : MonoBehaviour
 
 	CoinSortingStationDefinition _definition;
 	GroundCoinStack _hopperStack;
+	int _hopperLoadEventSuppress;
 	Rigidbody _body;
+	CoinSortingStationWorldTimer _worldTimer;
 	float _processAccumulator;
 	float _crankActiveUntil;
 	float _reserveSeconds;
@@ -223,6 +228,7 @@ public class CoinSortingStation : MonoBehaviour
 		EnsureSettleFeedback();
 		EnsureSortedFeedback();
 		EnsureCrankAudio();
+		EnsureWorldTimer();
 		BindVisuals();
 		if ( hopper != null )
 			hopper.BindStation( this );
@@ -237,7 +243,7 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		EnsureDefaultUpgradeLevel();
 		EnsureHopperStack();
-		BindOutputStacksInBounds();
+		RebindChuteOutputStacks();
 	}
 
 	void Update()
@@ -261,6 +267,8 @@ public class CoinSortingStation : MonoBehaviour
 			crank = GetComponentInChildren<CoinSortingCrankInteractable>( true );
 		if ( energyGauge == null )
 			energyGauge = GetComponentInChildren<CoinSortingEnergyGauge>( true );
+		if ( worldTimer == null )
+			worldTimer = GetComponentInChildren<CoinSortingStationWorldTimer>( true );
 		if ( crankSpin == null )
 			crankSpin = GetComponentInChildren<CoinSortingCrankSpin>( true );
 		if ( moveInteractable == null )
@@ -418,8 +426,8 @@ public class CoinSortingStation : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Clears chute output bookkeeping so new emits create stacks at the current chute poses.
-	/// Existing world stacks are left where they are.
+	/// Clears chute output bookkeeping so new emits re-resolve stacks at the current chute poses.
+	/// Parented chute stacks are left in place.
 	/// </summary>
 	public void ClearOutputStackBindings()
 	{
@@ -429,64 +437,92 @@ public class CoinSortingStation : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Bind homogeneous world stacks inside the station's physical bounds as chute outputs.
-	/// Matching stacks of the same type merge into one bound stack.
+	/// Rebuild <see cref="_activeOutputByType"/> from pinned chute-output stacks parented under each chute.
+	/// Does not claim nearby world piles.
 	/// </summary>
-	public void BindOutputStacksInBounds()
+	public void RebindChuteOutputStacks()
 	{
-		Bounds bounds = GetCombinedPhysicalBounds();
-		Vector3 center = bounds.center;
-		Vector3 extents = bounds.extents + new Vector3( 0.05f, 0.15f, 0.05f );
-		int hits = Physics.OverlapBoxNonAlloc(
-			center,
-			extents,
-			OverlapScratch,
-			transform.rotation,
-			Physics.DefaultRaycastLayers,
-			QueryTriggerInteraction.Ignore );
+		_activeOutputByType.Clear();
+		if ( chutes == null )
+			return;
 
-		BindStackScratch.Clear();
-		for ( int i = 0; i < hits; i++ )
+		for ( int i = 0; i < chutes.Count; i++ )
 		{
-			Collider col = OverlapScratch[ i ];
-			if ( col == null )
+			ChuteBinding binding = chutes[ i ];
+			if ( binding.coin == null || binding.chute == null )
 				continue;
 
-			GroundCoinStack stack = col.GetComponentInParent<GroundCoinStack>();
-			if ( stack == null || IsHopperStack( stack ) || stack.IsMachineBuffer || stack.Count <= 0 )
-				continue;
-			if ( !stack.TryGetHomogeneousDefinition( out TreasureDefinition homo ) || homo == null )
-				continue;
-			if ( FindChute( homo ) == null )
-				continue;
-
-			if ( !BindStackScratch.Contains( stack ) )
-				BindStackScratch.Add( stack );
-		}
-
-		for ( int i = 0; i < BindStackScratch.Count; i++ )
-		{
-			GroundCoinStack stack = BindStackScratch[ i ];
-			if ( stack == null || stack.Count <= 0 )
-				continue;
-			if ( !stack.TryGetHomogeneousDefinition( out TreasureDefinition homo ) || homo == null )
-				continue;
-
-			TreasureDefinition key = ResolveOutputKey( homo );
+			TreasureDefinition key = ResolveOutputKey( binding.coin );
 			if ( key == null )
-				continue;
+				key = binding.coin;
 
-			if ( _activeOutputByType.TryGetValue( key, out GroundCoinStack existing )
-				&& existing != null
-				&& existing != stack
-				&& existing.Count > 0 )
+			CollectChuteOutputStacks( binding.chute, key, BindStackScratch );
+			GroundCoinStack preferred = null;
+			for ( int s = 0; s < BindStackScratch.Count; s++ )
 			{
-				MergeBoundStacks( existing, stack );
-				continue;
+				GroundCoinStack stack = BindStackScratch[ s ];
+				if ( stack == null )
+					continue;
+				if ( preferred == null )
+					preferred = stack;
+				if ( !stack.IsFull )
+				{
+					preferred = stack;
+					break;
+				}
 			}
 
-			_activeOutputByType[ key ] = stack;
+			if ( preferred != null )
+			{
+				_activeOutputByType[ key ] = preferred;
+				if ( binding.coin != key )
+					_activeOutputByType[ binding.coin ] = preferred;
+			}
 		}
+	}
+
+	/// <summary>Legacy name — rebuilds from chute children only.</summary>
+	public void BindOutputStacksInBounds()
+	{
+		RebindChuteOutputStacks();
+	}
+
+	void CollectChuteOutputStacks( Transform chute, TreasureDefinition key, List<GroundCoinStack> into )
+	{
+		into.Clear();
+		if ( chute == null || key == null )
+			return;
+
+		GroundCoinStack[] stacks = chute.GetComponentsInChildren<GroundCoinStack>( true );
+		for ( int i = 0; i < stacks.Length; i++ )
+		{
+			GroundCoinStack stack = stacks[ i ];
+			if ( stack == null || !stack.IsChuteOutput || IsHopperStack( stack ) )
+				continue;
+			if ( stack.ChuteCoinType != null && !SameCoinType( stack.ChuteCoinType, key ) )
+				continue;
+			if ( !into.Contains( stack ) )
+				into.Add( stack );
+		}
+
+		into.Sort( CompareChuteStackLateral );
+	}
+
+	int CompareChuteStackLateral( GroundCoinStack a, GroundCoinStack b )
+	{
+		if ( a == null && b == null )
+			return 0;
+		if ( a == null )
+			return 1;
+		if ( b == null )
+			return -1;
+
+		Transform chute = a.transform.parent != null ? a.transform.parent : b.transform.parent;
+		Vector3 right = chute != null ? chute.right : Vector3.right;
+		Vector3 origin = chute != null ? chute.position : Vector3.zero;
+		float aOff = Vector3.Dot( a.ContactPosition - origin, right );
+		float bOff = Vector3.Dot( b.ContactPosition - origin, right );
+		return aOff.CompareTo( bOff );
 	}
 
 	TreasureDefinition ResolveOutputKey( TreasureDefinition definition )
@@ -504,19 +540,6 @@ public class CoinSortingStation : MonoBehaviour
 		}
 
 		return definition;
-	}
-
-	void MergeBoundStacks( GroundCoinStack survivor, GroundCoinStack other )
-	{
-		if ( survivor == null || other == null || survivor == other )
-			return;
-
-		ConsumeScratch.Clear();
-		if ( !other.TryConsumeAllDefinitions( ConsumeScratch ) )
-			return;
-
-		survivor.TryAppendDefinitions( ConsumeScratch );
-		ConsumeScratch.Clear();
 	}
 
 	public void PlayPlacedFeedback()
@@ -593,6 +616,9 @@ public class CoinSortingStation : MonoBehaviour
 				continue;
 
 			if ( renderer.GetComponentInParent<CoinSortingEnergyGauge>() != null )
+				continue;
+
+			if ( renderer.GetComponentInParent<CoinSortingStationWorldTimer>() != null )
 				continue;
 
 			int collectable = PhysicsLayers.CollectableLayer;
@@ -1148,7 +1174,12 @@ public class CoinSortingStation : MonoBehaviour
 			return false;
 
 		GroundCoinStack stack = EnsureHopperStack();
-		return stack.TryAppendDefinition( definition );
+		if ( !stack.TryAppendDefinition( definition ) )
+			return false;
+
+		if ( _hopperLoadEventSuppress == 0 )
+			PublishHopperLoaded( 1 );
+		return true;
 	}
 
 	/// <summary>Enqueue as many defs as capacity allows; returns number accepted.</summary>
@@ -1157,6 +1188,7 @@ public class CoinSortingStation : MonoBehaviour
 		if ( definitions == null || definitions.Count == 0 )
 			return 0;
 
+		_hopperLoadEventSuppress++;
 		int accepted = 0;
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
@@ -1164,8 +1196,25 @@ public class CoinSortingStation : MonoBehaviour
 				break;
 			accepted++;
 		}
+		_hopperLoadEventSuppress--;
+
+		if ( accepted >= 1 )
+			PublishHopperLoaded( accepted );
 
 		return accepted;
+	}
+
+	/// <summary>Notifies tutorials that coins entered the hopper (placement, dump, or enqueue).</summary>
+	public void PublishHopperLoaded( int coinCount )
+	{
+		if ( coinCount < 1 )
+			return;
+
+		EventBus.Publish( new CoinSorterStackLoadedEvent
+		{
+			Station = this,
+			CoinCount = coinCount
+		} );
 	}
 
 	/// <summary>
@@ -1239,14 +1288,8 @@ public class CoinSortingStation : MonoBehaviour
 				CoinStackInteractSfx.PlayStackPlace( endPos );
 			} );
 
-		if ( taken >= 2 )
-		{
-			EventBus.Publish( new CoinSorterStackLoadedEvent
-			{
-				Station = this,
-				CoinCount = taken
-			} );
-		}
+		if ( taken >= 1 )
+			PublishHopperLoaded( taken );
 
 		return true;
 	}
@@ -1305,14 +1348,6 @@ public class CoinSortingStation : MonoBehaviour
 
 		int accepted = TryEnqueueRange( ConsumeScratch );
 		ConsumeScratch.Clear();
-		if ( accepted >= 2 )
-		{
-			EventBus.Publish( new CoinSorterStackLoadedEvent
-			{
-				Station = this,
-				CoinCount = accepted
-			} );
-		}
 		return accepted > 0;
 	}
 
@@ -1427,6 +1462,85 @@ public class CoinSortingStation : MonoBehaviour
 
 		if ( BufferedCount == 0 )
 			_processAccumulator = 0f;
+	}
+
+	void EnsureWorldTimer()
+	{
+		if ( _worldTimer != null )
+			return;
+
+		if ( worldTimer != null )
+			_worldTimer = worldTimer;
+		else
+			_worldTimer = GetComponentInChildren<CoinSortingStationWorldTimer>( true );
+
+		if ( _worldTimer == null )
+		{
+			Transform parent = energyGauge != null ? energyGauge.transform : transform;
+			Transform existing = parent.Find( "WorldTimer" );
+			GameObject host = existing != null ? existing.gameObject : new GameObject( "WorldTimer", typeof( RectTransform ) );
+			if ( existing == null )
+			{
+				host.transform.SetParent( parent, false );
+				PlaceWorldTimerAboveWell( host.transform, parent );
+			}
+
+			_worldTimer = host.GetComponent<CoinSortingStationWorldTimer>();
+			if ( _worldTimer == null )
+				_worldTimer = host.AddComponent<CoinSortingStationWorldTimer>();
+		}
+
+		worldTimer = _worldTimer;
+		_worldTimer.BindStation( this );
+	}
+
+	static void PlaceWorldTimerAboveWell( Transform timer, Transform gauge )
+	{
+		if ( timer == null )
+			return;
+
+		float wellTop = 0.24f;
+		if ( gauge != null )
+		{
+			Transform well = gauge.Find( "Well" );
+			if ( well != null )
+				wellTop = well.localPosition.y + Mathf.Abs( well.localScale.y ) * 0.5f;
+		}
+
+		timer.localPosition = new Vector3( 0f, wellTop + 0.06f, 0f );
+		timer.localRotation = Quaternion.identity;
+		timer.localScale = Vector3.one * 0.0025f;
+	}
+
+	/// <summary>
+	/// Remaining sort-seconds and gauge color for the on-machine world timer.
+	/// L1 shows crank reserve; automatic shows hopper time at the current process rate.
+	/// </summary>
+	public bool TryGetWorldTimerDisplay( out float seconds, out Color color )
+	{
+		seconds = 0f;
+		color = Color.white;
+
+		CoinSortingStationDefinition def = ResolveDefinition();
+		if ( def == null )
+			return false;
+
+		int level = StationLevel;
+		if ( def.RequiresCrank( level ) )
+		{
+			seconds = _reserveSeconds;
+			color = def.EvaluateGaugeColor( ReserveNormalized );
+			return true;
+		}
+
+		if ( !def.IsAutomatic( level ) || BufferedCount <= 0 )
+			return false;
+
+		float rate = def.ResolveCoinsPerSecond( level );
+		seconds = BufferedCount / Mathf.Max( 0.01f, rate );
+		int capacity = Mathf.Max( 1, HopperCapacity );
+		color = def.EvaluateGaugeColor( Mathf.Clamp01( (float)BufferedCount / capacity ) );
+		return true;
 	}
 
 	/// <summary>Debug: force process one buffered coin if any.</summary>
@@ -1644,25 +1758,24 @@ public class CoinSortingStation : MonoBehaviour
 				_pendingOutputByType[ key ] = pending;
 		}
 
-		if ( stack == null || definition == null )
+		if ( definition == null )
 			return;
 
-		if ( stack.IsFull || !stack.TryAppendDefinition( definition ) )
+		if ( stack != null && stack.CanAccept( definition ) && stack.TryAppendDefinition( definition ) )
 		{
-			BumpFullStackIndex( definition );
-			Transform chute = FindChute( definition );
-			if ( chute == null )
-				return;
-
-			GroundCoinStack created = GetOrCreateOutputStack( definition, chute );
-			if ( created != null )
-				created.TryAppendDefinition( definition );
+			_activeOutputByType[ definition ] = stack;
+			if ( key != null )
+				_activeOutputByType[ key ] = stack;
 			return;
 		}
 
-		_activeOutputByType[ definition ] = stack;
-		if ( key != null )
-			_activeOutputByType[ key ] = stack;
+		Transform chute = FindChute( definition );
+		if ( chute == null )
+			return;
+
+		GroundCoinStack created = GetOrCreateOutputStack( definition, chute );
+		if ( created != null )
+			created.TryAppendDefinition( definition );
 	}
 
 	Transform FindChute( TreasureDefinition definition )
@@ -1698,49 +1811,42 @@ public class CoinSortingStation : MonoBehaviour
 		TreasureDefinition key = ResolveOutputKey( definition );
 		if ( key == null )
 			key = definition;
+		if ( chute == null || key == null )
+			return null;
 
-		if ( TryGetActiveOutput( key, definition, out GroundCoinStack existing ) )
+		CollectChuteOutputStacks( chute, key, BindStackScratch );
+		for ( int i = 0; i < BindStackScratch.Count; i++ )
 		{
-			if ( IsUsableOutputStack( existing ) && !existing.IsFull )
-				return existing;
+			GroundCoinStack existing = BindStackScratch[ i ];
+			if ( !IsUsableOutputStack( existing ) || existing.IsFull )
+				continue;
 
-			if ( existing != null && existing.IsFull )
-				BumpFullStackIndex( definition );
-			else
-			{
-				_activeOutputByType.Remove( definition );
-				if ( key != null )
-					_activeOutputByType.Remove( key );
-			}
+			_activeOutputByType[ definition ] = existing;
+			_activeOutputByType[ key ] = existing;
+			return existing;
 		}
 
-		int index = 0;
-		if ( _fullStackIndexByType.TryGetValue( definition, out int stored ) )
-			index = stored;
-		else if ( key != null && _fullStackIndexByType.TryGetValue( key, out stored ) )
-			index = stored;
+		if ( TryGetActiveOutput( key, definition, out GroundCoinStack active )
+			&& IsUsableOutputStack( active )
+			&& !active.IsFull )
+		{
+			return active;
+		}
 
+		int index = BindStackScratch.Count;
 		CoinSortingStationDefinition def = ResolveDefinition();
 		float lateral = def != null ? def.fullStackLateralOffset : 0.35f;
 		Vector3 pos = ResolveChuteStackContact( chute, lateral * index );
 		Quaternion rot = TreasureOrientation.FlattenUpright( chute.rotation );
 
-		GroundCoinStack nearest = GroundCoinStack.FindNearest( pos, lateral * 0.45f );
-		if ( IsUsableOutputStack( nearest )
-			&& !nearest.IsFull
-			&& nearest.TryGetHomogeneousDefinition( out TreasureDefinition homo )
-			&& SameCoinType( homo, definition ) )
-		{
-			_activeOutputByType[ definition ] = nearest;
-			if ( key != null )
-				_activeOutputByType[ key ] = nearest;
-			return nearest;
-		}
-
 		GroundCoinStack created = GroundCoinStack.CreateAt( pos, rot );
+		created.ConfigureAsChuteOutput( key, this );
+		created.transform.SetParent( chute, true );
+		created.name = "ChuteCoinStack_" + key.name;
+
 		_activeOutputByType[ definition ] = created;
-		if ( key != null )
-			_activeOutputByType[ key ] = created;
+		_activeOutputByType[ key ] = created;
+		_fullStackIndexByType[ key ] = index;
 		return created;
 	}
 
@@ -1760,16 +1866,23 @@ public class CoinSortingStation : MonoBehaviour
 			return false;
 		if ( IsHopperStack( stack ) || stack.IsMachineBuffer )
 			return false;
-		return true;
+		return stack.IsChuteOutput;
 	}
 
 	void BumpFullStackIndex( TreasureDefinition definition )
 	{
+		TreasureDefinition key = ResolveOutputKey( definition );
+		if ( key == null )
+			key = definition;
+		if ( key == null )
+			return;
+
 		int index = 0;
-		if ( _fullStackIndexByType.TryGetValue( definition, out int stored ) )
+		if ( _fullStackIndexByType.TryGetValue( key, out int stored ) )
 			index = stored;
-		_fullStackIndexByType[ definition ] = index + 1;
+		_fullStackIndexByType[ key ] = index + 1;
 		_activeOutputByType.Remove( definition );
+		_activeOutputByType.Remove( key );
 	}
 
 	static bool SameCoinType( TreasureDefinition a, TreasureDefinition b )
@@ -1812,6 +1925,11 @@ public class CoinSortingStation : MonoBehaviour
 	public void EditorSetEnergyGauge( CoinSortingEnergyGauge value )
 	{
 		energyGauge = value;
+	}
+
+	public void EditorSetWorldTimer( CoinSortingStationWorldTimer value )
+	{
+		worldTimer = value;
 	}
 
 	public void EditorSetCrankSpin( CoinSortingCrankSpin value )

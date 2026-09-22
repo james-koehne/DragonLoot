@@ -76,6 +76,17 @@ float DragonLootGlobalSpecularSize()
     return v > 1e-4 ? v : 48.0;
 }
 
+half DragonLootSpecularPower(half smoothness)
+{
+    half sm = saturate(smoothness);
+    // URP SimpleLit: smoothness 0 → 2, smoothness 1 → 2048.
+    // Scale so smoothness 0.75 (shader default) matches global Specular Size (48).
+    half specPower = exp2(10.0h * sm + 1.0h);
+    half specPowerRef = exp2(10.0h * 0.75h + 1.0h);
+    specPower *= max((half)DragonLootGlobalSpecularSize(), 1.0h) / specPowerRef;
+    return max(specPower, 1.0h);
+}
+
 struct DragonLootStylizedSurface
 {
     half3 albedo;
@@ -225,8 +236,8 @@ half3 DragonLootShadeLight(DragonLootStylizedSurface s, Light light)
     half enableSpec = (_DragonLoot_EnableSpecular > 0.5 || DragonLootGlobalsUnset()) ? 1.0h : 0.0h;
     half3 halfDir = SafeNormalize(light.direction + s.viewDirWS);
     half ndoth = saturate(dot(s.normalWS, halfDir));
-    half specPower = max(DragonLootGlobalSpecularSize(), 1.0);
-    half spec = pow(ndoth, specPower);
+    half specPower = DragonLootSpecularPower(s.smoothness);
+    half spec = pow(ndoth, specPower) * smoothstep(0.0h, 0.15h, saturate(s.smoothness));
     half3 f0 = lerp(half3(0.04h, 0.04h, 0.04h), s.albedo, s.metallic);
     half3 specTint = half3(_DragonLoot_SpecularColor.rgb);
     if (dot(specTint, specTint) < 1e-8h)

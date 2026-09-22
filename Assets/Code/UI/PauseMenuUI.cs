@@ -389,7 +389,7 @@ public class PauseMenuUI : MonoBehaviour
 		for ( int i = 0; i < entries.Count; i++ )
 		{
 			TutorialDefinition def = entries[ i ];
-			if ( def == null || string.IsNullOrEmpty( def.id ) )
+			if ( def == null || string.IsNullOrEmpty( def.id ) || def.disabled )
 				continue;
 
 			bool discovered = manager != null && manager.IsDiscovered( def.id );

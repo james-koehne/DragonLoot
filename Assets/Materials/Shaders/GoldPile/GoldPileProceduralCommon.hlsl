@@ -181,7 +181,8 @@ float ProcCoinHeight01(float distNorm)
     rim *= rimAmp;
 
     float h = lerp(face, 1.0, rim);
-    h *= 1.0 - smoothstep(0.98, 1.02, distNorm);
+    // Drop height only outside the disc so the rim stays a hard wall, not a rounded melt into the gap.
+    h *= 1.0 - smoothstep(1.0, 1.02, distNorm);
     return saturate(h);
 }
 
@@ -357,7 +358,9 @@ ProcCoinSurface SampleProcVirtualCoins(
                 float2 searchLocal = local;
 #endif
                 float distNorm = length(searchLocal) / max(radius, 1e-4);
-                half mask = 1.0h - smoothstep(0.98h, 1.02h, (half)distNorm);
+                // Full coin through the geometric edge; AA lives in a thin fringe outside
+                // so Gap Colour does not form a dark ring on the rim.
+                half mask = 1.0h - smoothstep(1.0h, 1.004h, (half)distNorm);
                 if (mask < 0.001h)
                     continue;
 

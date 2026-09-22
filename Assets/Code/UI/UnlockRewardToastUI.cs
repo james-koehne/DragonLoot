@@ -14,6 +14,7 @@ public class UnlockRewardToastUI : MonoBehaviour
 	struct ToastEntry
 	{
 		public string Message;
+		public string Description;
 		public Sprite Icon;
 		public ToastStackUI.ToastTier Tier;
 	}
@@ -93,28 +94,55 @@ public class UnlockRewardToastUI : MonoBehaviour
 		if ( definition == null )
 			return;
 
-		string name = definition.ResolveDisplayName();
 		EnqueueStatic( new ToastEntry
 		{
-			Message = "Unlocked: " + name,
+			Message = "Unlocked: " + definition.ResolveDisplayName(),
+			Description = TrimDescription( definition.description ),
 			Icon = definition.icon,
 			Tier = ToastStackUI.ToastTier.Unlock
 		} );
 	}
 
-	public static void NotifyMessage( string message, Sprite icon = null, ToastStackUI.ToastTier tier = ToastStackUI.ToastTier.Unlock )
+	public static void NotifyUnlock( UpgradeDefinition definition )
+	{
+		if ( definition == null )
+			return;
+
+		EnqueueStatic( new ToastEntry
+		{
+			Message = "Unlocked: " + definition.ResolveDisplayName(),
+			Description = TrimDescription( definition.description ),
+			Icon = definition.icon,
+			Tier = ToastStackUI.ToastTier.Unlock
+		} );
+	}
+
+	public static void NotifyMessage( string message, Sprite icon = null, ToastStackUI.ToastTier tier = ToastStackUI.ToastTier.Unlock, string description = null )
 	{
 		EnqueueStatic( new ToastEntry
 		{
 			Message = message,
+			Description = TrimDescription( description ),
 			Icon = icon,
 			Tier = tier
 		} );
 	}
 
+	static string TrimDescription( string description )
+	{
+		if ( string.IsNullOrEmpty( description ) )
+			return null;
+		string trimmed = description.Trim();
+		if ( string.IsNullOrEmpty( trimmed ) )
+			return null;
+		return trimmed;
+	}
+
 	static void EnqueueStatic( ToastEntry entry )
 	{
 		if ( string.IsNullOrEmpty( entry.Message ) )
+			return;
+		if ( IsDuplicate( entry ) )
 			return;
 
 		UnlockRewardToastUI ui = Instance;
@@ -125,6 +153,18 @@ public class UnlockRewardToastUI : MonoBehaviour
 		}
 
 		s_pendingBeforeInstance.Enqueue( entry );
+	}
+
+	static bool IsDuplicate( ToastEntry entry )
+	{
+		foreach ( ToastEntry pending in s_pendingBeforeInstance )
+		{
+			if ( pending.Message == entry.Message && pending.Tier == entry.Tier )
+				return true;
+		}
+
+		ToastStackUI stack = ToastStackUI.Instance;
+		return stack != null && stack.HasMessage( ToastStackUI.Kind.Unlock, entry.Message );
 	}
 
 	void FlushPending()
@@ -167,7 +207,7 @@ public class UnlockRewardToastUI : MonoBehaviour
 		if ( string.IsNullOrEmpty( entry.Message ) )
 			return;
 
-		ToastStackUI.NotifyUnlock( entry.Message, entry.Icon, 0f, entry.Tier );
+		ToastStackUI.NotifyUnlock( entry.Message, entry.Icon, 0f, entry.Tier, entry.Description );
 	}
 
 	void HideLegacyVisual()

@@ -42,6 +42,10 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	[SerializeField]
 	GameObject completedHighlight;
 
+	[Tooltip( "Optional objects that start inactive and are activated when every slot is filled." )]
+	[SerializeField]
+	List<GameObject> activateOnComplete = new List<GameObject>();
+
 	[Tooltip( "When false, hologram slot indicators are not bound or refreshed (artifacts + anchors only)." )]
 	[SerializeField]
 	bool showSlotIndicators = true;
@@ -52,6 +56,10 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	[Header( "Editor Gizmos" )]
 	[SerializeField]
 	bool drawGizmosAlways;
+
+	const int SlotAimRayBufferSize = 32;
+
+	static readonly RaycastHit[] SlotAimRayHits = new RaycastHit[ SlotAimRayBufferSize ];
 
 	Collider _collider;
 	readonly List<TreasureItem> _displayedItems = new List<TreasureItem>();
@@ -87,7 +95,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	{
 		EnsureCollider();
 		EnsureOccupants();
-		SyncSlotVolumes();
+		RebuildSlotAimVolumes( createMissing: true );
 		EnsureSlotIndicators();
 		ApplyInteractionName();
 		RefreshCountLabel();
@@ -189,26 +197,18 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 		Vector3 scale = item.GetWorldScale();
 
-		bool hasHoveredSlot = TryResolveAimedSlotIndex( in query, out int hoveredSlot );
-		bool hasPlacement = TryResolvePlacementSlot( item, in query, out int placementSlot, out bool placementValid );
-
-		if ( !hasPlacement && !hasHoveredSlot )
+		if ( !TryResolveAimedSlotIndex( in query, out int aimedSlot ) )
 		{
 			preview.SetSuppressed( transform.position, transform.rotation, scale, false );
 			return true;
 		}
 
-		// Feedback follows the slot under the crosshair; placement may still fall back elsewhere.
-		int feedbackSlot = hasHoveredSlot ? hoveredSlot : placementSlot;
-		bool feedbackValid = hasHoveredSlot
-			? EvaluateSlotForItem( hoveredSlot, item )
-			: placementValid;
-
-		GetSlotWorldPose( feedbackSlot, out Vector3 pos, out Quaternion rot );
+		bool feedbackValid = EvaluateSlotForItem( aimedSlot, item );
+		GetSlotWorldPose( aimedSlot, out Vector3 pos, out Quaternion rot );
 		// Show the held-item valid/invalid ghost; slot indicators hide the cyan hologram for this slot.
 		preview.SetItemMesh( pos, rot, scale, feedbackValid );
 
-		_aimedSlotIndex = feedbackSlot;
+		_aimedSlotIndex = aimedSlot;
 		_aimedSlotValid = feedbackValid;
 		_aimFeedbackFrame = Time.frameCount;
 		if ( showSlotIndicators && slotIndicators != null )
@@ -252,12 +252,27 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		RefreshCountLabel();
 		PublishChanged();
 		ClearAimFeedback();
+		SetSlotAimColliderEnabled( slotIndex, false );
 
 		if ( showSlotIndicators && slotIndicators != null )
 			slotIndicators.RefreshSlot( slotIndex, true );
 
 		StartCoroutine( SnapIntoSlotRoutine( removed, slotIndex ) );
 		return true;
+	}
+
+	void SetSlotAimColliderEnabled( int slotIndex, bool enabled )
+	{
+		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
+			return;
+
+		Transform anchor = slots[ slotIndex ].anchor;
+		if ( anchor == null )
+			return;
+
+		ArtifactPresentationSlotVolume volume = anchor.GetComponent<ArtifactPresentationSlotVolume>();
+		if ( volume != null )
+			volume.SetAimCollidersEnabled( enabled );
 	}
 
 	public bool IsSlotOccupied( int slotIndex )
@@ -405,118 +420,93 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( item == null || _occupants == null || slots == null )
 			return false;
 
-		// Prefer the aimed slot when it accepts the held artifact; otherwise fall back to any
-		// empty matching slot so hovering the table shows valid placement when one exists.
-		if ( TryResolveAimedSlotIndex( in query, out slotIndex ) )
-		{
-			valid = EvaluateSlotForItem( slotIndex, item );
-			if ( valid )
-				return true;
-		}
-
-		if ( !TryFindNearestValidSlot( item, in query, out int validSlotIndex ) )
-		{
-			// Keep aimed slot (if any) so the ghost/indicator can show invalid feedback.
-			return slotIndex >= 0;
-		}
-
-		slotIndex = validSlotIndex;
-		valid = true;
-		return true;
-	}
-
-	bool TryFindNearestValidSlot( TreasureItem item, in PlacementQuery query, out int slotIndex )
-	{
-		slotIndex = -1;
-		if ( item == null || slots == null || slots.Count == 0 )
+		if ( !TryResolveAimedSlotIndex( in query, out slotIndex ) )
 			return false;
 
-		Vector3 reference = query.HasHit ? query.Hit.point : transform.position;
-		float bestDistSq = float.MaxValue;
-
-		for ( int i = 0; i < slots.Count; i++ )
-		{
-			if ( IsSlotOccupied( i ) || !IsSlotPrerequisiteMet( i ) || !AcceptsForSlot( i, item.Definition ) )
-				continue;
-			if ( !item.IsClean )
-				continue;
-
-			if ( !TryGetSlotPlaneDistanceSq( reference, i, out float distSq ) )
-				continue;
-			if ( distSq >= bestDistSq )
-				continue;
-
-			bestDistSq = distSq;
-			slotIndex = i;
-		}
-
-		return slotIndex >= 0;
+		valid = EvaluateSlotForItem( slotIndex, item );
+		return true;
 	}
 
 	bool TryResolveAimedSlotIndex( in PlacementQuery query, out int slotIndex )
 	{
 		slotIndex = -1;
-		if ( !query.HasHit || slots == null || slots.Count == 0 )
+		if ( slots == null || slots.Count == 0 )
+			return false;
+
+		// Scan every collider along the aim ray — the single placement hit can be table geometry
+		// behind a slot mesh, and NonAlloc order is undefined.
+		if ( TryResolveAimedSlotFromRay( in query, out slotIndex ) )
+			return true;
+
+		if ( !query.HasHit || query.Hit.collider == null )
 			return false;
 
 		TreasureItem hitItem = query.Hit.collider.GetComponentInParent<TreasureItem>();
 		if ( hitItem != null && TryFindSlotContaining( hitItem, out slotIndex ) )
 			return true;
 
-		if ( ArtifactPresentationSlotVolume.TryResolveSlotIndex( query.Hit.collider, out slotIndex ) )
-			return true;
-
-		return TryFindNearestSlotOnTablePlane( query.Hit.point, out slotIndex, out _ );
+		return ArtifactPresentationSlotVolume.TryResolveSlotIndex( query.Hit.collider, out slotIndex );
 	}
 
-	bool TryFindNearestSlotOnTablePlane( Vector3 worldPoint, out int slotIndex, out float distSq )
+	bool TryResolveAimedSlotFromRay( in PlacementQuery query, out int slotIndex )
 	{
 		slotIndex = -1;
-		distSq = float.MaxValue;
-		if ( slots == null || slots.Count == 0 )
+		PlayerController player = query.Player;
+		if ( player == null )
 			return false;
 
-		Vector3 local = transform.InverseTransformPoint( worldPoint );
-		local.y = 0f;
+		PlayerInteraction interaction = player.Interaction;
+		if ( interaction == null || !interaction.TryGetAimRay( out Ray ray ) )
+			return false;
 
-		for ( int i = 0; i < slots.Count; i++ )
+		float range = query.InteractRange > 0.001f ? query.InteractRange : interaction.PlacementAimRange;
+		LayerMask mask = interaction.InteractMask;
+		int hitCount = Physics.RaycastNonAlloc(
+			ray,
+			SlotAimRayHits,
+			range,
+			mask,
+			QueryTriggerInteraction.Ignore );
+
+		RaycastHit[] processHits = SlotAimRayHits;
+		if ( hitCount >= SlotAimRayBufferSize )
 		{
-			Transform anchor = slots[ i ].anchor;
-			if ( anchor == null )
-				continue;
-
-			Vector3 slotLocal = transform.InverseTransformPoint( anchor.position );
-			slotLocal.y = 0f;
-			float d = ( slotLocal - local ).sqrMagnitude;
-			if ( d >= distSq )
-				continue;
-
-			distSq = d;
-			slotIndex = i;
+			processHits = Physics.RaycastAll( ray, range, mask, QueryTriggerInteraction.Ignore );
+			hitCount = processHits.Length;
 		}
 
-		return slotIndex >= 0;
-	}
+		Transform playerRoot = player.transform;
+		float bestDist = float.MaxValue;
+		int bestSlot = -1;
 
-	bool TryGetSlotPlaneDistanceSq( Vector3 worldPoint, int slotIndex, out float distSq )
-	{
-		distSq = float.MaxValue;
-		if ( slots == null || slotIndex < 0 || slotIndex >= slots.Count )
+		for ( int i = 0; i < hitCount; i++ )
+		{
+			RaycastHit hit = processHits[ i ];
+			if ( hit.collider == null )
+				continue;
+			if ( PlayerInteraction.IsPlayerOwnedHit( hit.collider, playerRoot ) )
+				continue;
+			if ( !ArtifactPresentationSlotVolume.TryResolveSlotIndex( hit.collider, out int candidate ) )
+				continue;
+
+			ArtifactPresentationSlotVolume volume = hit.collider.GetComponentInParent<ArtifactPresentationSlotVolume>();
+			if ( volume == null || volume.Table != this )
+				continue;
+			if ( hit.distance >= bestDist )
+				continue;
+
+			bestDist = hit.distance;
+			bestSlot = candidate;
+		}
+
+		if ( bestSlot < 0 )
 			return false;
 
-		Transform anchor = slots[ slotIndex ].anchor;
-		if ( anchor == null )
-			return false;
-
-		Vector3 local = transform.InverseTransformPoint( worldPoint );
-		local.y = 0f;
-		Vector3 slotLocal = transform.InverseTransformPoint( anchor.position );
-		slotLocal.y = 0f;
-		distSq = ( slotLocal - local ).sqrMagnitude;
+		slotIndex = bestSlot;
 		return true;
 	}
 
-	void SyncSlotVolumes()
+	void RebuildSlotAimVolumes( bool createMissing )
 	{
 		if ( slots == null )
 			return;
@@ -528,39 +518,23 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 				continue;
 
 			ArtifactPresentationSlotVolume volume = anchor.GetComponent<ArtifactPresentationSlotVolume>();
-			if ( volume != null )
-				volume.Configure( this, i );
+			if ( volume == null )
+			{
+				if ( !createMissing )
+					continue;
+				volume = anchor.gameObject.AddComponent<ArtifactPresentationSlotVolume>();
+			}
+
+			volume.Configure( this, i );
+			volume.RebuildAimCollider( GetRequiredArtifact( i ), socketRotation, slots[ i ].rotationOffset );
+			volume.SetAimCollidersEnabled( !IsSlotOccupied( i ) );
 		}
 	}
 
 #if UNITY_EDITOR
 	void EnsureSlotVolumes()
 	{
-		if ( slots == null )
-			return;
-
-		const float volumeSize = 0.22f;
-		const float volumeHeight = 0.06f;
-
-		for ( int i = 0; i < slots.Count; i++ )
-		{
-			Transform anchor = slots[ i ].anchor;
-			if ( anchor == null )
-				continue;
-
-			BoxCollider box = anchor.GetComponent<BoxCollider>();
-			if ( box == null )
-			{
-				box = anchor.gameObject.AddComponent<BoxCollider>();
-				box.center = Vector3.zero;
-				box.size = new Vector3( volumeSize, volumeHeight, volumeSize );
-			}
-
-			ArtifactPresentationSlotVolume volume = anchor.GetComponent<ArtifactPresentationSlotVolume>();
-			if ( volume == null )
-				volume = anchor.gameObject.AddComponent<ArtifactPresentationSlotVolume>();
-			volume.Configure( this, i );
-		}
+		RebuildSlotAimVolumes( createMissing: true );
 	}
 #endif
 
@@ -729,6 +703,16 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	{
 		if ( completedHighlight != null )
 			completedHighlight.SetActive( completed );
+
+		if ( activateOnComplete == null )
+			return;
+
+		for ( int i = 0; i < activateOnComplete.Count; i++ )
+		{
+			GameObject go = activateOnComplete[ i ];
+			if ( go != null )
+				go.SetActive( completed );
+		}
 	}
 
 	void PublishChanged()

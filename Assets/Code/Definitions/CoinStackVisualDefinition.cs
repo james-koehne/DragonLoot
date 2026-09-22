@@ -28,7 +28,7 @@ public class CoinStackVisualDefinition : ScriptableObject
 	public Material silverStackMaterial;
 	public Material copperStackMaterial;
 
-	[Tooltip( "Multi-type cylinder material (Texture2DArrays + per-band type map)." )]
+	[Tooltip( "Multi-type cylinder material (Texture2DArrays + per-band type map). Rebuild arrays via DragonLoot/Coin Stack/Rebuild Texture Arrays." )]
 	public Material multiStackMaterial;
 
 	[Header( "Multi Type Indices" )]

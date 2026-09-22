@@ -64,6 +64,12 @@ public class DebugInteractionSection : DebugOverlaySection
 		if ( !Mathf.Approximately( nextPickupInitial, pickupInitial ) )
 			interaction.SetPickupHoldInitialDelay( nextPickupInitial );
 
+		float nonCoinDelay = interaction.NonCoinPickupHoldDelay;
+		GUILayout.Label( $"Non-Coin Pickup Hold: {nonCoinDelay:0.00}s" );
+		float nextNonCoinDelay = GUILayout.HorizontalSlider( nonCoinDelay, 0f, 2f );
+		if ( !Mathf.Approximately( nextNonCoinDelay, nonCoinDelay ) )
+			interaction.SetNonCoinPickupHoldDelay( nextNonCoinDelay );
+
 		PlayerCarry carry = player != null ? player.Carry : null;
 		if ( carry != null && carry.TryPeekActive( out TreasureItem held ) && held != null )
 		{
@@ -81,6 +87,9 @@ public class DebugInteractionSection : DebugOverlaySection
 		{
 			float pickupProgress = interaction.PrimaryPickupRepeatProgress;
 			GUILayout.Label( $"Pickup Repeat Progress: {pickupProgress * 100f:0}%" );
+			float nonCoinProgress = interaction.NonCoinPickupHoldProgress;
+			if ( nonCoinProgress > 0.001f )
+				GUILayout.Label( $"Non-Coin Pickup Hold: {nonCoinProgress * 100f:0}%" );
 		}
 	}
 }

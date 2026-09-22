@@ -25,6 +25,8 @@ public class DebugToastsSection : DebugOverlaySection
 		GUI.enabled = unlockReady;
 		if ( GUILayout.Button( "Unlock (ability)" ) )
 			PlayUnlockGlide();
+		if ( GUILayout.Button( "Unlock (upgrade)" ) )
+			PlayUnlockSwiftHands();
 		if ( GUILayout.Button( "Milestone (island complete)" ) )
 			UnlockRewardToastUI.NotifyMessage( "Island complete — platforms activated", null, ToastStackUI.ToastTier.Milestone );
 		GUI.enabled = true;
@@ -41,7 +43,7 @@ public class DebugToastsSection : DebugOverlaySection
 		if ( GUILayout.Button( "Play Discovery then Unlock" ) )
 		{
 			DiscoveryToastUI.NotifyMessage( "Constellation Complete: Debug Gem", ToastStackUI.ToastTier.Completion );
-			UnlockRewardToastUI.NotifyMessage( "Unlocked: Double Jump", ResolveGlideIcon() );
+			PlayUnlockGlide();
 		}
 		if ( GUILayout.Button( "Play 3 Stacked Discovery" ) )
 		{
@@ -53,7 +55,7 @@ public class DebugToastsSection : DebugOverlaySection
 		{
 			DiscoveryToastUI.NotifyMessage( "New Discovery: Debug Coin", ToastStackUI.ToastTier.Discovery );
 			DiscoveryToastUI.NotifyMessage( "Display Complete: Coins", ToastStackUI.ToastTier.Completion );
-			UnlockRewardToastUI.NotifyMessage( "Unlocked: Double Jump", ResolveGlideIcon() );
+			PlayUnlockGlide();
 			UnlockRewardToastUI.NotifyMessage( "Island complete — platforms activated", null, ToastStackUI.ToastTier.Milestone );
 		}
 		GUI.enabled = true;
@@ -77,6 +79,28 @@ public class DebugToastsSection : DebugOverlaySection
 		if ( system == null )
 			return null;
 		if ( system.TryGetDefinition( PlayerController.GlideAbilityId, out AbilityDefinition definition ) )
+			return definition;
+		return null;
+	}
+
+	static void PlayUnlockSwiftHands()
+	{
+		UpgradeDefinition upgrade = ResolveSwiftHandsUpgrade();
+		if ( upgrade != null )
+		{
+			UnlockRewardToastUI.NotifyUnlock( upgrade );
+			return;
+		}
+
+		UnlockRewardToastUI.NotifyMessage( "Unlocked: Swift Hands", null, ToastStackUI.ToastTier.Unlock, "Dig and pick up treasure 1.5x faster." );
+	}
+
+	static UpgradeDefinition ResolveSwiftHandsUpgrade()
+	{
+		UpgradeSystem system = UpgradeSystem.Instance;
+		if ( system == null )
+			return null;
+		if ( system.TryGetDefinition( UpgradeDefinition.DigPickupSpeedId, out UpgradeDefinition definition ) )
 			return definition;
 		return null;
 	}

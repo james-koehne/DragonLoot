@@ -256,6 +256,42 @@ public class CarryDefinition : ScriptableObject
 	[Range( 0f, 1f )]
 	public float stackHandLandPickupSpatialBlend;
 
+	[Header( "Coin Pickup Combo" )]
+	[Tooltip( "When on, rapid coin pickups step the reward-layer pitch up one semitone each." )]
+	public bool coinPickupComboEnabled = true;
+
+	[Tooltip( "Seconds between coin pickups before the combo pitch resets." )]
+	[Min( 0.05f )]
+	public float coinPickupComboWindowSeconds = 0.4f;
+
+	[Tooltip( "Max semitone steps above base pitch for the reward layer." )]
+	[Min( 0 )]
+	public int coinPickupComboMaxSteps = 10;
+
+	[Header( "Pile Dig SFX" )]
+	[Tooltip( "3D pour / scoop one-shots at the dig point when stealing from a gold pile." )]
+	public AudioClip[] pileDigPourClips;
+
+	[Range( 0f, 1f )]
+	public float pileDigPourVolumeAtOne = 0.5f;
+
+	[Range( 0f, 1f )]
+	public float pileDigPourVolumeAtBatch = 0.85f;
+
+	[Tooltip( "Dig amount at which pour volume reaches pileDigPourVolumeAtBatch." )]
+	[Min( 1 )]
+	public int pileDigPourAmountForMaxVolume = 8;
+
+	[Range( -3f, 3f )]
+	public float pileDigPourPitchMin = 0.95f;
+
+	[Range( -3f, 3f )]
+	public float pileDigPourPitchMax = 1.05f;
+
+	[Tooltip( "Volume scale for quiet physical clinks on extra pile-steal coins (no obtain ding)." )]
+	[Range( 0f, 1f )]
+	public float pileStealExtraClinkVolumeScale = 0.4f;
+
 	/// <summary>Hold seconds for E/F based on stack or carried quantity.</summary>
 	public float ResolveWholeStackHoldSeconds( int quantity )
 	{
@@ -282,6 +318,15 @@ public class CarryDefinition : ScriptableObject
 		resolved = Mathf.Max( 1, resolved );
 		int cap = Mathf.Max( 1, stackHandLandPickupMaxCount );
 		return Mathf.Min( resolved, cap, quantity );
+	}
+
+	/// <summary>3D pour volume for a gold-pile dig of the given unit count.</summary>
+	public float ResolvePileDigPourVolume( int amount )
+	{
+		amount = Mathf.Max( 1, amount );
+		int forMax = Mathf.Max( 1, pileDigPourAmountForMaxVolume );
+		float t = Mathf.InverseLerp( 1f, forMax, amount );
+		return Mathf.Lerp( pileDigPourVolumeAtOne, pileDigPourVolumeAtBatch, t );
 	}
 
 	void OnValidate()
@@ -326,6 +371,12 @@ public class CarryDefinition : ScriptableObject
 		stackHandLandPickupStaggerSeconds = Mathf.Max( 0f, stackHandLandPickupStaggerSeconds );
 		stackHandLandPickupVolumeScale = Mathf.Clamp01( stackHandLandPickupVolumeScale );
 		stackHandLandPickupSpatialBlend = Mathf.Clamp01( stackHandLandPickupSpatialBlend );
+		coinPickupComboWindowSeconds = Mathf.Max( 0.05f, coinPickupComboWindowSeconds );
+		coinPickupComboMaxSteps = Mathf.Max( 0, coinPickupComboMaxSteps );
+		pileDigPourVolumeAtOne = Mathf.Clamp01( pileDigPourVolumeAtOne );
+		pileDigPourVolumeAtBatch = Mathf.Clamp01( pileDigPourVolumeAtBatch );
+		pileDigPourAmountForMaxVolume = Mathf.Max( 1, pileDigPourAmountForMaxVolume );
+		pileStealExtraClinkVolumeScale = Mathf.Clamp01( pileStealExtraClinkVolumeScale );
 
 		if ( stackHandLandPickupCountCurve == null || stackHandLandPickupCountCurve.length == 0 )
 		{

@@ -15,7 +15,7 @@ MonoBehaviour:
   displayName: Treasure Pile
   coinContents:
   - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    count: 160
+    count: 100
   treasureContents: []
   maxVisibleTotal: 32
   coinVisibleBufferFraction: 0.1
@@ -44,6 +44,7 @@ MonoBehaviour:
   preferBakedCoinSeats: 1
   latentSurfaceNeighborhoodCells: 1
   preferBakedLatents: 1
+  ignoreSpawnTreasureNearSurface: 0
   latentVolumeMaxAttempts: 24
   latentRetryNoOccupancyPasses: 1
   latentRetrySaltPasses: 0

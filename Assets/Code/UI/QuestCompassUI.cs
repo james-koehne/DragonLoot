@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// </summary>
 public class QuestCompassUI : MonoBehaviour
 {
-	const float HalfWidth = 440f;
+	const float HalfWidth = 360f;
 
 	[SerializeField] CanvasGroup group;
 	[SerializeField] RectTransform pip;

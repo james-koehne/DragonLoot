@@ -40,6 +40,7 @@ public sealed class PlacementGhost
 	float _pulseSpeed = 0.85f;
 	float _rimIntensity = 1.15f;
 	float _coreIntensity = 0.28f;
+	float _visualUpBias = 0.015f;
 
 	public PlacementGhost() : this( null )
 	{
@@ -75,6 +76,11 @@ public sealed class PlacementGhost
 		ApplyTint( _lastValid );
 	}
 
+	public void SetVisualUpBias( float bias )
+	{
+		_visualUpBias = Mathf.Max( 0f, bias );
+	}
+
 	public void Destroy()
 	{
 		if ( _material != null )
@@ -96,12 +102,7 @@ public sealed class PlacementGhost
 
 	public void UpdatePose( in PlacementPreview preview )
 	{
-		if ( !_visible || _rootTransform == null )
-			return;
-
-		_rootTransform.SetPositionAndRotation( preview.Position, preview.Rotation );
-		_rootTransform.localScale = preview.Scale;
-		ApplyTint( preview.IsValid );
+		UpdatePose( preview.Position, preview.Rotation, preview.Scale, preview.IsValid );
 	}
 
 	public void UpdatePose( Vector3 position, Quaternion rotation, Vector3 scale, bool valid )
@@ -109,7 +110,7 @@ public sealed class PlacementGhost
 		if ( !_visible || _rootTransform == null )
 			return;
 
-		_rootTransform.SetPositionAndRotation( position, rotation );
+		_rootTransform.SetPositionAndRotation( position + Vector3.up * _visualUpBias, rotation );
 		_rootTransform.localScale = scale;
 		ApplyTint( valid );
 	}

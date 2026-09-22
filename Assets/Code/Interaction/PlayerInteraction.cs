@@ -36,12 +36,17 @@ public class PlayerInteraction : MonoBehaviour
 	float _pickupRepeatInterval = -1f;
 	float _throwPlaceHoldInitialDelay = -1f;
 	float _pickupHoldInitialDelay = -1f;
+	float _nonCoinPickupHoldDelay = -1f;
+	float _activeNonCoinPickupHoldDelay;
 	float _secondaryRepeatTimer;
 	float _primaryRepeatTimer;
 	float _contextualRepeatTimer;
 	bool _primaryPastInitialDelay;
 	bool _secondaryPastInitialDelay;
 	bool _contextualPastInitialDelay;
+	bool _primaryNonCoinCharging;
+	bool _primaryHoldBlocked;
+	int _nonCoinPickupKey;
 	HoverOutlineVisualSettings _cachedPickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
 	public IInteractable Current => _current;
@@ -153,7 +158,28 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		get
 		{
+			if ( _primaryNonCoinCharging )
+				return 0f;
+
 			float wait = GetPrimaryHoldWait();
+			if ( wait <= 0f )
+				return 0f;
+
+			return Mathf.Clamp01( _primaryRepeatTimer / wait );
+		}
+	}
+
+	/// <summary>
+	/// 0–1 progress of the hold ring before a non-coin primary-interact pickup.
+	/// </summary>
+	public float NonCoinPickupHoldProgress
+	{
+		get
+		{
+			if ( !_primaryNonCoinCharging || _primaryHoldBlocked )
+				return 0f;
+
+			float wait = _activeNonCoinPickupHoldDelay;
 			if ( wait <= 0f )
 				return 0f;
 
@@ -201,6 +227,21 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		EnsurePickupHoldInitialDelayInitialized();
 		_pickupHoldInitialDelay = Mathf.Max( 0f, value );
+	}
+
+	public float NonCoinPickupHoldDelay
+	{
+		get
+		{
+			EnsureNonCoinPickupHoldDelayInitialized();
+			return _nonCoinPickupHoldDelay;
+		}
+	}
+
+	public void SetNonCoinPickupHoldDelay( float value )
+	{
+		EnsureNonCoinPickupHoldDelayInitialized();
+		_nonCoinPickupHoldDelay = Mathf.Max( 0f, value );
 	}
 
 	void EnsureInteractRangeInitialized()
@@ -255,6 +296,13 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _pickupHoldInitialDelay >= 0f )
 			return;
 		_pickupHoldInitialDelay = RuntimeDefinition.Get( Definition, d => d.pickupHoldInitialDelay, 0.2f );
+	}
+
+	void EnsureNonCoinPickupHoldDelayInitialized()
+	{
+		if ( _nonCoinPickupHoldDelay >= 0f )
+			return;
+		_nonCoinPickupHoldDelay = RuntimeDefinition.Get( Definition, d => d.nonCoinPickupHoldDelay, 0.5f );
 	}
 
 	/// <summary>Legacy alias used by placement targets.</summary>
@@ -588,7 +636,20 @@ public class PlayerInteraction : MonoBehaviour
 			_resolvedMask,
 			QueryTriggerInteraction.Ignore );
 
-		if ( hitCount <= 0 )
+		RaycastHit[] processHits = _rayHits;
+		int processCount = hitCount;
+		if ( hitCount >= RaycastBufferSize )
+		{
+			// NonAlloc truncates when the buffer is full — fall back so placement keeps the true closest hit.
+			processHits = Physics.RaycastAll(
+				ray,
+				aimRayLength,
+				_resolvedMask,
+				QueryTriggerInteraction.Ignore );
+			processCount = processHits.Length;
+		}
+
+		if ( processCount <= 0 )
 		{
 			PublishTreasurePileAimChanged();
 			return;
@@ -613,9 +674,9 @@ public class PlayerInteraction : MonoBehaviour
 		Vector3 playerPos = playerRoot != null ? playerRoot.position : cam.position;
 		float rangeSq = interactRange * interactRange;
 
-		for ( int i = 0; i < hitCount; i++ )
+		for ( int i = 0; i < processCount; i++ )
 		{
-			RaycastHit hit = _rayHits[ i ];
+			RaycastHit hit = processHits[ i ];
 			if ( hit.collider == null )
 				continue;
 
@@ -929,18 +990,55 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
+		bool canPickup = _current != null
+			&& InteractableBase.IsPickupInteract( _current )
+			&& _current.CanInteract( _player );
+		bool nonCoinPickup = canPickup && IsNonCoinPickup( _current );
+
 		if ( input.Interact.WasPressedThisFrame() )
 		{
-			TryPickupInteractWithFocus();
-			_primaryRepeatTimer = 0f;
-			_primaryPastInitialDelay = false;
+			if ( nonCoinPickup )
+				UpdateNonCoinPickupChargeState( true );
+			else if ( canPickup )
+			{
+				TryPickupInteractWithFocus();
+				_primaryRepeatTimer = 0f;
+				_primaryPastInitialDelay = false;
+				ClearNonCoinPickupCharge();
+			}
+
 			if ( _current != null )
 				_previousPrimaryFocus = _current;
 			return;
 		}
 
-		// Skip hold delay only when the cursor moves onto a different live pickup.
-		// Do not treat "previous item was just picked up" as a cursor move.
+		if ( _primaryHoldBlocked )
+			return;
+
+		if ( nonCoinPickup )
+		{
+			UpdateNonCoinPickupChargeState( true );
+			if ( !_primaryNonCoinCharging )
+				return;
+
+			float wait = _activeNonCoinPickupHoldDelay;
+			_primaryRepeatTimer += Time.deltaTime;
+			if ( wait > 0f && _primaryRepeatTimer < wait )
+				return;
+
+			if ( _current.CanInteract( _player ) )
+			{
+				TryPickupInteractWithFocus();
+				_primaryHoldBlocked = true;
+			}
+
+			ClearNonCoinPickupCharge();
+			return;
+		}
+
+		ClearNonCoinPickupCharge();
+
+		// Skip hold delay only when the cursor moves onto a different live coin pickup.
 		if ( InteractableBase.IsPickupInteract( _current )
 			&& !ReferenceEquals( _current, _previousPrimaryFocus )
 			&& IsFocusStillHoverable( _previousPrimaryFocus )
@@ -958,14 +1056,39 @@ public class PlayerInteraction : MonoBehaviour
 		if ( !InteractableBase.IsPickupInteract( _current ) )
 			return;
 
-		float wait = GetPrimaryHoldWait();
+		float coinWait = GetPrimaryHoldWait();
 		_primaryRepeatTimer += Time.deltaTime;
-		if ( _primaryRepeatTimer < wait )
+		if ( _primaryRepeatTimer < coinWait )
 			return;
 
-		_primaryRepeatTimer -= wait;
+		_primaryRepeatTimer -= coinWait;
 		_primaryPastInitialDelay = true;
 		TryPickupInteractWithFocus();
+	}
+
+	void UpdateNonCoinPickupChargeState( bool nonCoinHold )
+	{
+		if ( !nonCoinHold )
+		{
+			ClearNonCoinPickupCharge();
+			return;
+		}
+
+		int pickupKey = ResolveNonCoinPickupKey();
+		if ( _primaryNonCoinCharging && pickupKey == _nonCoinPickupKey )
+			return;
+
+		_primaryNonCoinCharging = true;
+		_nonCoinPickupKey = pickupKey;
+		_activeNonCoinPickupHoldDelay = ResolveNonCoinPickupHoldDelay( _current );
+		_primaryRepeatTimer = 0f;
+	}
+
+	void ClearNonCoinPickupCharge()
+	{
+		_primaryNonCoinCharging = false;
+		_nonCoinPickupKey = 0;
+		_activeNonCoinPickupHoldDelay = 0f;
 	}
 
 	void TryContextualRepeatInput( GameInput input )
@@ -1191,6 +1314,8 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		_primaryRepeatTimer = 0f;
 		_primaryPastInitialDelay = false;
+		ClearNonCoinPickupCharge();
+		_primaryHoldBlocked = false;
 	}
 
 	void ResetContextualRepeatState()
@@ -1248,6 +1373,105 @@ public class PlayerInteraction : MonoBehaviour
 		return PlayerDigPickupSpeed.ScaleDuration( PickupRepeatInterval );
 	}
 
+	float ResolveNonCoinPickupHoldDelay( IInteractable focus )
+	{
+		if ( !TryResolveNonCoinPickup( focus, out TreasureDefinition definition, out _ ) )
+			return 0f;
+
+		float global = NonCoinPickupHoldDelay;
+		if ( definition != null )
+			return definition.ResolveNonCoinPickupHoldDelay( global );
+		return global;
+	}
+
+	bool IsNonCoinPickup( IInteractable focus )
+	{
+		return TryResolveNonCoinPickup( focus, out _, out _ );
+	}
+
+	int ResolveNonCoinPickupKey()
+	{
+		TreasurePileInteractable pile = _current as TreasurePileInteractable;
+		if ( pile != null )
+		{
+			int slot;
+			if ( TryResolveNonCoinPickup( pile, out _, out slot ) )
+				return pile.GetInstanceID() ^ ( slot * 397 );
+			return 0;
+		}
+
+		InteractableBase interactable = _current as InteractableBase;
+		if ( interactable != null )
+			return interactable.GetInstanceID();
+		return 0;
+	}
+
+	bool TryResolveNonCoinPickup( IInteractable focus, out TreasureDefinition definition, out int pileSlot )
+	{
+		definition = null;
+		pileSlot = -1;
+		if ( !InteractableBase.IsPickupInteract( focus ) )
+			return false;
+
+		TreasurePileInteractable pile = focus as TreasurePileInteractable;
+		if ( pile != null )
+		{
+			TreasurePileVisual visual = pile.PileVisual;
+			if ( visual == null || !_hasLastHit )
+				return false;
+
+			if ( !visual.TryPickLootInstance( _lastHit.point, out pileSlot, out definition, out _, out _ ) )
+				return false;
+
+			return definition != null && definition.category != TreasureCategory.Coin;
+		}
+
+		TreasureItemInteractable itemInteractable = focus as TreasureItemInteractable;
+		if ( itemInteractable != null )
+		{
+			TreasureItem item = itemInteractable.Item;
+			if ( item == null )
+				return false;
+
+			definition = item.Definition;
+			return definition != null && definition.category != TreasureCategory.Coin;
+		}
+
+		ChestInteractable chest = focus as ChestInteractable;
+		if ( chest != null )
+		{
+			TreasureItem item = chest.Item;
+			if ( item == null )
+				return false;
+
+			definition = item.Definition;
+			return definition != null && definition.category != TreasureCategory.Coin;
+		}
+
+		PickupInteractable pickup = focus as PickupInteractable;
+		if ( pickup != null )
+		{
+			definition = pickup.Treasure;
+			return definition != null && definition.category != TreasureCategory.Coin;
+		}
+
+		StackInteractable stack = focus as StackInteractable;
+		if ( stack != null )
+		{
+			definition = stack.Treasure;
+			return definition != null && definition.category != TreasureCategory.Coin;
+		}
+
+		GroundGoldBarStack barStack = focus as GroundGoldBarStack;
+		if ( barStack != null )
+		{
+			definition = barStack.StackDefinition;
+			return true;
+		}
+
+		return false;
+	}
+
 	float GetContextualHoldWait()
 	{
 		if ( !_contextualPastInitialDelay )
@@ -1272,7 +1496,7 @@ public class PlayerInteraction : MonoBehaviour
 		return ThrowPlaceRepeatInterval;
 	}
 
-	static bool IsPlayerOwnedHit( Collider collider, Transform playerRoot )
+	public static bool IsPlayerOwnedHit( Collider collider, Transform playerRoot )
 	{
 		if ( collider == null || playerRoot == null )
 			return false;

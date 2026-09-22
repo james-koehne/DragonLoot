@@ -39,7 +39,6 @@ public class TutorialPopupUI : MonoBehaviour
 	[SerializeField] Feedbacks showFeedback;
 	[SerializeField] Feedbacks hideFeedback;
 	[SerializeField] Feedbacks taskCompleteFeedback;
-	[SerializeField] Feedbacks taskCountPopFeedback;
 	[SerializeField] Feedbacks tutorialCompleteFeedback;
 	[SerializeField] Feedbacks switchFeedback;
 	[SerializeField] Feedbacks stackAddFeedback;
@@ -50,6 +49,8 @@ public class TutorialPopupUI : MonoBehaviour
 	bool _ready;
 	string _bodyBase = string.Empty;
 	string _tasksFormatted = string.Empty;
+	string _tasksFormattedPrevious = string.Empty;
+	readonly UiCountChunkPop _countPop = new UiCountChunkPop();
 	Vector3 _restScale = Vector3.one;
 	Vector2 _restAnchored;
 	bool _restAnchoredCaptured;
@@ -128,7 +129,6 @@ public class TutorialPopupUI : MonoBehaviour
 		CacheCardChrome();
 		EnsureActiveCard();
 		EnsureSwitchFeedback();
-		EnsureCountPopFeedback();
 		EnsureStackAddFeedback();
 		HideLegacyCycleHint();
 		EnsureMinimizedRoot();
@@ -176,8 +176,8 @@ public class TutorialPopupUI : MonoBehaviour
 		_activeCardGroup.blocksRaycasts = false;
 		_activeCardGroup.interactable = false;
 
-		ReparentToActiveCard( "Background" );
 		ReparentToActiveCard( "CompleteGlow" );
+		ReparentToActiveCard( "Background" );
 		ReparentToActiveCard( "Title" );
 		ReparentToActiveCard( "Body" );
 		ReparentToActiveCard( "Tasks" );
@@ -367,107 +367,6 @@ public class TutorialPopupUI : MonoBehaviour
 		stackAddFeedback.AddFeedback( parallel );
 	}
 
-	void EnsureCountPopFeedback()
-	{
-		if ( taskCountPopFeedback != null && taskCountPopFeedback.FeedbackList != null && taskCountPopFeedback.FeedbackList.Count > 0 )
-		{
-			SetUnscaled( taskCountPopFeedback );
-			RetargetCountPop();
-			return;
-		}
-
-		Transform existing = transform.Find( "TaskCountPopFeedbacks" );
-		GameObject go = existing != null ? existing.gameObject : new GameObject( "TaskCountPopFeedbacks", typeof( RectTransform ) );
-		if ( existing == null )
-			go.transform.SetParent( transform, false );
-
-		if ( taskCountPopFeedback == null )
-			taskCountPopFeedback = go.GetComponent<Feedbacks>();
-		if ( taskCountPopFeedback == null )
-			taskCountPopFeedback = go.AddComponent<Feedbacks>();
-		taskCountPopFeedback.UseUnscaledTime = true;
-
-		if ( taskCountPopFeedback.FeedbackList != null && taskCountPopFeedback.FeedbackList.Count > 0 )
-		{
-			RetargetCountPop();
-			return;
-		}
-
-		ParallelFeedback parallel = new ParallelFeedback();
-		parallel.Feedbacks = new List<Feedback>();
-		parallel.Feedbacks.Add( CreateCountPopPunch() );
-		parallel.Feedbacks.Add( CreateCountPopColor() );
-		taskCountPopFeedback.AddFeedback( parallel );
-		RetargetCountPop();
-	}
-
-	UiPunchScaleFeedback CreateCountPopPunch()
-	{
-		UiPunchScaleFeedback punch = new UiPunchScaleFeedback();
-		punch.Punch = new Vector3( 0.06f, 0.14f, 0f );
-		punch.Duration = 0.16f;
-		punch.UseUnscaledTime = true;
-		punch.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f ),
-			new Keyframe( 0.28f, 1f ),
-			new Keyframe( 1f, 0f ) );
-		return punch;
-	}
-
-	UiGraphicColorPunchFeedback CreateCountPopColor()
-	{
-		UiGraphicColorPunchFeedback color = new UiGraphicColorPunchFeedback();
-		color.PunchColor = new Color( 1f, 0.92f, 0.55f, 1f );
-		color.Duration = 0.16f;
-		color.UseUnscaledTime = true;
-		color.CaptureRestOnPlay = true;
-		color.Curve = new AnimationCurve(
-			new Keyframe( 0f, 0f ),
-			new Keyframe( 0.3f, 1f ),
-			new Keyframe( 1f, 0f ) );
-		return color;
-	}
-
-	void RetargetCountPop()
-	{
-		if ( taskCountPopFeedback == null || taskCountPopFeedback.FeedbackList == null )
-			return;
-
-		RectTransform tasksRect = tasksText != null ? tasksText.rectTransform : null;
-		for ( int i = 0; i < taskCountPopFeedback.FeedbackList.Count; i++ )
-			RetargetCountPopRecursive( taskCountPopFeedback.FeedbackList[ i ], tasksRect, tasksText );
-	}
-
-	static void RetargetCountPopRecursive( Feedback feedback, RectTransform tasksRect, Graphic tasksGraphic )
-	{
-		if ( feedback == null )
-			return;
-
-		ParallelFeedback parallel = feedback as ParallelFeedback;
-		if ( parallel != null && parallel.Feedbacks != null )
-		{
-			for ( int i = 0; i < parallel.Feedbacks.Count; i++ )
-				RetargetCountPopRecursive( parallel.Feedbacks[ i ], tasksRect, tasksGraphic );
-			return;
-		}
-
-		SequenceFeedback sequence = feedback as SequenceFeedback;
-		if ( sequence != null && sequence.Feedbacks != null )
-		{
-			for ( int i = 0; i < sequence.Feedbacks.Count; i++ )
-				RetargetCountPopRecursive( sequence.Feedbacks[ i ], tasksRect, tasksGraphic );
-			return;
-		}
-
-		UiPunchScaleFeedback punch = feedback as UiPunchScaleFeedback;
-		if ( punch != null )
-			punch.Target = tasksRect;
-
-		UiGraphicColorPunchFeedback color = feedback as UiGraphicColorPunchFeedback;
-		if ( color != null )
-			color.Target = tasksGraphic;
-	}
-
 	void RetargetStackAddFeedback( RectTransform row )
 	{
 		if ( stackAddFeedback == null || stackAddFeedback.FeedbackList == null || row == null )
@@ -625,7 +524,6 @@ public class TutorialPopupUI : MonoBehaviour
 		SetUnscaled( showFeedback );
 		SetUnscaled( hideFeedback );
 		SetUnscaled( taskCompleteFeedback );
-		SetUnscaled( taskCountPopFeedback );
 		SetUnscaled( tutorialCompleteFeedback );
 		SetUnscaled( switchFeedback );
 		SetUnscaled( stackAddFeedback );
@@ -650,7 +548,9 @@ public class TutorialPopupUI : MonoBehaviour
 		transform.SetAsLastSibling();
 		_visible = true;
 		_bodyBase = body ?? string.Empty;
+		_tasksFormattedPrevious = _tasksFormatted;
 		_tasksFormatted = tasksFormatted ?? string.Empty;
+		StopCountChunkPop( restore: false );
 
 		StopAllFeedbacksExcept( null );
 
@@ -732,6 +632,8 @@ public class TutorialPopupUI : MonoBehaviour
 
 	public void SetTasks( string tasksFormatted )
 	{
+		_tasksFormattedPrevious = _tasksFormatted;
+		StopCountChunkPop( restore: false );
 		_tasksFormatted = tasksFormatted ?? string.Empty;
 		RefreshBodyAndTasks();
 		LayoutContent();
@@ -739,17 +641,16 @@ public class TutorialPopupUI : MonoBehaviour
 
 	public void PlayTaskComplete()
 	{
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
+		StopCountChunkPop( restore: true );
 		if ( taskCompleteFeedback != null )
 			taskCompleteFeedback.Play();
 	}
 
 	public void PlayTaskCountPop()
 	{
-		EnsureCountPopFeedback();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Play();
+		if ( !_countPop.Begin( _tasksFormattedPrevious, _tasksFormatted ) )
+			return;
+		ApplyCountChunkDisplay( _countPop.CurrentDisplay( CountChunkFontSize(), CountChunkRestColor() ) );
 	}
 
 	public void PlayTutorialComplete()
@@ -795,8 +696,7 @@ public class TutorialPopupUI : MonoBehaviour
 			showFeedback.Stop();
 		if ( taskCompleteFeedback != null )
 			taskCompleteFeedback.Stop();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
+		StopCountChunkPop( restore: false );
 		if ( tutorialCompleteFeedback != null )
 			tutorialCompleteFeedback.Stop();
 		if ( switchFeedback != null )
@@ -828,8 +728,7 @@ public class TutorialPopupUI : MonoBehaviour
 			showFeedback.Stop();
 		if ( taskCompleteFeedback != null )
 			taskCompleteFeedback.Stop();
-		if ( taskCountPopFeedback != null )
-			taskCountPopFeedback.Stop();
+		StopCountChunkPop( restore: false );
 		if ( tutorialCompleteFeedback != null )
 			tutorialCompleteFeedback.Stop();
 		if ( switchFeedback != null )
@@ -854,6 +753,7 @@ public class TutorialPopupUI : MonoBehaviour
 	public void HideImmediate()
 	{
 		_visible = false;
+		StopCountChunkPop( restore: false );
 		StopAllFeedbacksExcept( null );
 
 		transform.localScale = _restScale;
@@ -907,7 +807,6 @@ public class TutorialPopupUI : MonoBehaviour
 		StopIfNot( showFeedback, keep );
 		StopIfNot( hideFeedback, keep );
 		StopIfNot( taskCompleteFeedback, keep );
-		StopIfNot( taskCountPopFeedback, keep );
 		StopIfNot( tutorialCompleteFeedback, keep );
 		StopIfNot( switchFeedback, keep );
 		StopIfNot( stackAddFeedback, keep );
@@ -954,12 +853,24 @@ public class TutorialPopupUI : MonoBehaviour
 
 	void RefreshBodyAndTasks()
 	{
+		ApplyTasksDisplay( _tasksFormatted );
+	}
+
+	void ApplyCountChunkDisplay( string display )
+	{
+		ApplyTasksDisplay( display );
+		if ( _visible )
+			LayoutContent();
+	}
+
+	void ApplyTasksDisplay( string tasksFormatted )
+	{
 		if ( tasksText != null )
 		{
 			if ( bodyText != null )
 				bodyText.text = _bodyBase;
-			tasksText.text = _tasksFormatted;
 			tasksText.supportRichText = true;
+			tasksText.text = tasksFormatted ?? string.Empty;
 			tasksText.gameObject.SetActive( !string.IsNullOrEmpty( _tasksFormatted ) );
 			return;
 		}
@@ -968,12 +879,55 @@ public class TutorialPopupUI : MonoBehaviour
 			return;
 
 		bodyText.supportRichText = true;
-		if ( string.IsNullOrEmpty( _tasksFormatted ) )
+		if ( string.IsNullOrEmpty( tasksFormatted ) )
 			bodyText.text = _bodyBase;
 		else if ( string.IsNullOrEmpty( _bodyBase ) )
-			bodyText.text = _tasksFormatted;
+			bodyText.text = tasksFormatted;
 		else
-			bodyText.text = _bodyBase + "\n\n" + _tasksFormatted;
+			bodyText.text = _bodyBase + "\n\n" + tasksFormatted;
+	}
+
+	void StopCountChunkPop( bool restore )
+	{
+		bool wasActive = _countPop.Active;
+		_countPop.Stop();
+		if ( restore && wasActive )
+			RefreshBodyAndTasks();
+	}
+
+	void Update()
+	{
+		TickCountChunkPop();
+	}
+
+	void TickCountChunkPop()
+	{
+		if ( !_countPop.Active )
+			return;
+
+		string display;
+		bool running = _countPop.Tick( Time.unscaledDeltaTime, CountChunkFontSize(), CountChunkRestColor(), out display );
+		ApplyCountChunkDisplay( display );
+		if ( !running )
+			RefreshBodyAndTasks();
+	}
+
+	int CountChunkFontSize()
+	{
+		if ( tasksText != null )
+			return tasksText.fontSize;
+		if ( bodyText != null )
+			return bodyText.fontSize;
+		return 18;
+	}
+
+	Color CountChunkRestColor()
+	{
+		if ( tasksText != null )
+			return tasksText.color;
+		if ( bodyText != null )
+			return bodyText.color;
+		return Color.white;
 	}
 
 	void LayoutContent()
