@@ -80,6 +80,9 @@ public class PlayerInteractionDefinition : ScriptableObject
 	[Header( "Quest Objective Outline" )]
 	public HoverOutlineVisualSettings questOutline = HoverOutlineVisualSettings.DefaultQuest();
 
+	[Header( "Tutorial Outline" )]
+	public HoverOutlineVisualSettings tutorialOutline = HoverOutlineVisualSettings.DefaultTutorial();
+
 	void OnValidate()
 	{
 		interactRange = Mathf.Max( 0.1f, interactRange );
@@ -109,5 +112,9 @@ public class PlayerInteractionDefinition : ScriptableObject
 			questOutline = HoverOutlineVisualSettings.DefaultQuest();
 		else
 			questOutline.Validate();
+		if ( tutorialOutline == null )
+			tutorialOutline = HoverOutlineVisualSettings.DefaultTutorial();
+		else
+			tutorialOutline.Validate();
 	}
 }

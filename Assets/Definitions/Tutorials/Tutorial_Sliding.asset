@@ -33,7 +33,7 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
-  prerequisiteVolumeId: 
+  prerequisiteVolumeId: volume_main_cave
   prerequisiteTutorialIds:
   - tut_sprinting
   highlightMapLabel: 

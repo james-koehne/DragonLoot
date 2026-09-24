@@ -18,6 +18,7 @@ namespace FeedbackSystem
 		Vector3 _basePosition;
 		Quaternion _baseRotation;
 		float _elapsed;
+		int _anchorId;
 		bool _running;
 
 		public override void Play()
@@ -25,9 +26,13 @@ namespace FeedbackSystem
 			if ( Target == null )
 				return;
 
-			Cancel();
-			_basePosition = Target.localPosition;
-			_baseRotation = Target.localRotation;
+			if ( _running )
+			{
+				_elapsed = 0f;
+				return;
+			}
+
+			_anchorId = TransformShakeAnchor.Retain( Target, out _basePosition, out _baseRotation );
 			_elapsed = 0f;
 			_running = true;
 			RegisterTick( this );
@@ -47,14 +52,13 @@ namespace FeedbackSystem
 		{
 			if ( !_running || Target == null )
 			{
-				_running = false;
+				End( false );
 				return false;
 			}
 
 			if ( Duration <= 0f )
 			{
-				Restore();
-				_running = false;
+				End( true );
 				return false;
 			}
 
@@ -62,8 +66,7 @@ namespace FeedbackSystem
 			float t = _elapsed / Duration;
 			if ( t >= 1f )
 			{
-				Restore();
-				_running = false;
+				End( true );
 				return false;
 			}
 
@@ -76,20 +79,17 @@ namespace FeedbackSystem
 
 		public void Cancel()
 		{
-			if ( _running )
-				Restore();
-
-			_running = false;
-			UnregisterTick( this );
+			End( true );
 		}
 
-		void Restore()
+		void End( bool restore )
 		{
-			if ( Target == null )
+			if ( !_running )
 				return;
 
-			Target.localPosition = _basePosition;
-			Target.localRotation = _baseRotation;
+			_running = false;
+			TransformShakeAnchor.Release( _anchorId, Target, restore );
+			UnregisterTick( this );
 		}
 	}
 }

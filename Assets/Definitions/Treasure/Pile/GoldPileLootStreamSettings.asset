@@ -34,8 +34,8 @@ MonoBehaviour:
   useSurfaceDecorSeats: 1
   releaseEmbeddedSeatsOnDig: 0
   spawnPhysicalCoinsOnDig: 1
-  digPhysicalSpawnChance: 0.05
-  digPhysicalMaxPerCarve: 3
+  digPhysicalSpawnChance: 0
+  digPhysicalMaxPerCarve: 0
   digPhysicalUnitsPerRoll: 1
   digDecorTopUpMax: 10
   digStickMax: 16

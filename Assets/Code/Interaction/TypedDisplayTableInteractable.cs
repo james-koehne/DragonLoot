@@ -82,6 +82,22 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	[SerializeField]
 	protected GameObject completedHighlight;
 
+	[Tooltip( "Optional objects that start inactive and are activated when the display is complete." )]
+	[SerializeField]
+	protected List<GameObject> activateOnComplete = new List<GameObject>();
+
+	[Tooltip( "Optional complete FX (lit + SoftShaft). Activated with the display; color can be overridden below." )]
+	[SerializeField]
+	protected DisplayCompleteEffect completeEffect;
+
+	[Tooltip( "When enabled, pushes Complete Effect Color into the complete effect on activation." )]
+	[SerializeField]
+	protected bool overrideCompleteEffectColor;
+
+	[SerializeField]
+	[ColorUsage( true, true )]
+	protected Color completeEffectColor = new Color( 1f, 0.72f, 0.28f, 1f );
+
 	[SerializeField]
 	[Tooltip( "Optional Feedbacks played when this table becomes complete." )]
 	protected Feedbacks completeFeedbacks;
@@ -1815,6 +1831,40 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 	{
 		if ( completedHighlight != null )
 			completedHighlight.SetActive( completed );
+
+		if ( activateOnComplete != null )
+		{
+			for ( int i = 0; i < activateOnComplete.Count; i++ )
+			{
+				GameObject go = activateOnComplete[ i ];
+				if ( go != null )
+					go.SetActive( completed );
+			}
+		}
+
+		ApplyCompleteEffect( completed );
+	}
+
+	void ApplyCompleteEffect( bool completed )
+	{
+		if ( completeEffect == null )
+			return;
+
+		if ( completed && TryResolveCompleteEffectColor( out Color color ) )
+			completeEffect.Setup( color );
+
+		GameObject effectGo = completeEffect.gameObject;
+		if ( effectGo != null )
+			effectGo.SetActive( completed );
+	}
+
+	/// <summary>
+	/// When true, <see cref="ApplyCompleteEffect"/> calls Setup with the resolved color on completion.
+	/// </summary>
+	protected virtual bool TryResolveCompleteEffectColor( out Color color )
+	{
+		color = completeEffectColor;
+		return overrideCompleteEffectColor;
 	}
 
 	/// <summary>Hook for place FX / SFX (assets later).</summary>

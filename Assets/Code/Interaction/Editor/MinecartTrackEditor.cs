@@ -30,10 +30,14 @@ public class MinecartTrackEditor : Editor
 		{
 			MinecartTrack track = (MinecartTrack)target;
 			MinecartTrackMeshBuilder.Rebuild( track );
+			MinecartJunctionGraphBaker.RebuildActiveSceneIfPresent();
 		}
 
 		if ( serializedObject.ApplyModifiedProperties() )
+		{
 			MinecartTrackMeshBuilder.Rebuild( (MinecartTrack)target );
+			MinecartJunctionGraphBaker.RebuildActiveSceneIfPresent();
+		}
 	}
 
 	void OnSplineChanged( Spline spline, int knotIndex, SplineModification modification )
@@ -43,6 +47,7 @@ public class MinecartTrackEditor : Editor
 			return;
 
 		MinecartTrackMeshBuilder.Rebuild( track );
+		MinecartJunctionGraphBaker.RebuildActiveSceneIfPresent();
 	}
 
 	[MenuItem( DragonLootMenus.MinecartCreateTrack )]
@@ -73,6 +78,7 @@ public class MinecartTrackEditor : Editor
 		Undo.RegisterCreatedObjectUndo( go, "Create Minecart Track" );
 		Selection.activeGameObject = go;
 		MinecartTrackMeshBuilder.Rebuild( track );
+		MinecartJunctionGraphBaker.RebuildActiveSceneIfPresent();
 	}
 }
 #endif

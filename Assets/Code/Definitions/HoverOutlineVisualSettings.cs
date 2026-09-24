@@ -109,6 +109,25 @@ public class HoverOutlineVisualSettings
 		return settings;
 	}
 
+	public static HoverOutlineVisualSettings DefaultTutorial()
+	{
+		HoverOutlineVisualSettings settings = new HoverOutlineVisualSettings();
+		Color tutorial = PlacementFeedbackColors.TutorialHighlight;
+		settings.outlineColor = new Color( tutorial.r * 1.15f, tutorial.g * 1.1f, tutorial.b * 1.2f, 1f );
+		settings.outlineIntensity = 1.1f;
+		settings.hdrBoost = 1.55f;
+		settings.scalePixels = 3.5f;
+		settings.maskDilatePixels = 2.5f;
+		settings.depthThreshold = 1.5f;
+		settings.normalThreshold = 0.4f;
+		settings.depthNormalThreshold = 0.5f;
+		settings.depthNormalThresholdScale = 7f;
+		settings.normalEdgeWeight = 1f;
+		settings.pulseSpeed = 1.2f;
+		settings.pulseAmount = 0.16f;
+		return settings;
+	}
+
 	public void Validate()
 	{
 		outlineIntensity = Mathf.Clamp( outlineIntensity, 0f, 2f );

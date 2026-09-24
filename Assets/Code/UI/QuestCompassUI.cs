@@ -7,7 +7,7 @@ using UnityEngine.UI;
 /// </summary>
 public class QuestCompassUI : MonoBehaviour
 {
-	const float HalfWidth = 360f;
+	const float HalfWidth = 288f;
 
 	[SerializeField] CanvasGroup group;
 	[SerializeField] RectTransform pip;
@@ -26,7 +26,26 @@ public class QuestCompassUI : MonoBehaviour
 	{
 		Subscribe();
 		AttachDistanceToPip();
+		ApplyQuestPipColor();
 		ApplyVisibility();
+	}
+
+	void ApplyQuestPipColor()
+	{
+		if ( pip == null )
+			return;
+
+		Image image = pip.GetComponent<Image>();
+		if ( image == null )
+			return;
+
+		Color cyan = PlacementFeedbackColors.QuestObjectiveHighlight;
+		PlayerInteractionDefinition def = null;
+		def = RuntimeDefinition.Resolve( ref def );
+		if ( def != null && def.questOutline != null )
+			cyan = def.questOutline.outlineColor;
+
+		image.color = new Color( cyan.r, cyan.g, cyan.b, image.color.a );
 	}
 
 	public void SetCinematicHidden( bool hidden )

@@ -130,6 +130,7 @@ public class GameController : MonoBehaviour
 	{
 		PlacePlayerAtSpawn();
 		DebugSpawnRegistry.ApplySkipIntroIfSelected();
+		DebugSpawnRegistry.ApplyPostTutorialIfSelected();
 	}
 
 	void PlacePlayerAtSpawn()

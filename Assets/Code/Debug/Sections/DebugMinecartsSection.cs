@@ -26,6 +26,13 @@ public class DebugMinecartsSection : DebugOverlaySection
 		GUILayout.Label( lead.IsDriveCart ? "Kind: Drive" : "Kind: Cargo" );
 		GUILayout.Label( $"Followers: {lead.FollowerCount}" );
 		GUILayout.Label( $"Along: {lead.DistanceAlongTrack:0.00}  Speed: {lead.AlongTrackSpeed:0.00}" );
+		GUILayout.Label( lead.DebugJunctionCommitLabel );
+
+		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+		if ( graph == null )
+			GUILayout.Label( "Junction graph: none" );
+		else
+			GUILayout.Label( $"Junction graph: {graph.JunctionCount} node(s)" );
 
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Add cargo car" ) )

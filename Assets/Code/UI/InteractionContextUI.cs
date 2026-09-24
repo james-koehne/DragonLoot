@@ -94,7 +94,7 @@ public class InteractionContextUI : MonoBehaviour
 
 		IInteractable focus = interaction.Current;
 		if ( focus is CoinSortingCrankInteractable crankFocus && crankFocus.CanInteract( player ) )
-			AppendBound( gameInput.ContextualInteract, "Hold to crank" );
+			AppendDualBound( gameInput.Interact, gameInput.ContextualInteract, "Hold to crank" );
 		else if ( focus is CoinSortingStationMoveInteractable )
 			AppendBound( gameInput.ContextualInteract, "Hold to move sorter" );
 		else if ( focus is DoorInteractable doorFocus && doorFocus.ShowsLockedPrompt )
@@ -119,7 +119,10 @@ public class InteractionContextUI : MonoBehaviour
 		if ( carrying && placement != null )
 		{
 			if ( wholeStack != null && wholeStack.CanOfferWholeStackPlace )
-				AppendBound( gameInput.ContextualInteract, "Hold to place stack" );
+			{
+				string holdPlace = wholeStack.TryGetWholePlaceJoinTarget( out _ ) ? "Hold to stack onto pile" : "Hold to place stack";
+				AppendBound( gameInput.ContextualInteract, holdPlace );
+			}
 
 			AppendSecondaryLines( gameInput, placement );
 		}
@@ -149,7 +152,10 @@ public class InteractionContextUI : MonoBehaviour
 		switch ( action )
 		{
 			case SecondaryContextAction.Place:
-				AppendBound( gameInput.SecondaryInteract, FormatPlacePrompt( placement ) );
+				if ( placement.ActiveTarget is ArtifactPresentationTableInteractable )
+					AppendDualBound( gameInput.Interact, gameInput.SecondaryInteract, FormatPlacePrompt( placement ) );
+				else
+					AppendBound( gameInput.SecondaryInteract, FormatPlacePrompt( placement ) );
 				break;
 			case SecondaryContextAction.Throw:
 				AppendBound( gameInput.SecondaryInteract, "Throw" );
@@ -167,6 +173,8 @@ public class InteractionContextUI : MonoBehaviour
 			return "Place to clean";
 		if ( target is GemConstellationInteractable )
 			return "Place gem";
+		if ( placement.IsJoiningStack )
+			return "Stack onto pile";
 		return "Place";
 	}
 
@@ -240,6 +248,18 @@ public class InteractionContextUI : MonoBehaviour
 			return;
 
 		AppendLine( binding, prompt );
+	}
+
+	void AppendDualBound( InputAction primary, InputAction secondary, string prompt )
+	{
+		string a = FormatBinding( primary );
+		string b = FormatBinding( secondary );
+		if ( !string.IsNullOrEmpty( a ) && !string.IsNullOrEmpty( b ) )
+			AppendLine( a + " / " + b, prompt );
+		else if ( !string.IsNullOrEmpty( a ) )
+			AppendLine( a, prompt );
+		else if ( !string.IsNullOrEmpty( b ) )
+			AppendLine( b, prompt );
 	}
 
 	void AppendPlain( string prompt )

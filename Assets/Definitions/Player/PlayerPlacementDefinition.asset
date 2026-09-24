@@ -20,7 +20,7 @@ MonoBehaviour:
   groundStackSnapRadius: 0.15
   constellationPlaceRange: 12
   placementArcHeight: 0.12
-  coinFlipSpeed: 1
+  coinFlipSpeed: 2
   previewSmoothSpeed: 200
   ghostShader: {fileID: 4800000, guid: 1e663b1dc789049468dce8ca236ec965, type: 3}
   validGhostColor: {r: 0.25, g: 0.9, b: 0.35, a: 0.34901962}

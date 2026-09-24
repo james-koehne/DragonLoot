@@ -25,6 +25,11 @@ public struct WholeStackPickupCompletedEvent
 public struct WholeStackPlaceCompletedEvent
 {
 	public CarryBucketKind Bucket;
+
+	/// <summary>
+	/// True when coins joined an existing stack via nearby floor snap or along-ray (not direct aim/hit).
+	/// </summary>
+	public bool IndirectJoin;
 }
 
 /// <summary>Interaction focus aiming at a treasure pile started or stopped.</summary>

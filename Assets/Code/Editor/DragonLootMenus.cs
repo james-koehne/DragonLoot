@@ -36,6 +36,10 @@ public static class DragonLootMenus
 
 	public const string GraphicsMagicalLanternAddToSelection = Root + "/Graphics/Lantern/Add Magical Motion To Selection";
 
+	public const string GraphicsCompleteGlowRebuildAll = Root + "/Graphics/Complete Glow/Rebuild All In Open Scenes";
+	public const string GraphicsCompleteGlowEnsurePresets = Root + "/Graphics/Complete Glow/Ensure Presets";
+	public const string GameObjectBuildCompleteGlow = "GameObject/DragonLoot/Build Complete Glow";
+
 	// --- Coin Stack ---
 	public const string CoinStackRebuildImperfectChunks = Root + "/Coin Stack/Rebuild Imperfect Chunks";
 	public const string CoinStackRebuildTextureArrays = Root + "/Coin Stack/Rebuild Texture Arrays";
@@ -65,6 +69,8 @@ public static class DragonLootMenus
 	public const string TreasureSurfaceCreateDefinition = Root + "/Treasure Surface/Create Definition";
 	public const string TreasureSurfaceCreateAuthoring = Root + "/Treasure Surface/Create Authoring In Active Scene";
 	public const string TreasureSurfaceMigratePaint = Root + "/Treasure Surface/Migrate Authoring Paint To Asset";
+	public const string TreasureSurfaceCreatePathDebug = Root + "/Treasure Surface/Create Path Debug In Active Scene";
+	public const string GameObjectTreasureSurfacePathDebug = "GameObject/DragonLoot/Treasure Surface Path Debug";
 
 	// --- Minecart ---
 	public const string MinecartCreateSetup = Root + "/Minecart/Create Setup";
@@ -72,6 +78,8 @@ public static class DragonLootMenus
 	public const string MinecartCreateTrack = Root + "/Minecart/Create Track";
 	public const string MinecartCreateUnloadPoint = Root + "/Minecart/Create Unload Point";
 	public const string MinecartCreateCallPost = Root + "/Minecart/Create Call Post";
+	public const string MinecartCreateJunctionGraph = Root + "/Minecart/Create Junction Graph";
+	public const string MinecartRebuildJunctions = Root + "/Minecart/Rebuild Junctions";
 	public const string MinecartPatchAudio = Root + "/Minecart/Patch Move & Brake Audio";
 
 	public const string GameObjectMinecartSetup = "GameObject/DragonLoot/Minecart Setup";
@@ -79,6 +87,7 @@ public static class DragonLootMenus
 	public const string GameObjectMinecartTrack = "GameObject/DragonLoot/Minecart Track";
 	public const string GameObjectMinecartUnloadPoint = "GameObject/DragonLoot/Minecart Unload Point";
 	public const string GameObjectMinecartCallPost = "GameObject/DragonLoot/Minecart Call Post";
+	public const string GameObjectMinecartJunctionGraph = "GameObject/DragonLoot/Minecart Junction Graph";
 
 	// --- World ---
 	public const string WorldCreateFloatingPlatformGroup = Root + "/World/Create Floating Platform Group";
@@ -111,6 +120,9 @@ public static class DragonLootMenus
 
 	// --- Companions ---
 	public const string CompanionsBuildFairyHelper = Root + "/Companions/Build Fairy Helper Prefab";
+
+	// --- Dragon ---
+	public const string DragonSetupLookAt = Root + "/Dragon/Setup Look-At";
 
 	// --- Cinematic ---
 	public const string CinematicCreateIntroSplines = Root + "/Cinematic/Create Intro Splines";

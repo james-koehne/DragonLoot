@@ -236,6 +236,45 @@ public class ObjectiveSystem : MonoBehaviour
 			CompleteObjective( definition, ignoreWorldState: true );
 	}
 
+	/// <summary>
+	/// Marks every catalog objective and sub complete, grants their rewards, and fires completion world events.
+	/// Skips the per-island completion toast so a debug skip can surface ability/upgrade rewards instead.
+	/// </summary>
+	public void DebugCompleteAll()
+	{
+		if ( _catalog == null || _catalog.objectives == null )
+			return;
+
+		for ( int i = 0; i < _catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = _catalog.objectives[ i ];
+			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+
+			if ( definition.subs != null )
+			{
+				for ( int s = 0; s < definition.subs.Length; s++ )
+				{
+					ObjectiveSubDefinition sub = definition.subs[ s ];
+					if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+						continue;
+					if ( IsSubCompleted( definition.id, sub.id ) )
+						continue;
+
+					string key = SubKey( definition.id, sub.id );
+					_completedSubs.Add( key );
+					PersistSub( key );
+				}
+			}
+
+			_pendingCompleteIds.Remove( definition.id );
+			if ( !IsCompleted( definition.id ) )
+				CompleteObjective( definition, ignoreWorldState: true, announce: false );
+		}
+
+		RefreshNearbyHud( force: true );
+	}
+
 	public void DebugResetProgress()
 	{
 		StopAllCoroutines();
@@ -638,7 +677,7 @@ public class ObjectiveSystem : MonoBehaviour
 		CompleteObjective( definition );
 	}
 
-	void CompleteObjective( ObjectiveDefinition definition, bool ignoreWorldState = false )
+	void CompleteObjective( ObjectiveDefinition definition, bool ignoreWorldState = false, bool announce = true )
 	{
 		if ( definition == null || string.IsNullOrEmpty( definition.id ) )
 			return;
@@ -651,7 +690,7 @@ public class ObjectiveSystem : MonoBehaviour
 		_completedObjectives.Add( definition.id );
 		PersistObjective( definition.id );
 
-		if ( !string.IsNullOrEmpty( definition.completionToast ) )
+		if ( announce && !string.IsNullOrEmpty( definition.completionToast ) )
 			UnlockRewardToastUI.NotifyMessage( definition.completionToast, null, ToastStackUI.ToastTier.Milestone );
 
 		GrantRewards( definition );
@@ -987,6 +1026,10 @@ public class ObjectiveSystem : MonoBehaviour
 		if ( definition.subs == null )
 			return false;
 
+		// Primary: centroid of all incomplete subs with resolvable QuestTargets.
+		Vector3 sum = Vector3.zero;
+		int count = 0;
+		string firstId = null;
 		for ( int i = 0; i < definition.subs.Length; i++ )
 		{
 			ObjectiveSubDefinition sub = definition.subs[ i ];
@@ -995,13 +1038,21 @@ public class ObjectiveSystem : MonoBehaviour
 			if ( IsSubCompleted( definition.id, sub.id ) )
 				continue;
 
-			if ( TryResolveSubAnchor( sub, out string id, out Vector3 pos, out _ ) )
-			{
-				markerId = id;
-				markerPos = pos;
-				distance = TutorialHudDistance.HorizontalTo( pos );
-				return true;
-			}
+			if ( !TryResolveSubAnchor( sub, out string id, out Vector3 pos, out _ ) )
+				continue;
+
+			sum += pos;
+			count++;
+			if ( firstId == null )
+				firstId = id;
+		}
+
+		if ( count > 0 )
+		{
+			markerId = firstId;
+			markerPos = sum / count;
+			distance = TutorialHudDistance.HorizontalTo( markerPos );
+			return true;
 		}
 
 		// Fallback: any sub with a resolvable target (even completed) so the objective can still show.

@@ -14,10 +14,22 @@ public abstract class InteractableBase : MonoBehaviour, IInteractable
 	/// </summary>
 	public virtual bool UsesPickupInteract => false;
 
+	/// <summary>
+	/// When true, primary Interact (LMB) hold-repeats this target in addition to ContextualInteract (E).
+	/// Unlike <see cref="UsesPickupInteract"/>, this does not block E.
+	/// </summary>
+	public virtual bool AcceptsPrimaryInteract => false;
+
 	public static bool IsPickupInteract( IInteractable interactable )
 	{
 		InteractableBase target = interactable as InteractableBase;
 		return target != null && target.UsesPickupInteract;
+	}
+
+	public static bool AcceptsPrimary( IInteractable interactable )
+	{
+		InteractableBase target = interactable as InteractableBase;
+		return target != null && target.AcceptsPrimaryInteract;
 	}
 
 	public virtual bool CanInteract( PlayerController player )

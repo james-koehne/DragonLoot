@@ -403,7 +403,7 @@ MonoBehaviour:
         _enabled: 1
         Target: {fileID: 2294012121574183026}
         Strength: 0.018
-        RotationScale: 22
+        RotationScale: 11
 --- !u!1 &9111000000000201
 GameObject:
   m_ObjectHideFlags: 0

@@ -21,6 +21,7 @@ public class LoopShakeTransformFeedback : Feedback, IFeedbackTick
 
 	Vector3 _basePosition;
 	Quaternion _baseRotation;
+	int _anchorId;
 	bool _running;
 
 	public override void Play()
@@ -28,21 +29,22 @@ public class LoopShakeTransformFeedback : Feedback, IFeedbackTick
 		if ( Target == null )
 			return;
 
-		Cancel( false );
-		_basePosition = Target.localPosition;
-		_baseRotation = Target.localRotation;
+		if ( _running )
+			return;
+
+		_anchorId = TransformShakeAnchor.Retain( Target, out _basePosition, out _baseRotation );
 		_running = true;
 		RegisterTick( this );
 	}
 
 	public override void Stop()
 	{
-		Cancel( true );
+		Cancel();
 	}
 
 	public override void Reset()
 	{
-		Cancel( true );
+		Cancel();
 	}
 
 	public override float GetHoldDuration()
@@ -54,7 +56,7 @@ public class LoopShakeTransformFeedback : Feedback, IFeedbackTick
 	{
 		if ( !_running || Target == null )
 		{
-			_running = false;
+			End( false );
 			return false;
 		}
 
@@ -64,26 +66,18 @@ public class LoopShakeTransformFeedback : Feedback, IFeedbackTick
 		return true;
 	}
 
-	void Cancel( bool restore )
-	{
-		if ( _running && restore )
-			Restore();
-
-		_running = false;
-		UnregisterTick( this );
-	}
-
-	void Restore()
-	{
-		if ( Target == null )
-			return;
-
-		Target.localPosition = _basePosition;
-		Target.localRotation = _baseRotation;
-	}
-
 	public void Cancel()
 	{
-		Cancel( true );
+		End( true );
+	}
+
+	void End( bool restore )
+	{
+		if ( !_running )
+			return;
+
+		_running = false;
+		TransformShakeAnchor.Release( _anchorId, Target, restore );
+		UnregisterTick( this );
 	}
 }

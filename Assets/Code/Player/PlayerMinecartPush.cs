@@ -45,7 +45,10 @@ public class PlayerMinecartPush : MonoBehaviour
 	{
 		StopPushFeedback();
 		if ( _cart != null )
+		{
 			_cart.SetHoldPush( false );
+			_cart.ClearJunctionLook();
+		}
 
 		_cart = null;
 		_pending = false;
@@ -128,6 +131,7 @@ public class PlayerMinecartPush : MonoBehaviour
 		}
 
 		_cart.SetHoldPush( true );
+		_cart.SetJunctionLook( ResolveLookFlat() );
 
 		Vector3 tangent;
 		if ( !_cart.TryGetTrackTangent( out tangent ) )
@@ -139,6 +143,20 @@ public class PlayerMinecartPush : MonoBehaviour
 		float signed = WalkAlongTangent( tangent ) + MouseSteerAlongTangent( input, tangent );
 		bool moved = Mathf.Abs( signed ) > 0.00001f && _cart.TryPushAlong( signed );
 		SetMoving( moved );
+	}
+
+	Vector3 ResolveLookFlat()
+	{
+		Transform cam = ResolveCamera();
+		Vector3 facing = cam != null ? cam.forward : transform.forward;
+		facing.y = 0f;
+		if ( facing.sqrMagnitude < 0.0001f && _player != null )
+		{
+			facing = _player.transform.forward;
+			facing.y = 0f;
+		}
+
+		return facing;
 	}
 
 	float WalkAlongTangent( Vector3 tangent )

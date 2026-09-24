@@ -24,6 +24,7 @@ public class DebugTreasureSurfaceSection : DebugOverlaySection
 		GUILayout.Label( $"Active: {world.ActiveChunkCount}  Frozen: {world.SleepingChunkCount}  Dirty: {world.DirtyChunkCount}" );
 		GUILayout.Label( $"Rebuild: {world.LastChunkRebuildMs:0.00} ms" );
 		GUILayout.Label( $"Surface tick: {world.LastSurfaceUpdateMs:0.00} ms" );
+		GUILayout.Label( $"Geometry version: {world.GeometryVersion}" );
 
 		TreasureSurfaceSimulator sim = world.Simulator;
 		if ( sim != null )
@@ -36,6 +37,18 @@ public class DebugTreasureSurfaceSection : DebugOverlaySection
 			GUILayout.Label( $"Outside bounds: {sim.OutsideBoundsCount}" );
 			if ( GUILayout.Button( "Reset recovery stats" ) )
 				sim.ResetStats();
+		}
+
+		TreasureSurfacePathDebug pathDebug = TreasureSurfacePathDebug.Instance;
+		if ( pathDebug != null )
+		{
+			GUILayout.Space( 4f );
+			GUILayout.Label( "Path debug" );
+			GUILayout.Label( pathDebug.LastSuccess
+				? $"OK  waypoints: {pathDebug.LastWaypointCount}  length: {pathDebug.LastLength:0.00}m"
+				: "Failed / no path" );
+			TreasureSurfacePathSettings s = pathDebug.Settings;
+			GUILayout.Label( $"Margin: {s.edgeMargin:0.00}m  Penalty: {s.edgePenalty:0.0}" );
 		}
 
 		GUILayout.Space( 4f );

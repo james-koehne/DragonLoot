@@ -270,7 +270,7 @@ public class DisplayRequirementUI
 
 	bool AppendArtifactTable( ArtifactPresentationTableInteractable table, StringBuilder builder )
 	{
-		if ( table == null )
+		if ( table == null || table.IsComplete )
 			return false;
 
 		int aimed = table.AimedSlotIndex;

@@ -53,6 +53,9 @@ public class PlayerPlacementDefinition : ScriptableObject
 	public Color validGhostColor = new Color( 0.25f, 0.9f, 0.35f, 0.35f );
 	public Color invalidGhostColor = new Color( 0.95f, 0.2f, 0.2f, 0.35f );
 
+	[Tooltip( "Ghost + target outline tint when the place will join an existing ground stack." )]
+	public Color joinGhostColor = new Color( 0.4f, 0.55f, 1f, 0.4f );
+
 	[Range( 0.5f, 8f )]
 	public float ghostFresnelPower = 2.4f;
 

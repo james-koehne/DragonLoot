@@ -22,7 +22,7 @@ MonoBehaviour:
   volumeId: 
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
-  alsoShowWhenAimingCoinStack: 0
+  alsoShowWhenAimingCoinStack: 1
   minWorldCoinsToShow: 100
   minCarriedCoinsToShow: 50
   minDisplayCoinsToShow: 50
@@ -37,16 +37,25 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Place carefully on the ground, or throw to toss them farther.
-  keybindHint: '[{SecondaryInteract}] Place / Throw'
+  body: Place carefully on the ground, stack matching coins, or throw to toss them
+    farther.
+  keybindHint: '[{SecondaryInteract}] Place / Stack / Throw'
   tasks:
   - id: place_coin_floor
     label: Place a coin on the ground
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 2
     completeVolumeId: 
+    requiredCount: 0
+  - id: stack_coins
+    label: Stack coins
+    keybindHint: '[{SecondaryInteract}]'
+    completeTrigger: 4
+    completeVolumeId: 
+    requiredCount: 0
   - id: throw_coin
     label: Aim up to throw a coin
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 3
     completeVolumeId: 
+    requiredCount: 0

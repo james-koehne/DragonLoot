@@ -32,6 +32,11 @@ public class TreasureSurfaceWorld : MonoBehaviour
 	public int DirtyChunkCount { get; private set; }
 	public int LoadedChunkCount => _loadedList.Count;
 
+	/// <summary>
+	/// Increments when any chunk finishes a dirty rebuild (or authoring rebind). Poll for path invalidation.
+	/// </summary>
+	public int GeometryVersion { get; private set; }
+
 	public static TreasureSurfaceWorld Instance => _instance;
 	public TreasureSurfaceDefinition Definition => definition;
 	public TreasureSurfaceSampler Sampler => _sampler;
@@ -165,6 +170,7 @@ public class TreasureSurfaceWorld : MonoBehaviour
 			return;
 		}
 
+		bool any = false;
 		for ( int i = 0; i < _loadedList.Count; i++ )
 		{
 			TreasureChunk chunk = _loadedList[ i ];
@@ -175,7 +181,11 @@ public class TreasureSurfaceWorld : MonoBehaviour
 			TreasureSurfaceRelax.CopyHeightToSmoothed( chunk );
 			TreasureSurfaceRebuild.RebuildDerived( chunk, definition, definition.CellSize );
 			chunk.MarkDirtyFull();
+			any = true;
 		}
+
+		if ( any )
+			GeometryVersion++;
 	}
 
 	void PreloadAroundOrigin( int radiusChunks )
@@ -517,6 +527,8 @@ public class TreasureSurfaceWorld : MonoBehaviour
 		}
 
 		LastChunkRebuildMs = ( float )sw.Elapsed.TotalMilliseconds;
+		if ( rebuilt > 0 )
+			GeometryVersion++;
 	}
 
 	void ReleaseAllChunks()

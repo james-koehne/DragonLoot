@@ -20,7 +20,7 @@ public static class QuestObjectiveFeedbackPostprocessor
 	const string DiamondSpritePath = "Assets/Textures/Icons/icon_quest.png";
 	const string GlowSpritePath = "Assets/Textures/Circle.png";
 
-	static readonly Color GoldColor = new Color( 0.941f, 0.847f, 0.471f, 1f );
+	static readonly Color QuestCyan = new Color( 0.2f, 0.95f, 1f, 1f );
 
 	static bool _ranThisDomain;
 
@@ -63,6 +63,7 @@ public static class QuestObjectiveFeedbackPostprocessor
 			}
 
 			AttentionChrome attention = EnsureAttentionOverlay( quest );
+			EnsureTitleDiamondRow( quest, attention );
 			Feedbacks showFeedback = EnsureShowChild( quest, attention );
 			Feedbacks hideFeedback = EnsureHideChild( quest );
 			Feedbacks subFeedback = EnsureSfxChild( quest, "SubObjectiveCompleteFeedbacks", SubClipPath );
@@ -102,6 +103,8 @@ public static class QuestObjectiveFeedbackPostprocessor
 		AttentionChrome chrome = new AttentionChrome();
 
 		Transform attention = quest.Find( "Attention" );
+		if ( attention == null )
+			attention = quest.Find( "TitleRow/Attention" );
 		GameObject attentionGo = attention != null ? attention.gameObject : new GameObject( "Attention", typeof( RectTransform ), typeof( CanvasGroup ), typeof( LayoutElement ) );
 		if ( attention == null )
 			attentionGo.transform.SetParent( quest, false );
@@ -127,8 +130,8 @@ public static class QuestObjectiveFeedbackPostprocessor
 		chrome.Group.interactable = false;
 		chrome.Group.blocksRaycasts = false;
 
-		chrome.GlowImage = EnsureImageChild( attentionGo.transform, "Glow", GlowSpritePath, new Vector2( 56f, 56f ), new Color( GoldColor.r, GoldColor.g, GoldColor.b, 0.45f ) );
-		chrome.DiamondImage = EnsureImageChild( attentionGo.transform, "Diamond", DiamondSpritePath, new Vector2( 28f, 28f ), GoldColor );
+		chrome.GlowImage = EnsureImageChild( attentionGo.transform, "Glow", GlowSpritePath, new Vector2( 40f, 40f ), new Color( QuestCyan.r, QuestCyan.g, QuestCyan.b, 0.4f ) );
+		chrome.DiamondImage = EnsureImageChild( attentionGo.transform, "Diamond", DiamondSpritePath, new Vector2( 22f, 22f ), QuestCyan );
 		chrome.Diamond = chrome.DiamondImage != null ? chrome.DiamondImage.transform : null;
 
 		if ( chrome.GlowImage != null )
@@ -139,6 +142,104 @@ public static class QuestObjectiveFeedbackPostprocessor
 		return chrome;
 	}
 
+	static void EnsureTitleDiamondRow( Transform quest, AttentionChrome attention )
+	{
+		if ( quest == null || attention.Group == null )
+			return;
+
+		QuestObjectiveUI ui = quest.GetComponent<QuestObjectiveUI>();
+		Text title = null;
+		if ( ui != null )
+		{
+			SerializedObject so = new SerializedObject( ui );
+			title = so.FindProperty( "title" ).objectReferenceValue as Text;
+		}
+
+		if ( title == null )
+			return;
+
+		Transform titleRow = quest.Find( "TitleRow" );
+		if ( titleRow == null )
+		{
+			GameObject rowGo = new GameObject( "TitleRow", typeof( RectTransform ), typeof( HorizontalLayoutGroup ), typeof( LayoutElement ) );
+			titleRow = rowGo.transform;
+			titleRow.SetParent( quest, false );
+			titleRow.SetSiblingIndex( title.rectTransform.GetSiblingIndex() );
+		}
+
+		HorizontalLayoutGroup rowLayout = titleRow.GetComponent<HorizontalLayoutGroup>();
+		if ( rowLayout == null )
+			rowLayout = titleRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+		rowLayout.spacing = 8f;
+		rowLayout.childAlignment = TextAnchor.MiddleLeft;
+		rowLayout.childControlWidth = true;
+		rowLayout.childControlHeight = true;
+		rowLayout.childForceExpandWidth = false;
+		rowLayout.childForceExpandHeight = false;
+
+		LayoutElement rowElement = titleRow.GetComponent<LayoutElement>();
+		if ( rowElement == null )
+			rowElement = titleRow.gameObject.AddComponent<LayoutElement>();
+		rowElement.flexibleWidth = 1f;
+
+		Transform attentionTransform = attention.Group.transform;
+		if ( attentionTransform.parent != titleRow )
+			attentionTransform.SetParent( titleRow, false );
+		attentionTransform.SetSiblingIndex( 0 );
+
+		RectTransform titleRect = title.rectTransform;
+		if ( titleRect.parent != titleRow )
+			titleRect.SetParent( titleRow, false );
+		titleRect.SetSiblingIndex( 1 );
+
+		LayoutElement attentionLayout = attentionTransform.GetComponent<LayoutElement>();
+		if ( attentionLayout == null )
+			attentionLayout = attentionTransform.gameObject.AddComponent<LayoutElement>();
+		attentionLayout.ignoreLayout = false;
+		attentionLayout.preferredWidth = 22f;
+		attentionLayout.preferredHeight = 22f;
+		attentionLayout.minWidth = 22f;
+		attentionLayout.minHeight = 22f;
+		attentionLayout.flexibleWidth = 0f;
+
+		RectTransform attentionRect = attentionTransform as RectTransform;
+		if ( attentionRect != null )
+		{
+			attentionRect.anchorMin = new Vector2( 0f, 0.5f );
+			attentionRect.anchorMax = new Vector2( 0f, 0.5f );
+			attentionRect.pivot = new Vector2( 0.5f, 0.5f );
+			attentionRect.sizeDelta = new Vector2( 22f, 22f );
+			attentionRect.anchoredPosition = Vector2.zero;
+		}
+
+		PinCenteredChild( attention.Diamond, 22f );
+		PinCenteredChild( attention.GlowImage != null ? attention.GlowImage.transform : null, 40f );
+
+		LayoutElement titleLayout = title.GetComponent<LayoutElement>();
+		if ( titleLayout == null )
+			titleLayout = title.gameObject.AddComponent<LayoutElement>();
+		titleLayout.flexibleWidth = 1f;
+		titleLayout.minHeight = 22f;
+	}
+
+	static void PinCenteredChild( Transform child, float size )
+	{
+		if ( child == null )
+			return;
+
+		RectTransform rect = child as RectTransform;
+		if ( rect == null )
+			return;
+
+		rect.anchorMin = new Vector2( 0.5f, 0.5f );
+		rect.anchorMax = new Vector2( 0.5f, 0.5f );
+		rect.pivot = new Vector2( 0.5f, 0.5f );
+		rect.anchoredPosition = Vector2.zero;
+		rect.sizeDelta = new Vector2( size, size );
+		rect.localRotation = Quaternion.identity;
+		rect.localScale = Vector3.one;
+	}
+
 	static Image EnsureImageChild( Transform parent, string childName, string spritePath, Vector2 size, Color color )
 	{
 		Transform existing = parent.Find( childName );
@@ -147,10 +248,10 @@ public static class QuestObjectiveFeedbackPostprocessor
 			go.transform.SetParent( parent, false );
 
 		RectTransform rect = go.GetComponent<RectTransform>();
-		rect.anchorMin = new Vector2( 0f, 1f );
-		rect.anchorMax = new Vector2( 0f, 1f );
+		rect.anchorMin = new Vector2( 0.5f, 0.5f );
+		rect.anchorMax = new Vector2( 0.5f, 0.5f );
 		rect.pivot = new Vector2( 0.5f, 0.5f );
-		rect.anchoredPosition = new Vector2( 14f, -14f );
+		rect.anchoredPosition = Vector2.zero;
 		rect.sizeDelta = size;
 		rect.localRotation = Quaternion.identity;
 		rect.localScale = Vector3.one;
@@ -267,7 +368,7 @@ public static class QuestObjectiveFeedbackPostprocessor
 		{
 			UiGraphicColorPunchFeedback colorPunch = new UiGraphicColorPunchFeedback();
 			colorPunch.Target = title;
-			colorPunch.PunchColor = GoldColor;
+			colorPunch.PunchColor = QuestCyan;
 			colorPunch.Duration = 0.45f;
 			colorPunch.UseUnscaledTime = true;
 			colorPunch.CaptureRestOnPlay = true;
@@ -299,16 +400,26 @@ public static class QuestObjectiveFeedbackPostprocessor
 			CanvasGroupFadeFeedback fadeIn = new CanvasGroupFadeFeedback();
 			fadeIn.Target = attention.Group;
 			fadeIn.From = 0f;
-			fadeIn.To = 0.9f;
+			fadeIn.To = 1f;
 			fadeIn.Duration = 0.18f;
 			fadeIn.UseUnscaledTime = true;
 			fadeIn.Curve = AnimationCurve.EaseInOut( 0f, 0f, 1f, 1f );
 			parallel.Feedbacks.Add( fadeIn );
 		}
+		else
+		{
+			for ( int i = 0; i < parallel.Feedbacks.Count; i++ )
+			{
+				CanvasGroupFadeFeedback fade = parallel.Feedbacks[ i ] as CanvasGroupFadeFeedback;
+				if ( fade == null || fade.Target != attention.Group )
+					continue;
+				fade.To = 1f;
+			}
+		}
 
 		EnsureDiamondSpin( parallel.Feedbacks, attention.Diamond );
 		EnsureGlowPulse( parallel.Feedbacks, attention.GlowImage != null ? attention.GlowImage.transform : null );
-		EnsureAttentionFadeOut( parallel.Feedbacks, attention.Group );
+		RemoveAttentionFadeOut( parallel.Feedbacks, attention.Group );
 	}
 
 	static void BumpPanelPunch( List<Feedback> list, RectTransform panel )
@@ -393,41 +504,31 @@ public static class QuestObjectiveFeedbackPostprocessor
 		list.Add( pulse );
 	}
 
-	static void EnsureAttentionFadeOut( List<Feedback> list, CanvasGroup group )
+	static void RemoveAttentionFadeOut( List<Feedback> list, CanvasGroup group )
 	{
 		if ( group == null || list == null )
 			return;
 
-		SequenceFeedback fadeOutSequence = FindAttentionFadeOutSequence( list, group );
-		if ( fadeOutSequence != null )
+		for ( int i = list.Count - 1; i >= 0; i-- )
 		{
-			for ( int i = 0; i < fadeOutSequence.Feedbacks.Count; i++ )
+			SequenceFeedback sequence = list[ i ] as SequenceFeedback;
+			if ( sequence == null || sequence.Feedbacks == null )
+				continue;
+
+			bool isAttentionFadeOut = false;
+			for ( int j = 0; j < sequence.Feedbacks.Count; j++ )
 			{
-				DelayFeedback delay = fadeOutSequence.Feedbacks[ i ] as DelayFeedback;
-				if ( delay != null )
-					delay.Duration = 7.3f;
+				CanvasGroupFadeFeedback fade = sequence.Feedbacks[ j ] as CanvasGroupFadeFeedback;
+				if ( fade != null && fade.Target == group && fade.To <= 0.01f )
+				{
+					isAttentionFadeOut = true;
+					break;
+				}
 			}
-			return;
+
+			if ( isAttentionFadeOut )
+				list.RemoveAt( i );
 		}
-
-		fadeOutSequence = new SequenceFeedback();
-		fadeOutSequence.Feedbacks = new List<Feedback>();
-
-		DelayFeedback newDelay = new DelayFeedback();
-		newDelay.Duration = 7.3f;
-		fadeOutSequence.Feedbacks.Add( newDelay );
-
-		CanvasGroupFadeFeedback fadeOut = new CanvasGroupFadeFeedback();
-		fadeOut.Target = group;
-		fadeOut.From = 0.9f;
-		fadeOut.To = 0f;
-		fadeOut.Duration = 0.7f;
-		fadeOut.UseUnscaledTime = true;
-		fadeOut.CaptureCurrentAsFrom = true;
-		fadeOut.Curve = AnimationCurve.EaseInOut( 0f, 0f, 1f, 1f );
-		fadeOutSequence.Feedbacks.Add( fadeOut );
-
-		list.Add( fadeOutSequence );
 	}
 
 	static ParallelFeedback FindOrCreateShowParallel( Feedbacks feedbacks )
@@ -523,25 +624,6 @@ public static class QuestObjectiveFeedbackPostprocessor
 			UiPulseScaleFeedback pulse = list[ i ] as UiPulseScaleFeedback;
 			if ( pulse != null && pulse.Target == glow )
 				return pulse;
-		}
-		return null;
-	}
-
-	static SequenceFeedback FindAttentionFadeOutSequence( List<Feedback> list, CanvasGroup group )
-	{
-		if ( list == null || group == null )
-			return null;
-		for ( int i = 0; i < list.Count; i++ )
-		{
-			SequenceFeedback sequence = list[ i ] as SequenceFeedback;
-			if ( sequence == null || sequence.Feedbacks == null )
-				continue;
-			for ( int j = 0; j < sequence.Feedbacks.Count; j++ )
-			{
-				CanvasGroupFadeFeedback fade = sequence.Feedbacks[ j ] as CanvasGroupFadeFeedback;
-				if ( fade != null && fade.Target == group && fade.To < 0.1f )
-					return sequence;
-			}
 		}
 		return null;
 	}

@@ -1,0 +1,111 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3cf3ff9374a8af14fa1df23db0b9fe11, type: 3}
+  m_Name: CompleteGlow_SoftSpotlight
+  m_EditorClassIdentifier: Assembly-CSharp::CompleteGlowPreset
+  _settings:
+    FootprintSource: 0
+    CustomFootprint: {x: 1, y: 1}
+    FootprintPadding: {x: 0, y: 0}
+    Anchor: 0
+    AnchorOffsetY: 0
+    CompensateParentScale: 1
+    Height: 1.25
+    FlareAngleDegrees: 8
+    FlareCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 1
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 1
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    CrossSection: 1
+    CornerRadius: 0.15
+    CornerSegments: 2
+    CircleSegments: 24
+    HeightSegments: 8
+    BottomCap: 0
+    LayerCount: 1
+    LayerOutwardStep: 0.04
+    LayerHeightScaleStep: 0.08
+    LayerAlphaFalloff: 0.55
+    LayerFlareStep: 3
+    InnerCore: 0
+    CoreScale: 0.45
+    CoreHeightScale: 0.7
+    CoreIntensity: 1.6
+    RayCardCount: 0
+    RayCardWidthScale: 1
+    RayCardHeightScale: 1
+    RayCardAlpha: 0.35
+    RayCardRandomRotation: 0
+    Seed: 1
+    BaseFadeIn: 0.05
+    HeightFalloffCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: -1
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 0
+        inSlope: -1
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    EdgeSoftness: 0.2
+    MaterialOverride: {fileID: 0}
+    Color: {r: 1, g: 0.95, b: 0.85, a: 1}
+    Exposure: 1.1
+    AlphaMultiplier: 1
+    NoiseStrength: 0.15
+    NoiseScrollSpeed: 0.15
+    NoiseTiling: 4
+    PulseSpeed: 0.4
+    PulseAmount: 0.15
+    DepthFadeDistance: 0.25
+    AddPointLight: 0
+    LightColorFromGlow: 1
+    LightIntensity: 1.2
+    LightRange: 3
+    LightHeightT: 0.25
+    DustMotesPrefab: {fileID: 0}
+    SortingOrder: 0

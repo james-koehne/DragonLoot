@@ -159,6 +159,14 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	float _unbindRetryTimer;
 	Transform _visualRoot;
 	Collider _ownCollider;
+	bool _junctionLookValid;
+	Vector3 _junctionLookFlat;
+	int _committedJunctionId = -1;
+	bool _hasCommittedExit;
+	MinecartTrack _committedExitTrack;
+	float _committedExitDistance;
+	int _committedExitTravelSign;
+	static readonly List<MinecartJunctionExit> JunctionExitBuffer = new List<MinecartJunctionExit>( 8 );
 
 	public static IReadOnlyList<MinecartInteractable> ActiveCarts => All;
 
@@ -219,6 +227,23 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	public float WheelRadius => definition != null ? Mathf.Max( 0.05f, definition.wheelRadius ) : 0.21f;
 
 	public float TrackSnapRadius => definition != null ? definition.trackSnapRadius : 4f;
+
+	public float JunctionApproachRadius => definition != null ? Mathf.Max( 0.1f, definition.junctionApproachRadius ) : 2.5f;
+
+	public float JunctionLookMinAlign => definition != null ? Mathf.Clamp01( definition.junctionLookMinAlign ) : 0.15f;
+
+	public string DebugJunctionCommitLabel
+	{
+		get
+		{
+			MinecartInteractable lead = ConsistLead;
+			if ( !lead._hasCommittedExit || lead._committedExitTrack == null )
+				return "Junction: none";
+
+			string look = lead._junctionLookValid ? "look" : "no-look";
+			return $"Junction #{lead._committedJunctionId} → {lead._committedExitTrack.name} sign {lead._committedExitTravelSign} ({look})";
+		}
+	}
 
 	public bool AttachPlayerWhenStanding => !IsDriveCart && ( definition == null || definition.attachPlayerWhenStanding );
 
@@ -340,6 +365,8 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		All.Remove( this );
 		_riderPresent = false;
 		_driveBraking = false;
+		ClearJunctionLook();
+		ClearJunctionCommit();
 		StopMoveLoop();
 		CancelRecall( arrived: false );
 		DetachFromConsist();
@@ -848,12 +875,73 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !EnsureBoundTrack() || Mathf.Abs( signedDelta ) < 0.00001f )
 			return false;
 
-		float next;
-		if ( !track.TryAdvance( _distanceAlongTrack, signedDelta, this, out next ) )
+		float remaining = signedDelta;
+		float totalTraveled = 0f;
+		const int maxHops = 4;
+		for ( int hop = 0; hop < maxHops && Mathf.Abs( remaining ) > 0.00001f; hop++ )
+		{
+			int travelSign = remaining >= 0f ? 1 : -1;
+			UpdateJunctionCommit( travelSign );
+
+			float step = remaining;
+			bool transferred;
+			float leftoverAfterTransfer;
+			float junctionDistance;
+			if ( TryPrepareJunctionTransfer( travelSign, ref step, out transferred, out leftoverAfterTransfer, out junctionDistance ) )
+			{
+				if ( Mathf.Abs( step ) > 0.00001f )
+				{
+					float next;
+					if ( !track.TryAdvance( _distanceAlongTrack, step, this, out next ) )
+						break;
+
+					float traveled = MeasureTraveled( _distanceAlongTrack, next );
+					_distanceAlongTrack = next;
+					totalTraveled += traveled;
+				}
+
+				float leftToJunction = Mathf.Abs( track.SignedAlong( _distanceAlongTrack, junctionDistance ) );
+				if ( transferred && leftToJunction <= 0.05f )
+				{
+					BindToTrack( _committedExitTrack, _committedExitDistance );
+					RemapSpeedAfterJunctionTransfer( _committedExitTravelSign );
+					remaining = leftoverAfterTransfer;
+					continue;
+				}
+
+				remaining = 0f;
+				break;
+			}
+
+			float nextPos;
+			if ( !track.TryAdvance( _distanceAlongTrack, remaining, this, out nextPos ) )
+				break;
+
+			float moved = MeasureTraveled( _distanceAlongTrack, nextPos );
+			_distanceAlongTrack = nextPos;
+			totalTraveled += moved;
+			remaining = 0f;
+		}
+
+		if ( Mathf.Abs( totalTraveled ) < 0.00001f )
 			return false;
 
-		float traveled = next - _distanceAlongTrack;
-		if ( track.IsClosed )
+		ApplyTrackPose( runtime: true );
+		SpinWheels( totalTraveled );
+		SnapFollowers();
+
+		float dt = Time.deltaTime;
+		if ( dt > 0.00001f )
+			_alongSpeed = totalTraveled / dt;
+		_speedWriteFrame = Time.frameCount;
+
+		return true;
+	}
+
+	float MeasureTraveled( float from, float to )
+	{
+		float traveled = to - from;
+		if ( track != null && track.IsClosed )
 		{
 			float length = track.Length;
 			if ( traveled > length * 0.5f )
@@ -862,17 +950,178 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 				traveled += length;
 		}
 
-		_distanceAlongTrack = next;
-		ApplyTrackPose( runtime: true );
-		SpinWheels( traveled );
-		SnapFollowers();
+		return traveled;
+	}
 
-		float dt = Time.deltaTime;
-		if ( dt > 0.00001f )
-			_alongSpeed = traveled / dt;
-		_speedWriteFrame = Time.frameCount;
+	public void SetJunctionLook( Vector3 flatLook )
+	{
+		flatLook.y = 0f;
+		if ( flatLook.sqrMagnitude < 0.0001f )
+		{
+			ClearJunctionLook();
+			return;
+		}
 
-		return Mathf.Abs( traveled ) > 0.00001f;
+		_junctionLookFlat = flatLook.normalized;
+		_junctionLookValid = true;
+	}
+
+	public void ClearJunctionLook()
+	{
+		_junctionLookValid = false;
+		_junctionLookFlat = Vector3.zero;
+	}
+
+	void ClearJunctionCommit()
+	{
+		_committedJunctionId = -1;
+		_hasCommittedExit = false;
+		_committedExitTrack = null;
+		_committedExitDistance = 0f;
+		_committedExitTravelSign = 1;
+	}
+
+	void UpdateJunctionCommit( int travelSign )
+	{
+		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+		if ( graph == null || track == null )
+		{
+			ClearJunctionCommit();
+			return;
+		}
+
+		float approach = JunctionApproachRadius;
+		if ( _committedJunctionId >= 0 && graph.IsOutsideApproach( track, _distanceAlongTrack, _committedJunctionId, approach ) )
+			ClearJunctionCommit();
+
+		int junctionIndex;
+		float junctionDistance;
+		if ( !graph.TryFindApproachJunction( track, _distanceAlongTrack, approach, out junctionIndex, out junctionDistance ) )
+			return;
+
+		if ( _committedJunctionId == junctionIndex && _hasCommittedExit )
+			return;
+
+		CommitJunctionExit( graph, junctionIndex, travelSign );
+	}
+
+	void CommitJunctionExit( MinecartJunctionGraph graph, int junctionIndex, int travelSign )
+	{
+		int sign = travelSign >= 0 ? 1 : -1;
+		graph.BuildExits( junctionIndex, track, sign, JunctionExitBuffer );
+		if ( JunctionExitBuffer.Count == 0 )
+		{
+			ClearJunctionCommit();
+			return;
+		}
+
+		MinecartJunctionExit chosen;
+		if ( !_junctionLookValid )
+		{
+			if ( !TryFindContinueExit( track, sign, out chosen ) )
+				chosen = JunctionExitBuffer[ 0 ];
+		}
+		else
+		{
+			int bestIndex = 0;
+			float bestDot = float.NegativeInfinity;
+			Vector3 look = _junctionLookFlat;
+			for ( int i = 0; i < JunctionExitBuffer.Count; i++ )
+			{
+				MinecartJunctionExit exit = JunctionExitBuffer[ i ];
+				Vector3 tan = exit.worldTangent;
+				tan.y = 0f;
+				if ( tan.sqrMagnitude < 0.0001f )
+					continue;
+
+				float dot = Vector3.Dot( look, tan.normalized );
+				if ( dot <= bestDot )
+					continue;
+
+				bestDot = dot;
+				bestIndex = i;
+			}
+
+			if ( bestDot >= JunctionLookMinAlign )
+				chosen = JunctionExitBuffer[ bestIndex ];
+			else if ( TryFindContinueExit( track, sign, out chosen ) )
+			{
+				// Prefer continuing on the current track when look is ambiguous.
+			}
+			else
+				chosen = JunctionExitBuffer[ bestIndex ];
+		}
+
+		_committedJunctionId = junctionIndex;
+		_hasCommittedExit = true;
+		_committedExitTrack = chosen.track;
+		_committedExitDistance = chosen.distance;
+		_committedExitTravelSign = chosen.travelSign >= 0 ? 1 : -1;
+	}
+
+	static bool TryFindContinueExit( MinecartTrack currentTrack, int travelSign, out MinecartJunctionExit exit )
+	{
+		exit = default;
+		int sign = travelSign >= 0 ? 1 : -1;
+		for ( int i = 0; i < JunctionExitBuffer.Count; i++ )
+		{
+			MinecartJunctionExit candidate = JunctionExitBuffer[ i ];
+			if ( candidate.track != currentTrack )
+				continue;
+
+			if ( candidate.travelSign != sign )
+				continue;
+
+			exit = candidate;
+			return true;
+		}
+
+		return false;
+	}
+
+	bool TryPrepareJunctionTransfer( int travelSign, ref float step, out bool transferred, out float leftoverAfterTransfer, out float junctionDistance )
+	{
+		transferred = false;
+		leftoverAfterTransfer = 0f;
+		junctionDistance = 0f;
+		if ( !_hasCommittedExit || _committedExitTrack == null || _committedExitTrack == track )
+			return false;
+
+		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+		if ( graph == null )
+			return false;
+
+		if ( !graph.TryGetPortDistance( track, _committedJunctionId, out junctionDistance ) )
+			return false;
+
+		float toJunction = track.SignedAlong( _distanceAlongTrack, junctionDistance );
+		if ( toJunction * travelSign <= 0.00001f )
+			return false;
+
+		float absRemaining = Mathf.Abs( step );
+		float absToJunction = Mathf.Abs( toJunction );
+		if ( absToJunction > absRemaining + 0.0001f )
+			return false;
+
+		step = toJunction;
+		float leftoverMag = Mathf.Max( 0f, absRemaining - absToJunction );
+		leftoverAfterTransfer = _committedExitTravelSign * leftoverMag;
+		transferred = true;
+		return true;
+	}
+
+	void RemapSpeedAfterJunctionTransfer( int exitTravelSign )
+	{
+		int sign = exitTravelSign >= 0 ? 1 : -1;
+		float magDrive = Mathf.Abs( _driveSpeed );
+		float magCoast = Mathf.Abs( _coastSpeed );
+		float magAlong = Mathf.Abs( _alongSpeed );
+		if ( magDrive > StopSpeedEpsilon )
+			_driveSpeed = sign * magDrive;
+		if ( magCoast > StopSpeedEpsilon )
+			_coastSpeed = sign * magCoast;
+		if ( magAlong > StopSpeedEpsilon )
+			_alongSpeed = sign * magAlong;
 	}
 
 	float ConsistRiderMotionScale()

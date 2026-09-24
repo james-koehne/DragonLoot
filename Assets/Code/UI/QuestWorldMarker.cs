@@ -13,6 +13,9 @@ public class QuestWorldMarker : MonoBehaviour
 	[SerializeField] CanvasGroup group;
 	[SerializeField] Text distance;
 
+	[SerializeField] [Tooltip( "When true, the world-space screen marker stays hidden (compass + panel diamond still work)." )]
+	bool disableWorldMarker = true;
+
 	[SerializeField] [Tooltip( "Fade the marker out once the player is this close." )]
 	float hideWithinMeters = 3f;
 	[SerializeField] [Tooltip( "Marker stays hidden until the player is at least this far away." )]
@@ -35,15 +38,22 @@ public class QuestWorldMarker : MonoBehaviour
 		if ( distance == null && marker != null )
 			distance = marker.GetComponentInChildren<Text>( true );
 
-		Subscribe();
 		_alpha = 0f;
 		ApplyAlpha( 0f );
+		if ( disableWorldMarker )
+		{
+			_hasTarget = false;
+			Unsubscribe();
+			return;
+		}
+
+		Subscribe();
 	}
 
 	public void SetCinematicHidden( bool hidden )
 	{
 		_cinematicHidden = hidden;
-		if ( hidden )
+		if ( hidden || disableWorldMarker )
 		{
 			_alpha = 0f;
 			ApplyAlpha( 0f );
@@ -52,7 +62,8 @@ public class QuestWorldMarker : MonoBehaviour
 
 	void OnEnable()
 	{
-		Subscribe();
+		if ( !disableWorldMarker )
+			Subscribe();
 	}
 
 	void OnDisable()
@@ -67,6 +78,16 @@ public class QuestWorldMarker : MonoBehaviour
 
 	void LateUpdate()
 	{
+		if ( disableWorldMarker )
+		{
+			if ( _alpha > 0f )
+			{
+				_alpha = 0f;
+				ApplyAlpha( 0f );
+			}
+			return;
+		}
+
 		bool inFront = false;
 		if ( _hasTarget && marker != null )
 			inFront = UpdateScreenPosition();
@@ -156,6 +177,14 @@ public class QuestWorldMarker : MonoBehaviour
 
 	void OnHudChanged( TutorialHudChangedEvent evt )
 	{
+		if ( disableWorldMarker )
+		{
+			_hasTarget = false;
+			_alpha = 0f;
+			ApplyAlpha( 0f );
+			return;
+		}
+
 		_hasTarget = evt.HasMarker && !evt.Cleared;
 		_worldPos = evt.MarkerWorldPosition;
 		_awayTimer = 0f;

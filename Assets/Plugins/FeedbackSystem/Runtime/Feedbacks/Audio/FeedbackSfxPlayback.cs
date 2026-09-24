@@ -43,13 +43,17 @@ namespace FeedbackSystem
 			Vector3 position,
 			float spatialBlend = 0f,
 			float minDistance = 1f,
-			float maxDistance = 20f )
+			float maxDistance = 20f,
+			Transform followTransform = null )
 		{
 			if ( !Enabled || clip == null )
 				return;
 
 			float volume = SampleVolume( volumeMin, volumeMax );
 			float pitch = SamplePitch( pitchMin, pitchMax );
+
+			if ( followTransform != null )
+				position = followTransform.position;
 
 			if ( audioSource != null )
 			{
@@ -59,10 +63,11 @@ namespace FeedbackSystem
 				audioSource.maxDistance = Mathf.Max( audioSource.minDistance, maxDistance );
 				audioSource.pitch = pitch;
 				audioSource.PlayOneShot( clip, volume );
+				FeedbackAudioFollower.Attach( audioSource, followTransform );
 				return;
 			}
 
-			FeedbackAudioPool.Play( clip, volume, pitch, position, spatialBlend, minDistance, maxDistance );
+			FeedbackAudioPool.Play( clip, volume, pitch, position, spatialBlend, minDistance, maxDistance, followTransform );
 		}
 	}
 }

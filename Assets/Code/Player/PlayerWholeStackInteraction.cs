@@ -44,6 +44,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	MinecartInteractable _placeCart;
 	ITreasureDisplayStackOwner _placeDisplay;
 	int _placeDisplaySlot = -1;
+	bool _placeIndirectJoin;
 
 	public float ChargeProgress01 =>
 		_mode == ChargeMode.None || _holdSeconds <= 0.01f
@@ -100,8 +101,38 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			if ( HasBlockingContextualFocus() )
 				return false;
 
-			return TryResolveWholePlace( out _, out _, out bool valid, out _, out _, out _, out _, out _, out _ ) && valid;
+			return TryResolveWholePlace( out _, out _, out bool valid, out _, out _, out _, out _, out _, out _, out _ ) && valid;
 		}
+	}
+
+	/// <summary>
+	/// Existing ground coin / gold-bar stack that a Hold-E whole-stack place would join right now.
+	/// </summary>
+	public bool TryGetWholePlaceJoinTarget( out MonoBehaviour target )
+	{
+		target = null;
+		if ( !_inputEnabled )
+			return false;
+
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || carry.Count <= 0 )
+			return false;
+
+		if ( CanOfferWholeStackPickup || HasBlockingContextualFocus() )
+			return false;
+
+		if ( !TryResolveWholePlace( out _, out _, out bool valid, out GroundCoinStack coinTarget, out GroundGoldBarStack barTarget, out _, out _, out _, out MinecartInteractable cartPlace, out _ ) )
+			return false;
+
+		if ( !valid || cartPlace != null )
+			return false;
+
+		if ( coinTarget != null && !coinTarget.IsMachineBuffer )
+			target = coinTarget;
+		else if ( barTarget != null )
+			target = barTarget;
+
+		return target != null;
 	}
 
 	public void Setup( PlayerController player, PlayerInteraction interaction, PlayerPlacement placement )
@@ -205,6 +236,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			out _,
 			out ITreasureDisplayStackOwner display,
 			out int displaySlot,
+			out _,
 			out _ ) )
 			return false;
 
@@ -393,7 +425,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			out CoinSortingHopper hopper,
 			out ITreasureDisplayStackOwner display,
 			out int displaySlot,
-			out MinecartInteractable cartPlace ) )
+			out MinecartInteractable cartPlace,
+			out bool indirectJoin ) )
 		{
 			CancelCharge();
 			return;
@@ -420,6 +453,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		_placeCart = cartPlace;
 		_placeDisplay = display;
 		_placeDisplaySlot = displaySlot;
+		_placeIndirectJoin = indirectJoin;
 
 		if ( !valid )
 		{
@@ -625,6 +659,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 
 		CarryBucketKind bucket = carry.SelectedBucket;
+		bool indirectJoin = _placeIndirectJoin;
 		if ( bucket == CarryBucketKind.Coin )
 		{
 			if ( _placeHopper != null )
@@ -633,7 +668,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				if ( station != null )
 				{
 					station.TryDumpCarryIntoHopperAnimated( carry );
-					EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+					EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket, IndirectJoin = false } );
 				}
 				return;
 			}
@@ -644,7 +679,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 					carry,
 					_placeDisplay,
 					_placeDisplaySlot );
-				EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+				EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket, IndirectJoin = false } );
 				return;
 			}
 
@@ -663,7 +698,11 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				return;
 
 			PlaceCoinDefinitions( defs, startPos, startRot, carry.CoinHandVariationSeed, _placePos, _placeRot, target );
-			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+			EventBus.Publish( new WholeStackPlaceCompletedEvent
+			{
+				Bucket = bucket,
+				IndirectJoin = indirectJoin && target != null
+			} );
 			return;
 		}
 
@@ -673,7 +712,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( bucket == CarryBucketKind.Gem )
 		{
 			PlaceGemCollection( items, _placePos );
-			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket, IndirectJoin = false } );
 			return;
 		}
 
@@ -699,7 +738,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				carry.TryAbsorbAtHeldBottom( ItemScratch );
 			PlaceScratch.Clear();
 			ItemScratch.Clear();
-			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket, IndirectJoin = false } );
 			return;
 		}
 
@@ -709,7 +748,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			PlaceArtifactCollection( ItemScratch, _placePos, _placeRot );
 		PlaceScratch.Clear();
 		ItemScratch.Clear();
-		EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket } );
+		EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = bucket, IndirectJoin = false } );
 	}
 
 	void PlaceCoinDefinitionsOnDisplay(
@@ -1332,7 +1371,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		out CoinSortingHopper hopper,
 		out ITreasureDisplayStackOwner display,
 		out int displaySlot,
-		out MinecartInteractable cartPlace )
+		out MinecartInteractable cartPlace,
+		out bool indirectJoin )
 	{
 		position = Vector3.zero;
 		rotation = Quaternion.identity;
@@ -1343,6 +1383,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		display = null;
 		displaySlot = -1;
 		cartPlace = null;
+		indirectJoin = false;
 
 		PlayerCarry carry = _player != null ? _player.Carry : null;
 		if ( carry == null || carry.Count <= 0 || _interaction == null )
@@ -1403,8 +1444,29 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			}
 		}
 
+		// Aiming at a heightfield pile blocks placement (dig owns that aim), matching PlayerPlacement.
+		if ( _interaction.TryGetPlacementAimHit( out RaycastHit aimHit )
+			&& PlacementFloorSurface.IsHeightfieldPileCollider( aimHit.collider ) )
+		{
+			position = aimHit.point;
+			rotation = TreasureOrientation.FlattenUpright( Quaternion.identity );
+			valid = false;
+			return true;
+		}
+
 		if ( !_interaction.TryGetLastHit( out RaycastHit hit ) )
+		{
+			// Empty air: still allow joining a coin stack along the aim ray.
+			if ( bucket == CarryBucketKind.Coin
+				&& TryResolveAlongRayCoinJoin( carry, out position, out rotation, out coinTarget ) )
+			{
+				indirectJoin = true;
+				valid = true;
+				return true;
+			}
+
 			return false;
+		}
 
 		if ( bucket == CarryBucketKind.Coin && carry.GetBucketCount( CarryBucketKind.Coin ) > 0 )
 		{
@@ -1517,6 +1579,14 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		if ( !PlacementFloorSurface.IsWalkableFloorHit( in hit ) )
 		{
+			if ( bucket == CarryBucketKind.Coin
+				&& TryResolveAlongRayCoinJoin( carry, out position, out rotation, out coinTarget ) )
+			{
+				indirectJoin = true;
+				valid = true;
+				return true;
+			}
+
 			position = hit.point;
 			rotation = TreasureOrientation.FlattenUpright( Quaternion.identity );
 			valid = false;
@@ -1539,6 +1609,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			{
 				position = coinTarget.transform.position;
 				rotation = coinTarget.transform.rotation;
+				indirectJoin = true;
 			}
 
 			valid = true;
@@ -1562,6 +1633,35 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		}
 
 		valid = true;
+		return true;
+	}
+
+	bool TryResolveAlongRayCoinJoin(
+		PlayerCarry carry,
+		out Vector3 position,
+		out Quaternion rotation,
+		out GroundCoinStack coinTarget )
+	{
+		position = Vector3.zero;
+		rotation = Quaternion.identity;
+		coinTarget = null;
+
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 || _interaction == null )
+			return false;
+
+		if ( !_interaction.TryGetAimRay( out Ray ray ) )
+			return false;
+
+		TreasureDefinition def = null;
+		carry.TryPeekActive( out def );
+		float radius = Mathf.Max( 0.42f, GroundCoinStack.ResolveJoinRadius( def ) );
+		GroundCoinStack nearest = GroundCoinStack.FindNearestAlongRay( ray, radius, _interaction.PlacementAimRange );
+		if ( nearest == null || nearest.IsFull || nearest.IsMachineBuffer )
+			return false;
+
+		coinTarget = nearest;
+		position = nearest.transform.position;
+		rotation = nearest.transform.rotation;
 		return true;
 	}
 
@@ -1768,6 +1868,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		_placeDisplay = null;
 		_placeDisplaySlot = -1;
 		_placeValid = false;
+		_placeIndirectJoin = false;
 	}
 
 	static GameInput GetGameInput()

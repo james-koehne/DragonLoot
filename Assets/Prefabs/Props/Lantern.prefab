@@ -62,6 +62,7 @@ MonoBehaviour:
         SpatialBlend: 1
         MinDistance: 1
         MaxDistance: 12
+        FollowCallerTransform: 0
         AudioSource: {fileID: 0}
 --- !u!1 &437709429270676097
 GameObject:
@@ -433,6 +434,7 @@ MonoBehaviour:
         SpatialBlend: 1
         MinDistance: 1
         MaxDistance: 240
+        FollowCallerTransform: 0
         AudioSource: {fileID: 0}
 --- !u!1 &8748728253186325288
 GameObject:

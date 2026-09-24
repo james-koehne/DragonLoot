@@ -245,17 +245,8 @@ public static class HoverOutlineTargetUtility
 		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
 		for ( int i = 0; i < renderers.Length; i++ )
 		{
-			Renderer renderer = renderers[ i ];
-			if ( renderer == null || !renderer.enabled )
-				continue;
-
-			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
-				continue;
-
-			if ( renderer.sharedMaterial == null )
-				continue;
-
-			return true;
+			if ( ShouldIncludeOutlineRenderer( renderers[ i ] ) )
+				return true;
 		}
 
 		return false;
@@ -303,6 +294,7 @@ public static class HoverOutlineTargetUtility
 	/// <summary>
 	/// Appends enabled mesh/skinned renderers under <paramref name="root"/> into <paramref name="destination"/>
 	/// without clearing it (safe while building a multi-source outline list).
+	/// Skips meshes under <see cref="DisplayCompleteEffect"/> so complete FX never outline with the display.
 	/// </summary>
 	public static void AppendEnabledMeshRenderers( GameObject root, List<Renderer> destination )
 	{
@@ -313,13 +305,7 @@ public static class HoverOutlineTargetUtility
 		for ( int i = 0; i < renderers.Length; i++ )
 		{
 			Renderer renderer = renderers[ i ];
-			if ( renderer == null || !renderer.enabled )
-				continue;
-
-			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
-				continue;
-
-			if ( renderer.sharedMaterial == null )
+			if ( !ShouldIncludeOutlineRenderer( renderer ) )
 				continue;
 
 			destination.Add( renderer );
@@ -335,16 +321,27 @@ public static class HoverOutlineTargetUtility
 		for ( int i = 0; i < renderers.Length; i++ )
 		{
 			Renderer renderer = renderers[ i ];
-			if ( renderer == null || !renderer.enabled )
-				continue;
-
-			if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
-				continue;
-
-			if ( renderer.sharedMaterial == null )
+			if ( !ShouldIncludeOutlineRenderer( renderer ) )
 				continue;
 
 			Buffer.Add( renderer );
 		}
+	}
+
+	static bool ShouldIncludeOutlineRenderer( Renderer renderer )
+	{
+		if ( renderer == null || !renderer.enabled )
+			return false;
+
+		if ( !( renderer is MeshRenderer ) && !( renderer is SkinnedMeshRenderer ) )
+			return false;
+
+		if ( renderer.sharedMaterial == null )
+			return false;
+
+		if ( renderer.GetComponentInParent<DisplayCompleteEffect>( true ) != null )
+			return false;
+
+		return true;
 	}
 }

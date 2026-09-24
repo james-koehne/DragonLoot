@@ -1,14 +1,16 @@
 using UnityEngine;
 
 /// <summary>
-/// Manual crank for level-1 coin sorting. Hold ContextualInteract to keep processing active.
-/// Hidden (non-interactable) once the station is automatic (level 2+).
+/// Manual crank for level-1 coin sorting. Hold ContextualInteract (E) or Interact (LMB)
+/// to keep processing active. Hidden (non-interactable) once the station is automatic (level 2+).
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 public class CoinSortingCrankInteractable : InteractableBase
 {
 	[SerializeField]
 	CoinSortingStation station;
+
+	public override bool AcceptsPrimaryInteract => true;
 
 	public void BindStation( CoinSortingStation owner )
 	{

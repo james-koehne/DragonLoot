@@ -51,7 +51,7 @@ MonoBehaviour:
     requiredCount: 0
   - id: load_hopper
     label: Add coins into the hopper
-    keybindHint: '[{WholeStackPlace}] or [{Interact}]'
+    keybindHint: '[{WholeStackPlace}] or [{SecondaryInteract}]'
     completeTrigger: 31
     completeVolumeId: 
     requiredCount: 0

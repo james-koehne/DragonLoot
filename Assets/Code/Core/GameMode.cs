@@ -148,16 +148,8 @@ public class GameMode : MonoBehaviour, IGameMode
 			contextUi.Setup();
 
 			InteractionProgressRingUI progressRing = interfacePrefab.GetComponentInChildren<InteractionProgressRingUI>( true );
-			if ( progressRing == null )
-			{
-				CrosshairUI host = interfacePrefab.GetComponentInChildren<CrosshairUI>( true );
-				if ( host != null )
-					progressRing = host.gameObject.AddComponent<InteractionProgressRingUI>();
-				else
-					progressRing = interfacePrefab.AddComponent<InteractionProgressRingUI>();
-			}
-
-			progressRing.Setup();
+			if ( progressRing != null )
+				progressRing.Setup();
 
 			DragonDialogueUI dialogueUi = interfacePrefab.GetComponentInChildren<DragonDialogueUI>( true );
 			if ( dialogueUi != null )
@@ -236,6 +228,7 @@ public class GameMode : MonoBehaviour, IGameMode
 
 			ObjectiveSystem objectives = ObjectiveSystem.EnsureExists();
 			objectives.StartCatalog();
+			DebugSpawnRegistry.ApplyPostTutorialIfSelected();
 
 			QuestObjectiveOutline.EnsureExists();
 		}

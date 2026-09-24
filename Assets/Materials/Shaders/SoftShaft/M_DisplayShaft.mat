@@ -25,23 +25,33 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _Alpha: 2
+    - _Alpha: 0.59
     - _CameraFadeEnd: 0
     - _CameraFadeStart: 0
     - _Cull: 2
+    - _DepthFade: 0
+    - _DepthFadeDistance: 0.25
     - _DstBlend: 1
-    - _Exposure: 0.1
+    - _Exposure: 0.69
     - _FogInfluence: 0.5
     - _FresnelPower: 0.1
     - _FresnelStrength: 0
     - _HeightMax: 1.5
     - _HeightMin: 0
     - _HeightPower: 1.84
+    - _MeshMask: 0
+    - _NoiseScrollSpeed: 0.15
+    - _NoiseStreaks: 0
+    - _NoiseStrength: 0.35
+    - _NoiseTiling: 4
+    - _Pulse: 0
+    - _PulseAmount: 0.15
+    - _PulseSpeed: 0.4
     - _RadialPower: 1.25
     - _RadialRadius: 3.39
     - _RadialSoftness: 1
     - _SrcBlend: 1
     m_Colors:
-    - _Color: {r: 1, g: 0.72, b: 0.28, a: 1}
+    - _Color: {r: 0.0016601563, g: 0.0017578125, b: 0.001953125, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

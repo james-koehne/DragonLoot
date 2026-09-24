@@ -5,10 +5,12 @@ using UnityEngine;
 /// <summary>
 /// Publishes contextual HUD state for objective UI, compass, world marker, and outlines.
 /// Owned at runtime by <see cref="ObjectiveSystem"/> (nearby objectives). World-event SetTutorialHud can still publish but will be overwritten on the next objective refresh.
+/// Tutorial outline roots (from <see cref="TutorialManager"/>) override objective roots while set.
 /// </summary>
 public static class TutorialHud
 {
 	static readonly List<Transform> OutlineRoots = new List<Transform>();
+	static readonly List<Transform> TutorialOverrideRoots = new List<Transform>();
 
 	public static void Publish( TutorialHudChangedEvent evt )
 	{
@@ -51,20 +53,45 @@ public static class TutorialHud
 		OutlineRoots.Clear();
 	}
 
+	public static void SetTutorialOverrideOutlineRoots( IList<Transform> roots )
+	{
+		TutorialOverrideRoots.Clear();
+		if ( roots == null )
+			return;
+
+		for ( int i = 0; i < roots.Count; i++ )
+		{
+			Transform root = roots[ i ];
+			if ( root == null )
+				continue;
+			if ( TutorialOverrideRoots.Contains( root ) )
+				continue;
+			TutorialOverrideRoots.Add( root );
+		}
+	}
+
+	public static void ClearTutorialOverrideOutlineRoots()
+	{
+		TutorialOverrideRoots.Clear();
+	}
+
 	public static void CollectOutlineRoots( System.Action<Transform> onRoot )
 	{
 		if ( onRoot == null )
 			return;
 
-		for ( int i = 0; i < OutlineRoots.Count; i++ )
+		List<Transform> source = HasTutorialOutlineOverride ? TutorialOverrideRoots : OutlineRoots;
+		for ( int i = 0; i < source.Count; i++ )
 		{
-			Transform root = OutlineRoots[ i ];
+			Transform root = source[ i ];
 			if ( root != null )
 				onRoot( root );
 		}
 	}
 
-	public static bool HasOutlineRoots => OutlineRoots.Count > 0;
+	public static bool HasTutorialOutlineOverride => TutorialOverrideRoots.Count > 0;
+
+	public static bool HasOutlineRoots => HasTutorialOutlineOverride || OutlineRoots.Count > 0;
 
 	/// <summary>
 	/// Convenience: show a simple title + objective text with optional marker target id.

@@ -6417,6 +6417,7 @@ MonoBehaviour:
         SpatialBlend: 0
         MinDistance: 1
         MaxDistance: 20
+        FollowCallerTransform: 0
         AudioSource: {fileID: 0}
     - rid: 9100000000000000102
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}

@@ -271,8 +271,9 @@ public class MinecartTrack : MonoBehaviour
 		float halfH = Mathf.Max( 0.04f, SleeperSize.y * 0.5f );
 		int rings = samples;
 		int segs = IsClosed ? samples : samples - 1;
-		int vertCount = rings * 4;
-		Vector3[] verts = new Vector3[ vertCount ];
+
+		bool[] inGap = new bool[ rings ];
+		Vector3[] verts = new Vector3[ rings * 4 ];
 		List<int> tris = new List<int>( segs * 24 + 12 );
 
 		for ( int i = 0; i < rings; i++ )
@@ -280,6 +281,8 @@ public class MinecartTrack : MonoBehaviour
 			float dist = IsClosed
 				? ( length * i ) / samples
 				: ( length * i ) / ( samples - 1 );
+			inGap[ i ] = MinecartJunctionGraph.IsTrackDistanceInMeshGap( this, dist );
+
 			Vector3 pos;
 			Vector3 tan;
 			Vector3 up;
@@ -302,8 +305,13 @@ public class MinecartTrack : MonoBehaviour
 
 		for ( int i = 0; i < segs; i++ )
 		{
-			int a = i * 4;
-			int b = ( ( i + 1 ) % rings ) * 4;
+			int aRing = i;
+			int bRing = ( i + 1 ) % rings;
+			if ( inGap[ aRing ] || inGap[ bRing ] )
+				continue;
+
+			int a = aRing * 4;
+			int b = bRing * 4;
 			AddColliderQuad( tris, a + 3, a + 2, b + 2, b + 3 );
 			AddColliderQuad( tris, a + 1, a + 0, b + 0, b + 1 );
 			AddColliderQuad( tris, a + 0, a + 3, b + 3, b + 0 );
@@ -312,10 +320,21 @@ public class MinecartTrack : MonoBehaviour
 
 		if ( !IsClosed )
 		{
-			int last = ( rings - 1 ) * 4;
-			AddColliderQuad( tris, 0, 1, 2, 3 );
-			AddColliderQuad( tris, last + 1, last + 0, last + 3, last + 2 );
+			if ( !inGap[ 0 ] )
+				AddColliderQuad( tris, 0, 1, 2, 3 );
+
+			int lastRing = rings - 1;
+			if ( !inGap[ lastRing ] )
+			{
+				int last = lastRing * 4;
+				AddColliderQuad( tris, last + 1, last + 0, last + 3, last + 2 );
+			}
 		}
+
+		CapWalkColliderRunEnds( tris, inGap, rings, IsClosed );
+
+		if ( tris.Count == 0 )
+			return null;
 
 		Mesh mesh = new Mesh();
 		mesh.name = gameObject.name + "_WalkCollider";
@@ -324,6 +343,42 @@ public class MinecartTrack : MonoBehaviour
 		mesh.RecalculateBounds();
 		mesh.RecalculateNormals();
 		return mesh;
+	}
+
+	static void CapWalkColliderRunEnds( List<int> tris, bool[] inGap, int rings, bool closed )
+	{
+		if ( rings < 2 || inGap == null || inGap.Length < rings )
+			return;
+
+		for ( int i = 0; i < rings; i++ )
+		{
+			if ( inGap[ i ] )
+				continue;
+
+			bool startOfRun;
+			bool endOfRun;
+			if ( closed )
+			{
+				int prev = ( i - 1 + rings ) % rings;
+				int next = ( i + 1 ) % rings;
+				startOfRun = inGap[ prev ];
+				endOfRun = inGap[ next ];
+			}
+			else
+			{
+				startOfRun = i > 0 && inGap[ i - 1 ];
+				endOfRun = i < rings - 1 && inGap[ i + 1 ];
+			}
+
+			if ( !startOfRun && !endOfRun )
+				continue;
+
+			int a = i * 4;
+			if ( startOfRun )
+				AddColliderQuad( tris, a + 0, a + 1, a + 2, a + 3 );
+			if ( endOfRun )
+				AddColliderQuad( tris, a + 1, a + 0, a + 3, a + 2 );
+		}
 	}
 
 	static void AddColliderQuad( List<int> tris, int a, int b, int c, int d )

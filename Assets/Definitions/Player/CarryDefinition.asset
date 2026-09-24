@@ -157,7 +157,7 @@ MonoBehaviour:
   coinPickupComboMaxSteps: 10
   pileDigPourClips:
   - {fileID: 8300000, guid: 58792f3caa7a6ec46a24f0b1aac8ce51, type: 3}
-  pileDigPourVolumeAtOne: 0.5
+  pileDigPourVolumeAtOne: 0.25
   pileDigPourVolumeAtBatch: 0.85
   pileDigPourAmountForMaxVolume: 8
   pileDigPourPitchMin: 0.95

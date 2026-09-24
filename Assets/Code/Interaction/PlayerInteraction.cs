@@ -44,6 +44,14 @@ public class PlayerInteraction : MonoBehaviour
 	bool _primaryPastInitialDelay;
 	bool _secondaryPastInitialDelay;
 	bool _contextualPastInitialDelay;
+	/// <summary>True while SecondaryInteract has been held continuously since a place/throw pulse.</summary>
+	bool _secondaryHoldSession;
+	CarryBucketKind _secondarySessionBucket;
+	/// <summary>
+	/// After the selected pouch changes mid-hold (e.g. auto-switch on empty), ignore further
+	/// place/throw until SecondaryInteract is released.
+	/// </summary>
+	bool _secondaryBlockedUntilRelease;
 	bool _primaryNonCoinCharging;
 	bool _primaryHoldBlocked;
 	int _nonCoinPickupKey;
@@ -687,8 +695,6 @@ public class PlayerInteraction : MonoBehaviour
 
 			InteractableBase interactable = ResolveInteractableFromHit( hit.collider );
 			interactable = PromoteSorterMoveFocus( interactable, hit.collider );
-			if ( IsClippedTreasurePileHit( interactable, hit ) )
-				continue;
 
 			bool withinPickRange = hit.distance <= interactRange + 0.001f;
 			bool withinPlacementRange = hit.distance <= placementAimRange + 0.001f;
@@ -993,15 +999,34 @@ public class PlayerInteraction : MonoBehaviour
 		bool canPickup = _current != null
 			&& InteractableBase.IsPickupInteract( _current )
 			&& _current.CanInteract( _player );
+		bool canPrimaryHold = _current != null
+			&& InteractableBase.AcceptsPrimary( _current )
+			&& _current.CanInteract( _player );
 		bool nonCoinPickup = canPickup && IsNonCoinPickup( _current );
 
 		if ( input.Interact.WasPressedThisFrame() )
 		{
+			if ( TryPrimaryPlaceOnArtifactPresentation() )
+			{
+				ResetPrimaryRepeatState();
+				ClearNonCoinPickupCharge();
+				if ( _current != null )
+					_previousPrimaryFocus = _current;
+				return;
+			}
+
 			if ( nonCoinPickup )
 				UpdateNonCoinPickupChargeState( true );
 			else if ( canPickup )
 			{
 				TryPickupInteractWithFocus();
+				_primaryRepeatTimer = 0f;
+				_primaryPastInitialDelay = false;
+				ClearNonCoinPickupCharge();
+			}
+			else if ( canPrimaryHold )
+			{
+				TryInteractWithFocus();
 				_primaryRepeatTimer = 0f;
 				_primaryPastInitialDelay = false;
 				ClearNonCoinPickupCharge();
@@ -1053,7 +1078,12 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _current != null )
 			_previousPrimaryFocus = _current;
 
-		if ( !InteractableBase.IsPickupInteract( _current ) )
+		bool repeatPickup = InteractableBase.IsPickupInteract( _current );
+		bool repeatPrimaryHold = InteractableBase.AcceptsPrimary( _current );
+		if ( !repeatPickup && !repeatPrimaryHold )
+			return;
+
+		if ( _current == null || !_current.CanInteract( _player ) )
 			return;
 
 		float coinWait = GetPrimaryHoldWait();
@@ -1063,7 +1093,10 @@ public class PlayerInteraction : MonoBehaviour
 
 		_primaryRepeatTimer -= coinWait;
 		_primaryPastInitialDelay = true;
-		TryPickupInteractWithFocus();
+		if ( repeatPickup )
+			TryPickupInteractWithFocus();
+		else
+			TryInteractWithFocus();
 	}
 
 	void UpdateNonCoinPickupChargeState( bool nonCoinHold )
@@ -1173,19 +1206,6 @@ public class PlayerInteraction : MonoBehaviour
 		_current.Interact( _player );
 		if ( _player != null )
 			_player.CancelSlideVelocity();
-	}
-
-	static bool IsClippedTreasurePileHit( InteractableBase interactable, in RaycastHit hit )
-	{
-		TreasurePileInteractable pile = interactable as TreasurePileInteractable;
-		if ( pile == null )
-			return false;
-
-		TreasurePileVisual visual = pile.PileVisual;
-		if ( visual == null )
-			return false;
-
-		return !visual.HasPileSurfaceAt( hit.point );
 	}
 
 	static InteractableBase ResolveInteractableFromHit( Collider collider )
@@ -1318,6 +1338,24 @@ public class PlayerInteraction : MonoBehaviour
 		_primaryHoldBlocked = false;
 	}
 
+	/// <summary>
+	/// LMB places onto an aimed artifact presentation stand when the ghost is valid.
+	/// </summary>
+	bool TryPrimaryPlaceOnArtifactPresentation()
+	{
+		if ( _placement == null || !_placement.HasValidPlacement )
+			return false;
+		if ( !( _placement.ActiveTarget is ArtifactPresentationTableInteractable ) )
+			return false;
+
+		if ( !_placement.TryPlaceAtAim() )
+			return false;
+
+		if ( _player != null )
+			_player.CancelSlideVelocity();
+		return true;
+	}
+
 	void ResetContextualRepeatState()
 	{
 		_contextualRepeatTimer = 0f;
@@ -1332,8 +1370,40 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
-		if ( !holding || _placement == null )
+		if ( _secondaryBlockedUntilRelease )
 			return;
+
+		if ( !holding || _placement == null )
+		{
+			// Emptied mid-hold: keep suppressing until release so an auto pouch switch
+			// (or a pickup that reselects) cannot resume place/throw on the next pouch.
+			if ( _secondaryHoldSession )
+			{
+				_secondaryBlockedUntilRelease = true;
+				_secondaryRepeatTimer = 0f;
+			}
+			return;
+		}
+
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry != null )
+		{
+			CarryBucketKind selected = carry.SelectedBucket;
+			if ( _secondaryHoldSession )
+			{
+				if ( selected != _secondarySessionBucket )
+				{
+					_secondaryBlockedUntilRelease = true;
+					_secondaryRepeatTimer = 0f;
+					return;
+				}
+			}
+			else
+			{
+				_secondaryHoldSession = true;
+				_secondarySessionBucket = selected;
+			}
+		}
 
 		if ( input.SecondaryInteract.WasPressedThisFrame() )
 		{
@@ -1359,6 +1429,8 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		_secondaryRepeatTimer = 0f;
 		_secondaryPastInitialDelay = false;
+		_secondaryHoldSession = false;
+		_secondaryBlockedUntilRelease = false;
 	}
 
 	float GetPrimaryHoldWait()

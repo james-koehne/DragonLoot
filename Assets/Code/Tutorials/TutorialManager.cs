@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 /// <summary>
 /// Contextual tutorials: once shown, stay visible until all tasks complete.
 /// Multi-task checkboxes completed by gameplay; permanently complete when all tasks done.
-/// Does not drive TutorialHud.
+/// Pushes tutorial outline roots to <see cref="TutorialHud"/> (overrides nearby objective outlines).
 /// </summary>
 public class TutorialManager : MonoBehaviour
 {
@@ -39,6 +39,7 @@ public class TutorialManager : MonoBehaviour
 	readonly List<TutorialDefinition> _cycleScratch = new List<TutorialDefinition>( 8 );
 	readonly List<TutorialDefinition> _openTutorials = new List<TutorialDefinition>( 8 );
 	readonly List<string> _minimizedTitleScratch = new List<string>( 8 );
+	readonly List<Transform> _outlineRootScratch = new List<Transform>( 8 );
 
 	TutorialCatalogDefinition _catalog;
 	TutorialPopupUI _popup;
@@ -154,6 +155,7 @@ public class TutorialManager : MonoBehaviour
 		_taskProgressCounts.Clear();
 		_completedUnscaledTimes.Clear();
 		_hadContextIds.Clear();
+		TutorialHud.ClearTutorialOverrideOutlineRoots();
 		HydrateCompletedFromSave();
 		RefreshFromPlayerState();
 		EvaluateContext( force: true );
@@ -1054,6 +1056,8 @@ public class TutorialManager : MonoBehaviour
 	void OnWholeStackPlace( WholeStackPlaceCompletedEvent evt )
 	{
 		TryCompleteTask( TutorialTaskCompleteType.WholeStackPlace );
+		if ( evt.IndirectJoin )
+			TryCompleteTask( TutorialTaskCompleteType.WholeStackPlaceNearby );
 	}
 
 	void OnTreasureCollected( TreasureCollectedEvent evt )
@@ -1794,6 +1798,7 @@ public class TutorialManager : MonoBehaviour
 			CollectDeferredUncheckedTasks( def );
 
 		ApplyMapHighlight( def );
+		ApplyTutorialOutlineOverride( def );
 
 		_popup.Show(
 			def.title,
@@ -1882,6 +1887,39 @@ public class TutorialManager : MonoBehaviour
 			MapOverlayRegistrar.SetTempMarkerActive( def.mapMarkerId, true );
 	}
 
+	void ApplyTutorialOutlineOverride( TutorialDefinition def )
+	{
+		_outlineRootScratch.Clear();
+		if ( def != null && def.outlineTargetIds != null )
+		{
+			for ( int i = 0; i < def.outlineTargetIds.Length; i++ )
+			{
+				string id = def.outlineTargetIds[ i ];
+				if ( string.IsNullOrEmpty( id ) )
+					continue;
+				if ( !EventTargetRegistry.TryGetTarget( id, out QuestTarget target ) || target == null )
+					continue;
+
+				Transform root = target.ResolveOutlineRoot();
+				if ( root == null )
+					continue;
+				if ( _outlineRootScratch.Contains( root ) )
+					continue;
+				_outlineRootScratch.Add( root );
+			}
+		}
+
+		if ( _outlineRootScratch.Count > 0 )
+			TutorialHud.SetTutorialOverrideOutlineRoots( _outlineRootScratch );
+		else
+			TutorialHud.ClearTutorialOverrideOutlineRoots();
+	}
+
+	void ClearTutorialOutlineOverride()
+	{
+		TutorialHud.ClearTutorialOverrideOutlineRoots();
+	}
+
 	void RequestHide( bool complete )
 	{
 		if ( _phase == CeremonyPhase.TutorialComplete || _phase == CeremonyPhase.Hiding )
@@ -1934,6 +1972,7 @@ public class TutorialManager : MonoBehaviour
 		_deferredUncheckedTaskIds.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
+		ClearTutorialOutlineOverride();
 
 		bool keepStack = _pendingShow != null && !IsCompleted( _pendingShow.id );
 		if ( !keepStack && _openTutorials.Count == 0 && _popup != null )
@@ -2562,6 +2601,11 @@ public class TutorialManager : MonoBehaviour
 		return ProfileManager.Instance.ProfileSaveData;
 	}
 
+	public void DebugMarkCompleted( string tutorialId )
+	{
+		MarkCompleted( tutorialId );
+	}
+
 	public void DebugResetProgress()
 	{
 		_active = null;
@@ -2593,6 +2637,7 @@ public class TutorialManager : MonoBehaviour
 		_taskProgressCounts.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
+		ClearTutorialOutlineOverride();
 		if ( _popup != null )
 			_popup.HideImmediate();
 

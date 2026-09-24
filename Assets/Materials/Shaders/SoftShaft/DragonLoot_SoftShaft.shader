@@ -26,6 +26,18 @@ Shader "DragonLoot/SoftShaft"
 		_CameraFadeStart("Camera Fade Start", Float) = 0.35
 		_CameraFadeEnd("Camera Fade End", Float) = 1.25
 
+		[Header(Mesh Mask Features)]
+		[Toggle(_MESH_MASK)] _MeshMask("Use Mesh Mask (UV/Vertex Color)", Float) = 0
+		[Toggle(_NOISE_STREAKS)] _NoiseStreaks("Noise Streaks", Float) = 0
+		_NoiseStrength("Noise Strength", Range(0, 1)) = 0.35
+		_NoiseScrollSpeed("Noise Scroll Speed", Float) = 0.15
+		_NoiseTiling("Noise Tiling", Float) = 4
+		[Toggle(_PULSE)] _Pulse("Pulse", Float) = 0
+		_PulseSpeed("Pulse Speed", Float) = 0.4
+		_PulseAmount("Pulse Amount", Range(0, 1)) = 0.15
+		[Toggle(_DEPTH_FADE)] _DepthFade("Depth Fade", Float) = 0
+		_DepthFadeDistance("Depth Fade Distance", Float) = 0.25
+
 		[Header(Render)]
 		[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend("Src Blend", Float) = 5
 		[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend("Dst Blend", Float) = 10
@@ -59,6 +71,10 @@ Shader "DragonLoot/SoftShaft"
 			#pragma fragment Frag
 			#pragma multi_compile_instancing
 			#pragma multi_compile_fog
+			#pragma shader_feature_local _MESH_MASK
+			#pragma shader_feature_local _NOISE_STREAKS
+			#pragma shader_feature_local _PULSE
+			#pragma shader_feature_local _DEPTH_FADE
 
 			#include "DragonLoot_SoftShaftPass.hlsl"
 

@@ -35,6 +35,9 @@ namespace FeedbackSystem
 		[Min( 0.01f )]
 		public float MaxDistance = 20f;
 
+		[Tooltip( "When enabled, the AudioSource tracks Context.Source (or the Feedbacks owner) for the duration of playback." )]
+		public bool FollowCallerTransform;
+
 		public AudioSource AudioSource;
 
 		public override void Play()
@@ -49,7 +52,22 @@ namespace FeedbackSystem
 				ResolvePosition(),
 				SpatialBlend,
 				MinDistance,
-				MaxDistance );
+				MaxDistance,
+				ResolveFollowTransform() );
+		}
+
+		Transform ResolveFollowTransform()
+		{
+			if ( !FollowCallerTransform )
+				return null;
+
+			if ( Context != null && Context.Source != null )
+				return Context.Source.transform;
+
+			if ( Owner != null )
+				return Owner.transform;
+
+			return null;
 		}
 
 		Vector3 ResolvePosition()

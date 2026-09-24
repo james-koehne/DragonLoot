@@ -47,6 +47,15 @@ public class MinecartDefinition : ScriptableObject
 	[Min( 0.5f )]
 	public float trackSnapRadius = 4f;
 
+	[Header( "Junctions" )]
+	[Tooltip( "Along-track distance from a baked junction where look is sampled once and the exit is committed." )]
+	[Min( 0.1f )]
+	public float junctionApproachRadius = 2.5f;
+
+	[Tooltip( "Minimum |look · exit tangent| to treat a branch as a clear look match. Below this, prefer continuing on the current track." )]
+	[Range( 0f, 1f )]
+	public float junctionLookMinAlign = 0.15f;
+
 	[Header( "Rider" )]
 	[Tooltip( "When the player stands on the cart, carry them with it so they can walk around while it moves." )]
 	public bool attachPlayerWhenStanding = true;
@@ -108,6 +117,8 @@ public class MinecartDefinition : ScriptableObject
 		wheelRadius = Mathf.Max( 0.05f, wheelRadius );
 		blockingHalfLength = Mathf.Max( 0.1f, blockingHalfLength );
 		trackSnapRadius = Mathf.Max( 0.5f, trackSnapRadius );
+		junctionApproachRadius = Mathf.Max( 0.1f, junctionApproachRadius );
+		junctionLookMinAlign = Mathf.Clamp01( junctionLookMinAlign );
 		riderSpeedMultiplier = Mathf.Max( 0.1f, riderSpeedMultiplier );
 		recallSpeed = Mathf.Max( 0.1f, recallSpeed );
 		recallStopDistance = Mathf.Max( 0.02f, recallStopDistance );

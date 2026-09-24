@@ -481,6 +481,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cdf649137aa25084f91a62b3f8a646c5
+    m_Address: Assets/Definitions/Level/TimeOfDayDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cf67fff312cfb7d4991e61db64ad079f
     m_Address: Assets/Addressables/Treasure/Gems/RubyVisual.prefab
     m_ReadOnly: 0

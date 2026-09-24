@@ -51,6 +51,17 @@ public static class MinecartTrackMeshBuilder
 		}
 	}
 
+	public static void RebuildAllWithJunctionGaps()
+	{
+		MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		for ( int i = 0; i < found.Length; i++ )
+		{
+			MinecartTrack track = found[ i ];
+			if ( track != null && track.IsUsable )
+				Rebuild( track );
+		}
+	}
+
 	static void RebuildInternal( MinecartTrack track )
 	{
 		if ( track == null || !track.IsUsable )
@@ -92,6 +103,7 @@ public static class MinecartTrackMeshBuilder
 		Vector3[] tangents = new Vector3[ samples ];
 		Vector3[] ups = new Vector3[ samples ];
 		Vector3[] rights = new Vector3[ samples ];
+		bool[] inGap = new bool[ samples ];
 		for ( int i = 0; i < samples; i++ )
 		{
 			float t = track.IsClosed
@@ -105,9 +117,10 @@ public static class MinecartTrackMeshBuilder
 			tangents[ i ] = tan;
 			ups[ i ] = up;
 			rights[ i ] = Vector3.Cross( up, tan ).normalized;
+			inGap[ i ] = MinecartJunctionGraph.IsTrackDistanceInMeshGap( track, t );
 		}
 
-		AppendRails( track, positions, ups, rights, samples );
+		AppendRails( track, positions, ups, rights, samples, inGap );
 		AppendSleepers( track, length );
 
 		mesh = new Mesh();
@@ -123,7 +136,7 @@ public static class MinecartTrackMeshBuilder
 		MeshRoot = null;
 	}
 
-	static void AppendRails( MinecartTrack track, Vector3[] positions, Vector3[] ups, Vector3[] rights, int samples )
+	static void AppendRails( MinecartTrack track, Vector3[] positions, Vector3[] ups, Vector3[] rights, int samples, bool[] inGap )
 	{
 		float gauge = track.RailGauge * 0.5f;
 		float halfW = track.RailWidth * 0.5f;
@@ -150,6 +163,9 @@ public static class MinecartTrackMeshBuilder
 		{
 			int a = i;
 			int b = ( i + 1 ) % rings;
+			if ( inGap != null && inGap.Length > a && inGap.Length > b && ( inGap[ a ] || inGap[ b ] ) )
+				continue;
+
 			ConnectRailRings( leftStart + a * 4, leftStart + b * 4 );
 			ConnectRailRings( rightStart + a * 4, rightStart + b * 4 );
 		}
@@ -186,6 +202,9 @@ public static class MinecartTrackMeshBuilder
 			float dist = track.IsClosed
 				? ( length * i ) / count
 				: Mathf.Min( length, i * spacing );
+			if ( MinecartJunctionGraph.IsTrackDistanceInMeshGap( track, dist ) )
+				continue;
+
 			Vector3 pos;
 			Vector3 tan;
 			Vector3 up;

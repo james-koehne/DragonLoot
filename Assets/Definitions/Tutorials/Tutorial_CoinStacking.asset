@@ -38,15 +38,14 @@ MonoBehaviour:
   highlightMapLabel: 
   mapMarkerId: 
   completeAllTasksOnVolumeEnter: 0
-  body: Stack matching coins. Hold on a stack to pick it all up, or look at the ground
-    and hold to place your whole stack.
-  keybindHint: '[{SecondaryInteract}] Stack  Hold [{ContextualInteract}] Pick up
-    or place stack'
+  body: Hold on a stack to pick it all up. Aim next to a stack and hold to add your
+    whole stack to it.
+  keybindHint: Hold [{ContextualInteract}] Pick up or add to stack
   tasks:
-  - id: stack_coins
-    label: Stack coins
-    keybindHint: '[{SecondaryInteract}]'
-    completeTrigger: 4
+  - id: aim_next_to_stack
+    label: Aim next to another stack on the ground
+    keybindHint: 'Hold [{ContextualInteract}]'
+    completeTrigger: 32
     completeVolumeId: 
     requiredCount: 0
   - id: whole_stack_place

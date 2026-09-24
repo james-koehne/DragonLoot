@@ -37,7 +37,8 @@ namespace FeedbackSystem
 			Vector3 position,
 			float spatialBlend,
 			float minDistance,
-			float maxDistance )
+			float maxDistance,
+			Transform followTransform = null )
 		{
 			if ( !FeedbackSfxPlayback.Enabled || clip == null )
 				return;
@@ -47,12 +48,16 @@ namespace FeedbackSystem
 			if ( source == null )
 				return;
 
+			if ( followTransform != null )
+				position = followTransform.position;
+
 			source.transform.position = position;
 			source.spatialBlend = Mathf.Clamp01( spatialBlend );
 			source.minDistance = Mathf.Max( 0.01f, minDistance );
 			source.maxDistance = Mathf.Max( source.minDistance, maxDistance );
 			source.pitch = pitch <= 0f ? 1f : pitch;
 			source.PlayOneShot( clip, volume );
+			FeedbackAudioFollower.Attach( source, followTransform );
 		}
 
 		static void Ensure()

@@ -88,6 +88,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 			return;
 		}
 
+		_cart.SetJunctionLook( ResolveLookFlat() );
 		TickDriveInput( input, Time.deltaTime );
 	}
 
@@ -163,6 +164,7 @@ public class PlayerMinecartDrive : MonoBehaviour
 
 		_cart.SetDriveSeatCollidersEnabled( true );
 		_cart.SetDriveSpeed( _signedSpeed, false );
+		_cart.ClearJunctionLook();
 
 		_cart = null;
 		_signedSpeed = 0f;

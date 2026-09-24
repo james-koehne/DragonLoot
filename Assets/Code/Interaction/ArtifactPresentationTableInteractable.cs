@@ -46,6 +46,18 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	[SerializeField]
 	List<GameObject> activateOnComplete = new List<GameObject>();
 
+	[Tooltip( "Optional complete FX (lit + SoftShaft). Activated with the display; color can be overridden below." )]
+	[SerializeField]
+	DisplayCompleteEffect completeEffect;
+
+	[Tooltip( "When enabled, pushes Complete Effect Color into the complete effect on activation." )]
+	[SerializeField]
+	bool overrideCompleteEffectColor;
+
+	[SerializeField]
+	[ColorUsage( true, true )]
+	Color completeEffectColor = new Color( 1f, 0.72f, 0.28f, 1f );
+
 	[Tooltip( "When false, hologram slot indicators are not bound or refreshed (artifacts + anchors only)." )]
 	[SerializeField]
 	bool showSlotIndicators = true;
@@ -197,13 +209,18 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 		Vector3 scale = item.GetWorldScale();
 
-		if ( !TryResolveAimedSlotIndex( in query, out int aimedSlot ) )
+		if ( _isComplete )
 		{
 			preview.SetSuppressed( transform.position, transform.rotation, scale, false );
 			return true;
 		}
 
-		bool feedbackValid = EvaluateSlotForItem( aimedSlot, item );
+		if ( !TryResolvePlacementSlot( item, in query, out int aimedSlot, out bool feedbackValid ) )
+		{
+			preview.SetSuppressed( transform.position, transform.rotation, scale, false );
+			return true;
+		}
+
 		GetSlotWorldPose( aimedSlot, out Vector3 pos, out Quaternion rot );
 		// Show the held-item valid/invalid ghost; slot indicators hide the cyan hologram for this slot.
 		preview.SetItemMesh( pos, rot, scale, feedbackValid );
@@ -420,14 +437,29 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( item == null || _occupants == null || slots == null )
 			return false;
 
-		if ( !TryResolveAimedSlotIndex( in query, out slotIndex ) )
+		if ( !TryResolveAimedSlotIndex( item, in query, out slotIndex ) )
 			return false;
 
-		valid = EvaluateSlotForItem( slotIndex, item );
+		if ( EvaluateSlotForItem( slotIndex, item ) )
+		{
+			valid = true;
+			return true;
+		}
+
+		// Aiming at any slot / the stand: snap to the matching empty slot when one exists.
+		// Invalid only when this artifact cannot go in any available slot.
+		if ( TryFindMatchingValidSlot( item, in query, out int matchingSlot ) )
+		{
+			slotIndex = matchingSlot;
+			valid = true;
+			return true;
+		}
+
+		valid = false;
 		return true;
 	}
 
-	bool TryResolveAimedSlotIndex( in PlacementQuery query, out int slotIndex )
+	bool TryResolveAimedSlotIndex( TreasureItem item, in PlacementQuery query, out int slotIndex )
 	{
 		slotIndex = -1;
 		if ( slots == null || slots.Count == 0 )
@@ -445,7 +477,77 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( hitItem != null && TryFindSlotContaining( hitItem, out slotIndex ) )
 			return true;
 
-		return ArtifactPresentationSlotVolume.TryResolveSlotIndex( query.Hit.collider, out slotIndex );
+		if ( ArtifactPresentationSlotVolume.TryResolveSlotIndex( query.Hit.collider, out slotIndex ) )
+			return true;
+
+		// Aiming at table base / non-slot geometry: snap preview/place to the matching empty slot.
+		if ( !IsHitOnThisTable( query.Hit.collider ) )
+			return false;
+
+		if ( item != null && TryFindMatchingValidSlot( item, in query, out slotIndex ) )
+			return true;
+
+		return TryFindNearestEmptySlot( query.Hit.point, out slotIndex );
+	}
+
+	bool IsHitOnThisTable( Collider hitCollider )
+	{
+		if ( hitCollider == null )
+			return false;
+
+		ArtifactPresentationTableInteractable table =
+			hitCollider.GetComponentInParent<ArtifactPresentationTableInteractable>();
+		return table == this;
+	}
+
+	bool TryFindMatchingValidSlot( TreasureItem item, in PlacementQuery query, out int slotIndex )
+	{
+		slotIndex = -1;
+		if ( item == null || slots == null || _occupants == null )
+			return false;
+
+		Vector3 reference = query.HasHit ? query.Hit.point : transform.position;
+		float bestDistSq = float.MaxValue;
+
+		for ( int i = 0; i < slots.Count; i++ )
+		{
+			if ( !EvaluateSlotForItem( i, item ) )
+				continue;
+
+			GetSlotWorldPose( i, out Vector3 slotPos, out _ );
+			float distSq = ( slotPos - reference ).sqrMagnitude;
+			if ( distSq >= bestDistSq )
+				continue;
+
+			bestDistSq = distSq;
+			slotIndex = i;
+		}
+
+		return slotIndex >= 0;
+	}
+
+	bool TryFindNearestEmptySlot( Vector3 worldPoint, out int slotIndex )
+	{
+		slotIndex = -1;
+		if ( slots == null || _occupants == null )
+			return false;
+
+		float bestDistSq = float.MaxValue;
+		for ( int i = 0; i < slots.Count; i++ )
+		{
+			if ( IsSlotOccupied( i ) )
+				continue;
+
+			GetSlotWorldPose( i, out Vector3 slotPos, out _ );
+			float distSq = ( slotPos - worldPoint ).sqrMagnitude;
+			if ( distSq >= bestDistSq )
+				continue;
+
+			bestDistSq = distSq;
+			slotIndex = i;
+		}
+
+		return slotIndex >= 0;
 	}
 
 	bool TryResolveAimedSlotFromRay( in PlacementQuery query, out int slotIndex )
@@ -704,15 +806,30 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( completedHighlight != null )
 			completedHighlight.SetActive( completed );
 
-		if ( activateOnComplete == null )
+		if ( activateOnComplete != null )
+		{
+			for ( int i = 0; i < activateOnComplete.Count; i++ )
+			{
+				GameObject go = activateOnComplete[ i ];
+				if ( go != null )
+					go.SetActive( completed );
+			}
+		}
+
+		ApplyCompleteEffect( completed );
+	}
+
+	void ApplyCompleteEffect( bool completed )
+	{
+		if ( completeEffect == null )
 			return;
 
-		for ( int i = 0; i < activateOnComplete.Count; i++ )
-		{
-			GameObject go = activateOnComplete[ i ];
-			if ( go != null )
-				go.SetActive( completed );
-		}
+		if ( completed && overrideCompleteEffectColor )
+			completeEffect.Setup( completeEffectColor );
+
+		GameObject effectGo = completeEffect.gameObject;
+		if ( effectGo != null )
+			effectGo.SetActive( completed );
 	}
 
 	void PublishChanged()

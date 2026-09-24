@@ -30,18 +30,23 @@ public class ToastStackUI : MonoBehaviour
 
 	static readonly Color GoldOutline = new Color( 0.92f, 0.78f, 0.32f, 0.85f );
 	static readonly Color GoldKicker = new Color( 1f, 0.88f, 0.45f, 1f );
+	static readonly Color TealOutline = new Color( 0.4f, 0.78f, 0.85f, 0.85f );
+	static readonly Color TealKicker = new Color( 0.55f, 0.9f, 0.95f, 1f );
+	static readonly Color EmeraldOutline = new Color( 0.38f, 0.85f, 0.5f, 0.85f );
+	static readonly Color EmeraldKicker = new Color( 0.55f, 0.95f, 0.65f, 1f );
 	static readonly Color DescriptionColor = new Color( 0.78f, 0.74f, 0.62f, 0.82f );
 	static readonly Color CoinAccent = new Color( 0.95f, 0.78f, 0.28f, 1f );
 	static readonly Color GemAccent = new Color( 0.35f, 0.82f, 0.95f, 1f );
 	static readonly Color ArtifactAccent = new Color( 0.82f, 0.55f, 0.32f, 1f );
 	static readonly Color GeneralAccent = new Color( 0.7f, 0.72f, 0.78f, 1f );
 	static readonly Color UnlockAccent = new Color( 1f, 0.86f, 0.35f, 1f );
-	static readonly Color MilestoneAccent = new Color( 1f, 0.92f, 0.45f, 1f );
+	static readonly Color CompletionAccent = new Color( 0.45f, 0.82f, 0.88f, 1f );
+	static readonly Color MilestoneAccent = new Color( 0.45f, 0.92f, 0.55f, 1f );
 
 	static readonly Color DiscoveryBackdrop = new Color( 0.05f, 0.04f, 0.02f, 0.72f );
-	static readonly Color CompletionBackdrop = new Color( 0.06f, 0.07f, 0.1f, 0.78f );
+	static readonly Color CompletionBackdrop = new Color( 0.04f, 0.08f, 0.1f, 0.8f );
 	static readonly Color UnlockBackdrop = new Color( 0.1f, 0.08f, 0.03f, 0.82f );
-	static readonly Color MilestoneBackdrop = new Color( 0.14f, 0.1f, 0.03f, 0.88f );
+	static readonly Color MilestoneBackdrop = new Color( 0.05f, 0.12f, 0.07f, 0.88f );
 
 	public enum Kind
 	{
@@ -779,7 +784,7 @@ public class ToastStackUI : MonoBehaviour
 		if ( item.Outline != null )
 		{
 			item.Outline.enabled = true;
-			item.Outline.effectColor = GoldOutline;
+			item.Outline.effectColor = OutlineForTier( entry.Tier );
 			item.Outline.effectDistance = entry.Tier == ToastTier.Milestone
 				? new Vector2( 3f, 3f )
 				: new Vector2( 2f, 2f );
@@ -810,7 +815,7 @@ public class ToastStackUI : MonoBehaviour
 		{
 			item.Kicker.gameObject.SetActive( hasKicker );
 			item.Kicker.text = kicker;
-			item.Kicker.color = GoldKicker;
+			item.Kicker.color = KickerForTier( entry.Tier );
 			item.Kicker.fontSize = entry.Tier == ToastTier.Milestone ? 18 : 16;
 		}
 
@@ -856,6 +861,8 @@ public class ToastStackUI : MonoBehaviour
 			return MilestoneAccent;
 		if ( entry.Tier == ToastTier.Unlock )
 			return UnlockAccent;
+		if ( entry.Tier == ToastTier.Completion )
+			return CompletionAccent;
 		if ( entry.Kind != Kind.Discovery || !entry.ShowPouchIcon )
 			return CoinAccent;
 
@@ -870,6 +877,32 @@ public class ToastStackUI : MonoBehaviour
 				return GeneralAccent;
 			default:
 				return CoinAccent;
+		}
+	}
+
+	static Color OutlineForTier( ToastTier tier )
+	{
+		switch ( tier )
+		{
+			case ToastTier.Completion:
+				return TealOutline;
+			case ToastTier.Milestone:
+				return EmeraldOutline;
+			default:
+				return GoldOutline;
+		}
+	}
+
+	static Color KickerForTier( ToastTier tier )
+	{
+		switch ( tier )
+		{
+			case ToastTier.Completion:
+				return TealKicker;
+			case ToastTier.Milestone:
+				return EmeraldKicker;
+			default:
+				return GoldKicker;
 		}
 	}
 

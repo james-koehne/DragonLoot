@@ -47,12 +47,16 @@ public class QuestObjectiveUI : MonoBehaviour
 	Coroutine _completeSequenceRoutine;
 	string _objectiveFormatted = string.Empty;
 	readonly UiCountChunkPop _countPop = new UiCountChunkPop();
+	Coroutine _hideAttentionGlowRoutine;
+	const float AttentionSpinSeconds = 8f;
 
 	public void Setup()
 	{
 		BindLayout();
-		ResolveFeedbackRefs();
 		ResolveAttentionRefs();
+		ResolveFeedbackRefs();
+		EnsureTitleDiamondLayout();
+		ApplyQuestDiamondColor();
 		Subscribe();
 		_wantVisible = false;
 		_shownObjectiveKey = null;
@@ -86,12 +90,14 @@ public class QuestObjectiveUI : MonoBehaviour
 
 	void OnDisable()
 	{
+		CancelHideAttentionGlow();
 		CancelCompleteSequence();
 		Unsubscribe();
 	}
 
 	void OnDestroy()
 	{
+		CancelHideAttentionGlow();
 		CancelCompleteSequence();
 		Unsubscribe();
 	}
@@ -130,6 +136,54 @@ public class QuestObjectiveUI : MonoBehaviour
 		SetUnscaled( hideFeedback );
 		SetUnscaled( subObjectiveCompleteFeedback );
 		SetUnscaled( objectiveCompleteFeedback );
+		StripAttentionFadeOutFromShowFeedback();
+	}
+
+	void StripAttentionFadeOutFromShowFeedback()
+	{
+		if ( showFeedback == null || showFeedback.FeedbackList == null || attentionGroup == null )
+			return;
+
+		StripAttentionFadeOutList( showFeedback.FeedbackList, attentionGroup );
+	}
+
+	static void StripAttentionFadeOutList( List<Feedback> list, CanvasGroup group )
+	{
+		if ( list == null || group == null )
+			return;
+
+		for ( int i = list.Count - 1; i >= 0; i-- )
+		{
+			Feedback feedback = list[ i ];
+			ParallelFeedback parallel = feedback as ParallelFeedback;
+			if ( parallel != null )
+			{
+				StripAttentionFadeOutList( parallel.Feedbacks, group );
+				continue;
+			}
+
+			CanvasGroupFadeFeedback fadeIn = feedback as CanvasGroupFadeFeedback;
+			if ( fadeIn != null && fadeIn.Target == group && fadeIn.To > 0.5f )
+				fadeIn.To = 1f;
+
+			SequenceFeedback sequence = feedback as SequenceFeedback;
+			if ( sequence == null || sequence.Feedbacks == null )
+				continue;
+
+			bool isAttentionFadeOut = false;
+			for ( int j = 0; j < sequence.Feedbacks.Count; j++ )
+			{
+				CanvasGroupFadeFeedback fade = sequence.Feedbacks[ j ] as CanvasGroupFadeFeedback;
+				if ( fade != null && fade.Target == group && fade.To <= 0.01f )
+				{
+					isAttentionFadeOut = true;
+					break;
+				}
+			}
+
+			if ( isAttentionFadeOut )
+				list.RemoveAt( i );
+		}
 	}
 
 	void ResolveAttentionRefs()
@@ -137,6 +191,8 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( attentionGroup == null )
 		{
 			Transform existing = transform.Find( "Attention" );
+			if ( existing == null )
+				existing = transform.Find( "TitleRow/Attention" );
 			if ( existing != null )
 				attentionGroup = existing.GetComponent<CanvasGroup>();
 		}
@@ -144,6 +200,8 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( attentionDiamond == null )
 		{
 			Transform existing = transform.Find( "Attention/Diamond" );
+			if ( existing == null )
+				existing = transform.Find( "TitleRow/Attention/Diamond" );
 			if ( existing != null )
 				attentionDiamond = existing;
 		}
@@ -151,8 +209,131 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( attentionGlow == null )
 		{
 			Transform existing = transform.Find( "Attention/Glow" );
+			if ( existing == null )
+				existing = transform.Find( "TitleRow/Attention/Glow" );
 			if ( existing != null )
 				attentionGlow = existing;
+		}
+	}
+
+	const float TitleDiamondSize = 22f;
+	const float TitleDiamondGap = 8f;
+
+	void EnsureTitleDiamondLayout()
+	{
+		if ( title == null )
+			return;
+
+		ResolveAttentionRefs();
+		if ( attentionGroup == null )
+			return;
+
+		Transform attentionTransform = attentionGroup.transform;
+		RectTransform titleRect = title.rectTransform;
+		Transform quest = transform;
+
+		Transform titleRow = quest.Find( "TitleRow" );
+		if ( titleRow == null )
+		{
+			GameObject rowGo = new GameObject( "TitleRow", typeof( RectTransform ), typeof( HorizontalLayoutGroup ), typeof( LayoutElement ) );
+			titleRow = rowGo.transform;
+			titleRow.SetParent( quest, false );
+			titleRow.SetSiblingIndex( titleRect.GetSiblingIndex() );
+		}
+
+		HorizontalLayoutGroup rowLayout = titleRow.GetComponent<HorizontalLayoutGroup>();
+		if ( rowLayout == null )
+			rowLayout = titleRow.gameObject.AddComponent<HorizontalLayoutGroup>();
+		rowLayout.spacing = TitleDiamondGap;
+		rowLayout.childAlignment = TextAnchor.MiddleLeft;
+		rowLayout.childControlWidth = true;
+		rowLayout.childControlHeight = true;
+		rowLayout.childForceExpandWidth = false;
+		rowLayout.childForceExpandHeight = false;
+		rowLayout.padding = new RectOffset( 0, 0, 0, 0 );
+
+		LayoutElement rowElement = titleRow.GetComponent<LayoutElement>();
+		if ( rowElement == null )
+			rowElement = titleRow.gameObject.AddComponent<LayoutElement>();
+		rowElement.flexibleWidth = 1f;
+
+		if ( attentionTransform.parent != titleRow )
+			attentionTransform.SetParent( titleRow, false );
+		attentionTransform.SetSiblingIndex( 0 );
+
+		if ( titleRect.parent != titleRow )
+			titleRect.SetParent( titleRow, false );
+		titleRect.SetSiblingIndex( 1 );
+
+		LayoutElement attentionLayout = attentionTransform.GetComponent<LayoutElement>();
+		if ( attentionLayout == null )
+			attentionLayout = attentionTransform.gameObject.AddComponent<LayoutElement>();
+		attentionLayout.ignoreLayout = false;
+		attentionLayout.preferredWidth = TitleDiamondSize;
+		attentionLayout.preferredHeight = TitleDiamondSize;
+		attentionLayout.minWidth = TitleDiamondSize;
+		attentionLayout.minHeight = TitleDiamondSize;
+		attentionLayout.flexibleWidth = 0f;
+		attentionLayout.flexibleHeight = 0f;
+
+		RectTransform attentionRect = attentionTransform as RectTransform;
+		if ( attentionRect != null )
+		{
+			attentionRect.anchorMin = new Vector2( 0f, 0.5f );
+			attentionRect.anchorMax = new Vector2( 0f, 0.5f );
+			attentionRect.pivot = new Vector2( 0.5f, 0.5f );
+			attentionRect.sizeDelta = new Vector2( TitleDiamondSize, TitleDiamondSize );
+			attentionRect.anchoredPosition = Vector2.zero;
+		}
+
+		PinAttentionChild( attentionDiamond, TitleDiamondSize );
+		PinAttentionChild( attentionGlow, TitleDiamondSize * 1.85f );
+
+		LayoutElement titleLayout = title.GetComponent<LayoutElement>();
+		if ( titleLayout == null )
+			titleLayout = title.gameObject.AddComponent<LayoutElement>();
+		titleLayout.flexibleWidth = 1f;
+		titleLayout.minHeight = TitleDiamondSize;
+	}
+
+	static void PinAttentionChild( Transform child, float size )
+	{
+		if ( child == null )
+			return;
+
+		RectTransform rect = child as RectTransform;
+		if ( rect == null )
+			return;
+
+		rect.anchorMin = new Vector2( 0.5f, 0.5f );
+		rect.anchorMax = new Vector2( 0.5f, 0.5f );
+		rect.pivot = new Vector2( 0.5f, 0.5f );
+		rect.anchoredPosition = Vector2.zero;
+		rect.sizeDelta = new Vector2( size, size );
+		rect.localRotation = Quaternion.identity;
+		rect.localScale = Vector3.one;
+	}
+
+	void ApplyQuestDiamondColor()
+	{
+		Color cyan = PlacementFeedbackColors.QuestObjectiveHighlight;
+		PlayerInteractionDefinition def = null;
+		def = RuntimeDefinition.Resolve( ref def );
+		if ( def != null && def.questOutline != null )
+			cyan = def.questOutline.outlineColor;
+
+		if ( attentionDiamond != null )
+		{
+			Image diamondImage = attentionDiamond.GetComponent<Image>();
+			if ( diamondImage != null )
+				diamondImage.color = new Color( cyan.r, cyan.g, cyan.b, 1f );
+		}
+
+		if ( attentionGlow != null )
+		{
+			Image glowImage = attentionGlow.GetComponent<Image>();
+			if ( glowImage != null )
+				glowImage.color = new Color( cyan.r, cyan.g, cyan.b, 0.4f );
 		}
 	}
 
@@ -284,16 +465,63 @@ public class QuestObjectiveUI : MonoBehaviour
 		RestoreObjectiveTransform();
 		ResetAttentionChrome();
 		StopCountChunkPop( restore: true );
+		SetAttentionGlowVisible( true );
 		if ( showFeedback != null )
 		{
 			if ( group != null )
 				group.alpha = 0f;
 			showFeedback.Play();
+			ScheduleHideAttentionGlow( AttentionSpinSeconds );
 			return;
 		}
 
 		if ( group != null )
 			group.alpha = 1f;
+		if ( attentionGroup != null )
+			attentionGroup.alpha = 1f;
+		ScheduleHideAttentionGlow( AttentionSpinSeconds );
+	}
+
+	void ScheduleHideAttentionGlow( float delaySeconds )
+	{
+		CancelHideAttentionGlow();
+		if ( !isActiveAndEnabled )
+		{
+			SetAttentionGlowVisible( false );
+			return;
+		}
+
+		_hideAttentionGlowRoutine = StartCoroutine( HideAttentionGlowAfter( delaySeconds ) );
+	}
+
+	void CancelHideAttentionGlow()
+	{
+		if ( _hideAttentionGlowRoutine == null )
+			return;
+		StopCoroutine( _hideAttentionGlowRoutine );
+		_hideAttentionGlowRoutine = null;
+	}
+
+	IEnumerator HideAttentionGlowAfter( float delaySeconds )
+	{
+		float remaining = Mathf.Max( 0f, delaySeconds );
+		while ( remaining > 0f )
+		{
+			remaining -= Time.unscaledDeltaTime;
+			yield return null;
+		}
+
+		SetAttentionGlowVisible( false );
+		_hideAttentionGlowRoutine = null;
+	}
+
+	void SetAttentionGlowVisible( bool visible )
+	{
+		if ( attentionGlow == null )
+			return;
+		attentionGlow.gameObject.SetActive( visible );
+		if ( visible )
+			attentionGlow.localScale = Vector3.one;
 	}
 
 	void PlayTaskCountPop( string previousText, string nextText )
@@ -486,6 +714,7 @@ public class QuestObjectiveUI : MonoBehaviour
 
 	void HideImmediate()
 	{
+		CancelHideAttentionGlow();
 		if ( showFeedback != null )
 			showFeedback.Stop();
 		if ( hideFeedback != null )
@@ -511,6 +740,7 @@ public class QuestObjectiveUI : MonoBehaviour
 
 	void ResetAttentionChrome()
 	{
+		CancelHideAttentionGlow();
 		if ( attentionGroup != null )
 			attentionGroup.alpha = 0f;
 		if ( attentionDiamond != null )
@@ -519,7 +749,10 @@ public class QuestObjectiveUI : MonoBehaviour
 			attentionDiamond.localScale = Vector3.one;
 		}
 		if ( attentionGlow != null )
+		{
 			attentionGlow.localScale = Vector3.one;
+			attentionGlow.gameObject.SetActive( true );
+		}
 	}
 
 	void ApplyCountChunkDisplay( string display )

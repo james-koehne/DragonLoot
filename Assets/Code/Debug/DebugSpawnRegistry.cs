@@ -27,6 +27,9 @@ public static class DebugSpawnRegistry
 		new FallbackVolume( EventSceneAutoWire.IdVolumeCoinHall, "Coin Hall" )
 	};
 
+	public const string PostTutorialSpawnId = "posttutorial";
+	const string JumpTutorialId = "tut_jumping";
+
 	static readonly string[] IntroEventIds =
 	{
 		"intro_welcome",
@@ -198,6 +201,8 @@ public static class DebugSpawnRegistry
 			ApplySkipIntro();
 		else
 			PouchBarUI.NotifyIntroComplete();
+		if ( IsPostTutorialSpawn( spawnId ) )
+			ApplyPostTutorial();
 		return true;
 	}
 
@@ -209,6 +214,63 @@ public static class DebugSpawnRegistry
 			return;
 
 		ApplySkipIntro();
+	}
+
+	public static bool IsPostTutorialSpawn( string spawnId )
+	{
+		return spawnId == PostTutorialSpawnId;
+	}
+
+	public static void ApplyPostTutorialIfSelected()
+	{
+		if ( !IsPostTutorialSpawn( SelectedSpawnId ) )
+			return;
+		if ( !TryGetSelectedPose( out _, out _ ) )
+			return;
+
+		ApplyPostTutorial();
+	}
+
+	public static void ApplyPostTutorial()
+	{
+		ObjectiveSystem objectives = ObjectiveSystem.EnsureExists();
+		if ( objectives != null )
+		{
+			if ( objectives.Catalog == null )
+				objectives.StartCatalog();
+			objectives.DebugCompleteAll();
+		}
+
+		TutorialManager tutorials = TutorialManager.Instance;
+		if ( tutorials == null )
+			tutorials = TutorialManager.EnsureExists();
+		if ( tutorials != null )
+			tutorials.DebugMarkCompleted( JumpTutorialId );
+
+		GrantPostTutorialRewards();
+	}
+
+	static void GrantPostTutorialRewards()
+	{
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		if ( player == null )
+			player = DebugOverlay.GetPlayer();
+
+		AbilitySystem abilities = player != null ? AbilitySystem.Ensure( player ) : AbilitySystem.Instance;
+		if ( abilities != null )
+			abilities.UnlockAbility( PlayerController.JumpAbilityId );
+
+		UpgradeSystem upgrades = player != null ? UpgradeSystem.Ensure( player ) : UpgradeSystem.Instance;
+		if ( upgrades == null )
+			return;
+		if ( upgrades.GetUpgradeLevel( UpgradeDefinition.DigPickupSpeedId ) >= 1 )
+			return;
+		if ( !upgrades.SetUpgradeLevel( UpgradeDefinition.DigPickupSpeedId, 1 ) )
+			return;
+		if ( !upgrades.TryGetDefinition( UpgradeDefinition.DigPickupSpeedId, out UpgradeDefinition swiftHands ) || swiftHands == null )
+			return;
+
+		UnlockRewardToastUI.NotifyUnlock( swiftHands );
 	}
 
 	public static void ApplySkipIntro()

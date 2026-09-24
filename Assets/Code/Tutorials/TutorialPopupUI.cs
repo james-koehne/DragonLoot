@@ -27,6 +27,12 @@ public class TutorialPopupUI : MonoBehaviour
 	const float CycleControlWidth = 168f;
 	const float CycleControlHeight = 48f;
 	const float CycleControlGap = 14f;
+	const float CompleteGlowExtra = 5f;
+
+	static readonly Color CardBackgroundColor = new Color( 0.1372549f, 0.1411765f, 0.1294118f, 1f );
+	static readonly Color CardTitleColor = new Color( 0.6039216f, 0.8470588f, 0.6039216f, 1f );
+	static readonly Color CompleteGlowIdleColor = new Color( 0.9215686f, 0.9215686f, 0.9215686f, 1f );
+	static readonly Color CompleteGlowCompleteColor = new Color( 0.3490196f, 0.9215686f, 0.4509804f, 1f );
 
 	[SerializeField] CanvasGroup group;
 	[SerializeField] Text titleText;
@@ -128,6 +134,7 @@ public class TutorialPopupUI : MonoBehaviour
 		ConfigureTextOverflow( stepText );
 		CacheCardChrome();
 		EnsureActiveCard();
+		ApplyTutorialChrome();
 		EnsureSwitchFeedback();
 		EnsureStackAddFeedback();
 		HideLegacyCycleHint();
@@ -136,6 +143,40 @@ public class TutorialPopupUI : MonoBehaviour
 
 		HideImmediate();
 		_ready = true;
+	}
+
+	Image _backgroundImage;
+	Image _completeGlowImage;
+	Color _tutorialMinimizedColor;
+	bool _tutorialChromeReady;
+
+	void ApplyTutorialChrome()
+	{
+		_tutorialMinimizedColor = new Color( CardBackgroundColor.r, CardBackgroundColor.g, CardBackgroundColor.b, 0.9f );
+		_tutorialChromeReady = true;
+
+		if ( _backgroundRect == null )
+		{
+			Transform background = transform.Find( "Background" );
+			if ( background == null )
+				background = transform.Find( "ActiveCard/Background" );
+			if ( background != null )
+				_backgroundRect = background as RectTransform;
+		}
+
+		if ( _backgroundRect != null )
+		{
+			_backgroundImage = _backgroundRect.GetComponent<Image>();
+			if ( _backgroundImage != null )
+				_backgroundImage.color = CardBackgroundColor;
+		}
+
+		if ( titleText != null )
+			titleText.color = CardTitleColor;
+
+		if ( completeGlowGroup != null )
+			_completeGlowImage = completeGlowGroup.GetComponent<Image>();
+		ApplyCompleteGlowColor( complete: false );
 	}
 
 	void CacheCardChrome()
@@ -148,7 +189,7 @@ public class TutorialPopupUI : MonoBehaviour
 			_glowRect = completeGlowGroup.transform as RectTransform;
 
 		PinChromeToTop( _backgroundRect, 0f, 0f );
-		PinChromeToTop( _glowRect, 20f, 10f );
+		PinChromeToTop( _glowRect, CompleteGlowExtra * 2f, CompleteGlowExtra );
 	}
 
 	void EnsureActiveCard()
@@ -197,7 +238,7 @@ public class TutorialPopupUI : MonoBehaviour
 		}
 
 		if ( _glowRect != null )
-			PinChromeToTop( _glowRect, 20f, 10f );
+			PinChromeToTop( _glowRect, CompleteGlowExtra * 2f, CompleteGlowExtra );
 
 		_activeCardRect.SetSiblingIndex( 0 );
 		RetargetCardFeedbacks();
@@ -559,7 +600,7 @@ public class TutorialPopupUI : MonoBehaviour
 		RestoreRestAnchored();
 		RestoreActiveCardRest();
 		RestoreTasksTransform();
-		SetGlowAlpha( 0f );
+		ApplyCompleteGlowColor( complete: false );
 
 		if ( titleText != null )
 			titleText.text = title ?? string.Empty;
@@ -655,6 +696,7 @@ public class TutorialPopupUI : MonoBehaviour
 
 	public void PlayTutorialComplete()
 	{
+		ApplyCompleteGlowColor( complete: true );
 		if ( tutorialCompleteFeedback != null )
 			tutorialCompleteFeedback.Play();
 	}
@@ -738,7 +780,7 @@ public class TutorialPopupUI : MonoBehaviour
 
 		RestoreActiveCardRest();
 		RestoreTasksTransform();
-		SetGlowAlpha( 0f );
+		ApplyCompleteGlowColor( complete: false );
 
 		if ( hideFeedback != null )
 		{
@@ -761,7 +803,7 @@ public class TutorialPopupUI : MonoBehaviour
 		RestoreRestAnchored();
 		RestoreActiveCardRest();
 		RestoreTasksTransform();
-		SetGlowAlpha( 0f );
+		ApplyCompleteGlowColor( complete: false );
 		HideStackExtras();
 		_minimizedTitles.Clear();
 		_cycleVisible = false;
@@ -966,7 +1008,20 @@ public class TutorialPopupUI : MonoBehaviour
 			_activeCardRect.sizeDelta = new Vector2( 0f, cardHeight );
 
 		if ( _glowRect != null )
-			_glowRect.sizeDelta = new Vector2( 20f, cardHeight + 20f );
+		{
+			float extra = CompleteGlowExtra * 2f;
+			_glowRect.sizeDelta = new Vector2( extra, cardHeight + extra );
+			_glowRect.anchoredPosition = new Vector2( 0f, CompleteGlowExtra );
+		}
+	}
+
+	void ApplyCompleteGlowColor( bool complete )
+	{
+		if ( _completeGlowImage == null && completeGlowGroup != null )
+			_completeGlowImage = completeGlowGroup.GetComponent<Image>();
+		if ( _completeGlowImage != null )
+			_completeGlowImage.color = complete ? CompleteGlowCompleteColor : CompleteGlowIdleColor;
+		SetGlowAlpha( 1f );
 	}
 
 	float LayoutMinimized( float width, float yFromTop )
@@ -1026,7 +1081,9 @@ public class TutorialPopupUI : MonoBehaviour
 		go.transform.SetParent( _minimizedRoot, false );
 
 		Image background = go.GetComponent<Image>();
-		background.color = new Color( 0.07f, 0.08f, 0.11f, 0.88f );
+		background.color = _tutorialChromeReady
+			? _tutorialMinimizedColor
+			: new Color( 0.07f, 0.08f, 0.11f, 0.88f );
 		background.raycastTarget = false;
 
 		Text title = FindOrCreateText( go.transform, "Title", string.Empty, 22 );

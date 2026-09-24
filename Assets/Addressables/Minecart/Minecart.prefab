@@ -816,7 +816,7 @@ MonoBehaviour:
       type: {class: LoopSfxFeedback, ns: , asm: Assembly-CSharp}
       data:
         _enabled: 1
-        Clip: {fileID: 8300000, guid: f829aac6a2d8c82449b3eb8f27123b9e, type: 3}
+        Clip: {fileID: 8300000, guid: 1c4699a16f6a00042bccdff3e7aa8071, type: 3}
         AudioSource: {fileID: 7290727321014383511}
         PitchAtRest: 0.75
         PitchAtMax: 1.2
@@ -826,6 +826,7 @@ MonoBehaviour:
         FadeOutSeconds: 0.28
         BrakeDuck: 0.55
         BrakeDuckBlendSeconds: 0.1
+        RequireBraking: 0
         SpatialBlend: 1
         MinDistance: 2
         MaxDistance: 30

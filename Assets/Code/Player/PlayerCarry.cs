@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>Hand rig a treasure is carried in. Keys/chests use General; TreasureCategory.Junk uses Junk.</summary>
 public enum CarryBucketKind
@@ -1915,11 +1914,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( GetBucketCount( _selected ) > 0 )
 			return;
 
-		// Hold-to-place keeps SecondaryInteract pressed after the last item leaves the pouch.
-		// Defer auto-swap until release so the next place pulse does not dump another pouch.
-		if ( IsSecondaryPlaceHeld() )
-			return;
-
 		for ( int i = 0; i < BucketCount; i++ )
 		{
 			CarryBucketKind kind = (CarryBucketKind)i;
@@ -1929,16 +1923,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			TrySetSelectedBucket( kind );
 			return;
 		}
-	}
-
-	static bool IsSecondaryPlaceHeld()
-	{
-		InputController inputController = InputController.Instance;
-		if ( inputController == null || inputController.GameInput == null )
-			return false;
-
-		InputAction action = inputController.GameInput.SecondaryInteract;
-		return action != null && action.IsPressed();
 	}
 
 	float GetHeldCoinCylinderHeight( CategoryBucket bucket )

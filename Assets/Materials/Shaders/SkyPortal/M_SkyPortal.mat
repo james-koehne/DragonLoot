@@ -25,11 +25,7 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _NoiseTexture:
-        m_Texture: {fileID: 2800000, guid: 10f0f05cdfbe64f44b9e3b2655c32308, type: 3}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - _SkyCubemap:
-        m_Texture: {fileID: 8900000, guid: 599e20092e3297247ad7ecc4ba9caf00, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _TextureMask:
@@ -43,13 +39,34 @@ Material:
     - _EdgeGlowPower: 2.5
     - _Feather: 0.3
     - _FlipSkyDirection: 0
+    - _HorizonLift: 0.2
+    - _MoonGlow: 1.2
+    - _MoonGlowPower: 5
+    - _MoonSize: 0.028
     - _NoiseScale: 1.75
     - _NoiseStrength: 0.3
     - _SkyDirectionView: 1
-    - _SkyExposure: 0.8
-    - _SkyIntensity: 2.39
+    - _SkyExposure: 1
+    - _SkyIntensity: 1
     - _SkyRotation: 0
+    - _StarBrightness: 2.5
+    - _StarDensity: 0.01
+    - _StarTwinkle: 0
+    - _SunGlow: 2.5
+    - _SunGlowPower: 6
+    - _SunSize: 0.035
     m_Colors:
+    - _DayLowerColor: {r: 0.7, g: 0.85, b: 1, a: 1}
+    - _DayUpperColor: {r: 0.45, g: 0.7, b: 0.98, a: 1}
+    - _DayZenithColor: {r: 0.25, g: 0.55, b: 0.95, a: 1}
+    - _MoonColor: {r: 0.75, g: 0.82, b: 1, a: 1}
+    - _NightLowerColor: {r: 0.08, g: 0.07, b: 0.2, a: 1}
+    - _NightUpperColor: {r: 0.04, g: 0.05, b: 0.18, a: 1}
+    - _NightZenithColor: {r: 0.02, g: 0.03, b: 0.12, a: 1}
     - _SkyTint: {r: 1, g: 1, b: 1, a: 1}
+    - _SunColor: {r: 1, g: 0.92, b: 0.7, a: 1}
+    - _SunsetLowerColor: {r: 1, g: 0.55, b: 0.3, a: 1}
+    - _SunsetUpperColor: {r: 0.95, g: 0.4, b: 0.55, a: 1}
+    - _SunsetZenithColor: {r: 0.35, g: 0.25, b: 0.55, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

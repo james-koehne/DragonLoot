@@ -32,6 +32,17 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 	[SerializeField]
 	bool showEditModePreviews = true;
 
+	[Header( "Distance Fade" )]
+	[Tooltip( "Fully opaque at this distance and closer (meters from the player)." )]
+	[SerializeField]
+	[Min( 0f )]
+	float fadeNearDistance = 12f;
+
+	[Tooltip( "Fully hidden beyond this distance. Default 15m." )]
+	[SerializeField]
+	[Min( 0f )]
+	float fadeFarDistance = 15f;
+
 	ArtifactPresentationTableInteractable _table;
 	SlotVisual[] _slotVisuals;
 	bool _rebuildQueued;
@@ -56,6 +67,9 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 				QueueEditModeRebuild();
 		}
 	}
+
+	public float FadeNearDistance => fadeNearDistance;
+	public float FadeFarDistance => fadeFarDistance;
 
 	public void Bind( ArtifactPresentationTableInteractable table )
 	{
@@ -104,6 +118,9 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 
 	void OnValidate()
 	{
+		fadeNearDistance = Mathf.Max( 0f, fadeNearDistance );
+		fadeFarDistance = Mathf.Max( fadeNearDistance, fadeFarDistance );
+
 		if ( Application.isPlaying )
 			return;
 
@@ -581,9 +598,11 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			&& _table.IsAimFeedbackFresh
 			&& _table.AimedSlotIndex == slotIndex;
 
+		float distanceFade = Application.isPlaying ? EvaluateDistanceFade( visual.Root.transform.position ) : 1f;
+
 		// Hide the cyan base hologram while the placement ghost shows valid/invalid feedback,
-		// when occupied, or while a prerequisite slot is empty.
-		if ( occupied || lockedByPrerequisite || hideForAimFeedback )
+		// when occupied, while a prerequisite slot is empty, or when fully faded by distance.
+		if ( occupied || lockedByPrerequisite || hideForAimFeedback || distanceFade <= 0.001f )
 		{
 			visual.Root.SetActive( false );
 			return;
@@ -594,6 +613,8 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 		Color tint = CyanTint;
 		if ( Application.isPlaying && _table.IsAimFeedbackFresh && _table.AimedSlotIndex >= 0 )
 			tint = DimCyanTint;
+
+		tint.a *= distanceFade;
 
 		if ( visual.PropertyBlock == null )
 			visual.PropertyBlock = new MaterialPropertyBlock();
@@ -614,6 +635,39 @@ public class ArtifactPresentationSlotIndicators : MonoBehaviour
 			for ( int m = 0; m < matCount; m++ )
 				renderer.SetPropertyBlock( visual.PropertyBlock, m );
 		}
+	}
+
+	float EvaluateDistanceFade( Vector3 worldPos )
+	{
+		if ( !TryGetViewerPosition( out Vector3 viewerPos ) )
+			return 0f;
+
+		float near = fadeNearDistance;
+		float far = Mathf.Max( near, fadeFarDistance );
+		float distance = Vector3.Distance( viewerPos, worldPos );
+		if ( distance <= near )
+			return 1f;
+		if ( distance >= far )
+			return 0f;
+
+		return 1f - Mathf.InverseLerp( near, far, distance );
+	}
+
+	static bool TryGetViewerPosition( out Vector3 position )
+	{
+		position = Vector3.zero;
+		if ( GameMode.Instance != null && GameMode.Instance.Player != null )
+		{
+			position = GameMode.Instance.Player.transform.position;
+			return true;
+		}
+
+		Camera camera = Camera.main;
+		if ( camera == null )
+			return false;
+
+		position = camera.transform.position;
+		return true;
 	}
 
 	void DestroyVisualObject( GameObject go )

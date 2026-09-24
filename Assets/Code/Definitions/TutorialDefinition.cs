@@ -75,7 +75,9 @@ public enum TutorialTaskCompleteType
 	/// <summary>Player is aiming at a coin sorting station (hopper, crank, body, or chute).</summary>
 	AimCoinSorter = 30,
 	/// <summary>Coins were loaded into a coin sorter hopper.</summary>
-	LoadCoinSorterHopper = 31
+	LoadCoinSorterHopper = 31,
+	/// <summary>Whole-stack Hold-E place joined an existing coin stack via nearby/indirect aim.</summary>
+	WholeStackPlaceNearby = 32
 }
 
 [Serializable]
@@ -168,6 +170,9 @@ public class TutorialDefinition : ScriptableObject
 
 	[Tooltip( "Optional TutorialMapMarker id to show as a pulsing temp pin on the map while active." )]
 	public string mapMarkerId;
+
+	[Tooltip( "Optional QuestTarget ids to outline while this tutorial is the active card. Overrides nearby objective outlines." )]
+	public string[] outlineTargetIds;
 
 	[Tooltip( "When true, entering a task EnterVolume / TutorialMapMarker zone completes all remaining tasks (destination tutorials)." )]
 	public bool completeAllTasksOnVolumeEnter;

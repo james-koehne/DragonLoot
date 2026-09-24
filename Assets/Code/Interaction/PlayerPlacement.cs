@@ -32,6 +32,7 @@ public class PlayerPlacement : MonoBehaviour
 	Vector3 _smoothedPreviewPos;
 	Quaternion _smoothedPreviewRot = Quaternion.identity;
 	bool _hasSmoothedPreview;
+	bool _joinOutlineActive;
 	static readonly List<Renderer> StackOutlineScratch = new List<Renderer>( 8 );
 	static readonly List<TreasureItem> StackOutlineColumnScratch = new List<TreasureItem>( 8 );
 
@@ -46,11 +47,16 @@ public class PlayerPlacement : MonoBehaviour
 		_hasPreview && _activePreview.GhostStyle == PlacementGhostStyle.StackOutline;
 
 	/// <summary>
-	/// True when placement owns the shared hover-outline bus (stack outline or station/table mesh outline).
+	/// True when placement owns the shared hover-outline bus (stack outline, station/table mesh outline,
+	/// or the stack a place would join).
 	/// </summary>
 	public bool HasActivePlacementOutline =>
 		HasActiveStackOutlinePreview
+		|| _joinOutlineActive
 		|| ( _hasPreview && UsesWholeMeshPlacementOutline( _activeTarget ) );
+
+	/// <summary>True when the current secondary place preview joins an existing ground stack.</summary>
+	public bool IsJoiningStack => HasValidPlacement && IsStackJoinTarget( _activeTarget );
 	public FloorPlacementTarget FloorTarget => _floorTarget;
 	public float PlacementArcHeight => RuntimeDefinition.Get( Definition, d => d.placementArcHeight, 0.12f );
 	public float CoinFlipSpeed => RuntimeDefinition.Get( Definition, d => d.coinFlipSpeed, 1f );
@@ -97,6 +103,10 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( IsBlockedPileAimTarget( aimTarget ) )
 			return SecondaryContextAction.CannotPlace;
+
+		ArtifactPresentationTableInteractable completeArtifact = aimTarget as ArtifactPresentationTableInteractable;
+		if ( completeArtifact != null && completeArtifact.IsComplete )
+			return SecondaryContextAction.None;
 
 		if ( aimTarget != null && aimTarget != _floorTarget )
 		{
@@ -173,7 +183,9 @@ public class PlayerPlacement : MonoBehaviour
 
 	void LateUpdate()
 	{
+		_joinOutlineActive = false;
 		UpdatePreview();
+		UpdateWholeStackJoinOutline();
 	}
 
 	void UpdatePreview()
@@ -226,6 +238,13 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
+		ArtifactPresentationTableInteractable artifactTable = target as ArtifactPresentationTableInteractable;
+		if ( artifactTable != null && artifactTable.IsComplete )
+		{
+			ClearPreview();
+			return;
+		}
+
 		if ( target == null )
 		{
 			PlacementQuery floorQuery = BuildFloorQuery();
@@ -235,6 +254,18 @@ public class PlayerPlacement : MonoBehaviour
 			{
 				target = _floorTarget;
 				query = floorQuery;
+			}
+			else if ( GroundCoinStack.IsGroundStackableCoin( item ) )
+			{
+				// Empty air / non-floor aim beside an airborne stack — join along the aim ray.
+				GroundCoinStack airNearby = FindNearbyGroundCoinStack( in query );
+				if ( airNearby == null )
+				{
+					ClearPreview();
+					return;
+				}
+
+				target = airNearby;
 			}
 			else
 			{
@@ -317,17 +348,61 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
+		bool join = preview.IsValid && IsStackJoinTarget( target );
+
 		EnsureGhost();
-		ConfigureGhostVisuals();
+		ConfigureGhostVisuals( join );
 
 		_ghost.SetVisible( true );
 		_ghost.SyncFromItem( item );
 		_ghost.UpdatePose( in preview );
 
-		if ( UsesWholeMeshPlacementOutline( target ) )
+		if ( join )
+		{
+			UpdatePlacementTargetOutline( target, true, true );
+			_joinOutlineActive = HoverOutlineRegistrar.CurrentOwner == HoverOutlineRegistrar.Owner.StackVolume;
+		}
+		else if ( UsesWholeMeshPlacementOutline( target ) )
 			UpdatePlacementTargetOutline( target, preview.IsValid );
 		else
 			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
+	}
+
+	static bool IsStackJoinTarget( ITreasurePlacementTarget target )
+	{
+		GroundCoinStack coinStack = target as GroundCoinStack;
+		if ( coinStack != null )
+			return !coinStack.IsMachineBuffer;
+
+		return target is GroundGoldBarStack || target is GroundTreasureStackTarget;
+	}
+
+	/// <summary>
+	/// Hold-E whole-stack place joining a stack gets the same join outline even when the
+	/// single-item preview is hidden or points elsewhere.
+	/// </summary>
+	void UpdateWholeStackJoinOutline()
+	{
+		if ( _joinOutlineActive || !_inputEnabled || _player == null )
+			return;
+
+		PlayerSorterReposition sorter = _player.SorterReposition;
+		if ( sorter != null && sorter.IsRepositioning )
+			return;
+
+		if ( _hasPreview && UsesWholeMeshPlacementOutline( _activeTarget ) )
+			return;
+
+		PlayerWholeStackInteraction wholeStack = _player.WholeStack;
+		if ( wholeStack == null || !wholeStack.TryGetWholePlaceJoinTarget( out MonoBehaviour joinTarget ) )
+			return;
+
+		ITreasurePlacementTarget target = joinTarget as ITreasurePlacementTarget;
+		if ( target == null )
+			return;
+
+		UpdatePlacementTargetOutline( target, true, true );
+		_joinOutlineActive = HoverOutlineRegistrar.CurrentOwner == HoverOutlineRegistrar.Owner.StackVolume;
 	}
 
 	static bool UsesWholeMeshPlacementOutline( ITreasurePlacementTarget target )
@@ -372,7 +447,12 @@ public class PlayerPlacement : MonoBehaviour
 
 	void UpdatePlacementTargetOutline( ITreasurePlacementTarget target, bool valid )
 	{
-		HoverOutlineVisualSettings settings = ResolveStackOutlineSettings( valid );
+		UpdatePlacementTargetOutline( target, valid, false );
+	}
+
+	void UpdatePlacementTargetOutline( ITreasurePlacementTarget target, bool valid, bool join )
+	{
+		HoverOutlineVisualSettings settings = ResolveStackOutlineSettings( valid, join );
 		List<Renderer> renderers = StackOutlineScratch;
 		renderers.Clear();
 
@@ -391,7 +471,7 @@ public class PlayerPlacement : MonoBehaviour
 			GetInstanceID() );
 	}
 
-	HoverOutlineVisualSettings ResolveStackOutlineSettings( bool valid )
+	HoverOutlineVisualSettings ResolveStackOutlineSettings( bool valid, bool join )
 	{
 		PlayerPlacementDefinition def = Definition;
 		HoverOutlineVisualSettings settings = def != null && def.stackOutline != null
@@ -400,9 +480,11 @@ public class PlayerPlacement : MonoBehaviour
 		settings.Validate();
 
 		// Validity tint comes from ghost colors so SO tweaks apply to outline + mesh ghost alike.
-		Color ghost = valid
-			? ( def != null ? def.validGhostColor : PlacementFeedbackColors.ValidGhost )
-			: ( def != null ? def.invalidGhostColor : PlacementFeedbackColors.InvalidGhost );
+		Color ghost = !valid
+			? ( def != null ? def.invalidGhostColor : PlacementFeedbackColors.InvalidGhost )
+			: join
+				? ResolveJoinGhostColor( def )
+				: ( def != null ? def.validGhostColor : PlacementFeedbackColors.ValidGhost );
 		Color rgb = new Color( ghost.r, ghost.g, ghost.b, 1f );
 		settings.outlineColor = new Color( rgb.r * 1.2f, rgb.g * 1.15f, rgb.b, 1f );
 		return settings;
@@ -555,13 +637,20 @@ public class PlayerPlacement : MonoBehaviour
 		}
 	}
 
-	void ConfigureGhostVisuals()
+	static Color ResolveJoinGhostColor( PlayerPlacementDefinition def )
+	{
+		return def != null ? def.joinGhostColor : PlacementFeedbackColors.JoinGhost;
+	}
+
+	void ConfigureGhostVisuals( bool join )
 	{
 		if ( _ghost == null )
 			return;
 
 		PlayerPlacementDefinition def = Definition;
-		Color valid = def != null ? def.validGhostColor : PlacementFeedbackColors.ValidGhost;
+		Color valid = join
+			? ResolveJoinGhostColor( def )
+			: ( def != null ? def.validGhostColor : PlacementFeedbackColors.ValidGhost );
 		Color invalid = def != null ? def.invalidGhostColor : PlacementFeedbackColors.InvalidGhost;
 		float fresnelPower = def != null ? def.ghostFresnelPower : 2.4f;
 		float fresnelBoost = def != null ? def.ghostFresnelBoost : 0.7f;
@@ -651,9 +740,14 @@ public class PlayerPlacement : MonoBehaviour
 		RefreshDefinitionTuning();
 		PlacementQuery query = BuildQuery();
 
-		// Empty space (no aim hit): throw Active item when allowed.
+		// Empty space (no aim hit): join a coin stack along the aim ray, else throw.
 		if ( !query.HasHit || query.Hit.collider == null )
+		{
+			if ( TryPlaceOntoAlongRayCoinStack( item, in query ) )
+				return true;
+
 			return ItemCanThrow( item ) && TryThrowActive();
+		}
 
 		if ( IsBlockedPileAim( in query, _activeTarget ) )
 			return false;
@@ -710,10 +804,25 @@ public class PlayerPlacement : MonoBehaviour
 			return false;
 		}
 
+		if ( TryPlaceOntoAlongRayCoinStack( item, in query ) )
+			return true;
+
 		if ( ShouldThrowAtInvalidWorldAim( in query, item ) )
 			return ItemCanThrow( item ) && TryThrowActive();
 
 		return false;
+	}
+
+	bool TryPlaceOntoAlongRayCoinStack( TreasureItem item, in PlacementQuery query )
+	{
+		if ( !GroundCoinStack.IsGroundStackableCoin( item ) )
+			return false;
+
+		GroundCoinStack nearby = FindNearbyGroundCoinStack( in query );
+		if ( nearby == null )
+			return false;
+
+		return ExecutePlace( nearby, item, in query );
 	}
 
 	static bool ShouldThrowAtRejectedConstellation( ITreasurePlacementTarget target, TreasureItem item )
@@ -786,6 +895,7 @@ public class PlayerPlacement : MonoBehaviour
 	{
 		return target is TypedDisplayTableInteractable
 			|| target is MixedDisplayTableInteractable
+			|| target is ArtifactPresentationTableInteractable
 			|| target is MinecartInteractable;
 	}
 
@@ -1535,31 +1645,46 @@ public class PlayerPlacement : MonoBehaviour
 	/// <summary>
 	/// Prefer an existing owned stack near the aim contact. Spam-clicking often hits floor beside
 	/// the capsule instead of the stack itself — without this, each click seeds a new loose coin.
+	/// When there is no valid floor (empty air / non-floor hit), snap along the aim ray so airborne
+	/// stacks can be joined the same way as ground-side stacks.
 	/// </summary>
 	GroundCoinStack FindNearbyGroundCoinStack( in PlacementQuery query )
 	{
-		if ( !query.HasHit || query.Hit.collider == null )
-			return null;
+		float radius = ResolveCoinJoinRadius( in query );
 
-		ITreasurePlacementTarget dedicated =
-			query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
-		if ( IsDedicatedPlacementTarget( dedicated ) )
-			return null;
-
-		GroundCoinStack onHit = query.Hit.collider.GetComponentInParent<GroundCoinStack>();
-		if ( onHit != null && !onHit.IsFull )
-			return onHit;
-
-		TreasureItem looseOnHit = query.Hit.collider.GetComponentInParent<TreasureItem>();
-		if ( looseOnHit != null && GroundCoinStack.IsGroundStackableCoin( looseOnHit ) )
+		if ( query.HasHit && query.Hit.collider != null )
 		{
-			if ( looseOnHit.Owner is GroundCoinStack owner && !owner.IsFull )
-				return owner;
+			ITreasurePlacementTarget dedicated =
+				query.Hit.collider.GetComponentInParent<ITreasurePlacementTarget>();
+			if ( IsDedicatedPlacementTarget( dedicated ) )
+				return null;
+
+			GroundCoinStack onHit = query.Hit.collider.GetComponentInParent<GroundCoinStack>();
+			if ( onHit != null && !onHit.IsFull )
+				return onHit;
+
+			TreasureItem looseOnHit = query.Hit.collider.GetComponentInParent<TreasureItem>();
+			if ( looseOnHit != null && GroundCoinStack.IsGroundStackableCoin( looseOnHit ) )
+			{
+				if ( looseOnHit.Owner is GroundCoinStack owner && !owner.IsFull )
+					return owner;
+			}
+
+			if ( PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
+			{
+				GroundCoinStack nearest = GroundCoinStack.FindNearest( query.Hit.point, radius );
+				if ( nearest != null && !nearest.IsFull )
+					return nearest;
+
+				return null;
+			}
 		}
 
-		if ( !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
-			return null;
+		return FindCoinStackAlongAimRay( radius );
+	}
 
+	float ResolveCoinJoinRadius( in PlacementQuery query )
+	{
 		float radius = GroundStackSnapRadius;
 		if ( radius <= 0.0001f )
 			radius = GroundCoinStack.DefaultJoinRadius;
@@ -1571,7 +1696,16 @@ public class PlayerPlacement : MonoBehaviour
 		if ( held != null && held.Definition != null )
 			radius = Mathf.Max( radius, GroundCoinStack.ResolveJoinRadius( held.Definition ) );
 
-		GroundCoinStack nearest = GroundCoinStack.FindNearest( query.Hit.point, radius );
+		return radius;
+	}
+
+	GroundCoinStack FindCoinStackAlongAimRay( float radius )
+	{
+		if ( _interaction == null || !_interaction.TryGetAimRay( out Ray ray ) )
+			return null;
+
+		float maxDistance = _interaction.PlacementAimRange;
+		GroundCoinStack nearest = GroundCoinStack.FindNearestAlongRay( ray, radius, maxDistance );
 		if ( nearest != null && !nearest.IsFull )
 			return nearest;
 

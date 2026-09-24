@@ -101,6 +101,16 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	[Min( 0.05f )]
 	float levelCrossSlotArcHeight = 0.28f;
 
+	[Header( "Complete Effect" )]
+	[Tooltip( "When enabled, complete FX use Accepted Treasure uiColorHint (times HDR Mult) instead of the manual override color." )]
+	[SerializeField]
+	bool useAcceptedTreasureUiColorHint;
+
+	[Tooltip( "Multiplies Accepted Treasure uiColorHint RGB for HDR emission / SoftShaft tint." )]
+	[SerializeField]
+	[Min( 0f )]
+	float completeEffectUiColorHdrMult = 1f;
+
 	readonly List<LevelMove> _levelMoves = new List<LevelMove>( 128 );
 	readonly HashSet<int> _levelSourceSlots = new HashSet<int>();
 	readonly List<int> _levelTypeGroup = new List<int>( 32 );
@@ -135,6 +145,19 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	public bool UsesMixedColumnRequirements => useMixedColumnRequirements;
 
 	public static IReadOnlyList<CoinDisplayTableInteractable> ActiveTables => All;
+
+	protected override bool TryResolveCompleteEffectColor( out Color color )
+	{
+		if ( useAcceptedTreasureUiColorHint && acceptedTreasure != null )
+		{
+			Color hint = acceptedTreasure.uiColorHint;
+			float mult = Mathf.Max( 0f, completeEffectUiColorHdrMult );
+			color = new Color( hint.r * mult, hint.g * mult, hint.b * mult, hint.a );
+			return true;
+		}
+
+		return base.TryResolveCompleteEffectColor( out color );
+	}
 
 	public override TreasureDefinition GetRequiredTreasure( int slotIndex )
 	{
@@ -249,6 +272,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		levelCoinStagger = Mathf.Max( 0f, levelCoinStagger );
 		levelStartDelay = Mathf.Max( 0f, levelStartDelay );
 		levelCrossSlotArcHeight = Mathf.Max( 0.05f, levelCrossSlotArcHeight );
+		completeEffectUiColorHdrMult = Mathf.Max( 0f, completeEffectUiColorHdrMult );
 		SyncColumnRequiredCoins();
 	}
 

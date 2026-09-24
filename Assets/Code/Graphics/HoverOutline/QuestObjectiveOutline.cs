@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Keeps tutorial-target meshes registered for a separate cyan outline while TutorialHud provides roots.
+/// Keeps quest / tutorial target meshes registered for the quest outline channel while TutorialHud provides roots.
+/// Tutorial override roots use tutorialOutline colour; otherwise quest cyan.
 /// </summary>
 public class QuestObjectiveOutline : MonoBehaviour
 {
@@ -12,6 +13,7 @@ public class QuestObjectiveOutline : MonoBehaviour
 	static readonly HashSet<int> SeenRoots = new HashSet<int>();
 
 	bool _subscribed;
+	bool _hadTutorialOverride;
 
 	public static QuestObjectiveOutline EnsureExists()
 	{
@@ -86,8 +88,10 @@ public class QuestObjectiveOutline : MonoBehaviour
 
 	void LateUpdate()
 	{
-		if ( Time.frameCount % 15 == 0 )
+		bool tutorialOverride = TutorialHud.HasTutorialOutlineOverride;
+		if ( tutorialOverride != _hadTutorialOverride || Time.frameCount % 15 == 0 )
 			Refresh();
+		_hadTutorialOverride = tutorialOverride;
 	}
 
 	void Refresh()
@@ -123,6 +127,18 @@ public class QuestObjectiveOutline : MonoBehaviour
 	{
 		PlayerInteractionDefinition def = null;
 		def = RuntimeDefinition.Resolve( ref def );
+		if ( TutorialHud.HasTutorialOutlineOverride )
+		{
+			if ( def != null && def.tutorialOutline != null )
+			{
+				HoverOutlineVisualSettings tutorialClone = def.tutorialOutline.Clone();
+				tutorialClone.Validate();
+				return tutorialClone;
+			}
+
+			return HoverOutlineVisualSettings.DefaultTutorial();
+		}
+
 		if ( def != null && def.questOutline != null )
 		{
 			HoverOutlineVisualSettings clone = def.questOutline.Clone();

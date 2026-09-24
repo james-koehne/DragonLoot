@@ -48,8 +48,8 @@ MonoBehaviour:
   stepTurnDegrees: 90
   stepVolumeMin: 0.1
   stepVolumeMax: 0.2
-  landStepVolumeMin: 0.85
-  landStepVolumeMax: 1
+  landStepVolumeMin: 0.5
+  landStepVolumeMax: 0.7
   stepPitchMin: 0.92
   stepPitchMax: 1.08
   jumpClips:
