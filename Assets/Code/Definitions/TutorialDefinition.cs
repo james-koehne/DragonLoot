@@ -31,7 +31,9 @@ public enum TutorialTriggerType
 	/// <summary>Show while aiming a drive minecart, or while seated and driving one.</summary>
 	DriveMinecart = 20,
 	/// <summary>Show while holdingCategory's pouch has items but is not the selected pouch.</summary>
-	UnselectedHoldingCategory = 21
+	UnselectedHoldingCategory = 21,
+	/// <summary>Show after the player has interacted with the world hammer prop (sticky until tutorial completes).</summary>
+	InteractWorldHammer = 22
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -77,7 +79,11 @@ public enum TutorialTaskCompleteType
 	/// <summary>Coins were loaded into a coin sorter hopper.</summary>
 	LoadCoinSorterHopper = 31,
 	/// <summary>Whole-stack Hold-E place joined an existing coin stack via nearby/indirect aim.</summary>
-	WholeStackPlaceNearby = 32
+	WholeStackPlaceNearby = 32,
+	/// <summary>Player entered build mode (F).</summary>
+	EnterBuildMode = 33,
+	/// <summary>Player completed any buildable structure.</summary>
+	CompleteBuildable = 34
 }
 
 [Serializable]
@@ -87,7 +93,7 @@ public class TutorialTask
 
 	public string label;
 
-	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}, {CyclePouch}, {CategorySlot1}..{CategorySlot5}." )]
+	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}, {CyclePouch}, {BuildModeToggle}, {CategorySlot1}..{CategorySlot5}." )]
 	public string keybindHint;
 
 	public TutorialTaskCompleteType completeTrigger;

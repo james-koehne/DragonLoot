@@ -23,6 +23,7 @@ public sealed class GameInput : System.IDisposable
 	public InputAction RotateLeft { get; }
 	public InputAction RotateRight { get; }
 	public InputAction CyclePouch { get; }
+	public InputAction BuildModeToggle { get; }
 	public InputAction[] AbilitySlots { get; }
 	public InputAction[] CategorySlots { get; }
 
@@ -45,6 +46,7 @@ public sealed class GameInput : System.IDisposable
 		RotateLeft = _game.FindAction( "RotateLeft", throwIfNotFound: false );
 		RotateRight = _game.FindAction( "RotateRight", throwIfNotFound: false );
 		CyclePouch = _game.FindAction( "CyclePouch", throwIfNotFound: false );
+		BuildModeToggle = _game.FindAction( "BuildModeToggle", throwIfNotFound: false );
 
 		AbilitySlots = new InputAction[ AbilitySlotCount ];
 		for ( int i = 0; i < AbilitySlotCount; i++ )

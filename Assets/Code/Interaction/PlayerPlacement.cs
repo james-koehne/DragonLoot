@@ -196,6 +196,12 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
+		if ( _player.IsInBuildMode )
+		{
+			ClearPreview();
+			return;
+		}
+
 		PlayerSorterReposition sorter = _player.SorterReposition;
 		if ( sorter != null && sorter.IsRepositioning )
 		{

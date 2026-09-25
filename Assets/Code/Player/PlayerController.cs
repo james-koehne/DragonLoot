@@ -42,6 +42,7 @@ public class PlayerController : MonoBehaviour
 	PlayerAbilities _abilities;
 	PlayerCleaning _cleaning;
 	PlayerWholeStackInteraction _wholeStack;
+	PlayerBuildMode _buildMode;
 	CharacterController _characterController;
 	bool gameplayInputEnabled = true;
 	bool _cinematicInputLock;
@@ -200,6 +201,8 @@ public class PlayerController : MonoBehaviour
 	public PlayerAbilities Abilities => _abilities;
 	public PlayerCleaning Cleaning => _cleaning;
 	public PlayerWholeStackInteraction WholeStack => _wholeStack;
+	public PlayerBuildMode BuildMode => _buildMode;
+	public bool IsInBuildMode => _buildMode != null && _buildMode.IsActive;
 
 	public bool IsGrounded { get; private set; }
 	public PlayerMovementState MovementState { get; private set; } = PlayerMovementState.Walking;
@@ -633,6 +636,7 @@ public class PlayerController : MonoBehaviour
 		EnsureAbilities();
 		EnsureCleaning();
 		EnsureWholeStack();
+		EnsureBuildMode();
 		EnsureFootsteps();
 		EnsureUpgrades();
 
@@ -668,6 +672,7 @@ public class PlayerController : MonoBehaviour
 		EnsureAbilities();
 		EnsureCleaning();
 		EnsureWholeStack();
+		EnsureBuildMode();
 		EnsureFootsteps();
 		EnsureUpgrades();
 
@@ -679,6 +684,8 @@ public class PlayerController : MonoBehaviour
 			_cleaning.Setup( this );
 		if ( _wholeStack != null )
 			_wholeStack.Setup( this, _interaction, _placement );
+		if ( _buildMode != null )
+			_buildMode.Setup( this, _interaction );
 		if ( _minecartPush != null )
 			_minecartPush.Setup( this );
 		if ( _minecartRide != null )
@@ -869,6 +876,14 @@ public class PlayerController : MonoBehaviour
 			_wholeStack = GetComponent<PlayerWholeStackInteraction>();
 		if ( _wholeStack == null )
 			_wholeStack = gameObject.AddComponent<PlayerWholeStackInteraction>();
+	}
+
+	void EnsureBuildMode()
+	{
+		if ( _buildMode == null )
+			_buildMode = GetComponent<PlayerBuildMode>();
+		if ( _buildMode == null )
+			_buildMode = gameObject.AddComponent<PlayerBuildMode>();
 	}
 
 	void EnsureFootsteps()
@@ -2048,6 +2063,9 @@ public class PlayerController : MonoBehaviour
 
 		if ( _wholeStack != null )
 			_wholeStack.SetInputEnabled( gameplay );
+
+		if ( _buildMode != null )
+			_buildMode.SetInputEnabled( gameplay );
 	}
 
 	static GameInput GetGameInput()

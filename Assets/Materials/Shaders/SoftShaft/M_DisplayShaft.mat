@@ -32,7 +32,7 @@ Material:
     - _DepthFade: 0
     - _DepthFadeDistance: 0.25
     - _DstBlend: 1
-    - _Exposure: 0.69
+    - _Exposure: 0.2
     - _FogInfluence: 0.5
     - _FresnelPower: 0.1
     - _FresnelStrength: 0

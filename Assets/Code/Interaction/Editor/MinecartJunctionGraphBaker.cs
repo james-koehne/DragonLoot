@@ -137,10 +137,15 @@ public static class MinecartJunctionGraphBaker
 				continue;
 
 			Vector3 center = cluster.sum / cluster.count;
+			MinecartJunctionKind preservedKind = graph.EditorFindPreservedKind( center );
+			MinecartJunctionKind resolved = MinecartJunctionGraph.ResolveKind( preservedKind, ports );
 			MinecartJunction junction = new MinecartJunction
 			{
 				worldPosition = center,
-				ports = ports
+				kind = preservedKind,
+				resolvedKind = resolved,
+				ports = ports,
+				ridePaths = new List<MinecartJunctionRidePath>( 8 )
 			};
 			int junctionIndex = junctions.Count;
 			junctions.Add( junction );

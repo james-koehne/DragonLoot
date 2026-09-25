@@ -157,6 +157,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 		}
 
+		if ( _player.IsInBuildMode )
+		{
+			CancelCharge();
+			return;
+		}
+
 		PlayerSorterReposition sorter = _player.SorterReposition;
 		if ( sorter != null && sorter.IsBusy )
 		{

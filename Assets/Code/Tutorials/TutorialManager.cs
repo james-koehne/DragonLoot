@@ -73,6 +73,7 @@ public class TutorialManager : MonoBehaviour
 	float _walkWithoutSprintSeconds;
 	bool _walkWithoutSprintContext;
 	bool _driveMinecartContext;
+	bool _worldHammerInteracted;
 
 	public static TutorialManager Instance => _instance;
 
@@ -151,6 +152,7 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintSeconds = 0f;
 		_walkWithoutSprintContext = false;
 		_driveMinecartContext = false;
+		_worldHammerInteracted = false;
 		_deferredUncheckedTaskIds.Clear();
 		_taskProgressCounts.Clear();
 		_completedUnscaledTimes.Clear();
@@ -240,6 +242,9 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<MinecartDriveExitedEvent>( OnMinecartDriveExited );
 		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Subscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
+		EventBus.Subscribe<WorldHammerInteractedEvent>( OnWorldHammerInteracted );
+		EventBus.Subscribe<BuildModeEnteredEvent>( OnBuildModeEntered );
+		EventBus.Subscribe<BuildableCompletedEvent>( OnBuildableCompleted );
 		_subscribed = true;
 	}
 
@@ -274,6 +279,9 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<MinecartDriveExitedEvent>( OnMinecartDriveExited );
 		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Unsubscribe<AbilityUnlockedEvent>( OnAbilityUnlocked );
+		EventBus.Unsubscribe<WorldHammerInteractedEvent>( OnWorldHammerInteracted );
+		EventBus.Unsubscribe<BuildModeEnteredEvent>( OnBuildModeEntered );
+		EventBus.Unsubscribe<BuildableCompletedEvent>( OnBuildableCompleted );
 		_subscribed = false;
 	}
 
@@ -1202,6 +1210,23 @@ public class TutorialManager : MonoBehaviour
 		PlayActiveTaskCompleteCeremony();
 	}
 
+	void OnWorldHammerInteracted( WorldHammerInteractedEvent evt )
+	{
+		_worldHammerInteracted = true;
+		NoteActivationForTrigger( TutorialTriggerType.InteractWorldHammer );
+		EvaluateContext( force: true );
+	}
+
+	void OnBuildModeEntered( BuildModeEnteredEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.EnterBuildMode );
+	}
+
+	void OnBuildableCompleted( BuildableCompletedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.CompleteBuildable );
+	}
+
 	void NoteActivationForTrigger( TutorialTriggerType trigger )
 	{
 		if ( _catalog == null || _catalog.tutorials == null )
@@ -1528,6 +1553,9 @@ public class TutorialManager : MonoBehaviour
 			case TutorialTriggerType.AbilityUnlocked:
 				primary = IsAbilityUnlockedContext( def );
 				break;
+			case TutorialTriggerType.InteractWorldHammer:
+				primary = _worldHammerInteracted;
+				break;
 			default:
 				primary = false;
 				break;
@@ -1802,7 +1830,7 @@ public class TutorialManager : MonoBehaviour
 
 		_popup.Show(
 			def.title,
-			def.body,
+			TutorialKeybindFormatter.Format( def.body ),
 			string.Empty,
 			FormatActiveTasks(),
 			animate );
@@ -2042,7 +2070,7 @@ public class TutorialManager : MonoBehaviour
 
 		_popup.Show(
 			_active.title,
-			_active.body,
+			TutorialKeybindFormatter.Format( _active.body ),
 			string.Empty,
 			tasks );
 	}
@@ -2634,6 +2662,7 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintSeconds = 0f;
 		_walkWithoutSprintContext = false;
 		_driveMinecartContext = false;
+		_worldHammerInteracted = false;
 		_taskProgressCounts.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
@@ -2685,6 +2714,7 @@ public static class TutorialKeybindFormatter
 		result = ReplaceToken( result, "Jump", gameInput.Jump );
 		result = ReplaceToken( result, "Sprint", gameInput.Sprint );
 		result = ReplaceToken( result, "CyclePouch", gameInput.CyclePouch );
+		result = ReplaceToken( result, "BuildModeToggle", gameInput.BuildModeToggle );
 		if ( gameInput.CategorySlots != null )
 		{
 			for ( int i = 0; i < gameInput.CategorySlots.Length; i++ )

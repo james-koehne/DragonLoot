@@ -166,6 +166,9 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	MinecartTrack _committedExitTrack;
 	float _committedExitDistance;
 	int _committedExitTravelSign;
+	bool _junctionRiding;
+	MinecartJunctionRidePath _activeRidePath;
+	float _rideDistanceAlong;
 	static readonly List<MinecartJunctionExit> JunctionExitBuffer = new List<MinecartJunctionExit>( 8 );
 
 	public static IReadOnlyList<MinecartInteractable> ActiveCarts => All;
@@ -880,6 +883,18 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		const int maxHops = 4;
 		for ( int hop = 0; hop < maxHops && Mathf.Abs( remaining ) > 0.00001f; hop++ )
 		{
+			if ( _junctionRiding )
+			{
+				float rideTraveled;
+				float leftover;
+				if ( !AdvanceJunctionRide( remaining, out rideTraveled, out leftover ) )
+					break;
+
+				totalTraveled += Mathf.Abs( rideTraveled );
+				remaining = leftover;
+				continue;
+			}
+
 			int travelSign = remaining >= 0f ? 1 : -1;
 			UpdateJunctionCommit( travelSign );
 
@@ -903,6 +918,12 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 				float leftToJunction = Mathf.Abs( track.SignedAlong( _distanceAlongTrack, junctionDistance ) );
 				if ( transferred && leftToJunction <= 0.05f )
 				{
+					if ( TryBeginJunctionRide( travelSign ) )
+					{
+						remaining = leftoverAfterTransfer;
+						continue;
+					}
+
 					BindToTrack( _committedExitTrack, _committedExitDistance );
 					RemapSpeedAfterJunctionTransfer( _committedExitTravelSign );
 					remaining = leftoverAfterTransfer;
@@ -926,7 +947,11 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( Mathf.Abs( totalTraveled ) < 0.00001f )
 			return false;
 
-		ApplyTrackPose( runtime: true );
+		if ( _junctionRiding )
+			ApplyJunctionRidePose();
+		else
+			ApplyTrackPose( runtime: true );
+
 		SpinWheels( totalTraveled );
 		SnapFollowers();
 
@@ -979,6 +1004,82 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		_committedExitTrack = null;
 		_committedExitDistance = 0f;
 		_committedExitTravelSign = 1;
+		ClearJunctionRide();
+	}
+
+	void ClearJunctionRide()
+	{
+		_junctionRiding = false;
+		_activeRidePath = null;
+		_rideDistanceAlong = 0f;
+	}
+
+	bool TryBeginJunctionRide( int intoTravelSign )
+	{
+		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+		if ( graph == null || !_hasCommittedExit || _committedExitTrack == null )
+			return false;
+
+		MinecartJunctionRidePath path;
+		if ( !graph.TryFindRidePath( _committedJunctionId, track, intoTravelSign, _committedExitTrack, _committedExitTravelSign, out path ) )
+			return false;
+
+		_junctionRiding = true;
+		_activeRidePath = path;
+		_rideDistanceAlong = 0f;
+		return true;
+	}
+
+	bool AdvanceJunctionRide( float signedDelta, out float traveled, out float leftover )
+	{
+		traveled = 0f;
+		leftover = 0f;
+		if ( !_junctionRiding || _activeRidePath == null )
+			return false;
+
+		float absDelta = Mathf.Abs( signedDelta );
+		float pathLen = Mathf.Max( 0.0001f, _activeRidePath.length );
+		float room = Mathf.Max( 0f, pathLen - _rideDistanceAlong );
+		float step = Mathf.Min( absDelta, room );
+		_rideDistanceAlong += step;
+		traveled = step;
+
+		if ( _rideDistanceAlong < pathLen - 0.001f )
+		{
+			leftover = 0f;
+			return true;
+		}
+
+		MinecartTrack exitTrack = _activeRidePath.toTrack;
+		float exitDistance = _activeRidePath.toDistance;
+		int exitSign = _activeRidePath.outTravelSign;
+		ClearJunctionRide();
+		BindToTrack( exitTrack, exitDistance );
+		RemapSpeedAfterJunctionTransfer( exitSign );
+		float leftoverMag = Mathf.Max( 0f, absDelta - step );
+		leftover = exitSign * leftoverMag;
+		return true;
+	}
+
+	void ApplyJunctionRidePose()
+	{
+		if ( _activeRidePath == null )
+			return;
+
+		Vector3 position;
+		Vector3 tangent;
+		if ( !_activeRidePath.TryEvaluate( _rideDistanceAlong, out position, out tangent ) )
+			return;
+
+		Vector3 up = Vector3.up;
+		position += up * RideHeight;
+		Quaternion rotation = Quaternion.LookRotation( tangent, up );
+		transform.SetPositionAndRotation( position, rotation );
+		if ( _body != null )
+		{
+			_body.position = position;
+			_body.rotation = rotation;
+		}
 	}
 
 	void UpdateJunctionCommit( int travelSign )
@@ -1091,7 +1192,10 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( graph == null )
 			return false;
 
-		if ( !graph.TryGetPortDistance( track, _committedJunctionId, out junctionDistance ) )
+		MinecartJunctionRidePath ridePath;
+		if ( graph.TryFindRidePath( _committedJunctionId, track, travelSign, _committedExitTrack, _committedExitTravelSign, out ridePath ) )
+			junctionDistance = ridePath.fromDistance;
+		else if ( !graph.TryGetPortDistance( track, _committedJunctionId, out junctionDistance ) )
 			return false;
 
 		float toJunction = track.SignedAlong( _distanceAlongTrack, junctionDistance );

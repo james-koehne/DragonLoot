@@ -210,6 +210,17 @@ public static class DragonPrefabSetup
 			so.FindProperty( "_neck03" ).objectReferenceValue = neck03;
 			so.FindProperty( "_head" ).objectReferenceValue = head;
 			so.FindProperty( "_autoLookRange" ).floatValue = DefaultAutoLookRange;
+			so.FindProperty( "_lookExitPadding" ).floatValue = 5f;
+			so.FindProperty( "_aimSmoothTime" ).floatValue = 0.35f;
+			so.FindProperty( "_maxHeadDegreesPerSecond" ).floatValue = 180f;
+			so.FindProperty( "_lookingAnimSpeed" ).floatValue = 0.2f;
+			so.FindProperty( "_headLookOriginOffset" ).floatValue = 0.25f;
+			so.FindProperty( "_headWeight" ).floatValue = 1f;
+			so.FindProperty( "_headMaxYaw" ).floatValue = 80f;
+			so.FindProperty( "_headMaxPitch" ).floatValue = 45f;
+			WriteFloatArray( so, "_supportWeights", new float[] { 0.12f, 0.16f, 0.22f, 0.28f, 0.35f } );
+			WriteFloatArray( so, "_supportMaxYaw", new float[] { 20f, 25f, 35f, 40f, 45f } );
+			WriteFloatArray( so, "_supportMaxPitch", new float[] { 12f, 15f, 20f, 22f, 25f } );
 			so.ApplyModifiedPropertiesWithoutUndo();
 
 			PrefabUtility.SaveAsPrefabAsset( root, PrefabPath );
@@ -219,6 +230,17 @@ public static class DragonPrefabSetup
 		{
 			PrefabUtility.UnloadPrefabContents( root );
 		}
+	}
+
+	static void WriteFloatArray( SerializedObject so, string propertyName, float[] values )
+	{
+		SerializedProperty prop = so.FindProperty( propertyName );
+		if ( prop == null || !prop.isArray )
+			return;
+
+		prop.arraySize = values.Length;
+		for ( int i = 0; i < values.Length; i++ )
+			prop.GetArrayElementAtIndex( i ).floatValue = values[ i ];
 	}
 
 	static Transform FindDeep( Transform root, string name )

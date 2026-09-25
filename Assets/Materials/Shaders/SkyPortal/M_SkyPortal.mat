@@ -40,8 +40,8 @@ Material:
     - _Feather: 0.3
     - _FlipSkyDirection: 0
     - _HorizonLift: 0.2
-    - _MoonGlow: 1.2
-    - _MoonGlowPower: 5
+    - _MoonGlow: 0.01
+    - _MoonGlowPower: 4
     - _MoonSize: 0.028
     - _NoiseScale: 1.75
     - _NoiseStrength: 0.3

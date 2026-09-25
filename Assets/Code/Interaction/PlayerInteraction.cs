@@ -1129,6 +1129,12 @@ public class PlayerInteraction : MonoBehaviour
 		if ( input == null || input.ContextualInteract == null )
 			return;
 
+		if ( _player != null && _player.IsInBuildMode )
+		{
+			ResetContextualRepeatState();
+			return;
+		}
+
 		PlayerMinecartPush minecartPush = _player != null ? _player.MinecartPush : null;
 		if ( minecartPush != null && minecartPush.IsHandlingInteract )
 			return;

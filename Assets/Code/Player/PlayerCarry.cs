@@ -71,6 +71,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	Transform _carryRigs;
 	bool _cinematicHidden;
 	bool _minecartDriveHidden;
+	bool _buildModeHidden;
 	int _nextToken = 1;
 	int _usedCapacity;
 	float _bobPhase;
@@ -504,12 +505,22 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		ApplyCarryHiddenVisual();
 	}
 
+	/// <summary>
+	/// Hides first-person carry visuals while build mode shows the tool hammer.
+	/// Pouch contents are unchanged.
+	/// </summary>
+	public void SetBuildModeHidden( bool hidden )
+	{
+		_buildModeHidden = hidden;
+		ApplyCarryHiddenVisual();
+	}
+
 	void ApplyCarryHiddenVisual()
 	{
 		if ( _carryRigs == null )
 			return;
 
-		_carryRigs.gameObject.SetActive( !_cinematicHidden && !_minecartDriveHidden );
+		_carryRigs.gameObject.SetActive( !_cinematicHidden && !_minecartDriveHidden && !_buildModeHidden );
 	}
 
 	void EnsureBucketRig( CategoryBucket bucket )

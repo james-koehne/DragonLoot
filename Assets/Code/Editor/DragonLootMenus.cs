@@ -105,6 +105,10 @@ public static class DragonLootMenus
 	public const string GameObjectMapLabel = "GameObject/DragonLoot/Map Label Marker";
 	public const string GameObjectTutorialMapMarker = "GameObject/DragonLoot/Tutorial Map Marker";
 
+	// --- Build ---
+	public const string BuildWrapSelectionAsBuildable = Root + "/Build/Wrap Selection As Buildable";
+	public const string BuildCreateWorldHammerPrefab = Root + "/Build/Create World Hammer Prefab";
+
 	// --- Tutorials ---
 	public const string TutorialsInstallCatalog = Root + "/Tutorials/Install Catalog";
 
@@ -117,6 +121,8 @@ public static class DragonLootMenus
 	public const string DefinitionsEnsureDigPickupSpeedUpgrade = Root + "/Definitions/Ensure Dig Pickup Speed Upgrade";
 	public const string DefinitionsEnsureObjectiveFeedbacks = Root + "/Definitions/Ensure Objective HUD Feedbacks";
 	public const string DefinitionsEnsureIslandCompleteWorldEvents = Root + "/Definitions/Ensure Island Complete World Events";
+	public const string DefinitionsEnsureBuildMode = Root + "/Definitions/Ensure Build Mode Definition";
+	public const string DefinitionsEnsureBuildModeTutorial = Root + "/Definitions/Ensure Build Mode Tutorial";
 
 	// --- Companions ---
 	public const string CompanionsBuildFairyHelper = Root + "/Companions/Build Fairy Helper Prefab";
