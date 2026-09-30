@@ -1027,7 +1027,7 @@ public class TutorialManager : MonoBehaviour
 
 	void OnCoinStackChanged( CoinStackChangedEvent evt )
 	{
-		if ( evt.Stack == null || evt.Count < 2 )
+		if ( evt.Stack == null || evt.Count < 2 || !evt.PlayerDirected )
 			return;
 		TryCompleteTask( TutorialTaskCompleteType.StackCoins );
 	}

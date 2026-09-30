@@ -41,6 +41,7 @@ public class PlayerController : MonoBehaviour
 	PlayerSorterReposition _sorterReposition;
 	PlayerAbilities _abilities;
 	PlayerCleaning _cleaning;
+	PlayerCoffeeSip _coffeeSip;
 	PlayerWholeStackInteraction _wholeStack;
 	PlayerBuildMode _buildMode;
 	CharacterController _characterController;
@@ -90,6 +91,8 @@ public class PlayerController : MonoBehaviour
 	float _walkSpeed = -1f;
 	float _jumpForce = -1f;
 	float _gravity = float.NaN;
+	float _moveSpeedBuffMultiplier = 1f;
+	float _moveSpeedBuffExpireTime = -1f;
 
 	float WalkSpeed
 	{
@@ -200,6 +203,7 @@ public class PlayerController : MonoBehaviour
 	public PlayerSorterReposition SorterReposition => _sorterReposition;
 	public PlayerAbilities Abilities => _abilities;
 	public PlayerCleaning Cleaning => _cleaning;
+	public PlayerCoffeeSip CoffeeSip => _coffeeSip;
 	public PlayerWholeStackInteraction WholeStack => _wholeStack;
 	public PlayerBuildMode BuildMode => _buildMode;
 	public bool IsInBuildMode => _buildMode != null && _buildMode.IsActive;
@@ -222,7 +226,7 @@ public class PlayerController : MonoBehaviour
 	public Vector3 FlatMoveIntent => _debugFlatMoveIntent;
 
 	/// <summary>
-	/// Intended ground speed this frame (walk/sprint × carry), ignoring collision slowdown.
+	/// Intended ground speed this frame (walk/sprint × carry × timed buff), ignoring collision slowdown.
 	/// </summary>
 	public float DesiredPlanarSpeed
 	{
@@ -230,7 +234,7 @@ public class PlayerController : MonoBehaviour
 		{
 			bool sprinting = _wantsSprint && _debugFlatMoveIntent.sqrMagnitude > 0.0001f;
 			float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
-			return ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale;
+			return ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale * GetMoveSpeedBuffMultiplier();
 		}
 	}
 
@@ -599,6 +603,33 @@ public class PlayerController : MonoBehaviour
 		_gravity = value;
 	}
 
+	/// <summary>Timed planar move multiplier (walk, sprint, climb). Refresh by calling again.</summary>
+	public void ApplyMoveSpeedBuff( float multiplier, float durationSeconds )
+	{
+		_moveSpeedBuffMultiplier = Mathf.Max( 0.01f, multiplier );
+		_moveSpeedBuffExpireTime = Time.time + Mathf.Max( 0.1f, durationSeconds );
+	}
+
+	public void ClearMoveSpeedBuff()
+	{
+		_moveSpeedBuffMultiplier = 1f;
+		_moveSpeedBuffExpireTime = -1f;
+	}
+
+	float GetMoveSpeedBuffMultiplier()
+	{
+		if ( _moveSpeedBuffExpireTime < 0f )
+			return 1f;
+
+		if ( Time.time >= _moveSpeedBuffExpireTime )
+		{
+			ClearMoveSpeedBuff();
+			return 1f;
+		}
+
+		return _moveSpeedBuffMultiplier;
+	}
+
 	void EnsureWalkSpeedInitialized()
 	{
 		if ( _walkSpeed >= 0f )
@@ -635,6 +666,7 @@ public class PlayerController : MonoBehaviour
 		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
+		EnsureCoffeeSip();
 		EnsureWholeStack();
 		EnsureBuildMode();
 		EnsureFootsteps();
@@ -671,6 +703,7 @@ public class PlayerController : MonoBehaviour
 		EnsureSorterReposition();
 		EnsureAbilities();
 		EnsureCleaning();
+		EnsureCoffeeSip();
 		EnsureWholeStack();
 		EnsureBuildMode();
 		EnsureFootsteps();
@@ -682,10 +715,12 @@ public class PlayerController : MonoBehaviour
 		_abilities.Setup( this );
 		if ( _cleaning != null )
 			_cleaning.Setup( this );
+		if ( _coffeeSip != null )
+			_coffeeSip.Setup( this );
 		if ( _wholeStack != null )
 			_wholeStack.Setup( this, _interaction, _placement );
 		if ( _buildMode != null )
-			_buildMode.Setup( this, _interaction );
+			_buildMode.Setup( this, _interaction, _cameraLook );
 		if ( _minecartPush != null )
 			_minecartPush.Setup( this );
 		if ( _minecartRide != null )
@@ -868,6 +903,14 @@ public class PlayerController : MonoBehaviour
 			_cleaning = GetComponent<PlayerCleaning>();
 		if ( _cleaning == null )
 			_cleaning = gameObject.AddComponent<PlayerCleaning>();
+	}
+
+	void EnsureCoffeeSip()
+	{
+		if ( _coffeeSip == null )
+			_coffeeSip = GetComponent<PlayerCoffeeSip>();
+		if ( _coffeeSip == null )
+			_coffeeSip = gameObject.AddComponent<PlayerCoffeeSip>();
 	}
 
 	void EnsureWholeStack()
@@ -1291,7 +1334,7 @@ public class PlayerController : MonoBehaviour
 
 		bool sprinting = _wantsSprint && moveIntent.sqrMagnitude > 0.0001f;
 		float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
-		float targetSpeed = ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale;
+		float targetSpeed = ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale * GetMoveSpeedBuffMultiplier();
 		if ( _slideEnterCharge > 0f && !_isSliding )
 			targetSpeed *= SlideEnterMoveSpeedScale;
 		Vector3 desired = moveIntent.sqrMagnitude > 0.0001f
@@ -1718,7 +1761,7 @@ public class PlayerController : MonoBehaviour
 		}
 
 		float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
-		float targetSpeed = ( _wantsSprint ? ClimbSprintSpeed : ClimbSpeed ) * carryScale;
+		float targetSpeed = ( _wantsSprint ? ClimbSprintSpeed : ClimbSpeed ) * carryScale * GetMoveSpeedBuffMultiplier();
 		Vector3 desired = surfaceIntent.sqrMagnitude > 0.0001f
 			? surfaceIntent.normalized * targetSpeed
 			: Vector3.zero;

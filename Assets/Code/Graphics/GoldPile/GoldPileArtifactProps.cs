@@ -1371,7 +1371,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			nearSurface );
 	}
 
-	async Task RefreshRevealAsync(
+	Task RefreshRevealAsync(
 		int bindId,
 		int generation,
 		bool spatialFilter,
@@ -1380,7 +1380,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 		int startIndex )
 	{
 		if ( _definition == null || _heightfield == null || _pileRoot == null )
-			return;
+			return Task.CompletedTask;
 
 		GoldPileEditTiming.Begin( "GoldPile.ArtifactReveal" );
 		System.Diagnostics.Stopwatch sw = GoldPileEditTiming.StartWatchIfEnabled();
@@ -1397,7 +1397,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 				if ( !IsRevealStillValid( bindId, generation ) )
 				{
 					FlushPendingWorldReleases();
-					return;
+					return Task.CompletedTask;
 				}
 
 				LatentEntry latent = _latent[ i ];
@@ -1467,7 +1467,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			if ( !IsRevealStillValid( bindId, generation ) )
 			{
 				FlushPendingWorldReleases();
-				return;
+				return Task.CompletedTask;
 			}
 
 			FlushPendingWorldReleases();
@@ -1486,6 +1486,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 
 			GoldPileEditTiming.End();
 		}
+
+		return Task.CompletedTask;
 	}
 
 	bool IsRevealStillValid( int bindId, int generation )

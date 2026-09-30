@@ -74,6 +74,10 @@ static class CoinSortingStationSetup
 			definition.level3CoinsPerSecond = 10f;
 			definition.crankHoldGrace = 0.2f;
 			definition.fullStackLateralOffset = 0.35f;
+			definition.autoPullFromNearbyStorage = true;
+			definition.storagePullRadius = 3f;
+			definition.storagePullInterval = 0.35f;
+			definition.storagePullFlightDuration = 0.32f;
 			AssetDatabase.CreateAsset( definition, defPath );
 		}
 

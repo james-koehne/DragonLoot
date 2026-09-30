@@ -101,6 +101,8 @@ public sealed class GoldPileHeightfield
 	float _initialVolume;
 	bool _lockMaxHeight;
 	Func<float, float, float> _lootFloorResolver;
+	float _cachedHeightSum;
+	bool _heightSumValid;
 
 	public int ResolutionX => _resolutionX;
 	public int ResolutionZ => _resolutionZ;
@@ -1851,6 +1853,9 @@ public sealed class GoldPileHeightfield
 			phaseSw.Restart();
 		}
 
+		if ( _heightSumValid )
+			_cachedHeightSum = Mathf.Max( 0f, _cachedHeightSum - volumeToRemove );
+
 		int pad = ResolveCarveBlurPad( radius, cellX, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
 		ExpandDirtyRect(
@@ -2034,6 +2039,9 @@ public sealed class GoldPileHeightfield
 			}
 		}
 
+		if ( _heightSumValid )
+			_cachedHeightSum += volumeToAdd;
+
 		int pad = ResolveCarveBlurPad( radius, cellX, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
 		ExpandDirtyRect(
@@ -2216,9 +2224,14 @@ public sealed class GoldPileHeightfield
 		if ( _heights == null )
 			return 0f;
 
+		if ( _heightSumValid )
+			return _cachedHeightSum;
+
 		float sum = 0f;
 		for ( int i = 0; i < _heights.Length; i++ )
 			sum += _heights[ i ];
+		_cachedHeightSum = sum;
+		_heightSumValid = true;
 		return sum;
 	}
 
@@ -2247,6 +2260,7 @@ public sealed class GoldPileHeightfield
 		_dirtyMaxX = _resolutionX - 1;
 		_dirtyMinZ = 0;
 		_dirtyMaxZ = _resolutionZ - 1;
+		_heightSumValid = false;
 	}
 
 	void ExpandDirtyRect( int minX, int maxX, int minZ, int maxZ )

@@ -1131,8 +1131,24 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		LastPhysicalSpawnCount = 0;
 		// Reserves must match current heights/inventory after the dig carve. Stale reserves
 		// (bind-time heights) make reserved >> capacity and dump huge column spills.
-		RebuildColumnCoinReserves();
+		System.Diagnostics.Stopwatch reserveSw = GoldPileEditTiming.StartWatchIfEnabled();
+		RebuildColumnCoinReservesNear( local, radius );
+		if ( reserveSw != null )
+		{
+			reserveSw.Stop();
+			GoldPileEditTiming.Record( "densify.rebuildReserves", reserveSw.Elapsed.TotalMilliseconds );
+		}
+
+		System.Diagnostics.Stopwatch spillSw = GoldPileEditTiming.StartWatchIfEnabled();
 		int columnSpill = SpawnColumnInventorySpillNear( local, radius, carveUnits );
+		if ( spillSw != null )
+		{
+			spillSw.Stop();
+			GoldPileEditTiming.Record(
+				"densify.columnSpill",
+				spillSw.Elapsed.TotalMilliseconds,
+				$"spawned={columnSpill} units={carveUnits}" );
+		}
 		LastPhysicalSpawnCount = columnSpill;
 		if ( streamSettings != null && streamSettings.spawnPhysicalCoinsOnDig )
 		{
@@ -1159,7 +1175,11 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( queueCoinReleases )
 			released = QueueUnsupportedCoinReleasesNear( local, radius );
 
-		bool needFullRebuild = released > 0 || columnSpill > 0;
+		// Spill/release already UnmarkDrawn / take seats — do NOT full RebuildVisibility
+		// (25k seats ≈ 100ms hitch). Only dirty stream draw cache.
+		bool needFullRebuild = false;
+		if ( columnSpill > 0 || released > 0 || LastPhysicalSpawnCount > 0 )
+			MarkStreamDrawCacheDirty();
 		int scanned = 0;
 
 		if ( UseSurfaceDecorSeats() )
@@ -1218,16 +1238,23 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		float topUpRadius = Mathf.Max( radius * 1.5f, _pickRadius * 4f );
 		Vector3 topUpLocal = local;
 		int topUpMax = streamSettings != null ? streamSettings.digDecorTopUpMax : 10;
-		System.Diagnostics.Stopwatch topUpSw = GoldPileEditTiming.StartWatchIfEnabled();
-		int topped = TopUpShallowCoinSeatsNear( topUpLocal, topUpRadius, maxSpawn: topUpMax );
-		if ( topUpSw != null )
-		{
-			topUpSw.Stop();
-			GoldPileEditTiming.Record(
-				"densify.topUp",
-				topUpSw.Elapsed.TotalMilliseconds,
-				$"spawned={topped} max={topUpMax}" );
-		}
+		// Hard cap + time budget: spawning seats is the remaining dig hitch after spill/promote fixes.
+		const int DigTopUpHardCap = 3;
+		const float DigTopUpBudgetMs = 1.5f;
+		topUpMax = Mathf.Min( topUpMax, DigTopUpHardCap );
+		System.Diagnostics.Stopwatch topUpSw = System.Diagnostics.Stopwatch.StartNew();
+		int topped = TopUpShallowCoinSeatsNear(
+			topUpLocal,
+			topUpRadius,
+			maxSpawn: topUpMax,
+			bindSeed: false,
+			workSw: topUpSw,
+			budgetMs: DigTopUpBudgetMs );
+		topUpSw.Stop();
+		GoldPileEditTiming.Record(
+			"densify.topUp",
+			topUpSw.Elapsed.TotalMilliseconds,
+			$"spawned={topped} max={topUpMax} budget={DigTopUpBudgetMs:0.#}" );
 		if ( topped > 0 && !UseSurfaceDecorSeats() )
 			needFullRebuild = true;
 		else if ( topped > 0 )
@@ -1243,7 +1270,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				GoldPileEditTiming.Record(
 					"densify.rebuildVisibilityCall",
 					rebuildSw.Elapsed.TotalMilliseconds,
-					$"topped={topped} released={released}" );
+					$"topped={topped} released={released} spill={columnSpill}" );
 			}
 		}
 		else if ( _streamMatrixDirtyChunks != null && _streamMatrixDirtyChunks.Count > 0 )
@@ -1358,6 +1385,61 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 	}
 
+	/// <summary>
+	/// Dig-path reserve refresh: only rewrite columns inside the brush.
+	/// Full-grid rebuild is O(resolution²) and hitch on large piles.
+	/// </summary>
+	void RebuildColumnCoinReservesNear( Vector3 localCenter, float radius )
+	{
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+		{
+			_columnCoinReserve = null;
+			return;
+		}
+
+		int cellCount = _heightfield.ResolutionX * _heightfield.ResolutionZ;
+		if ( _columnCoinReserve == null || _columnCoinReserve.Length != cellCount )
+		{
+			RebuildColumnCoinReserves();
+			return;
+		}
+
+		float sum = _heightfield.SumHeights();
+		int total = CountRemainingCoinInventory();
+		if ( sum < 0.0001f || total <= 0 )
+		{
+			for ( int i = 0; i < cellCount; i++ )
+				_columnCoinReserve[ i ] = 0f;
+			return;
+		}
+
+		float radiusSq = radius * radius;
+		float halfX = _heightfield.WorldSizeX * 0.5f;
+		float halfZ = _heightfield.WorldSizeZ * 0.5f;
+		float cellX = _heightfield.LocalCellSizeX;
+		float cellZ = _heightfield.LocalCellSizeZ;
+		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - radius + halfX ) / cellX ), 0, _heightfield.ResolutionX - 1 );
+		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + radius + halfX ) / cellX ), 0, _heightfield.ResolutionX - 1 );
+		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - radius + halfZ ) / cellZ ), 0, _heightfield.ResolutionZ - 1 );
+		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + radius + halfZ ) / cellZ ), 0, _heightfield.ResolutionZ - 1 );
+		float invSum = total / sum;
+
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				_heightfield.CellCenterLocal( x, z, out float lx, out float lz );
+				float dx = lx - localCenter.x;
+				float dz = lz - localCenter.z;
+				if ( dx * dx + dz * dz > radiusSq )
+					continue;
+
+				int idx = _heightfield.CellIndex( x, z );
+				_columnCoinReserve[ idx ] = _heightfield.GetCellHeight( x, z ) * invSum;
+			}
+		}
+	}
+
 	void ConsumeColumnReserveAtLocal( float localX, float localZ, int units )
 	{
 		if ( _columnCoinReserve == null || units <= 0 || _heightfield == null )
@@ -1373,28 +1455,20 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	}
 
 	/// <summary>
-	/// Spawns physical coins from pile inventory when a column cannot hold its reserved share
-	/// (volume capacity drops as height is carved, or the column reaches the loot floor).
-	/// Near-ground columns with reserve below <see cref="_columnNearEmptyReserve"/> flush entirely.
-	/// Cap is proportional to the dig so a 1-unit take cannot dump the brush max (128), except near-empty flush.
+	/// Spawns physical coins only when a dig leaves a column with 1–2 coins of reserve
+	/// (<see cref="_columnNearEmptyReserve"/>) at the loot floor. Mid-column capacity overflow
+	/// no longer spills — that was ejecting coins on every dig and hitching densify.
 	/// </summary>
 	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius, int carveUnits = 1 )
 	{
 		if ( _heightfield == null || _pileRoot == null || _remaining == null || _columnCoinReserve == null )
 			return 0;
 
-		int remaining = CountRemainingCoinInventory();
-		if ( remaining <= 0 )
-			return 0;
-
-		float volPerCoin = _heightfield.VolumePerCoin( remaining );
-		if ( volPerCoin <= 1e-6f )
+		if ( CountRemainingCoinInventory() <= 0 )
 			return 0;
 
 		int spawned = 0;
-		// One dig unit of volume loss should not eject more than that many column-spill coins.
-		int maxSpawn = Mathf.Min( 128, Mathf.Max( 1, carveUnits ) );
-		const int maxNearEmptyFlush = 128;
+		int spillCapTotal = Mathf.Min( 2, Mathf.Max( 1, Mathf.CeilToInt( _columnNearEmptyReserve ) ) );
 		float radiusSq = radius * radius;
 		float halfX = _heightfield.WorldSizeX * 0.5f;
 		float halfZ = _heightfield.WorldSizeZ * 0.5f;
@@ -1419,37 +1493,18 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				if ( idx < 0 || idx >= _columnCoinReserve.Length )
 					continue;
 
-				bool nearGround = _heightfield.IsColumnNearLootGround( lx, lz );
 				float reserved = _columnCoinReserve[ idx ];
-
-				// Near-zero columns must not keep GPU coin instances.
-				if ( nearGround )
-					HideCoinVisualsInColumn( x, z );
-
-				if ( reserved < 0.5f )
+				// Only flush nearly empty columns (1–2 coins). Leave thicker columns alone.
+				if ( reserved < 0.5f || reserved > _columnNearEmptyReserve )
+					continue;
+				if ( !_heightfield.IsColumnNearLootGround( lx, lz ) )
 					continue;
 
-				int toSpill;
-				int spillCap;
-				if ( nearGround && reserved < _columnNearEmptyReserve )
-				{
-					toSpill = Mathf.CeilToInt( reserved );
-					spillCap = maxNearEmptyFlush - spawned;
-				}
-				else
-				{
-					float h = _heightfield.GetCellNormalizedHeight( x, z );
-					// Capacity from live height only. Forcing capacity=0 on loot-floor columns
-					// dumped each column's full reserve and cascaded with re-carve notifies.
-					float capacity = h / volPerCoin;
-					toSpill = Mathf.Max( 0, Mathf.FloorToInt( reserved - capacity ) );
-					spillCap = maxSpawn - spawned;
-				}
+				int spillCap = spillCapTotal - spawned;
+				if ( spillCap <= 0 )
+					break;
 
-				if ( toSpill <= 0 || spillCap <= 0 )
-					continue;
-
-				toSpill = Mathf.Min( toSpill, spillCap, CountRemainingCoinInventory() );
+				int toSpill = Mathf.Min( Mathf.CeilToInt( reserved ), spillCap, CountRemainingCoinInventory() );
 				for ( int i = 0; i < toSpill; i++ )
 				{
 					if ( !TrySpawnColumnSpillCoin( lx, lz, idx, out _ ) )
@@ -1458,11 +1513,15 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 					spawned++;
 				}
 
-				if ( nearGround && _columnCoinReserve[ idx ] > 0f && _columnCoinReserve[ idx ] < _columnNearEmptyReserve )
-					_columnCoinReserve[ idx ] = 0f;
+				_columnCoinReserve[ idx ] = 0f;
 			}
+
+			if ( spawned >= spillCapTotal )
+				break;
 		}
 
+		// One spatial pass — never O(slots) per heightfield cell (that hitching digs on large piles).
+		HideNearGroundCoinVisualsNear( localCenter, radius );
 		return spawned;
 	}
 
@@ -1545,33 +1604,42 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _slots == null || _heightfield == null )
 			return;
 
+		_heightfield.CellCenterLocal( cellX, cellZ, out float lx, out float lz );
+		HideNearGroundCoinVisualsNear( new Vector3( lx, 0f, lz ), Mathf.Max( _heightfield.LocalCellSizeX, _heightfield.LocalCellSizeZ ) * 0.75f );
+	}
+
+	/// <summary>
+	/// Hides GPU coin seats whose heightfield column is at the loot floor inside <paramref name="radius"/>.
+	/// Uses spatial cell lists so cost scales with nearby seats, not pile slot count × brush cells.
+	/// </summary>
+	void HideNearGroundCoinVisualsNear( Vector3 localCenter, float radius )
+	{
+		if ( _slots == null || _heightfield == null )
+			return;
+
 		bool dirty = false;
-		for ( int i = 0; i < _slotCount; i++ )
+		ForEachSlotIndexNearLocal( localCenter, radius, slotIndex =>
 		{
-			Slot slot = _slots[ i ];
+			Slot slot = _slots[ slotIndex ];
 			if ( slot.Taken || slot.Definition == null || slot.Definition.category != TreasureCategory.Coin )
-				continue;
+				return;
 			if ( !slot.CoinVisual && !slot.FixedVolumePose )
-				continue;
+				return;
+			if ( !_heightfield.IsColumnNearLootGround( slot.LocalPos.x, slot.LocalPos.z, ColumnSpillMargin( slot ) ) )
+				return;
 
-			if ( !_heightfield.TryLocalToCell( slot.LocalPos.x, slot.LocalPos.z, out int sx, out int sz ) )
-				continue;
-			if ( sx != cellX || sz != cellZ )
-				continue;
+			if ( slot.Drawn )
+				UnmarkDrawn( slotIndex );
 
-			bool wasDrawn = slot.Drawn;
-			if ( wasDrawn )
-				UnmarkDrawn( i );
-
-			RemoveFromCell( i );
+			RemoveFromCell( slotIndex );
 			ReleaseCoinSeat( slot.LocalPos );
 			slot.Taken = true;
 			slot.Drawn = false;
 			slot.MatrixIndex = -1;
 			slot.StreamRankInChunk = -1;
-			_slots[ i ] = slot;
+			_slots[ slotIndex ] = slot;
 			dirty = true;
-		}
+		} );
 
 		if ( dirty )
 			MarkStreamDrawCacheDirty();
@@ -5580,7 +5648,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		if ( promoted > 0 )
 		{
-			RebuildBatchMatrices();
+			// Matrices appended in MarkDrawn — avoid RebuildBatchMatrices (full redrawn rebuild).
 			MarkStreamDrawCacheDirty();
 			RecountChunkDrawnPoolStats();
 		}
@@ -7152,12 +7220,40 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		slot.Drawn = true;
 		_slots[ slotIndex ] = slot;
 		_visibleCountByEntry[ slot.EntryIndex ]++;
-		_batches[ slot.BatchKey ].SlotIndices.Add( slotIndex );
+
+		BatchGroup primary = _batches[ slot.BatchKey ];
+		List<int> sharedSlots = primary.SlotIndices;
+		sharedSlots.Add( slotIndex );
+		int matrixIndex = sharedSlots.Count - 1;
 
 		if ( _chunkDrawnSlots != null && _chunkGrid.ChunkCount > 0 )
 			InsertChunkDrawnSorted( slotIndex, slot.ChunkX, slot.ChunkZ );
 
 		AddToDrawnCell( slotIndex, slot.CellX, slot.CellZ );
+
+		// Append matrices now so dig promote/top-up never needs a full RebuildBatchMatrices.
+		if ( _pileRoot != null )
+		{
+			Matrix4x4 rootMatrix = BuildMatrix( slot );
+			for ( int b = 0; b < _batches.Length; b++ )
+			{
+				BatchGroup group = _batches[ b ];
+				if ( group.SlotIndices != sharedSlots )
+					continue;
+
+				if ( group.Matrices == null || group.Matrices.Length <= matrixIndex )
+					group.Matrices = GrowMatrixArray( group.Matrices, matrixIndex + 1 );
+
+				Matrix4x4 matrix = rootMatrix * group.PartLocal;
+				EncodeCoinLodPriority( ref matrix, slotIndex, slot );
+				group.Matrices[ matrixIndex ] = matrix;
+				_batches[ b ] = group;
+			}
+		}
+
+		slot.MatrixIndex = matrixIndex;
+		_slots[ slotIndex ] = slot;
+		SyncStreamMatrixForDrawnSlot( slotIndex );
 	}
 
 	/// <summary>

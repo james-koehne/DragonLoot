@@ -14,6 +14,9 @@ Shader "DragonLoot/Build Ghost"
 		_PlayerWorldPos ("Player World Pos", Vector) = (0, 0, 0, 0)
 		_FadeStart ("Fade Start", Float) = 12
 		_FadeEnd ("Fade End", Float) = 18
+		_CompleteGlow ("Complete Glow", Range(0, 1)) = 0
+		_CompleteColor ("Complete Color", Color) = (1.35, 0.95, 0.25, 1)
+		_AlphaMul ("Alpha Mul", Range(0, 1)) = 1
 	}
 
 	SubShader
@@ -55,6 +58,9 @@ Shader "DragonLoot/Build Ghost"
 				float4 _PlayerWorldPos;
 				float _FadeStart;
 				float _FadeEnd;
+				float _CompleteGlow;
+				float4 _CompleteColor;
+				float _AlphaMul;
 			CBUFFER_END
 
 			struct Attributes
@@ -99,11 +105,20 @@ Shader "DragonLoot/Build Ghost"
 				alpha *= lerp( 0.55, 1.0, fresnel );
 				alpha *= pulse;
 
+				float complete = saturate( _CompleteGlow );
+				float3 completeCol = _CompleteColor.rgb * ( 1.15 + fresnel * 1.75 );
+				color = lerp( color, completeCol, complete );
+				// Brighten and thicken while flashing so built mesh can pop underneath unseen.
+				alpha = saturate( alpha * ( 1.0 + complete * 1.85 ) );
+
 				float fadeStart = max( _FadeStart, 0.01 );
 				float fadeEnd = max( _FadeEnd, fadeStart + 0.01 );
 				float dist = distance( input.positionWS, _PlayerWorldPos.xyz );
 				float distanceFade = smoothstep( fadeEnd, fadeStart, dist );
+				// Skip distance fade during complete so the flash stays solid.
+				distanceFade = lerp( distanceFade, 1.0, complete );
 				alpha *= distanceFade;
+				alpha *= saturate( _AlphaMul );
 
 				clip( alpha - 0.01 );
 				return half4( color, saturate( alpha ) );

@@ -99,7 +99,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 	[Tooltip( "Minimum flip arc height when a coin flies between display columns." )]
 	[SerializeField]
 	[Min( 0.05f )]
-	float levelCrossSlotArcHeight = 0.28f;
+	float levelCrossSlotArcHeight = 0.36f;
 
 	[Header( "Complete Effect" )]
 	[Tooltip( "When enabled, complete FX use Accepted Treasure uiColorHint (times HDR Mult) instead of the manual override color." )]
@@ -587,9 +587,20 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		GetSlotWorldPose( toSlot, destStackIndex, coin, out endPos, out Quaternion endRot );
 		coin.EnterDisplayed( this, endPos, endRot );
 		RefreshSlotVisual( toSlot, animate: true );
-		PlayTreasurePlaceFeedback( coin );
+		PlayAutoLevelPlaceFeedback( coin );
 		_levelFlightSeated = true;
 		ClearLevelFlightTracking();
+	}
+
+	static void PlayAutoLevelPlaceFeedback( TreasureItem item )
+	{
+		if ( item == null )
+			return;
+
+		if ( CoinGemInteractFeedback.IsCoinOrGem( item ) )
+			CoinGemInteractFeedback.PlayPlace( item );
+
+		TreasureInteractSfx.PlayPlace( item, advanceCombo: true );
 	}
 
 	float ResolveCrossSlotArcHeight( Vector3 startPos, Vector3 endPos )
@@ -597,7 +608,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		Vector3 flatStart = new Vector3( startPos.x, 0f, startPos.z );
 		Vector3 flatEnd = new Vector3( endPos.x, 0f, endPos.z );
 		float horizontal = Vector3.Distance( flatStart, flatEnd );
-		return Mathf.Max( levelCrossSlotArcHeight, horizontal * 0.45f );
+		return Mathf.Min( 1.05f, Mathf.Max( levelCrossSlotArcHeight, horizontal * 0.75f ) );
 	}
 
 	void BuildLevelMoves( List<LevelMove> moves, HashSet<int> sourceSlots )

@@ -136,6 +136,7 @@ GameObject:
   - component: {fileID: 5893229519337026178}
   - component: {fileID: 1693583488707643600}
   - component: {fileID: 6310797825121580221}
+  - component: {fileID: 4610968042259016469}
   m_Layer: 0
   m_Name: Minecart
   m_TagString: Untagged
@@ -165,6 +166,8 @@ Transform:
   - {fileID: 1283810042693117063}
   - {fileID: 2288257341798960506}
   - {fileID: 9101555990011225102}
+  - {fileID: 7111555990011225202}
+  - {fileID: 7221555990011225302}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &5893229519337026178
@@ -246,6 +249,8 @@ MonoBehaviour:
   onDriveBrakeFeedbacks: {fileID: 0}
   onDriveReverseFeedbacks: {fileID: 0}
   onDriveExitFeedbacks: {fileID: 0}
+  onHopStartFeedbacks: {fileID: 7111555990011225203}
+  onHopLandFeedbacks: {fileID: 7221555990011225303}
   authoredFollowers: []
   consistLead: {fileID: 0}
   columns: 6
@@ -256,6 +261,18 @@ MonoBehaviour:
   snapDuration: 0.25
   bounceScale: 1.15
   drawLayoutGizmosAlways: 0
+--- !u!114 &4610968042259016469
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1949773801221525227}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fefba3a18f64f0446b4180a32c658565, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MinecartAutoController
 --- !u!1 &2423297742166402771
 GameObject:
   m_ObjectHideFlags: 0
@@ -501,6 +518,247 @@ MonoBehaviour:
   references:
     version: 2
     RefIds: []
+--- !u!1 &7111555990011225201
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7111555990011225202}
+  - component: {fileID: 7111555990011225203}
+  m_Layer: 0
+  m_Name: OnHopStartFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7111555990011225202
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7111555990011225201}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8721286345186438954}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7111555990011225203
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7111555990011225201}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 7111555990011225210
+  _useUnscaledTime: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 7111555990011225210
+      type: {class: SequenceFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Feedbacks:
+        - rid: 7111555990011225211
+        - rid: 7111555990011225212
+        - rid: 7111555990011225213
+    - rid: 7111555990011225211
+      type: {class: PunchScaleFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 2670441410158612560}
+        Punch: {x: 0.1, y: -0.14, z: 0.1}
+        Duration: 0.1
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.5
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+    - rid: 7111555990011225212
+      type: {class: DelayFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Duration: 0.11
+    - rid: 7111555990011225213
+      type: {class: PunchScaleFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 2670441410158612560}
+        Punch: {x: -0.09, y: 0.16, z: -0.09}
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.5
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+--- !u!1 &7221555990011225301
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7221555990011225302}
+  - component: {fileID: 7221555990011225303}
+  m_Layer: 0
+  m_Name: OnHopLandFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7221555990011225302
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7221555990011225301}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8721286345186438954}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7221555990011225303
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7221555990011225301}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 7221555990011225310
+  - rid: 7221555990011225311
+  _useUnscaledTime: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 7221555990011225310
+      type: {class: PunchScaleFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 2670441410158612560}
+        Punch: {x: 0.12, y: -0.16, z: 0.12}
+        Duration: 0.26
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.5
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+    - rid: 7221555990011225311
+      type: {class: ShakeTransformFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 2670441410158612560}
+        Duration: 0.18
+        Strength: 0.035
 --- !u!1 &7476685201534932912
 GameObject:
   m_ObjectHideFlags: 0

@@ -195,6 +195,18 @@ public class PlayerInteraction : MonoBehaviour
 		}
 	}
 
+	/// <summary>0–1 coffee machine craft hold when ContextualInteract is charging a step.</summary>
+	public float CoffeeHoldProgress
+	{
+		get
+		{
+			CoffeeMachineInteractable coffee = _current as CoffeeMachineInteractable;
+			if ( coffee == null )
+				return 0f;
+			return coffee.ChargeProgress01;
+		}
+	}
+
 	public void SetInteractRange( float value )
 	{
 		EnsureInteractRangeInitialized();
@@ -459,6 +471,10 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _player == null )
 			return false;
 
+		PlayerBuildMode buildMode = _player.BuildMode;
+		if ( buildMode != null && buildMode.AimedBuildable != null )
+			return true;
+
 		PlayerSorterReposition sorter = _player.SorterReposition;
 		if ( sorter != null && sorter.IsCarrying )
 			return true;
@@ -530,6 +546,9 @@ public class PlayerInteraction : MonoBehaviour
 
 		PlayerSorterReposition sorter = _player.SorterReposition;
 		if ( sorter != null && sorter.IsCarrying )
+			return;
+
+		if ( _player.IsInBuildMode )
 			return;
 
 		UpdatePickableIndicator();
@@ -612,6 +631,15 @@ public class PlayerInteraction : MonoBehaviour
 			_hasSurfaceHit = false;
 			ClearPickableIndicator();
 			TrySorterPlaceInput();
+			return;
+		}
+
+		if ( _player.IsInBuildMode )
+		{
+			_current = null;
+			_hasLastHit = false;
+			_hasSurfaceHit = false;
+			ClearPickableIndicator();
 			return;
 		}
 
@@ -989,6 +1017,13 @@ public class PlayerInteraction : MonoBehaviour
 		if ( input == null || input.Interact == null )
 			return;
 
+		if ( _player != null && _player.IsInBuildMode )
+		{
+			ResetPrimaryRepeatState();
+			ClearNonCoinPickupCharge();
+			return;
+		}
+
 		if ( input.Interact.WasReleasedThisFrame() || !input.Interact.IsPressed() )
 		{
 			ResetPrimaryRepeatState();
@@ -1158,6 +1193,13 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( InteractableBase.IsPickupInteract( _current ) )
 			return;
+
+		CoffeeMachineInteractable coffee = _current as CoffeeMachineInteractable;
+		if ( coffee != null && coffee.CanChargeHold( _player ) )
+		{
+			coffee.TickHoldCharge( Time.deltaTime );
+			return;
+		}
 
 		if ( input.ContextualInteract.WasPressedThisFrame() )
 		{
@@ -1366,6 +1408,10 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		_contextualRepeatTimer = 0f;
 		_contextualPastInitialDelay = false;
+
+		CoffeeMachineInteractable coffee = _current as CoffeeMachineInteractable;
+		if ( coffee != null )
+			coffee.CancelHoldCharge();
 	}
 
 	void TrySecondaryRepeatInput( GameInput input, bool holding )

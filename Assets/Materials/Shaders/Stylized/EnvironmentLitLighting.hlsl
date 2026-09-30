@@ -112,6 +112,7 @@ half4 EnvironmentLitFrag(Varyings input) : SV_Target
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
     half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv) * _BaseColor;
+    AlphaDiscard(albedoSample.a, _Cutoff);
     half4 maskSample = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap, input.uv);
     half occlusion = lerp(1.0h, SAMPLE_TEXTURE2D(_OcclusionMap, sampler_OcclusionMap, input.uv).g, _OcclusionStrength);
     half3 emissionMap = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, input.uv).rgb;
@@ -150,7 +151,20 @@ half4 EnvironmentLitFrag(Varyings input) : SV_Target
     half3 lit = DragonLootShadeSurface(inputData, surface);
     lit = DragonLootMixFog(lit, inputData.fogCoord, inputData.positionWS);
     lit = DragonLootApplyHeightFog(lit, inputData.positionWS);
+
+    half alpha = albedoSample.a;
+#if defined(_SURFACE_TYPE_TRANSPARENT)
+#if defined(_ALPHAPREMULTIPLY_ON)
+    lit *= alpha;
+#endif
+#if defined(_ALPHAMODULATE_ON)
+    lit = lerp(half3(1.0h, 1.0h, 1.0h), lit, alpha);
+    alpha = 1.0h;
+#endif
+    return half4(lit, alpha);
+#else
     return half4(lit, 1.0h);
+#endif
 }
 
 #endif

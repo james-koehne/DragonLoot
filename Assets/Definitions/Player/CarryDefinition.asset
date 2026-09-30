@@ -34,6 +34,9 @@ MonoBehaviour:
   bobFrequency: 16
   bobFullSpeed: 4
   idleBobScale: 0.15
+  airBobScale: 0
+  jumpReactionOffset: {x: 0, y: -0.08, z: -0.03}
+  jumpReactionDuration: 0.28
   swayAmplitude: {x: 0.02, y: 0.01, z: 0.015}
   swayFrequency: 1.6
   strafeSway: 0.04

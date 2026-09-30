@@ -34,21 +34,18 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
-  prerequisiteVolumeId: volume_island_4
-  prerequisiteTutorialIds: []
+  prerequisiteVolumeId: volume_island_4_coin_sorter
+  prerequisiteTutorialIds:
+  - tut_island4_artifacts
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds:
+  - island4_coin_sorter
   completeAllTasksOnVolumeEnter: 0
-  body: Got a lot of mixed coins? Use the coin sorter on this island by dumping them
-    into the hopper, then hold the crank to sort them into stacks.
+  body: Use the coin sorter on this island by dumping coins into the hopper, then
+    hold the crank to sort them into stacks.
   keybindHint: 
   tasks:
-  - id: look_sorter
-    label: Look at the coin sorter
-    keybindHint: 
-    completeTrigger: 30
-    completeVolumeId: 
-    requiredCount: 0
   - id: load_hopper
     label: Add coins into the hopper
     keybindHint: '[{WholeStackPlace}] or [{SecondaryInteract}]'

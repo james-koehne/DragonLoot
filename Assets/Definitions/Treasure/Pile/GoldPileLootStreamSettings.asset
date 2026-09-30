@@ -33,10 +33,10 @@ MonoBehaviour:
   useEmbeddedVolumeSeats: 0
   useSurfaceDecorSeats: 1
   releaseEmbeddedSeatsOnDig: 0
-  spawnPhysicalCoinsOnDig: 1
+  spawnPhysicalCoinsOnDig: 0
   digPhysicalSpawnChance: 0
   digPhysicalMaxPerCarve: 0
-  digPhysicalUnitsPerRoll: 1
+  digPhysicalUnitsPerRoll: 0.01
   digDecorTopUpMax: 10
   digStickMax: 16
   lod0Density: 1

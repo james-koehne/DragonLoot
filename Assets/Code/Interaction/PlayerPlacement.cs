@@ -1248,7 +1248,7 @@ public class PlayerPlacement : MonoBehaviour
 				continue;
 			}
 
-			stack.BeginAppendFlight( member, stack.transform.rotation );
+			stack.BeginAppendFlight( member, stack.transform.rotation, playerDirected: true );
 		}
 
 		stack.AbsorbNearbyLooseCoins();
@@ -1772,11 +1772,11 @@ public class PlayerPlacement : MonoBehaviour
 		if ( stack == null )
 		{
 			stack = GroundCoinStack.CreateAt( contact, rot );
-			stack.AbsorbSettledImmediate( baseItem );
+			stack.AbsorbSettledImmediate( baseItem, playerDirected: true );
 		}
 		else if ( !( baseItem.Owner is GroundCoinStack owned && owned == stack ) )
 		{
-			stack.TryAbsorbLooseImmediate( baseItem );
+			stack.TryAbsorbLooseImmediate( baseItem, playerDirected: true );
 		}
 
 		for ( int i = 0; i < cluster.Count; i++ )
@@ -1791,7 +1791,7 @@ public class PlayerPlacement : MonoBehaviour
 				continue;
 			}
 
-			stack.BeginAppendFlight( member, stack.transform.rotation );
+			stack.BeginAppendFlight( member, stack.transform.rotation, playerDirected: true );
 		}
 
 		stack.AbsorbNearbyLooseCoins();

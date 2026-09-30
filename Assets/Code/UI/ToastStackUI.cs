@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -8,6 +9,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Shared top-center toast list for discovery and unlock messages. Up to 3 visible rows.
+/// Hierarchy and root RectTransform live on the Interface prefab — position the ToastStack root in the editor.
 /// Same-moment shows share one SFX. Ability/upgrade toasts wait briefly after an island-complete milestone
 /// and include a subtle description line when authored.
 /// </summary>
@@ -27,6 +29,21 @@ public class ToastStackUI : MonoBehaviour
 	const float TextRightPad = 16f;
 	const float KickerGap = 2f;
 	const float DescriptionExtraHeight = 44f;
+
+	[Serializable]
+	public class ToastSlot
+	{
+		public RectTransform Slot;
+		public RectTransform Content;
+		public CanvasGroup Group;
+		public Image Backdrop;
+		public Outline Outline;
+		public Image Accent;
+		public Image Icon;
+		public Text Kicker;
+		public Text Label;
+		public Text Description;
+	}
 
 	static readonly Color GoldOutline = new Color( 0.92f, 0.78f, 0.32f, 0.85f );
 	static readonly Color GoldKicker = new Color( 1f, 0.88f, 0.45f, 1f );
@@ -107,6 +124,17 @@ public class ToastStackUI : MonoBehaviour
 
 	public static ToastStackUI Instance { get; private set; }
 
+	[SerializeField] ToastSlot[] slots = new ToastSlot[ MaxVisible ];
+	[SerializeField] Font labelFont;
+	[Tooltip( "Used when a discovery toast has no pouch/icon sprite." )]
+	[SerializeField] Sprite discoveryFallbackIcon;
+	[Tooltip( "Temp icon for constellation / display completion toasts." )]
+	[SerializeField] Sprite completionFallbackIcon;
+	[Tooltip( "Temp icon for unlock toasts missing an ability/upgrade icon." )]
+	[SerializeField] Sprite unlockFallbackIcon;
+	[Tooltip( "Temp icon for island / milestone toasts." )]
+	[SerializeField] Sprite milestoneFallbackIcon;
+
 	readonly List<Entry> _queue = new List<Entry>( 8 );
 	readonly List<ToastItem> _active = new List<ToastItem>( MaxVisible );
 	ToastItem[] _items;
@@ -141,7 +169,8 @@ public class ToastStackUI : MonoBehaviour
 	public int QueuedCount => _queue.Count + s_pendingBeforeInstance.Count;
 	public bool IsBusy => _active.Count > 0 || _queue.Count > 0 || s_pendingBeforeInstance.Count > 0;
 
-	public static ToastStackUI EnsureOnCanvas( Transform from )
+	/// <summary>Finds the prefab-wired stack under the canvas. Does not create hierarchy.</summary>
+	public static ToastStackUI FindOnCanvas( Transform from )
 	{
 		if ( Instance != null )
 			return Instance;
@@ -150,16 +179,7 @@ public class ToastStackUI : MonoBehaviour
 		if ( canvasRoot == null )
 			return null;
 
-		Transform existing = canvasRoot.Find( "ToastStack" );
-		GameObject go = existing != null ? existing.gameObject : new GameObject( "ToastStack", typeof( RectTransform ) );
-		if ( existing == null )
-			go.transform.SetParent( canvasRoot, false );
-
-		ToastStackUI stack = go.GetComponent<ToastStackUI>();
-		if ( stack == null )
-			stack = go.AddComponent<ToastStackUI>();
-		stack.Setup();
-		return stack;
+		return canvasRoot.GetComponentInChildren<ToastStackUI>( true );
 	}
 
 	public static void NotifyDiscovery( string message, CarryBucketKind pouch, bool showPouchIcon, float holdDuration, ToastTier tier = ToastTier.Discovery )
@@ -310,10 +330,12 @@ public class ToastStackUI : MonoBehaviour
 	public void Setup()
 	{
 		Instance = this;
-		EnsureRoot();
-		EnsureItems();
-		_ready = true;
-		FlushPending();
+		BindSlots();
+		_ready = _items != null && _items.Length > 0;
+		if ( _ready )
+			FlushPending();
+		else
+			Debug.LogWarning( "ToastStackUI: slots not wired on Interface prefab. Run Dragon Loot > Definitions > Ensure Toast Stack." );
 	}
 
 	public void RegisterTier( ToastTier tier, Feedbacks show, Feedbacks hide, CanvasGroup sourceGroup, RectTransform sourceRect, Image sourceAccent = null, Image sourceIcon = null, Image sourceBackdrop = null )
@@ -384,6 +406,7 @@ public class ToastStackUI : MonoBehaviour
 			return;
 
 		_labelFont = font;
+		labelFont = font;
 		if ( _items == null )
 			return;
 
@@ -752,7 +775,8 @@ public class ToastStackUI : MonoBehaviour
 		if ( item == null || item.Slot == null )
 			return;
 
-		item.Slot.anchoredPosition = new Vector2( 0f, y );
+		Vector2 pos = item.Slot.anchoredPosition;
+		item.Slot.anchoredPosition = new Vector2( pos.x, y );
 	}
 
 	ToastItem AcquireIdle()
@@ -969,19 +993,54 @@ public class ToastStackUI : MonoBehaviour
 		}
 	}
 
-	static Sprite ResolveIcon( Entry entry )
+	Sprite ResolveIcon( Entry entry )
 	{
 		if ( entry.Icon != null )
 			return entry.Icon;
 
-		if ( entry.Kind != Kind.Discovery || !entry.ShowPouchIcon )
-			return null;
+		if ( entry.Kind == Kind.Discovery && entry.ShowPouchIcon )
+		{
+			DiscoveryToastUI discovery = DiscoveryToastUI.Instance;
+			if ( discovery != null )
+			{
+				Sprite pouch = discovery.ResolvePouchSprite( entry.Pouch );
+				if ( pouch != null )
+					return pouch;
+			}
+		}
 
-		DiscoveryToastUI discovery = DiscoveryToastUI.Instance;
-		if ( discovery == null )
-			return null;
+		return FallbackIconForTier( entry.Tier );
+	}
 
-		return discovery.ResolvePouchSprite( entry.Pouch );
+	Sprite FallbackIconForTier( ToastTier tier )
+	{
+		switch ( tier )
+		{
+			case ToastTier.Completion:
+				if ( completionFallbackIcon != null )
+					return completionFallbackIcon;
+				break;
+			case ToastTier.Unlock:
+				if ( unlockFallbackIcon != null )
+					return unlockFallbackIcon;
+				break;
+			case ToastTier.Milestone:
+				if ( milestoneFallbackIcon != null )
+					return milestoneFallbackIcon;
+				break;
+			default:
+				if ( discoveryFallbackIcon != null )
+					return discoveryFallbackIcon;
+				break;
+		}
+
+		if ( discoveryFallbackIcon != null )
+			return discoveryFallbackIcon;
+		if ( unlockFallbackIcon != null )
+			return unlockFallbackIcon;
+		if ( completionFallbackIcon != null )
+			return completionFallbackIcon;
+		return milestoneFallbackIcon;
 	}
 
 	void ApplyIcon( ToastItem item, Sprite sprite, ToastTier tier )
@@ -1115,98 +1174,59 @@ public class ToastStackUI : MonoBehaviour
 		}
 	}
 
-	void EnsureRoot()
+	void BindSlots()
 	{
-		RectTransform root = transform as RectTransform;
-		if ( root == null )
-			root = gameObject.AddComponent<RectTransform>();
-
-		float height = MaxVisible * MaxSlotHeight() + ( MaxVisible - 1 ) * Spacing;
-		root.anchorMin = new Vector2( 0.5f, 1f );
-		root.anchorMax = new Vector2( 0.5f, 1f );
-		root.pivot = new Vector2( 0.5f, 1f );
-		root.anchoredPosition = new Vector2( 0f, -TopInset );
-		root.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, ToastWidth );
-		root.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );
-	}
-
-	void EnsureItems()
-	{
-		if ( _items != null && _items.Length == MaxVisible )
+		if ( slots == null || slots.Length == 0 )
+		{
+			_items = null;
 			return;
-
-		_items = new ToastItem[ MaxVisible ];
-		for ( int i = 0; i < MaxVisible; i++ )
-		{
-			_items[ i ] = CreateItem( i );
-			HideImmediate( _items[ i ] );
 		}
-	}
 
-	ToastItem CreateItem( int index )
-	{
-		float height = HeightForTier( ToastTier.Discovery );
-
-		GameObject slotGo = new GameObject( "ToastItem_" + index, typeof( RectTransform ) );
-		slotGo.transform.SetParent( transform, false );
-
-		RectTransform slot = slotGo.GetComponent<RectTransform>();
-		slot.anchorMin = new Vector2( 0.5f, 1f );
-		slot.anchorMax = new Vector2( 0.5f, 1f );
-		slot.pivot = new Vector2( 0.5f, 1f );
-		slot.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, ToastWidth );
-		slot.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );
-		slot.anchoredPosition = new Vector2( 0f, -index * ( height + Spacing ) );
-
-		GameObject contentGo = new GameObject( "Content", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ), typeof( CanvasGroup ), typeof( Outline ) );
-		contentGo.transform.SetParent( slot, false );
-
-		RectTransform content = contentGo.GetComponent<RectTransform>();
-		content.anchorMin = new Vector2( 0.5f, 1f );
-		content.anchorMax = new Vector2( 0.5f, 1f );
-		content.pivot = new Vector2( 0.5f, 1f );
-		content.anchoredPosition = Vector2.zero;
-		content.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, ToastWidth );
-		content.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );
-
-		Image backdrop = contentGo.GetComponent<Image>();
-		backdrop.color = DiscoveryBackdrop;
-		backdrop.raycastTarget = false;
-
-		Outline outline = contentGo.GetComponent<Outline>();
-		outline.effectColor = GoldOutline;
-		outline.effectDistance = new Vector2( 2f, 2f );
-		outline.useGraphicAlpha = true;
-
-		CanvasGroup group = contentGo.GetComponent<CanvasGroup>();
-		group.blocksRaycasts = false;
-		group.interactable = false;
-		group.alpha = 0f;
-
-		Image accent = CreateAccent( content );
-		Image icon = CreateIcon( content );
-		Text kicker = CreateKicker( content );
-		Text label = CreateLabel( content );
-		Text description = CreateDescription( content );
-
-		ToastItem item = new ToastItem
+		int count = slots.Length < MaxVisible ? slots.Length : MaxVisible;
+		_items = new ToastItem[ count ];
+		for ( int i = 0; i < count; i++ )
 		{
-			Slot = slot,
-			Content = content,
-			Group = group,
-			Backdrop = backdrop,
-			Outline = outline,
-			Accent = accent,
-			Icon = icon,
-			Kicker = kicker,
-			Label = label,
-			Description = description,
-			Height = height,
-			Tier = ToastTier.Discovery
-		};
+			ToastSlot binding = slots[ i ];
+			if ( binding == null || binding.Slot == null || binding.Content == null )
+			{
+				Debug.LogWarning( "ToastStackUI: slot " + i + " is missing Slot/Content references." );
+				continue;
+			}
 
-		EnsureItemFeedbacks( item );
-		return item;
+			ToastItem item = new ToastItem
+			{
+				Slot = binding.Slot,
+				Content = binding.Content,
+				Group = binding.Group != null ? binding.Group : binding.Content.GetComponent<CanvasGroup>(),
+				Backdrop = binding.Backdrop != null ? binding.Backdrop : binding.Content.GetComponent<Image>(),
+				Outline = binding.Outline != null ? binding.Outline : binding.Content.GetComponent<Outline>(),
+				Accent = binding.Accent,
+				Icon = binding.Icon,
+				Kicker = binding.Kicker,
+				Label = binding.Label,
+				Description = binding.Description,
+				Height = HeightForTier( ToastTier.Discovery ),
+				Tier = ToastTier.Discovery
+			};
+
+			_items[ i ] = item;
+			EnsureItemFeedbacks( item );
+			HideImmediate( item );
+		}
+
+		if ( labelFont != null )
+			SetLabelFont( labelFont );
+		else
+		{
+			for ( int i = 0; i < _items.Length; i++ )
+			{
+				ToastItem item = _items[ i ];
+				if ( item == null || item.Label == null || item.Label.font == null )
+					continue;
+				_labelFont = item.Label.font;
+				break;
+			}
+		}
 	}
 
 	void EnsureItemFeedbacks( ToastItem item )
@@ -1343,113 +1363,6 @@ public class ToastStackUI : MonoBehaviour
 			if ( sequence != null )
 				RetargetFeedbacks( sequence.Feedbacks, sourceGroup, sourceRect, sourceAccent, sourceIcon, sourceBackdrop, item );
 		}
-	}
-
-	Image CreateAccent( RectTransform parent )
-	{
-		GameObject accentGo = new GameObject( "Accent", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
-		accentGo.transform.SetParent( parent, false );
-
-		Image accent = accentGo.GetComponent<Image>();
-		RectTransform accentRect = accent.transform as RectTransform;
-		accentRect.anchorMin = new Vector2( 0f, 0f );
-		accentRect.anchorMax = new Vector2( 0f, 1f );
-		accentRect.pivot = new Vector2( 0f, 0.5f );
-		accentRect.anchoredPosition = Vector2.zero;
-		accentRect.sizeDelta = new Vector2( AccentWidthDiscovery, 0f );
-
-		accent.color = CoinAccent;
-		accent.raycastTarget = false;
-		return accent;
-	}
-
-	Image CreateIcon( RectTransform parent )
-	{
-		GameObject iconGo = new GameObject( "Icon", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
-		iconGo.transform.SetParent( parent, false );
-
-		Image icon = iconGo.GetComponent<Image>();
-		RectTransform iconRect = icon.transform as RectTransform;
-		iconRect.anchorMin = new Vector2( 0f, 0.5f );
-		iconRect.anchorMax = new Vector2( 0f, 0.5f );
-		iconRect.pivot = new Vector2( 0f, 0.5f );
-		iconRect.anchoredPosition = new Vector2( AccentWidthDiscovery + IconPadding, 0f );
-		iconRect.sizeDelta = new Vector2( IconSizeForTier( ToastTier.Discovery ), IconSizeForTier( ToastTier.Discovery ) );
-
-		icon.color = Color.white;
-		icon.raycastTarget = false;
-		icon.preserveAspect = true;
-		icon.enabled = false;
-		iconGo.SetActive( false );
-		return icon;
-	}
-
-	Text CreateKicker( RectTransform parent )
-	{
-		GameObject kickerGo = new GameObject( "Kicker", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
-		kickerGo.transform.SetParent( parent, false );
-
-		Text kicker = kickerGo.GetComponent<Text>();
-		kicker.font = ResolveFont();
-		kicker.fontSize = 16;
-		kicker.fontStyle = FontStyle.Bold;
-		kicker.color = GoldKicker;
-		kicker.horizontalOverflow = HorizontalWrapMode.Overflow;
-		kicker.verticalOverflow = VerticalWrapMode.Overflow;
-		kicker.raycastTarget = false;
-		kicker.supportRichText = false;
-		kicker.alignment = TextAnchor.LowerLeft;
-		kickerGo.SetActive( false );
-		return kicker;
-	}
-
-	Text CreateLabel( RectTransform parent )
-	{
-		GameObject labelGo = new GameObject( "Label", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
-		labelGo.transform.SetParent( parent, false );
-
-		Text label = labelGo.GetComponent<Text>();
-		label.font = ResolveFont();
-		label.fontSize = 26;
-		label.fontStyle = FontStyle.Bold;
-		label.color = Color.white;
-		label.horizontalOverflow = HorizontalWrapMode.Overflow;
-		label.verticalOverflow = VerticalWrapMode.Overflow;
-		label.raycastTarget = false;
-		label.supportRichText = false;
-
-		ToastItem layout = new ToastItem { Label = label };
-		ApplyLabelLayout( layout, false, false, false, ToastTier.Discovery );
-		return label;
-	}
-
-	Text CreateDescription( RectTransform parent )
-	{
-		GameObject descGo = new GameObject( "Description", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Text ) );
-		descGo.transform.SetParent( parent, false );
-
-		Text description = descGo.GetComponent<Text>();
-		description.font = ResolveFont();
-		description.fontSize = 16;
-		description.fontStyle = FontStyle.Normal;
-		description.color = DescriptionColor;
-		description.horizontalOverflow = HorizontalWrapMode.Wrap;
-		description.verticalOverflow = VerticalWrapMode.Truncate;
-		description.raycastTarget = false;
-		description.supportRichText = false;
-		description.alignment = TextAnchor.UpperLeft;
-		descGo.SetActive( false );
-		return description;
-	}
-
-	Font ResolveFont()
-	{
-		if ( _labelFont != null )
-			return _labelFont;
-		Font font = Resources.GetBuiltinResource<Font>( "LegacyRuntime.ttf" );
-		if ( font == null )
-			font = Resources.GetBuiltinResource<Font>( "Arial.ttf" );
-		return font;
 	}
 
 	static void StopItemFeedbacks( ToastItem item )

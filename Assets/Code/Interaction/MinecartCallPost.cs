@@ -208,7 +208,7 @@ public class MinecartCallPost : InteractableBase
 
 	bool EnsureBoundTrack()
 	{
-		if ( _bound && track != null && track.IsUsable )
+		if ( _bound && track != null && track.IsTravelReady )
 			return true;
 
 		if ( track == null )
@@ -219,7 +219,7 @@ public class MinecartCallPost : InteractableBase
 				track = nearest;
 		}
 
-		_bound = track != null && track.IsUsable;
+		_bound = track != null && track.IsTravelReady;
 		return _bound;
 	}
 

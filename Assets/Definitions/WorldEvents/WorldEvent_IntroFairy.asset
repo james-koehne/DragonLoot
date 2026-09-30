@@ -24,31 +24,5 @@ MonoBehaviour:
     excludeGoldBars: 0
     requireGoldBars: 0
     delaySeconds: 2
-  actions:
-  - type: 1
-    delayBefore: 0
-    onlyDelayThisAction: 0
-    waitUntilFinished: 0
-    dialogue: []
-    addressableKey: Companions/FairyHelper
-    spawnPointId: 
-    spawnWorldPosition: {x: 0, y: 0, z: 0}
-    useWorldPosition: 0
-    spawnAtPlayer: 1
-    tutorialTitle: 
-    tutorialObjectiveText: 
-    markerTargetId: 
-    audioClip: {fileID: 0}
-    audioVolumeMin: 1
-    audioVolumeMax: 1
-    audioPitchMin: 1
-    audioPitchMax: 1
-    audioSpatialBlend: 0
-    audioMinDistance: 1
-    audioMaxDistance: 20
-    audioAtPlayer: 0
-    audioUseWorldPosition: 0
-    lanternRevealId: 
-    cinematicPresentationId: 
-    playerBrakeDuration: 1
+  actions: []
   sessionOnly: 1

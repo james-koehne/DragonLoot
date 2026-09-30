@@ -2,9 +2,11 @@
 using UnityEditor;
 
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 
 /// <summary>
-/// Ensures <see cref="BuildModeDefinition"/> exists, is Addressable, and has the Build Ghost shader assigned.
+/// Ensures <see cref="BuildModeDefinition"/> exists, is Addressable, has the Build Ghost shader,
+/// and wires <see cref="BuildModeDefinition.hammerPrefab"/> to HeldHammer when empty.
 /// </summary>
 public static class BuildModeBootstrap
 {
@@ -47,28 +49,61 @@ public static class BuildModeBootstrap
 			def = AssetDatabase.LoadAssetAtPath<BuildModeDefinition>( DefinitionPath );
 		}
 
+		bool dirty = false;
 		if ( def == null )
 		{
 			def = ScriptableObject.CreateInstance<BuildModeDefinition>();
 			def.name = "BuildModeDefinition";
 			ApplyDefaults( def, shader );
 			AssetDatabase.CreateAsset( def, DefinitionPath );
-			AssetDatabase.SaveAssets();
+			dirty = true;
 		}
-		else if ( def.ghostShader == null && shader != null )
+		else
 		{
-			def.ghostShader = shader;
+			if ( def.ghostShader == null && shader != null )
+			{
+				def.ghostShader = shader;
+				dirty = true;
+			}
+
+			// Migrate old carry-centered defaults to FPS bottom-right if still on the original values.
+			if ( Approximately( def.hammerLocalOffset, new Vector3( 0.05f, -0.05f, 0.08f ) ) )
+			{
+				def.hammerLocalOffset = new Vector3( 0.32f, -0.28f, 0.45f );
+				def.hammerLocalEuler = new Vector3( 8f, 25f, -15f );
+				def.hammerLocalScale = 0.45f;
+				dirty = true;
+			}
+		}
+
+		GameObject held = WorldHammerPrefabMenu.EnsureHeldHammer();
+		if ( held != null && ( def.hammerPrefab == null || !def.hammerPrefab.RuntimeKeyIsValid() ) )
+		{
+			string guid = AssetDatabase.AssetPathToGUID( WorldHammerPrefabMenu.HeldHammerPath );
+			if ( !string.IsNullOrEmpty( guid ) )
+			{
+				def.hammerPrefab = new AssetReferenceGameObject( guid );
+				dirty = true;
+			}
+		}
+
+		if ( dirty )
+		{
 			EditorUtility.SetDirty( def );
 			AssetDatabase.SaveAssets();
 		}
 
-		AddressableEditorUtil.TryRegister( DefinitionPath, DefinitionPath );
+		AddressableEditorUtil.TryRegister( DefinitionPath, "BuildModeDefinition", "Definition" );
 		return def;
+	}
+
+	static bool Approximately( Vector3 a, Vector3 b )
+	{
+		return ( a - b ).sqrMagnitude < 0.0001f;
 	}
 
 	static void ApplyDefaults( BuildModeDefinition def, Shader shader )
 	{
-		def.showRadius = 20f;
 		def.fadeStart = 12f;
 		def.fadeEnd = 18f;
 		def.buildHoldSeconds = 2f;
@@ -81,9 +116,19 @@ public static class BuildModeBootstrap
 		def.ghostPulseSpeed = 0.85f;
 		def.ghostRimIntensity = 1.15f;
 		def.ghostCoreIntensity = 0.28f;
-		def.hammerLocalOffset = new Vector3( 0.05f, -0.05f, 0.08f );
-		def.hammerLocalEuler = new Vector3( 10f, 0f, -20f );
-		def.hammerLocalScale = 0.35f;
+		def.hammerLocalOffset = new Vector3( 0.32f, -0.28f, 0.45f );
+		def.hammerLocalEuler = new Vector3( 8f, 25f, -15f );
+		def.hammerLocalScale = 0.45f;
+		def.hammerDrawSeconds = 0.42f;
+		def.hammerHolsterSeconds = 0.22f;
+		def.hammerHolsterOffset = new Vector3( 0.12f, -0.35f, -0.15f );
+		def.hammerHolsterEuler = new Vector3( 40f, 35f, -25f );
+		def.hammerDrawTossHeight = 0.14f;
+		def.hammerDrawSpinRevolutions = 1.15f;
+		def.hammerDrawSpinAxis = new Vector3( 1f, 0.15f, 0.35f );
+		def.hammerWorldPickupSeconds = 0.45f;
+		def.hammerWorldPickupArcHeight = 0.35f;
+		def.hammerHolsterBumpHeight = 0.06f;
 	}
 }
 #endif

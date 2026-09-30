@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: M_DustMote
-  m_Shader: {fileID: 0}
+  m_Shader: {fileID: 4800000, guid: d09ee74edfbb3eb4381675b7aff7c050, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -44,6 +44,7 @@ Material:
     - _CoreHotness: 0.55
     - _Cull: 0
     - _DstBlend: 1
+    - _EmissionIntensity: 3
     - _Exposure: 1.15
     - _FlickerAmount: 0.08
     - _FlickerSpeed: 6

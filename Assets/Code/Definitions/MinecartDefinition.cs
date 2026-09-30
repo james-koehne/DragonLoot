@@ -48,11 +48,11 @@ public class MinecartDefinition : ScriptableObject
 	public float trackSnapRadius = 4f;
 
 	[Header( "Junctions" )]
-	[Tooltip( "Along-track distance from a baked junction where look is sampled once and the exit is committed." )]
+	[Tooltip( "Along-track distance from a baked junction where A/D steer is read and the exit is committed." )]
 	[Min( 0.1f )]
 	public float junctionApproachRadius = 2.5f;
 
-	[Tooltip( "Minimum |look · exit tangent| to treat a branch as a clear look match. Below this, prefer continuing on the current track." )]
+	[Tooltip( "Minimum side-align score for A/D to pick a branch. Below this, prefer continuing on the current track." )]
 	[Range( 0f, 1f )]
 	public float junctionLookMinAlign = 0.15f;
 
@@ -107,6 +107,27 @@ public class MinecartDefinition : ScriptableObject
 	[Min( 0f )]
 	public float unloadScatterRadius = 0.35f;
 
+	[Header( "Hop" )]
+	[Tooltip( "Base visual lift applied to VisualRoot while hopping over another cart." )]
+	[Min( 0.05f )]
+	public float hopHeight = 0.75f;
+
+	[Tooltip( "Minimum visual sine-arc duration for the lead car (followers stagger after this)." )]
+	[Min( 0.1f )]
+	public float hopDuration = 0.45f;
+
+	[Tooltip( "Per-car delay before each follower starts its hop arc." )]
+	[Min( 0f )]
+	public float hopStaggerDelay = 0.06f;
+
+	[Tooltip( "Extra hop height scaled by follower count in the hopping consist." )]
+	[Min( 0f )]
+	public float hopHeightPerExtraCar = 0.12f;
+
+	[Tooltip( "Extra hop height scale from blocker BlockingHalfLength / hopping cart half-length." )]
+	[Min( 0f )]
+	public float hopBlockerScale = 0.25f;
+
 	void OnValidate()
 	{
 		pushAttachRadius = Mathf.Max( 0.5f, pushAttachRadius );
@@ -131,5 +152,10 @@ public class MinecartDefinition : ScriptableObject
 		maxStackPerCell = Mathf.Max( 0, maxStackPerCell );
 		unloadDetectRadius = Mathf.Max( 0.5f, unloadDetectRadius );
 		unloadScatterRadius = Mathf.Max( 0f, unloadScatterRadius );
+		hopHeight = Mathf.Max( 0.05f, hopHeight );
+		hopDuration = Mathf.Max( 0.1f, hopDuration );
+		hopStaggerDelay = Mathf.Max( 0f, hopStaggerDelay );
+		hopHeightPerExtraCar = Mathf.Max( 0f, hopHeightPerExtraCar );
+		hopBlockerScale = Mathf.Max( 0f, hopBlockerScale );
 	}
 }

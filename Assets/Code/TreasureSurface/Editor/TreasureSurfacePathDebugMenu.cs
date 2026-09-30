@@ -58,7 +58,10 @@ public static class TreasureSurfacePathDebugMenu
 			settings.FindPropertyRelative( "edgeMargin" ).floatValue = defaults.edgeMargin;
 			settings.FindPropertyRelative( "edgePenalty" ).floatValue = defaults.edgePenalty;
 			settings.FindPropertyRelative( "maxStepHeight" ).floatValue = defaults.maxStepHeight;
+			settings.FindPropertyRelative( "uphillWeight" ).floatValue = defaults.uphillWeight;
 			settings.FindPropertyRelative( "searchPadding" ).floatValue = defaults.searchPadding;
+			settings.FindPropertyRelative( "navStride" ).intValue = defaults.navStride;
+			settings.FindPropertyRelative( "maxSearchCells" ).intValue = defaults.maxSearchCells;
 			settings.FindPropertyRelative( "allowDiagonal" ).boolValue = defaults.allowDiagonal;
 		}
 

@@ -38,6 +38,7 @@ public static class DragonLootMenus
 
 	public const string GraphicsCompleteGlowRebuildAll = Root + "/Graphics/Complete Glow/Rebuild All In Open Scenes";
 	public const string GraphicsCompleteGlowEnsurePresets = Root + "/Graphics/Complete Glow/Ensure Presets";
+	public const string GraphicsCompleteGlowEnsureRevealParticles = Root + "/Graphics/Complete Glow/Ensure Reveal Particle Prefabs";
 	public const string GameObjectBuildCompleteGlow = "GameObject/DragonLoot/Build Complete Glow";
 
 	// --- Coin Stack ---
@@ -63,6 +64,8 @@ public static class DragonLootMenus
 	public const string StationsCleaningPlace = Root + "/Stations/Cleaning/Place In Level";
 	public const string StationsCoinSortingCreate = Root + "/Stations/Coin Sorting/Create Setup";
 	public const string StationsCoinSortingPlace = Root + "/Stations/Coin Sorting/Place In Level";
+	public const string StationsCoffeeSetup = Root + "/Stations/Coffee/Setup Coffee Machine Prefab";
+	public const string DefinitionsEnsureCoffeeMachine = Root + "/Definitions/Ensure Coffee Machine Definition";
 
 	// --- Treasure surface ---
 	public const string TreasureSurfaceEditor = Root + "/Treasure Surface/Open Editor";
@@ -78,6 +81,9 @@ public static class DragonLootMenus
 	public const string MinecartCreateTrack = Root + "/Minecart/Create Track";
 	public const string MinecartCreateUnloadPoint = Root + "/Minecart/Create Unload Point";
 	public const string MinecartCreateCallPost = Root + "/Minecart/Create Call Post";
+	public const string MinecartCreateInputStation = Root + "/Minecart/Create Input Station";
+	public const string MinecartCreateOutputStation = Root + "/Minecart/Create Output Station";
+	public const string MinecartBuildStations = Root + "/Minecart/Build Station Prefabs";
 	public const string MinecartCreateJunctionGraph = Root + "/Minecart/Create Junction Graph";
 	public const string MinecartRebuildJunctions = Root + "/Minecart/Rebuild Junctions";
 	public const string MinecartPatchAudio = Root + "/Minecart/Patch Move & Brake Audio";
@@ -87,6 +93,8 @@ public static class DragonLootMenus
 	public const string GameObjectMinecartTrack = "GameObject/DragonLoot/Minecart Track";
 	public const string GameObjectMinecartUnloadPoint = "GameObject/DragonLoot/Minecart Unload Point";
 	public const string GameObjectMinecartCallPost = "GameObject/DragonLoot/Minecart Call Post";
+	public const string GameObjectMinecartInputStation = "GameObject/DragonLoot/Minecart Input Station";
+	public const string GameObjectMinecartOutputStation = "GameObject/DragonLoot/Minecart Output Station";
 	public const string GameObjectMinecartJunctionGraph = "GameObject/DragonLoot/Minecart Junction Graph";
 
 	// --- World ---
@@ -108,6 +116,7 @@ public static class DragonLootMenus
 	// --- Build ---
 	public const string BuildWrapSelectionAsBuildable = Root + "/Build/Wrap Selection As Buildable";
 	public const string BuildCreateWorldHammerPrefab = Root + "/Build/Create World Hammer Prefab";
+	public const string BuildCreateHeldHammerPrefab = Root + "/Build/Create Held Hammer Prefab";
 
 	// --- Tutorials ---
 	public const string TutorialsInstallCatalog = Root + "/Tutorials/Install Catalog";
@@ -120,6 +129,7 @@ public static class DragonLootMenus
 	public const string DefinitionsEnsureIslandObjectives = Root + "/Definitions/Ensure Island Objectives";
 	public const string DefinitionsEnsureDigPickupSpeedUpgrade = Root + "/Definitions/Ensure Dig Pickup Speed Upgrade";
 	public const string DefinitionsEnsureObjectiveFeedbacks = Root + "/Definitions/Ensure Objective HUD Feedbacks";
+	public const string DefinitionsEnsureToastStack = Root + "/Definitions/Ensure Toast Stack";
 	public const string DefinitionsEnsureIslandCompleteWorldEvents = Root + "/Definitions/Ensure Island Complete World Events";
 	public const string DefinitionsEnsureBuildMode = Root + "/Definitions/Ensure Build Mode Definition";
 	public const string DefinitionsEnsureBuildModeTutorial = Root + "/Definitions/Ensure Build Mode Tutorial";
@@ -129,6 +139,7 @@ public static class DragonLootMenus
 
 	// --- Dragon ---
 	public const string DragonSetupLookAt = Root + "/Dragon/Setup Look-At";
+	public const string DragonSetupSpellCast = Root + "/Dragon/Setup Spell Cast";
 
 	// --- Cinematic ---
 	public const string CinematicCreateIntroSplines = Root + "/Cinematic/Create Intro Splines";

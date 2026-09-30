@@ -15,5 +15,6 @@ public enum TreasureOwnerKind
 	CoinSortingStation,
 	CleaningStation,
 	GroundGoldBarStack,
-	GoldBarTable
+	GoldBarTable,
+	CoffeeMachine
 }

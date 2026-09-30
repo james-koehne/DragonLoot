@@ -50,6 +50,12 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	int _visualTriCount;
 	bool _visualTrisDirty;
 	bool _visualIndicesBuilt;
+	bool _visualOccupancyDirtyFull;
+	bool _hasVisualOccupancyDirty;
+	int _visualOccupancyDirtyMinX;
+	int _visualOccupancyDirtyMaxX;
+	int _visualOccupancyDirtyMinZ;
+	int _visualOccupancyDirtyMaxZ;
 	MaterialPropertyBlock _mpb;
 	GoldPileHeightfield _heightfield;
 	readonly GoldPileColliderTiles _colliderTiles = new GoldPileColliderTiles();
@@ -210,6 +216,30 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 			out int minX, out int maxX, out int minZ, out int maxZ, out bool full ) )
 		{
 			QueueColliderDirty( minX, maxX, minZ, maxZ, full );
+			// Stash before UploadIfDirty clears the heightfield dirty rect.
+			if ( !_hasVisualOccupancyDirty || _visualOccupancyDirtyFull )
+			{
+				_visualOccupancyDirtyMinX = minX;
+				_visualOccupancyDirtyMaxX = maxX;
+				_visualOccupancyDirtyMinZ = minZ;
+				_visualOccupancyDirtyMaxZ = maxZ;
+				_visualOccupancyDirtyFull = full;
+			}
+			else if ( !full )
+			{
+				if ( minX < _visualOccupancyDirtyMinX )
+					_visualOccupancyDirtyMinX = minX;
+				if ( maxX > _visualOccupancyDirtyMaxX )
+					_visualOccupancyDirtyMaxX = maxX;
+				if ( minZ < _visualOccupancyDirtyMinZ )
+					_visualOccupancyDirtyMinZ = minZ;
+				if ( maxZ > _visualOccupancyDirtyMaxZ )
+					_visualOccupancyDirtyMaxZ = maxZ;
+			}
+			else
+				_visualOccupancyDirtyFull = true;
+
+			_hasVisualOccupancyDirty = true;
 		}
 
 		// Coalesce multiple carves in one frame into a single Apply + MPB write.
@@ -308,13 +338,25 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 		if ( _visualTrisDirty )
 		{
-			if ( phaseSw != null )
-				phaseSw.Restart();
-			RebuildVisualTriangles();
-			if ( phaseSw != null )
+			// Shader already clips below-ground rim quads. On large (1024²) piles, SetTriangles
+			// is ~7ms — skip play-mode rebuilds entirely and only refresh topology in edit mode.
+			if ( !Application.isPlaying )
 			{
-				phaseSw.Stop();
-				GoldPileEditTiming.Record( "flush.visualTris", phaseSw.Elapsed.TotalMilliseconds );
+				if ( phaseSw != null )
+					phaseSw.Restart();
+				RebuildVisualTriangles();
+				if ( phaseSw != null )
+				{
+					phaseSw.Stop();
+					GoldPileEditTiming.Record(
+						"flush.visualTris",
+						phaseSw.Elapsed.TotalMilliseconds,
+						_visualIndicesBuilt ? "occupancy" : "init" );
+				}
+			}
+			else
+			{
+				_visualTrisDirty = false;
 			}
 		}
 
@@ -638,6 +680,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	/// <summary>
 	/// Resamples per-vertex above-ground flags. Returns true when occupancy changed (or when
 	/// there is no heightfield, in which case every quad is kept).
+	/// Digs only resample the dirty heightfield rect — full 1024² scans hitch every dig.
 	/// </summary>
 	bool RefreshVertexOccupancy()
 	{
@@ -645,6 +688,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		{
 			bool changed = _vertAboveGround != null;
 			_vertAboveGround = null;
+			_hasVisualOccupancyDirty = false;
 			return changed;
 		}
 
@@ -654,18 +698,43 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		{
 			_vertAboveGround = new bool[ vertCount ];
 			occupancyChanged = true;
+			_visualOccupancyDirtyFull = true;
 		}
 
+		int resX = _visualResolutionX;
+		int resZ = _visualResolutionZ;
 		float ground = _heightfield.GroundLevel;
-		for ( int i = 0; i < vertCount; i++ )
-		{
-			Vector3 v = _baseVerts[ i ];
-			bool above = _heightfield.SampleSurfaceHeight( v.x, v.z ) >= ground;
-			if ( above == _vertAboveGround[ i ] )
-				continue;
 
-			_vertAboveGround[ i ] = above;
-			occupancyChanged = true;
+		int minX = 0;
+		int maxX = resX - 1;
+		int minZ = 0;
+		int maxZ = resZ - 1;
+		if ( _hasVisualOccupancyDirty && !_visualOccupancyDirtyFull )
+		{
+			// Visual verts share heightfield resolution; pad 1 so rim quads update with neighbors.
+			minX = Mathf.Clamp( _visualOccupancyDirtyMinX - 1, 0, resX - 1 );
+			maxX = Mathf.Clamp( _visualOccupancyDirtyMaxX + 1, 0, resX - 1 );
+			minZ = Mathf.Clamp( _visualOccupancyDirtyMinZ - 1, 0, resZ - 1 );
+			maxZ = Mathf.Clamp( _visualOccupancyDirtyMaxZ + 1, 0, resZ - 1 );
+		}
+
+		_hasVisualOccupancyDirty = false;
+		_visualOccupancyDirtyFull = false;
+
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			int row = z * resX;
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				int i = row + x;
+				Vector3 v = _baseVerts[ i ];
+				bool above = _heightfield.SampleSurfaceHeight( v.x, v.z ) >= ground;
+				if ( above == _vertAboveGround[ i ] )
+					continue;
+
+				_vertAboveGround[ i ] = above;
+				occupancyChanged = true;
+			}
 		}
 
 		return occupancyChanged;

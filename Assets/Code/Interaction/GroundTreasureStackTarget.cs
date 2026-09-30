@@ -164,11 +164,11 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 			if ( stack == null )
 			{
 				stack = GroundCoinStack.CreateAt( _baseItem.transform.position, _baseItem.transform.rotation );
-				stack.AbsorbSettledImmediate( _baseItem );
+				stack.AbsorbSettledImmediate( _baseItem, playerDirected: true );
 			}
 			else if ( !( _baseItem.Owner is GroundCoinStack owned && owned == stack ) )
 			{
-				stack.TryAbsorbLooseImmediate( _baseItem );
+				stack.TryAbsorbLooseImmediate( _baseItem, playerDirected: true );
 			}
 
 			for ( int i = 0; i < coinCluster.Count; i++ )
@@ -183,7 +183,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 					continue;
 				}
 
-				stack.BeginAppendFlight( member, stack.transform.rotation );
+				stack.BeginAppendFlight( member, stack.transform.rotation, playerDirected: true );
 			}
 
 			stack.TryMergeNearby();

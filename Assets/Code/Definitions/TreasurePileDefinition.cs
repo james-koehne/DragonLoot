@@ -124,7 +124,7 @@ public class TreasurePileDefinition : ScriptableObject
 	public float treasureReleaseOutsideFraction = 0.9f;
 
 	[Header( "Column / Pile Clear" )]
-	[Tooltip( "When a column is near the loot floor and its coin reserve is below this, flush the reserve as loose coins and hide GPU seats." )]
+	[Tooltip( "Column spill only when reserve is at most this many coins (1–2) and the column is at the loot floor. Thicker columns never spill mid-dig." )]
 	[Min( 0.5f )]
 	public float columnNearEmptyReserve = 2f;
 

@@ -42,6 +42,10 @@ MonoBehaviour:
   sortPitchMin: 0.95
   sortPitchMax: 1.05
   sortPlayInterval: 1
+  autoPullFromNearbyStorage: 1
+  storagePullRadius: 3
+  storagePullInterval: 0.35
+  storagePullFlightDuration: 0.32
   fullStackLateralOffset: 0.35
   sortedCoinFlightDuration: 0.28
   sortedCoinFlightArcHeight: 0.35

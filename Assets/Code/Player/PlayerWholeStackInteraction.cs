@@ -17,7 +17,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	static readonly List<TreasureDefinition> DefinitionScratch = new List<TreasureDefinition>( 128 );
 	static readonly List<TreasureItem> ItemScratch = new List<TreasureItem>( 128 );
 	static readonly List<TreasureItem> PlaceScratch = new List<TreasureItem>( 128 );
-	static readonly List<TreasureDefinition> UniqueCoinTypesScratch = new List<TreasureDefinition>( 16 );
 	static readonly List<TreasureDefinition> TypeBatchScratch = new List<TreasureDefinition>( 64 );
 	static readonly List<TreasureDefinition> RemainderScratch = new List<TreasureDefinition>( 128 );
 
@@ -366,7 +365,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( carry.GetBucketCount( kind ) <= 0 )
 			return;
 
-		carry.TrySetSelectedBucket( kind );
+		if ( !carry.TrySetSelectedBucket( kind ) )
+			carry.NotifyPouchReselected();
 	}
 
 	void TickPickupCharge()
@@ -916,127 +916,82 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( carry == null || mixedTable == null || defs == null || defs.Count == 0 )
 			return;
 
-		CollectUniqueCoinTypes( defs, UniqueCoinTypesScratch );
-		RemainderScratch.Clear();
+		TreasureDefinition probe = null;
+		for ( int i = 0; i < defs.Count; i++ )
+		{
+			if ( defs[ i ] != null && defs[ i ].category == TreasureCategory.Coin )
+			{
+				probe = defs[ i ];
+				break;
+			}
+		}
+
+		if ( probe == null )
+			return;
+
+		if ( !mixedTable.TryFindWholeCoinPlaceSlot(
+			probe,
+			in query,
+			out int slotIndex,
+			out Vector3 endPos,
+			out Quaternion endRot ) )
+		{
+			carry.TryAbsorbDefinitionsAtHeldBottom( defs, CarryBucketKind.Coin, promoteIfEmpty: true );
+			return;
+		}
+
+		int room = mixedTable.GetSlotCoinAppendCapacity( slotIndex, probe );
+		if ( room <= 0 )
+		{
+			carry.TryAbsorbDefinitionsAtHeldBottom( defs, CarryBucketKind.Coin, promoteIfEmpty: true );
+			return;
+		}
+
+		List<TreasureDefinition> flying;
+		List<TreasureDefinition> remainder = null;
+		if ( room >= defs.Count )
+		{
+			flying = new List<TreasureDefinition>( defs );
+		}
+		else
+		{
+			flying = new List<TreasureDefinition>( room );
+			remainder = new List<TreasureDefinition>( defs.Count - room );
+			for ( int i = 0; i < defs.Count; i++ )
+			{
+				if ( i < room )
+					flying.Add( defs[ i ] );
+				else
+					remainder.Add( defs[ i ] );
+			}
+		}
 
 		CarryDefinition carryDef = null;
 		carryDef = RuntimeDefinition.Resolve( ref carryDef );
 		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
 		float seed = carry.CoinHandVariationSeed;
-		int flightIndex = 0;
+		ITreasureDisplayStackOwner display = mixedTable;
+		int capturedSlot = slotIndex;
+		Vector3 capturedEndPos = endPos;
 
-		for ( int t = 0; t < UniqueCoinTypesScratch.Count; t++ )
-		{
-			TreasureDefinition coinType = UniqueCoinTypesScratch[ t ];
-			if ( coinType == null )
-				continue;
-
-			TypeBatchScratch.Clear();
-			for ( int i = 0; i < defs.Count; i++ )
+		CoinStackFlight.FlyToWorld(
+			flying,
+			startPos,
+			startRot,
+			seed,
+			endPos,
+			endRot,
+			duration,
+			() =>
 			{
-				if ( defs[ i ] == coinType )
-					TypeBatchScratch.Add( defs[ i ] );
-			}
+				if ( display != null )
+					display.TryAppendSlotDefinitions( capturedSlot, flying );
 
-			if ( TypeBatchScratch.Count == 0 )
-				continue;
+				CoinStackInteractSfx.PlayStackPlace( capturedEndPos );
+			} );
 
-			if ( !mixedTable.TryFindWholeCoinPlaceSlot(
-				coinType,
-				in query,
-				out int slotIndex,
-				out Vector3 endPos,
-				out Quaternion endRot ) )
-			{
-				RemainderScratch.AddRange( TypeBatchScratch );
-				continue;
-			}
-
-			int room = mixedTable.GetSlotCoinAppendCapacity( slotIndex, coinType );
-			if ( room <= 0 )
-			{
-				RemainderScratch.AddRange( TypeBatchScratch );
-				continue;
-			}
-
-			List<TreasureDefinition> flying;
-			if ( room >= TypeBatchScratch.Count )
-			{
-				flying = new List<TreasureDefinition>( TypeBatchScratch );
-			}
-			else
-			{
-				flying = new List<TreasureDefinition>( room );
-				for ( int i = 0; i < TypeBatchScratch.Count; i++ )
-				{
-					if ( i < room )
-						flying.Add( TypeBatchScratch[ i ] );
-					else
-						RemainderScratch.Add( TypeBatchScratch[ i ] );
-				}
-			}
-
-			if ( flying.Count == 0 )
-				continue;
-
-			ITreasureDisplayStackOwner display = mixedTable;
-			int capturedSlot = slotIndex;
-			Vector3 capturedEndPos = endPos;
-			float capturedSeed = seed + flightIndex * 0.137f;
-			flightIndex++;
-
-			CoinStackFlight.FlyToWorld(
-				flying,
-				startPos,
-				startRot,
-				capturedSeed,
-				endPos,
-				endRot,
-				duration,
-				() =>
-				{
-					if ( display != null )
-						display.TryAppendSlotDefinitions( capturedSlot, flying );
-
-					CoinStackInteractSfx.PlayStackPlace( capturedEndPos );
-				} );
-		}
-
-		if ( RemainderScratch.Count > 0 )
-			carry.TryAbsorbDefinitionsAtHeldBottom( RemainderScratch, CarryBucketKind.Coin, promoteIfEmpty: true );
-
-		UniqueCoinTypesScratch.Clear();
-		TypeBatchScratch.Clear();
-		RemainderScratch.Clear();
-	}
-
-	static void CollectUniqueCoinTypes(
-		IReadOnlyList<TreasureDefinition> defs,
-		List<TreasureDefinition> unique )
-	{
-		unique.Clear();
-		if ( defs == null )
-			return;
-
-		for ( int i = 0; i < defs.Count; i++ )
-		{
-			TreasureDefinition def = defs[ i ];
-			if ( def == null )
-				continue;
-
-			bool seen = false;
-			for ( int j = 0; j < unique.Count; j++ )
-			{
-				if ( unique[ j ] == def )
-				{
-					seen = true;
-					break;
-				}
-			}
-
-			if ( !seen )
-				unique.Add( def );
-		}
+		if ( remainder != null && remainder.Count > 0 )
+			carry.TryAbsorbDefinitionsAtHeldBottom( remainder, CarryBucketKind.Coin, promoteIfEmpty: true );
 	}
 
 	bool TryBuildPlacementQuery( out PlacementQuery query )
@@ -1126,7 +1081,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				if ( stack == null )
 					return;
 
-				stack.TryAppendDefinitions( definitions );
+				stack.TryAppendDefinitions( definitions, playerDirected: true );
 				if ( !stack.HasInFlight )
 					stack.TryMergeNearby();
 
@@ -1157,7 +1112,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				continue;
 			}
 
-			stack.BeginAppendFlight( member, stack.transform.rotation );
+			stack.BeginAppendFlight( member, stack.transform.rotation, playerDirected: true );
 		}
 
 		stack.AbsorbNearbyLooseCoins();

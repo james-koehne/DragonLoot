@@ -12,8 +12,8 @@ namespace FeedbackSystem
 
 		public static float SampleVolume( float min, float max )
 		{
-			float lo = Mathf.Clamp01( Mathf.Min( min, max ) );
-			float hi = Mathf.Clamp01( Mathf.Max( min, max ) );
+			float lo = Mathf.Max( 0f, Mathf.Min( min, max ) );
+			float hi = Mathf.Max( 0f, Mathf.Max( min, max ) );
 			if ( Mathf.Approximately( lo, hi ) )
 				return lo;
 
@@ -62,12 +62,32 @@ namespace FeedbackSystem
 				audioSource.minDistance = Mathf.Max( 0.01f, minDistance );
 				audioSource.maxDistance = Mathf.Max( audioSource.minDistance, maxDistance );
 				audioSource.pitch = pitch;
-				audioSource.PlayOneShot( clip, volume );
+				ApplyVolumeAndPlay( audioSource, clip, volume );
 				FeedbackAudioFollower.Attach( audioSource, followTransform );
 				return;
 			}
 
 			FeedbackAudioPool.Play( clip, volume, pitch, position, spatialBlend, minDistance, maxDistance, followTransform );
+		}
+
+		/// <summary>
+		/// PlayOneShot volumeScale is effectively 0–1; values above 1 boost via AudioSource.volume.
+		/// </summary>
+		public static void ApplyVolumeAndPlay( AudioSource source, AudioClip clip, float volume )
+		{
+			if ( source == null || clip == null )
+				return;
+
+			float gain = Mathf.Max( 0f, volume );
+			if ( gain <= 1f )
+			{
+				source.volume = 1f;
+				source.PlayOneShot( clip, gain );
+				return;
+			}
+
+			source.volume = Mathf.Min( gain, 4f );
+			source.PlayOneShot( clip, 1f );
 		}
 	}
 }

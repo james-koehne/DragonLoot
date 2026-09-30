@@ -51,7 +51,7 @@ sealed class GoldPileSculptOverlay : IMGUIOverlay, ITransientOverlay
 			if ( GUILayout.Button( "Reset To Mound" ) )
 			{
 				Undo.RecordObject( visual, "Reset Gold Pile Mound" );
-				visual.ResetAuthoredToMound();
+				visual.ResetAuthoredToEmpty();
 				GoldPileSculptToolContext.Painter.RebuildPreview( visual );
 				EditorUtility.SetDirty( visual );
 			}

@@ -24,7 +24,6 @@ public class InterfaceController : MonoBehaviour, IInterfaceController
 	[SerializeField] private CanvasGroup loadingGroup;
 	[SerializeField] private TweenInstance<Transform, float> currentFadeTween;
 
-	private bool isSetup = false;
 	private bool manualQuit = false;
 	private bool quitting = false;
 	private bool settingInterfaceState = false;
@@ -46,8 +45,6 @@ public class InterfaceController : MonoBehaviour, IInterfaceController
 				uiControllers[ i ].SetVisibility( false );
 			}
 		}
-
-		isSetup = true;
 	}
 
 	public void HideError()

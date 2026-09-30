@@ -42,6 +42,13 @@ public static class QuestObjectiveFeedbackPostprocessor
 
 	public static void EnsureFeedbacksOnPrefab()
 	{
+		var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+		if ( stage != null && stage.assetPath == InterfacePrefabPath )
+		{
+			Debug.LogWarning( "QuestObjectiveFeedbackPostprocessor: Interface prefab is open in Prefab Mode — skipping auto-patch to avoid stomping unsaved edits." );
+			return;
+		}
+
 		GameObject root = PrefabUtility.LoadPrefabContents( InterfacePrefabPath );
 		if ( root == null )
 			return;
@@ -62,6 +69,7 @@ public static class QuestObjectiveFeedbackPostprocessor
 				return;
 			}
 
+			bool dirty = false;
 			AttentionChrome attention = EnsureAttentionOverlay( quest );
 			EnsureTitleDiamondRow( quest, attention );
 			Feedbacks showFeedback = EnsureShowChild( quest, attention );
@@ -71,23 +79,41 @@ public static class QuestObjectiveFeedbackPostprocessor
 			EnsureCompleteVisuals( quest, subFeedback, completeFeedback );
 
 			SerializedObject so = new SerializedObject( ui );
-			so.FindProperty( "showFeedback" ).objectReferenceValue = showFeedback;
-			so.FindProperty( "hideFeedback" ).objectReferenceValue = hideFeedback;
-			so.FindProperty( "subObjectiveCompleteFeedback" ).objectReferenceValue = subFeedback;
-			so.FindProperty( "objectiveCompleteFeedback" ).objectReferenceValue = completeFeedback;
-			so.FindProperty( "attentionGroup" ).objectReferenceValue = attention.Group;
-			so.FindProperty( "attentionDiamond" ).objectReferenceValue = attention.Diamond;
+			dirty |= AssignIfChanged( so, "showFeedback", showFeedback );
+			dirty |= AssignIfChanged( so, "hideFeedback", hideFeedback );
+			dirty |= AssignIfChanged( so, "subObjectiveCompleteFeedback", subFeedback );
+			dirty |= AssignIfChanged( so, "objectiveCompleteFeedback", completeFeedback );
+			dirty |= AssignIfChanged( so, "attentionGroup", attention.Group );
+			dirty |= AssignIfChanged( so, "attentionDiamond", attention.Diamond );
 			SerializedProperty glowProp = so.FindProperty( "attentionGlow" );
-			if ( glowProp != null )
-				glowProp.objectReferenceValue = attention.GlowImage != null ? attention.GlowImage.transform : null;
-			so.ApplyModifiedPropertiesWithoutUndo();
+			UnityEngine.Object glowTarget = attention.GlowImage != null ? attention.GlowImage.transform : null;
+			if ( glowProp != null && glowProp.objectReferenceValue != glowTarget )
+			{
+				glowProp.objectReferenceValue = glowTarget;
+				dirty = true;
+			}
 
-			PrefabUtility.SaveAsPrefabAsset( root, InterfacePrefabPath );
+			if ( dirty )
+			{
+				so.ApplyModifiedPropertiesWithoutUndo();
+				PrefabUtility.SaveAsPrefabAsset( root, InterfacePrefabPath );
+			}
 		}
 		finally
 		{
 			PrefabUtility.UnloadPrefabContents( root );
 		}
+	}
+
+	static bool AssignIfChanged( SerializedObject so, string propertyName, UnityEngine.Object value )
+	{
+		SerializedProperty prop = so.FindProperty( propertyName );
+		if ( prop == null )
+			return false;
+		if ( prop.objectReferenceValue == value )
+			return false;
+		prop.objectReferenceValue = value;
+		return true;
 	}
 
 	struct AttentionChrome

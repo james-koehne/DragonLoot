@@ -8,6 +8,7 @@ using UnityEngine;
 
 /// <summary>
 /// World coin sorter: hopper stack intake → timed process (bottom-first) → per-type output stacks.
+/// Auto-pulls whole coin stacks from nearby ground piles and mixed storage tables into the hopper.
 /// Levels via <see cref="UpgradeSystem"/> / <see cref="CoinSortingStationDefinition"/>.
 /// </summary>
 public class CoinSortingStation : MonoBehaviour
@@ -21,9 +22,11 @@ public class CoinSortingStation : MonoBehaviour
 
 	static readonly List<CoinSortingStation> All = new List<CoinSortingStation>( 8 );
 	static readonly List<TreasureDefinition> ConsumeScratch = new List<TreasureDefinition>( 64 );
+	static readonly List<TreasureDefinition> StoragePullScratch = new List<TreasureDefinition>( 64 );
 	static readonly List<TreasureItem> CarryDumpScratch = new List<TreasureItem>( 64 );
 	static readonly List<Collider> ColliderScratch = new List<Collider>( 16 );
 	static readonly Collider[] OverlapScratch = new Collider[ 64 ];
+	static readonly Collider[] StoragePullOverlap = new Collider[ 64 ];
 	static readonly RaycastHit[] FloorHits = new RaycastHit[ 16 ];
 
 	[SerializeField]
@@ -102,6 +105,9 @@ public class CoinSortingStation : MonoBehaviour
 	bool _loggedMissingGauge;
 	bool _loggedMissingCrankSpin;
 	bool _sortingShakeActive;
+	bool _storagePullInFlight;
+	int _pendingStoragePullCount;
+	float _nextStoragePullTime;
 
 	public static IReadOnlyList<CoinSortingStation> ActiveStations => All;
 
@@ -137,16 +143,16 @@ public class CoinSortingStation : MonoBehaviour
 		}
 	}
 
-	public bool IsHopperFull => BufferedCount >= HopperCapacity;
+	public bool IsHopperFull => BufferedCount + _pendingStoragePullCount >= HopperCapacity;
 
 	public bool HasRoomFor( int count )
 	{
 		if ( count <= 0 )
 			return true;
-		return BufferedCount + count <= HopperCapacity;
+		return BufferedCount + _pendingStoragePullCount + count <= HopperCapacity;
 	}
 
-	public int RemainingCapacity => Mathf.Max( 0, HopperCapacity - BufferedCount );
+	public int RemainingCapacity => Mathf.Max( 0, HopperCapacity - BufferedCount - _pendingStoragePullCount );
 
 	public bool IsCrankActive => Time.time <= _crankActiveUntil;
 
@@ -254,6 +260,7 @@ public class CoinSortingStation : MonoBehaviour
 		{
 			TickReserve( Time.deltaTime );
 			TickProcess( Time.deltaTime );
+			TickStoragePull();
 		}
 
 		TickSortingShake();
@@ -1361,6 +1368,235 @@ public class CoinSortingStation : MonoBehaviour
 		if ( !HasRoomFor( stack.Count ) )
 			return false;
 		return TryAbsorbStack( stack );
+	}
+
+	void TickStoragePull()
+	{
+		if ( _storagePullInFlight || IsHopperFull || RemainingCapacity <= 0 )
+			return;
+
+		CoinSortingStationDefinition def = ResolveDefinition();
+		if ( def == null || !def.autoPullFromNearbyStorage )
+			return;
+
+		if ( Time.time < _nextStoragePullTime )
+			return;
+
+		_nextStoragePullTime = Time.time + Mathf.Max( 0.05f, def.storagePullInterval );
+		TryPullNearestStorageStack( def );
+	}
+
+	bool TryPullNearestStorageStack( CoinSortingStationDefinition def )
+	{
+		float radius = Mathf.Max( 0.25f, def.storagePullRadius );
+		float radiusSq = radius * radius;
+		Vector3 origin = ResolveStoragePullOrigin();
+		int room = RemainingCapacity;
+		if ( room <= 0 )
+			return false;
+
+		GroundCoinStack bestGround = null;
+		float bestGroundSq = radiusSq;
+		IReadOnlyList<GroundCoinStack> stacks = GroundCoinStack.ActiveStacks;
+		for ( int i = 0; i < stacks.Count; i++ )
+		{
+			GroundCoinStack stack = stacks[ i ];
+			if ( !IsPullableGroundStack( stack ) || stack.Count > room )
+				continue;
+
+			Vector3 delta = stack.ContactPosition - origin;
+			float sq = delta.x * delta.x + delta.z * delta.z;
+			if ( sq > bestGroundSq )
+				continue;
+
+			bestGroundSq = sq;
+			bestGround = stack;
+		}
+
+		MixedDisplayTableInteractable bestTable = null;
+		int bestTableSlot = -1;
+		int bestTableCount = 0;
+		float bestTableSq = radiusSq;
+		FindNearestMixedStorageCoinStack( origin, radius, room, ref bestTable, ref bestTableSlot, ref bestTableCount, ref bestTableSq );
+
+		bool preferGround = bestGround != null && ( bestTable == null || bestGroundSq <= bestTableSq );
+		float duration = Mathf.Max( 0.05f, def.storagePullFlightDuration );
+		if ( preferGround )
+			return BeginPullGroundStack( bestGround, duration );
+		if ( bestTable != null && bestTableSlot >= 0 )
+			return BeginPullMixedStorageStack( bestTable, bestTableSlot, bestTableCount, duration );
+		return false;
+	}
+
+	Vector3 ResolveStoragePullOrigin()
+	{
+		GroundCoinStack hopperStack = EnsureHopperStack();
+		if ( hopperStack != null )
+			return hopperStack.ContactPosition;
+		if ( hopper != null )
+			return hopper.transform.position;
+		return transform.position;
+	}
+
+	bool IsPullableGroundStack( GroundCoinStack stack )
+	{
+		if ( stack == null || stack.Count <= 0 )
+			return false;
+		if ( IsHopperStack( stack ) || stack.IsMachineBuffer || stack.IsChuteOutput || stack.IsCartHosted )
+			return false;
+		if ( stack.HasInFlight || stack.IsReturningToPool )
+			return false;
+		return true;
+	}
+
+	void FindNearestMixedStorageCoinStack(
+		Vector3 origin,
+		float radius,
+		int room,
+		ref MixedDisplayTableInteractable bestTable,
+		ref int bestSlot,
+		ref int bestCount,
+		ref float bestSq )
+	{
+		int hits = Physics.OverlapSphereNonAlloc(
+			origin,
+			radius,
+			StoragePullOverlap,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Collide );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider col = StoragePullOverlap[ i ];
+			if ( col == null || IsOwnCollider( col ) )
+				continue;
+
+			MixedDisplayTableInteractable table = col.GetComponentInParent<MixedDisplayTableInteractable>();
+			if ( table == null || !table.isActiveAndEnabled )
+				continue;
+
+			if ( !table.TryFindPullableCoinStack( origin, room, out int slotIndex, out int coinCount, out float distSq ) )
+				continue;
+			if ( distSq > bestSq )
+				continue;
+
+			bestSq = distSq;
+			bestTable = table;
+			bestSlot = slotIndex;
+			bestCount = coinCount;
+		}
+	}
+
+	bool BeginPullGroundStack( GroundCoinStack stack, float duration )
+	{
+		if ( !IsPullableGroundStack( stack ) || !HasRoomFor( stack.Count ) )
+			return false;
+		if ( EnsureHopperStack() == null )
+			return false;
+
+		Vector3 startPos = stack.ContactPosition;
+		Quaternion startRot = stack.transform.rotation;
+		float seed = stack.VariationSeed;
+
+		StoragePullScratch.Clear();
+		if ( !stack.TryConsumeAllDefinitions( StoragePullScratch ) || StoragePullScratch.Count == 0 )
+		{
+			StoragePullScratch.Clear();
+			return false;
+		}
+
+		return BeginStoragePullFlight( StoragePullScratch, startPos, startRot, seed, duration );
+	}
+
+	bool BeginPullMixedStorageStack(
+		MixedDisplayTableInteractable table,
+		int slotIndex,
+		int expectedCount,
+		float duration )
+	{
+		if ( table == null || slotIndex < 0 || expectedCount <= 0 || !HasRoomFor( expectedCount ) )
+			return false;
+
+		StoragePullScratch.Clear();
+		if ( !table.TryConsumeSlotDefinitions( slotIndex, StoragePullScratch, out Vector3 startPos, out Quaternion startRot )
+			|| StoragePullScratch.Count == 0 )
+		{
+			StoragePullScratch.Clear();
+			return false;
+		}
+
+		if ( !HasRoomFor( StoragePullScratch.Count ) )
+		{
+			// Put the stack back if capacity changed between find and consume.
+			table.TryAppendSlotDefinitions( slotIndex, StoragePullScratch );
+			StoragePullScratch.Clear();
+			return false;
+		}
+
+		float seed = 1f;
+		TreasureDefinition first = StoragePullScratch[ 0 ];
+		if ( first != null )
+			seed = Mathf.Abs( first.GetInstanceID() % 1000 ) * 0.001f + 1f;
+
+		return BeginStoragePullFlight( StoragePullScratch, startPos, startRot, seed, duration );
+	}
+
+	bool BeginStoragePullFlight(
+		List<TreasureDefinition> source,
+		Vector3 startPos,
+		Quaternion startRot,
+		float seed,
+		float duration )
+	{
+		if ( source == null || source.Count == 0 )
+			return false;
+
+		GroundCoinStack hopperStack = EnsureHopperStack();
+		if ( hopperStack == null )
+			return false;
+
+		List<TreasureDefinition> flying = new List<TreasureDefinition>( source.Count );
+		for ( int i = 0; i < source.Count; i++ )
+			flying.Add( source[ i ] );
+		source.Clear();
+
+		_storagePullInFlight = true;
+		_pendingStoragePullCount += flying.Count;
+
+		Vector3 endPos = hopperStack.ContactPosition + Vector3.up * hopperStack.SettledHeight;
+		Quaternion endRot = hopperStack.transform.rotation;
+		int pulled = flying.Count;
+
+		CoinStackFlight.FlyToWorld(
+			flying,
+			startPos,
+			startRot,
+			seed,
+			endPos,
+			endRot,
+			duration,
+			() => CompleteStoragePullFlight( hopperStack, flying, pulled ) );
+
+		return true;
+	}
+
+	void CompleteStoragePullFlight( GroundCoinStack hopperStack, List<TreasureDefinition> flying, int pulled )
+	{
+		_storagePullInFlight = false;
+		_pendingStoragePullCount = Mathf.Max( 0, _pendingStoragePullCount - pulled );
+
+		if ( flying == null || flying.Count == 0 )
+			return;
+
+		if ( hopperStack == null )
+			hopperStack = EnsureHopperStack();
+		if ( hopperStack == null )
+			return;
+
+		hopperStack.TryAppendDefinitions( flying );
+		PlayHopperCoinPlaceFeedback( hopperStack, flying );
+		CoinStackInteractSfx.PlayStackPlace( hopperStack.ContactPosition + Vector3.up * hopperStack.SettledHeight );
+		PublishHopperLoaded( flying.Count );
 	}
 
 	void TickReserve( float dt )

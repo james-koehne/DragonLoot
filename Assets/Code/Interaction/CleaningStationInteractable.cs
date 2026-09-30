@@ -372,7 +372,7 @@ public class CleaningStationInteractable : InteractableBase, ITreasureOwner, ITr
 			_intakeSnapRoutine = null;
 		}
 
-		if ( freeItemOwnership && item != null && item.Owner == this )
+		if ( freeItemOwnership && item != null && (Object)item.Owner == this )
 		{
 			// Ownership cleared by caller path when needed.
 		}

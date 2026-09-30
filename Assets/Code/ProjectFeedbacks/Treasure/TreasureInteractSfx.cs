@@ -29,10 +29,15 @@ public static class TreasureInteractSfx
 
 	public static void PlayPlace( TreasureItem item )
 	{
+		PlayPlace( item, advanceCombo: false );
+	}
+
+	public static void PlayPlace( TreasureItem item, bool advanceCombo )
+	{
 		if ( item == null )
 			return;
 
-		Play( item.Definition, pickup: false, item.transform.position, physicalOnly: false, volumeScale: 1f, advanceCombo: false );
+		Play( item.Definition, pickup: false, item.transform.position, physicalOnly: false, volumeScale: 1f, advanceCombo );
 	}
 
 	public static void PlayPickup( TreasureDefinition definition, Vector3 position )
@@ -42,7 +47,12 @@ public static class TreasureInteractSfx
 
 	public static void PlayPlace( TreasureDefinition definition, Vector3 position )
 	{
-		Play( definition, pickup: false, position, physicalOnly: false, volumeScale: 1f, advanceCombo: false );
+		PlayPlace( definition, position, advanceCombo: false );
+	}
+
+	public static void PlayPlace( TreasureDefinition definition, Vector3 position, bool advanceCombo )
+	{
+		Play( definition, pickup: false, position, physicalOnly: false, volumeScale: 1f, advanceCombo );
 	}
 
 	/// <summary>
@@ -80,8 +90,12 @@ public static class TreasureInteractSfx
 		volumeScale = Mathf.Clamp01( volumeScale );
 		int comboStep = 0;
 		bool isCoin = definition.category == TreasureCategory.Coin;
-		if ( pickup && isCoin && advanceCombo )
+		if ( isCoin && advanceCombo )
 			comboStep = AdvanceCoinComboStep();
+
+		float placeComboPitch = isCoin && !pickup && advanceCombo
+			? Mathf.Pow( 2f, comboStep / 12f )
+			: 1f;
 
 		_sfx.Clips = clips;
 		if ( pickup )
@@ -96,8 +110,8 @@ public static class TreasureInteractSfx
 		{
 			_sfx.VolumeMin = definition.placeVolumeMin;
 			_sfx.VolumeMax = definition.placeVolumeMax;
-			_sfx.PitchMin = definition.placePitchMin;
-			_sfx.PitchMax = definition.placePitchMax;
+			_sfx.PitchMin = definition.placePitchMin * placeComboPitch;
+			_sfx.PitchMax = definition.placePitchMax * placeComboPitch;
 			_sfx.SpatialBlend = 1f;
 			_sfx.MinDistance = PlaceMinDistance;
 			_sfx.MaxDistance = PlaceMaxDistance;

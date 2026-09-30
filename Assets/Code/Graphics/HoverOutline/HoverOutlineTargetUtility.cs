@@ -112,6 +112,9 @@ public static class HoverOutlineTargetUtility
 		if ( item.State == TreasureItemState.InPile )
 			return false;
 
+		if ( TreasureItemInteractable.IsDisplayedPickupLocked( item ) )
+			return false;
+
 		return true;
 	}
 

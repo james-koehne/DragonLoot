@@ -12,25 +12,70 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a34438fac45ca1c408216c326912dc1c, type: 3}
   m_Name: BuildModeDefinition
   m_EditorClassIdentifier: Assembly-CSharp::BuildModeDefinition
-  showRadius: 20
   fadeStart: 12
   fadeEnd: 18
   buildHoldSeconds: 2
   aimMaxDistance: 0
   ghostShader: {fileID: 4800000, guid: d566e18f486577a4eba9174ebc7e7f0b, type: 3}
-  ghostColor: {r: 0.35, g: 0.75, b: 1, a: 0.4}
+  ghostColor: {r: 0.28555536, g: 0.64919347, b: 0.8773585, a: 0.4}
   ghostFresnelPower: 2.4
-  ghostFresnelBoost: 0.7
-  ghostPulseAmount: 0.12
-  ghostPulseSpeed: 0.85
-  ghostRimIntensity: 1.15
+  ghostFresnelBoost: 0
+  ghostPulseAmount: 0.14
+  ghostPulseSpeed: 0.425
+  ghostRimIntensity: 0.848
   ghostCoreIntensity: 0.28
+  completeGlowColor: {r: 1.4, g: 0.95, b: 0.28, a: 1}
+  completeFlashSeconds: 0.18
+  completeHoldSeconds: 0.08
+  completeFadeSeconds: 0.4
+  buildOutline:
+    outlineColor: {r: 1.2, g: 0.9775, b: 0.35, a: 1}
+    outlineIntensity: 1
+    hdrBoost: 1.5
+    scalePixels: 3
+    maskDilatePixels: 2
+    depthThreshold: 1.5
+    normalThreshold: 0.4
+    depthNormalThreshold: 0.5
+    depthNormalThresholdScale: 7
+    normalEdgeWeight: 1
+    pulseSpeed: 1.1
+    pulseAmount: 0.1
+  buildStartClip: {fileID: 0}
+  buildCompleteClip: {fileID: 8300000, guid: 0b3f39b6f7cd6774ca4f6397a533e694, type: 3}
+  buildHitClips:
+  - {fileID: 8300000, guid: 1258868c7a7d89c42a1ff8df3d49dd9d, type: 3}
+  - {fileID: 8300000, guid: 2175655654b74254fa718fcd1af279fd, type: 3}
+  - {fileID: 8300000, guid: 0b1d0230679eafe4b8fc851f0ea50467, type: 3}
+  - {fileID: 8300000, guid: 718df9140d9cf2047b321bc48f9bae40, type: 3}
+  buildStartVolume: 0.7
+  buildCompleteVolume: 0.7
+  buildHitVolumeMin: 0.65
+  buildHitVolumeMax: 0.75
+  buildHitPitchMin: 0.95
+  buildHitPitchMax: 1.05
+  hammerSwingCount: 3
+  hammerSwingHitNormalized: 0.55
+  hammerSwingWindupEuler: {x: 0, y: 0, z: -18}
+  hammerSwingImpactEuler: {x: 0, y: 0, z: 50}
+  hammerSwingWindupOffset: {x: 0.02, y: 0.08, z: -0.06}
+  hammerSwingImpactOffset: {x: 0.04, y: -0.05, z: 0.08}
   hammerPrefab:
-    m_AssetGUID: 
+    m_AssetGUID: 52c75a021028e99418ce796bb1fefb31
     m_SubObjectName: 
     m_SubObjectType: 
     m_SubObjectGUID: 
     m_EditorAssetChanged: 0
-  hammerLocalOffset: {x: 0.05, y: -0.05, z: 0.08}
-  hammerLocalEuler: {x: 10, y: 0, z: -20}
-  hammerLocalScale: 0.35
+  hammerLocalOffset: {x: 0.32, y: -0.28, z: 0.45}
+  hammerLocalEuler: {x: 8, y: 90, z: -15}
+  hammerLocalScale: 0.45
+  hammerDrawSeconds: 0.6
+  hammerHolsterSeconds: 0.3
+  hammerHolsterOffset: {x: 0.1, y: -0.56, z: 0.2}
+  hammerHolsterEuler: {x: 8, y: 90, z: -15}
+  hammerDrawTossHeight: 0.28
+  hammerDrawSpinRevolutions: 2
+  hammerDrawSpinAxis: {x: 0, y: 0, z: 1}
+  hammerWorldPickupSeconds: 0.45
+  hammerWorldPickupArcHeight: 0.35
+  hammerHolsterBumpHeight: 0.12

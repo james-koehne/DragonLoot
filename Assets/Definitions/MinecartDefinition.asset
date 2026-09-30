@@ -20,7 +20,7 @@ MonoBehaviour:
   mouseSteerScale: 0
   rideHeight: 0.15
   wheelRadius: 0.21
-  blockingHalfLength: 1.1
+  blockingHalfLength: 1.2
   trackSnapRadius: 4
   junctionApproachRadius: 2.5
   junctionLookMinAlign: 0.15
@@ -37,3 +37,5 @@ MonoBehaviour:
   maxStackPerCell: 0
   unloadDetectRadius: 3
   unloadScatterRadius: 0.35
+  hopHeight: 2.25
+  hopDuration: 0.45

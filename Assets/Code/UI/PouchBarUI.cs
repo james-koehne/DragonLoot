@@ -472,9 +472,10 @@ public class PouchBarUI : MonoBehaviour
 				slotT.SetSiblingIndex( i );
 		}
 
+		// Cycle hint sits to the left of the pouch slots.
 		Transform cycleT = transform.Find( "Cycle" );
 		if ( cycleT != null )
-			cycleT.SetAsLastSibling();
+			cycleT.SetAsFirstSibling();
 	}
 
 	void EnsureUi()

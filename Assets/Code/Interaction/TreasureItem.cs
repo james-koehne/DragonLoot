@@ -123,6 +123,8 @@ public class TreasureItem : MonoBehaviour
 	public void BeginFlight()
 	{
 		_inFlight = true;
+		// Cylinder columns hide settled coin meshes; flights must be visible.
+		SetMeshVisible( true );
 	}
 
 	public void EndFlight()

@@ -10,13 +10,20 @@ using UnityEngine;
 /// </summary>
 public static class MinecartJunctionMeshBuilder
 {
-	public const string JunctionChildPrefix = "Junction_";
+	public const string JunctionChildPrefix = MinecartJunctionGraph.JunctionChildPrefix;
 	public const string VisualChildName = "JunctionVisual";
 	public const string ColliderChildName = "JunctionCollider";
 
 	const string GeneratedFolder = "Assets/Generated/MinecartJunctions";
 	const int ThroughSamples = 8;
 	const float EntryMergeEpsilon = 0.08f;
+	const float EntryAngleMergeDegrees = 10f;
+	const float EntryWorldMerge = 0.15f;
+	const float NearStraightCornerDegrees = 135f;
+	const float OppositeInwardDot = -0.35f;
+	const float ColinearStubDot = 0.82f;
+	const int MaxThroughCross = 2;
+	const int MaxThroughTee = 2;
 
 	static readonly List<Vector3> Verts = new List<Vector3>( 512 );
 	static readonly List<Vector3> Normals = new List<Vector3>( 512 );
@@ -38,11 +45,13 @@ public static class MinecartJunctionMeshBuilder
 	{
 		public MinecartTrack track;
 		public float distance;
+		public float meetDistance;
 		public int portIndex;
 		public Vector3 localPos;
 		public Vector3 inwardTangent;
 		public Vector3 up;
 		public float angle;
+		public bool isStubArm;
 	}
 
 	public static void Rebuild( MinecartJunctionGraph graph )
@@ -109,12 +118,12 @@ public static class MinecartJunctionMeshBuilder
 		float railWidth = template != null ? template.RailWidth : 0.06f;
 		float railHeight = template != null ? template.RailHeight : 0.08f;
 		Vector3 sleeperSize = template != null ? template.SleeperSize : new Vector3( 1.2f, 0.08f, 0.18f );
-		float gap = graph.JunctionMeshGap;
+		float joinRadius = graph.JunctionEntryOffset;
 		float halfSleeper = graph.SleeperHalfWidthOverride > 0.01f
 			? graph.SleeperHalfWidthOverride
 			: sleeperSize.x * 0.5f;
 
-		Mesh visualMesh = BuildVisualMesh( graph, junction, gap, gauge, railWidth, railHeight, sleeperSize, halfSleeper );
+		Mesh visualMesh = BuildVisualMesh( graph, junction, joinRadius, gauge, railWidth, railHeight, sleeperSize, halfSleeper );
 		Mesh visualAsset = SaveMeshAsset( graph, index, "_Visual", visualMesh, Verts, Normals, Uvs, RailTris, SleeperTris, twoSubmeshes: true );
 		ApplyVisual( go, visualAsset, railMat, sleeperMat );
 
@@ -140,7 +149,7 @@ public static class MinecartJunctionMeshBuilder
 		return null;
 	}
 
-	static Mesh BuildVisualMesh( MinecartJunctionGraph graph, MinecartJunction junction, float gap, float gauge, float railWidth, float railHeight, Vector3 sleeperSize, float sleeperHalfWidth )
+	static Mesh BuildVisualMesh( MinecartJunctionGraph graph, MinecartJunction junction, float joinRadius, float gauge, float railWidth, float railHeight, Vector3 sleeperSize, float sleeperHalfWidth )
 	{
 		Verts.Clear();
 		Normals.Clear();
@@ -152,16 +161,17 @@ public static class MinecartJunctionMeshBuilder
 		ActiveJunctionWorld = junction.worldPosition;
 		ActiveJunction = junction;
 
-		CollectEntries( graph, junction, gap );
+		CollectEntries( graph, junction, joinRadius );
+		DedupeEntries();
 		if ( Entries.Count < 2 )
 		{
 			ActiveJunction = null;
 			return EmptyVisualMesh();
 		}
 
-		AppendThroughRails( graph, junction, gap, gauge, railWidth, railHeight, sleeperSize );
+		AppendThroughPaths( graph, junction, gauge, railWidth, railHeight, sleeperSize );
 		if ( graph.DrawTurnCurves )
-			AppendTurnCurves( graph, gauge, railWidth, railHeight, sleeperSize );
+			AppendTurnCurves( graph, junction, gauge, railWidth, railHeight, sleeperSize );
 		if ( graph.DrawShapedSleeper )
 			AppendShapedSleeper( sleeperSize.y, sleeperHalfWidth );
 
@@ -190,10 +200,11 @@ public static class MinecartJunctionMeshBuilder
 		return mesh;
 	}
 
-	static void CollectEntries( MinecartJunctionGraph graph, MinecartJunction junction, float gap )
+	static void CollectEntries( MinecartJunctionGraph graph, MinecartJunction junction, float unusedJoinRadius )
 	{
 		Vector3 center = junction.worldPosition;
-		float entryOffset = gap + graph.JoinOverlap;
+		float cutRadius = graph.JunctionJoinRadius;
+		float meetSlop = graph.JoinMeetSlop;
 		Color[] palette =
 		{
 			new Color( 1f, 0.85f, 0.2f ),
@@ -211,28 +222,33 @@ public static class MinecartJunctionMeshBuilder
 
 			bool canNeg = MinecartJunctionGraph.IsValidExitDirection( port, -1 );
 			bool canPos = MinecartJunctionGraph.IsValidExitDirection( port, 1 );
+			bool stub = !( canNeg && canPos );
+			// alongSign: direction away from the port along the track for the meet tuck.
 			if ( canNeg )
-				TryAddEntry( track, port.distance - entryOffset, p, center, palette[ p % palette.Length ] );
+				TryAddEntry( track, port.distance - cutRadius, -1, meetSlop, p, stub, center, palette[ p % palette.Length ] );
 			if ( canPos )
-				TryAddEntry( track, port.distance + entryOffset, p, center, palette[ p % palette.Length ] );
+				TryAddEntry( track, port.distance + cutRadius, 1, meetSlop, p, stub, center, palette[ p % palette.Length ] );
 		}
 	}
 
-	static void TryAddEntry( MinecartTrack track, float distance, int portIndex, Vector3 junctionWorld, Color color )
+	static void TryAddEntry( MinecartTrack track, float cutDistance, int alongSign, float meetSlop, int portIndex, bool isStubArm, Vector3 junctionWorld, Color color )
 	{
-		float wrapped = track.WrapDistance( distance );
+		float meetDistance = cutDistance + alongSign * meetSlop;
+		float wrappedCut = track.WrapDistance( cutDistance );
+		float wrappedMeet = track.WrapDistance( meetDistance );
 		if ( !track.IsClosed )
 		{
-			if ( wrapped <= 0.001f && distance < 0f )
-				wrapped = 0f;
-			if ( wrapped >= track.Length - 0.001f && distance > track.Length )
-				wrapped = track.Length;
+			if ( wrappedCut <= 0.001f && cutDistance < 0f )
+				wrappedCut = 0f;
+			if ( wrappedCut >= track.Length - 0.001f && cutDistance > track.Length )
+				wrappedCut = track.Length;
+			wrappedMeet = Mathf.Clamp( meetDistance, 0f, track.Length );
 		}
 
 		Vector3 pos;
 		Vector3 tan;
 		Vector3 up;
-		if ( !track.Evaluate( wrapped, out pos, out tan, out up ) )
+		if ( !track.Evaluate( wrappedMeet, out pos, out tan, out up ) )
 			return;
 
 		if ( tan.sqrMagnitude < 0.0001f )
@@ -262,7 +278,7 @@ public static class MinecartJunctionMeshBuilder
 			if ( existing.track != track )
 				continue;
 
-			if ( Mathf.Abs( track.SignedAlong( existing.distance, wrapped ) ) <= EntryMergeEpsilon )
+			if ( Mathf.Abs( track.SignedAlong( existing.distance, wrappedCut ) ) <= EntryMergeEpsilon )
 				return;
 		}
 
@@ -271,36 +287,212 @@ public static class MinecartJunctionMeshBuilder
 		Entries.Add( new JunctionEntry
 		{
 			track = track,
-			distance = wrapped,
+			distance = wrappedCut,
+			meetDistance = wrappedMeet,
 			portIndex = portIndex,
 			localPos = local,
 			inwardTangent = inward,
 			up = up,
-			angle = angle
+			angle = angle,
+			isStubArm = isStubArm
 		} );
 
 		if ( ActiveGraph != null )
 			ActiveGraph.EditorAddDebugEntry( pos, inward, color );
 	}
 
-	static void AppendThroughRails( MinecartJunctionGraph graph, MinecartJunction junction, float gap, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
+	static void DedupeEntries()
 	{
-		HashSet<MinecartTrack> done = new HashSet<MinecartTrack>();
+		if ( Entries.Count < 2 )
+			return;
+
+		Entries.Sort( ( a, b ) => a.angle.CompareTo( b.angle ) );
+		float angleMerge = EntryAngleMergeDegrees * Mathf.Deg2Rad;
+		List<JunctionEntry> kept = new List<JunctionEntry>( Entries.Count );
+		for ( int i = 0; i < Entries.Count; i++ )
+		{
+			JunctionEntry candidate = Entries[ i ];
+			bool merged = false;
+			for ( int k = 0; k < kept.Count; k++ )
+			{
+				JunctionEntry existing = kept[ k ];
+				float ang = Mathf.Abs( Mathf.DeltaAngle( existing.angle * Mathf.Rad2Deg, candidate.angle * Mathf.Rad2Deg ) ) * Mathf.Deg2Rad;
+				float worldDist = Vector3.Distance( existing.localPos, candidate.localPos );
+				if ( ang > angleMerge && worldDist > EntryWorldMerge )
+					continue;
+
+				// Keep the farther entry (closer to the join plane / track cut).
+				float existingRad = new Vector3( existing.localPos.x, 0f, existing.localPos.z ).magnitude;
+				float candidateRad = new Vector3( candidate.localPos.x, 0f, candidate.localPos.z ).magnitude;
+				if ( candidateRad > existingRad )
+					kept[ k ] = candidate;
+
+				merged = true;
+				break;
+			}
+
+			if ( !merged )
+				kept.Add( candidate );
+		}
+
+		Entries.Clear();
+		Entries.AddRange( kept );
+	}
+
+	static void AppendThroughPaths( MinecartJunctionGraph graph, MinecartJunction junction, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
+	{
+		List<ThroughCandidate> candidates = new List<ThroughCandidate>( 4 );
+		CollectSameTrackThroughCandidates( graph, junction, candidates );
+		CollectOppositeStubThroughCandidates( candidates );
+
+		SyncThroughOptions( junction, candidates );
+
+		MinecartJunctionKind kind = junction.resolvedKind;
+		int maxThrough = kind == MinecartJunctionKind.Tee ? MaxThroughTee : MaxThroughCross;
+		int meshed = 0;
+		for ( int i = 0; i < candidates.Count; i++ )
+		{
+			ThroughCandidate c = candidates[ i ];
+			MinecartJunctionCornerOption opt = FindThroughOption( junction, c );
+			bool enabled = opt == null || opt.enabled;
+			if ( !enabled || !c.meshable )
+				continue;
+
+			if ( meshed >= maxThrough )
+			{
+				if ( ActiveGraph != null )
+					ActiveGraph.EditorAddDebugSkippedCorner( ActiveJunctionWorld + c.start, ActiveJunctionWorld + ( c.start + c.end ) * 0.5f, ActiveJunctionWorld + c.end );
+				continue;
+			}
+
+			if ( c.sameTrack )
+				AppendTrackSegmentRails( c.track, c.fromDist, c.toDist, junction.worldPosition, gauge, railWidth, railHeight, sleeperSize );
+			else
+				AppendCurvedThroughDualRail( graph, c.entryA, c.entryB, c.start, c.end, gauge, railWidth, railHeight, sleeperSize );
+
+			meshed++;
+		}
+	}
+
+	/// <summary>
+	/// Cross-track through / end-to-end join: always a tangent Bezier fillet (never a kinked chord).
+	/// </summary>
+	static void AppendCurvedThroughDualRail( MinecartJunctionGraph graph, JunctionEntry a, JunctionEntry b, Vector3 start, Vector3 end, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
+	{
+		float minRadius = gauge * 0.5f + railWidth;
+		Vector3 control = ComputeCornerControl( a, b, start, end, graph.CornerControlScale, minRadius );
+		AppendBezierDualRail( graph, a, b, start, control, end, gauge, railWidth, railHeight, sleeperSize );
+	}
+
+	static void CollectSameTrackThroughCandidates( MinecartJunctionGraph graph, MinecartJunction junction, List<ThroughCandidate> into )
+	{
+		float pad = Mathf.Max( graph.JoinMeetSlop, 0.05f );
+		HashSet<string> donePorts = new HashSet<string>();
+
+		for ( int i = 0; i < Entries.Count; i++ )
+		{
+			JunctionEntry a = Entries[ i ];
+			if ( a.track == null || !a.track.IsUsable )
+				continue;
+
+			string portKey = ThroughPortKey( a.track, a.portIndex );
+			if ( donePorts.Contains( portKey ) )
+				continue;
+
+			int best = -1;
+			float bestSep = 0.15f;
+			for ( int j = 0; j < Entries.Count; j++ )
+			{
+				if ( j == i )
+					continue;
+
+				JunctionEntry b = Entries[ j ];
+				// Continuous through only pairs opposite arms of the SAME port — not self-junction branch ports.
+				if ( b.track != a.track || b.portIndex != a.portIndex )
+					continue;
+
+				float sep = Mathf.Abs( a.track.SignedAlong( a.meetDistance, b.meetDistance ) );
+				if ( sep <= bestSep )
+					continue;
+
+				Vector3 pA = Flatten( a.localPos );
+				Vector3 pB = Flatten( b.localPos );
+				if ( pA.sqrMagnitude > 0.0001f && pB.sqrMagnitude > 0.0001f
+				     && Vector3.Dot( pA.normalized, pB.normalized ) > OppositeInwardDot )
+					continue;
+
+				bestSep = sep;
+				best = j;
+			}
+
+			if ( best < 0 )
+				continue;
+
+			donePorts.Add( portKey );
+			JunctionEntry other = Entries[ best ];
+
+			float fromAlong = PushMeetOutwardAlongTrack( a.track, a.meetDistance, junction.worldPosition, pad );
+			float toAlong = PushMeetOutwardAlongTrack( a.track, other.meetDistance, junction.worldPosition, pad );
+			float spanSigned = a.track.SignedAlong( fromAlong, toAlong );
+			if ( Mathf.Abs( spanSigned ) < 0.05f )
+				continue;
+
+			JunctionEntry entryFrom = a;
+			JunctionEntry entryTo = other;
+			if ( spanSigned < 0f )
+			{
+				float tmp = fromAlong;
+				fromAlong = toAlong;
+				toAlong = tmp;
+				entryFrom = other;
+				entryTo = a;
+			}
+
+			Vector3 fromPos;
+			Vector3 toPos;
+			Vector3 tan;
+			Vector3 up;
+			if ( !a.track.Evaluate( a.track.WrapDistance( fromAlong ), out fromPos, out tan, out up ) )
+				continue;
+			if ( !a.track.Evaluate( a.track.WrapDistance( toAlong ), out toPos, out tan, out up ) )
+				continue;
+
+			into.Add( new ThroughCandidate
+			{
+				sameTrack = true,
+				track = a.track,
+				entryA = entryFrom,
+				entryB = entryTo,
+				start = fromPos - junction.worldPosition,
+				end = toPos - junction.worldPosition,
+				fromDist = fromAlong,
+				toDist = toAlong,
+				angleA = entryFrom.angle,
+				angleB = entryTo.angle,
+				meshable = true,
+				label = $"Through {a.track.name}"
+			} );
+		}
+
+		// Fallback: each bidirectional port with no opposite entry pair gets its own cut fill.
+		float span = graph.JunctionJoinRadius + graph.JoinMeetSlop + pad;
 		for ( int p = 0; p < junction.ports.Count; p++ )
 		{
 			MinecartJunctionPort port = junction.ports[ p ];
 			MinecartTrack track = port.track;
-			if ( track == null || !track.IsUsable || done.Contains( track ) )
+			if ( track == null || !track.IsUsable )
 				continue;
 
-			done.Add( track );
+			string portKey = ThroughPortKey( track, p );
+			if ( donePorts.Contains( portKey ) )
+				continue;
+
 			bool canNeg = MinecartJunctionGraph.IsValidExitDirection( port, -1 );
 			bool canPos = MinecartJunctionGraph.IsValidExitDirection( port, 1 );
-			// Tee stubs only have one valid direction — no through-rail into nothing.
 			if ( !canNeg || !canPos )
 				continue;
 
-			float span = gap + graph.JoinOverlap;
+			donePorts.Add( portKey );
 			float from = port.distance - span;
 			float to = port.distance + span;
 			if ( !track.IsClosed )
@@ -312,8 +504,264 @@ public static class MinecartJunctionMeshBuilder
 			if ( to - from < 0.05f && !track.IsClosed )
 				continue;
 
-			AppendTrackSegmentRails( track, from, to, junction.worldPosition, gauge, railWidth, railHeight, sleeperSize );
+			Vector3 startPos;
+			Vector3 endPos;
+			Vector3 tan;
+			Vector3 up;
+			if ( !track.Evaluate( track.WrapDistance( from ), out startPos, out tan, out up ) )
+				continue;
+			if ( !track.Evaluate( track.WrapDistance( to ), out endPos, out tan, out up ) )
+				continue;
+
+			into.Add( new ThroughCandidate
+			{
+				sameTrack = true,
+				track = track,
+				entryA = default( JunctionEntry ),
+				entryB = default( JunctionEntry ),
+				start = startPos - junction.worldPosition,
+				end = endPos - junction.worldPosition,
+				fromDist = from,
+				toDist = to,
+				angleA = Mathf.Atan2( ( startPos - junction.worldPosition ).x, ( startPos - junction.worldPosition ).z ),
+				angleB = Mathf.Atan2( ( endPos - junction.worldPosition ).x, ( endPos - junction.worldPosition ).z ),
+				meshable = true,
+				label = $"Through {track.name}"
+			} );
 		}
+	}
+
+	static string ThroughPortKey( MinecartTrack track, int portIndex )
+	{
+		int id = track != null ? track.GetInstanceID() : 0;
+		return id.ToString() + ":" + portIndex.ToString();
+	}
+
+	static float PushMeetOutwardAlongTrack( MinecartTrack track, float meetDistance, Vector3 junctionWorld, float pad )
+	{
+		Vector3 pos;
+		Vector3 tan;
+		Vector3 up;
+		if ( !track.Evaluate( meetDistance, out pos, out tan, out up ) )
+			return meetDistance;
+
+		tan.y = 0f;
+		if ( tan.sqrMagnitude < 0.0001f )
+			return meetDistance;
+
+		tan.Normalize();
+		Vector3 away = pos - junctionWorld;
+		away.y = 0f;
+		float alongSign = Vector3.Dot( tan, away.sqrMagnitude > 0.0001f ? away.normalized : tan ) >= 0f ? 1f : -1f;
+		float pushed = meetDistance + alongSign * pad;
+		if ( !track.IsClosed )
+			return Mathf.Clamp( pushed, 0f, track.Length );
+
+		return track.WrapDistance( pushed );
+	}
+
+	static void CollectOppositeStubThroughCandidates( List<ThroughCandidate> into )
+	{
+		float pad = ActiveGraph != null ? Mathf.Max( ActiveGraph.JoinMeetSlop, 0.05f ) : 0.05f;
+		int count = Entries.Count;
+		for ( int i = 0; i < count; i++ )
+		{
+			for ( int j = i + 1; j < count; j++ )
+			{
+				JunctionEntry a = Entries[ i ];
+				JunctionEntry b = Entries[ j ];
+				if ( a.track == null || b.track == null )
+					continue;
+
+				if ( a.track == b.track )
+					continue;
+
+				if ( !AreOppositeEntries( a, b ) )
+					continue;
+
+				float chord = Vector3.Distance( a.localPos, b.localPos );
+				if ( chord < 0.15f )
+					continue;
+
+				bool duplicate = false;
+				for ( int t = 0; t < into.Count; t++ )
+				{
+					ThroughCandidate existing = into[ t ];
+					if ( !existing.sameTrack )
+						continue;
+
+					Vector3 midExisting = ( existing.start + existing.end ) * 0.5f;
+					Vector3 midNew = ( a.localPos + b.localPos ) * 0.5f;
+					if ( Vector3.Distance( midExisting, midNew ) < 0.35f )
+					{
+						duplicate = true;
+						break;
+					}
+				}
+
+				if ( duplicate )
+					continue;
+
+				Vector3 inA = Flatten( a.inwardTangent );
+				Vector3 inB = Flatten( b.inwardTangent );
+				Vector3 start = a.localPos;
+				Vector3 end = b.localPos;
+				if ( inA.sqrMagnitude > 0.0001f )
+					start -= inA.normalized * pad;
+				if ( inB.sqrMagnitude > 0.0001f )
+					end -= inB.normalized * pad;
+
+				string nameA = a.track.name;
+				string nameB = b.track.name;
+				into.Add( new ThroughCandidate
+				{
+					sameTrack = false,
+					track = null,
+					entryA = a,
+					entryB = b,
+					start = start,
+					end = end,
+					fromDist = 0f,
+					toDist = 0f,
+					angleA = a.angle,
+					angleB = b.angle,
+					meshable = true,
+					label = $"Through {nameA} ↔ {nameB}"
+				} );
+			}
+		}
+	}
+
+	static bool AreOppositeEntries( JunctionEntry a, JunctionEntry b )
+	{
+		Vector3 inA = Flatten( a.inwardTangent );
+		Vector3 inB = Flatten( b.inwardTangent );
+		Vector3 pA = Flatten( a.localPos );
+		Vector3 pB = Flatten( b.localPos );
+
+		bool tangentsOppose = inA.sqrMagnitude > 0.0001f && inB.sqrMagnitude > 0.0001f
+			&& Vector3.Dot( inA.normalized, inB.normalized ) <= OppositeInwardDot;
+		bool positionsOppose = pA.sqrMagnitude > 0.0001f && pB.sqrMagnitude > 0.0001f
+			&& Vector3.Dot( pA.normalized, pB.normalized ) <= OppositeInwardDot;
+
+		if ( tangentsOppose && positionsOppose )
+			return true;
+
+		if ( positionsOppose && pA.sqrMagnitude > 0.0001f && pB.sqrMagnitude > 0.0001f )
+			return Vector3.Angle( pA, pB ) >= NearStraightCornerDegrees;
+
+		return false;
+	}
+
+	/// <summary>
+	/// True when two opposite stubs form a nearly straight splice (inward tangents align with the chord).
+	/// Kept for diagnostics; through joins always mesh as Bezier fillets regardless.
+	/// </summary>
+	static bool AreColinearStubJoin( JunctionEntry a, JunctionEntry b )
+	{
+		Vector3 inA = Flatten( a.inwardTangent );
+		Vector3 inB = Flatten( b.inwardTangent );
+		Vector3 chord = Flatten( b.localPos - a.localPos );
+		if ( inA.sqrMagnitude < 0.0001f || inB.sqrMagnitude < 0.0001f || chord.sqrMagnitude < 0.0001f )
+			return false;
+
+		inA.Normalize();
+		inB.Normalize();
+		chord.Normalize();
+
+		float alignA = Vector3.Dot( inA, chord );
+		float alignB = Vector3.Dot( inB, -chord );
+		return alignA >= ColinearStubDot && alignB >= ColinearStubDot;
+	}
+
+	static bool IsStraightThroughPair( JunctionEntry a, JunctionEntry b )
+	{
+		// Any opposite cross-track stub pair is owned by through (curved fillet), not corners.
+		return a.track != b.track && AreOppositeEntries( a, b );
+	}
+
+	static Vector3 Flatten( Vector3 v )
+	{
+		v.y = 0f;
+		return v;
+	}
+
+	struct ThroughCandidate
+	{
+		public bool sameTrack;
+		public MinecartTrack track;
+		public JunctionEntry entryA;
+		public JunctionEntry entryB;
+		public Vector3 start;
+		public Vector3 end;
+		public float fromDist;
+		public float toDist;
+		public float angleA;
+		public float angleB;
+		public bool meshable;
+		public string label;
+	}
+
+	static void SyncThroughOptions( MinecartJunction junction, List<ThroughCandidate> candidates )
+	{
+		if ( junction.throughOptions == null )
+			junction.throughOptions = new List<MinecartJunctionCornerOption>( candidates.Count );
+
+		List<MinecartJunctionCornerOption> previous = junction.throughOptions;
+		List<MinecartJunctionCornerOption> next = new List<MinecartJunctionCornerOption>( candidates.Count );
+		for ( int i = 0; i < candidates.Count; i++ )
+		{
+			ThroughCandidate c = candidates[ i ];
+			MinecartTrack trackA = c.sameTrack ? c.track : c.entryA.track;
+			MinecartTrack trackB = c.sameTrack ? c.track : c.entryB.track;
+			MinecartJunctionCornerOption match = FindPathOption( previous, trackA, trackB, c.angleA, c.angleB );
+
+			next.Add( new MinecartJunctionCornerOption
+			{
+				label = c.label,
+				trackA = trackA,
+				trackB = trackB,
+				angleA = c.angleA,
+				angleB = c.angleB,
+				cornerAngleDegrees = 180f,
+				enabled = match != null ? match.enabled : c.meshable
+			} );
+		}
+
+		junction.throughOptions = next;
+	}
+
+	static MinecartJunctionCornerOption FindThroughOption( MinecartJunction junction, ThroughCandidate c )
+	{
+		if ( junction.throughOptions == null )
+			return null;
+
+		MinecartTrack trackA = c.sameTrack ? c.track : c.entryA.track;
+		MinecartTrack trackB = c.sameTrack ? c.track : c.entryB.track;
+		return FindPathOption( junction.throughOptions, trackA, trackB, c.angleA, c.angleB );
+	}
+
+	static MinecartJunctionCornerOption FindPathOption( List<MinecartJunctionCornerOption> options, MinecartTrack trackA, MinecartTrack trackB, float angleA, float angleB )
+	{
+		if ( options == null )
+			return null;
+
+		for ( int i = 0; i < options.Count; i++ )
+		{
+			MinecartJunctionCornerOption o = options[ i ];
+			if ( o == null )
+				continue;
+
+			if ( !SameTrackPair( o.trackA, o.trackB, trackA, trackB ) )
+				continue;
+
+			if ( !AnglesMatch( o.angleA, o.angleB, angleA, angleB ) )
+				continue;
+
+			return o;
+		}
+
+		return null;
 	}
 
 	static void AppendTrackSegmentRails( MinecartTrack track, float fromDist, float toDist, Vector3 junctionWorld, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
@@ -323,11 +771,6 @@ public static class MinecartJunctionMeshBuilder
 			length += track.Length;
 
 		int samples = Mathf.Max( 2, ThroughSamples );
-		float halfW = railWidth * 0.5f;
-		float halfH = railHeight * 0.5f;
-		float halfGauge = gauge * 0.5f;
-		float sleeperTop = sleeperSize.y;
-
 		Vector3[] centers = new Vector3[ samples ];
 		Vector3[] rights = new Vector3[ samples ];
 		Vector3[] ups = new Vector3[ samples ];
@@ -374,17 +817,42 @@ public static class MinecartJunctionMeshBuilder
 		if ( ActiveGraph != null )
 			ActiveGraph.EditorAddDebugPolyline( false, WorldPolylineBuffer );
 
+		EmitDualRailMesh( centers, rights, ups, samples, gauge, railWidth, railHeight, sleeperSize.y );
+	}
+
+	static void EmitDualRailMesh( Vector3[] centers, Vector3[] rights, Vector3[] ups, int samples, float gauge, float railWidth, float railHeight, float sleeperTop )
+	{
+		float halfW = railWidth * 0.5f;
+		float halfH = railHeight * 0.5f;
+		float halfGauge = gauge * 0.5f;
+
 		int leftStart = Verts.Count;
 		for ( int i = 0; i < samples; i++ )
 		{
-			Vector3 center = centers[ i ] + rights[ i ] * -halfGauge + ups[ i ] * ( sleeperTop + halfH );
+			float offset = halfGauge;
+			if ( samples >= 3 && i > 0 && i < samples - 1 )
+			{
+				float radius = EstimatePolylineRadius( centers[ i - 1 ], centers[ i ], centers[ i + 1 ] );
+				if ( radius < halfGauge * 1.05f )
+					offset = Mathf.Max( railWidth, radius * 0.9f );
+			}
+
+			Vector3 center = centers[ i ] + rights[ i ] * -offset + ups[ i ] * ( sleeperTop + halfH );
 			AddRailRing( center, rights[ i ], ups[ i ], halfW, halfH );
 		}
 
 		int rightStart = Verts.Count;
 		for ( int i = 0; i < samples; i++ )
 		{
-			Vector3 center = centers[ i ] + rights[ i ] * halfGauge + ups[ i ] * ( sleeperTop + halfH );
+			float offset = halfGauge;
+			if ( samples >= 3 && i > 0 && i < samples - 1 )
+			{
+				float radius = EstimatePolylineRadius( centers[ i - 1 ], centers[ i ], centers[ i + 1 ] );
+				if ( radius < halfGauge * 1.05f )
+					offset = Mathf.Max( railWidth, radius * 0.9f );
+			}
+
+			Vector3 center = centers[ i ] + rights[ i ] * offset + ups[ i ] * ( sleeperTop + halfH );
 			AddRailRing( center, rights[ i ], ups[ i ], halfW, halfH );
 		}
 
@@ -395,7 +863,22 @@ public static class MinecartJunctionMeshBuilder
 		}
 	}
 
-	static void AppendTurnCurves( MinecartJunctionGraph graph, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
+	static float EstimatePolylineRadius( Vector3 a, Vector3 b, Vector3 c )
+	{
+		Vector3 ab = Flatten( b - a );
+		Vector3 bc = Flatten( c - b );
+		if ( ab.sqrMagnitude < 0.0001f || bc.sqrMagnitude < 0.0001f )
+			return 999f;
+
+		float turn = Vector3.Angle( ab, bc ) * Mathf.Deg2Rad;
+		if ( turn < 0.001f )
+			return 999f;
+
+		float seg = ( ab.magnitude + bc.magnitude ) * 0.5f;
+		return seg / turn;
+	}
+
+	static void AppendTurnCurves( MinecartJunctionGraph graph, MinecartJunction junction, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
 	{
 		SortedEntries.Clear();
 		SortedEntries.AddRange( Entries );
@@ -405,42 +888,312 @@ public static class MinecartJunctionMeshBuilder
 		if ( count < 2 )
 			return;
 
+		float minChord = Mathf.Max( 0.2f, graph.JunctionEntryOffset * 0.35f );
+		float minRadius = gauge * 0.5f + railWidth;
+		List<CornerCandidate> candidates = new List<CornerCandidate>( 8 );
+
+		// Adjacent pairs around the ring (turn corners). Same-track allowed only across different ports (self-junction).
 		for ( int i = 0; i < count; i++ )
 		{
 			JunctionEntry a = SortedEntries[ i ];
 			JunctionEntry b = SortedEntries[ ( i + 1 ) % count ];
-			if ( a.track == b.track )
+			if ( a.track == b.track && a.portIndex == b.portIndex )
 				continue;
 
-			AppendBezierDualRail( graph, a, b, gauge, railWidth, railHeight, sleeperSize );
+			// Colinear opposite stubs are straight through fills; bent end-to-end pairs become corners.
+			if ( IsStraightThroughPair( a, b ) )
+				continue;
+
+			TryBuildCandidate( graph, a, b, minChord, minRadius, candidates );
+		}
+
+		// Also pair every distinct-port same-track entry pair (self-junction arms may not be ring-adjacent).
+		for ( int i = 0; i < count; i++ )
+		{
+			for ( int j = i + 1; j < count; j++ )
+			{
+				JunctionEntry a = SortedEntries[ i ];
+				JunctionEntry b = SortedEntries[ j ];
+				if ( a.track != b.track || a.portIndex == b.portIndex )
+					continue;
+
+				TryBuildCandidate( graph, a, b, minChord, minRadius, candidates );
+			}
+		}
+
+		// Tee: also stub ↔ each through arm in case ring adjacency missed one.
+		if ( junction.resolvedKind == MinecartJunctionKind.Tee )
+		{
+			for ( int i = 0; i < count; i++ )
+			{
+				if ( !SortedEntries[ i ].isStubArm )
+					continue;
+
+				for ( int j = 0; j < count; j++ )
+				{
+					if ( SortedEntries[ j ].isStubArm )
+						continue;
+
+					if ( SortedEntries[ j ].track == SortedEntries[ i ].track
+					     && SortedEntries[ j ].portIndex == SortedEntries[ i ].portIndex )
+						continue;
+
+					if ( IsStraightThroughPair( SortedEntries[ i ], SortedEntries[ j ] ) )
+						continue;
+
+					TryBuildCandidate( graph, SortedEntries[ i ], SortedEntries[ j ], minChord, minRadius, candidates );
+				}
+			}
+		}
+
+		// Two-stub end-to-end: ring adjacency covers the pair, but also force any bent stub↔stub pair.
+		for ( int i = 0; i < count; i++ )
+		{
+			if ( !SortedEntries[ i ].isStubArm )
+				continue;
+
+			for ( int j = i + 1; j < count; j++ )
+			{
+				if ( !SortedEntries[ j ].isStubArm )
+					continue;
+
+				if ( SortedEntries[ i ].track == SortedEntries[ j ].track )
+					continue;
+
+				if ( IsStraightThroughPair( SortedEntries[ i ], SortedEntries[ j ] ) )
+					continue;
+
+				TryBuildCandidate( graph, SortedEntries[ i ], SortedEntries[ j ], minChord, minRadius, candidates );
+			}
+		}
+
+		SyncCornerOptions( junction, candidates );
+
+		for ( int i = 0; i < candidates.Count; i++ )
+		{
+			CornerCandidate c = candidates[ i ];
+			MinecartJunctionCornerOption opt = FindCornerOption( junction, c );
+			bool enabled = opt == null || opt.enabled;
+			if ( !enabled || !c.meshable )
+			{
+				if ( ActiveGraph != null )
+					ActiveGraph.EditorAddDebugSkippedCorner( ActiveJunctionWorld + c.start, ActiveJunctionWorld + c.control, ActiveJunctionWorld + c.end );
+				continue;
+			}
+
+			AppendBezierDualRail( graph, c.entryA, c.entryB, c.start, c.control, c.end, gauge, railWidth, railHeight, sleeperSize );
 		}
 	}
 
-	static void AppendBezierDualRail( MinecartJunctionGraph graph, JunctionEntry a, JunctionEntry b, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
+	struct CornerCandidate
 	{
+		public JunctionEntry entryA;
+		public JunctionEntry entryB;
+		public Vector3 start;
+		public Vector3 end;
+		public Vector3 control;
+		public float cornerAngleDegrees;
+		public float chord;
+		public bool meshable;
+		public string label;
+	}
+
+	static void TryBuildCandidate( MinecartJunctionGraph graph, JunctionEntry a, JunctionEntry b, float minChord, float minRadius, List<CornerCandidate> into )
+	{
+		// Same port arms are through fills, not corners.
+		if ( a.track == b.track && a.portIndex == b.portIndex )
+			return;
+
+		for ( int i = 0; i < into.Count; i++ )
+		{
+			CornerCandidate existing = into[ i ];
+			if ( SameTrackPair( existing.entryA.track, existing.entryB.track, a.track, b.track )
+			     && AnglesMatch( existing.entryA.angle, existing.entryB.angle, a.angle, b.angle ) )
+				return;
+		}
+
 		Vector3 start = a.localPos;
 		Vector3 end = b.localPos;
 		float chord = Vector3.Distance( start, end );
-		if ( chord < 0.05f )
-			return;
+		Vector3 flatA = Flatten( start );
+		Vector3 flatB = Flatten( end );
+		float cornerAngle = 0f;
+		if ( flatA.sqrMagnitude > 0.0001f && flatB.sqrMagnitude > 0.0001f )
+			cornerAngle = Vector3.Angle( flatA, flatB );
 
-		Vector3 flatA = new Vector3( start.x, 0f, start.z );
-		Vector3 flatB = new Vector3( end.x, 0f, end.z );
-		float avgRadius = ( flatA.magnitude + flatB.magnitude ) * 0.5f;
-		Vector3 bisector = flatA.normalized + flatB.normalized;
-		if ( bisector.sqrMagnitude < 0.0001f )
-			return;
+		Vector3 control = ComputeCornerControl( a, b, start, end, graph.CornerControlScale, minRadius );
+		bool hasControl = control.sqrMagnitude > 0.0001f || ( start.sqrMagnitude > 0.0001f && end.sqrMagnitude > 0.0001f );
 
-		Vector3 control = bisector.normalized * ( avgRadius * graph.CornerControlScale );
-		control.y = ( start.y + end.y ) * 0.5f;
+		bool tooShort = chord < minChord;
+		bool tooSharp = cornerAngle > 0.01f && cornerAngle < graph.MinCornerAngleDegrees;
+		bool meshable = !tooShort && !tooSharp && hasControl;
 
+		string trackAName = a.track != null ? a.track.name : "?";
+		string trackBName = b.track != null ? b.track.name : "?";
+		string label = $"{trackAName} ↔ {trackBName} ({cornerAngle:0}°)";
+		if ( tooShort )
+			label += " [short]";
+		else if ( tooSharp )
+			label += " [sharp]";
+
+		into.Add( new CornerCandidate
+		{
+			entryA = a,
+			entryB = b,
+			start = start,
+			end = end,
+			control = control,
+			cornerAngleDegrees = cornerAngle,
+			chord = chord,
+			meshable = meshable,
+			label = label
+		} );
+	}
+
+	/// <summary>
+	/// Quadratic Bezier control from inward-tangent ray intersection (fillet), not a radial bisector.
+	/// Radial bisectors pinch dual rails into a point on tight bends.
+	/// </summary>
+	static Vector3 ComputeCornerControl( JunctionEntry a, JunctionEntry b, Vector3 start, Vector3 end, float scale, float minRadius )
+	{
+		Vector3 inA = Flatten( a.inwardTangent );
+		Vector3 inB = Flatten( b.inwardTangent );
+		if ( inA.sqrMagnitude < 0.0001f )
+			inA = -Flatten( start );
+		if ( inB.sqrMagnitude < 0.0001f )
+			inB = -Flatten( end );
+
+		if ( inA.sqrMagnitude < 0.0001f )
+			inA = Vector3.forward;
+		if ( inB.sqrMagnitude < 0.0001f )
+			inB = Vector3.forward;
+
+		inA.Normalize();
+		inB.Normalize();
+
+		float chord = Vector3.Distance( start, end );
+		float handle = Mathf.Max( minRadius * 1.5f, chord * Mathf.Clamp( scale, 0.2f, 1.2f ) * 0.55f );
+		float y = ( start.y + end.y ) * 0.5f;
+
+		Vector3 hit;
+		if ( TryIntersectRaysXZ( start, inA, end, inB, out hit ) )
+		{
+			Vector3 fromStart = Flatten( hit - start );
+			Vector3 fromEnd = Flatten( hit - end );
+			bool inside = Vector3.Dot( fromStart, inA ) > 0.01f && Vector3.Dot( fromEnd, inB ) > 0.01f;
+			if ( inside )
+			{
+				float maxDist = Mathf.Max( handle, chord * 1.25f );
+				if ( fromStart.magnitude > maxDist )
+					hit = start + inA * maxDist;
+				hit.y = y;
+				return EnsureMinCornerRadius( start, hit, end, minRadius );
+			}
+		}
+
+		Vector3 fallback = ( start + inA * handle + end + inB * handle ) * 0.5f;
+		fallback.y = y;
+		return EnsureMinCornerRadius( start, fallback, end, minRadius );
+	}
+
+	static Vector3 EnsureMinCornerRadius( Vector3 start, Vector3 control, Vector3 end, float minRadius )
+	{
+		// Approximate curvature at mid Bezier sample; push control away from chord if too tight.
+		Vector3 mid = EvalQuadratic( start, control, end, 0.5f );
+		Vector3 chordMid = ( start + end ) * 0.5f;
+		Vector3 lateral = Flatten( mid - chordMid );
+		float lateralMag = lateral.magnitude;
+		if ( lateralMag >= minRadius * 0.85f )
+			return control;
+
+		Vector3 pushDir = lateralMag > 0.0001f ? lateral.normalized : Flatten( control - chordMid );
+		if ( pushDir.sqrMagnitude < 0.0001f )
+			pushDir = Vector3.Cross( Vector3.up, Flatten( end - start ) ).normalized;
+
+		if ( pushDir.sqrMagnitude < 0.0001f )
+			return control;
+
+		Vector3 pushed = chordMid + pushDir * ( minRadius * 1.1f );
+		pushed.y = control.y;
+		return pushed;
+	}
+
+	static bool TryIntersectRaysXZ( Vector3 p0, Vector3 d0, Vector3 p1, Vector3 d1, out Vector3 hit )
+	{
+		hit = Vector3.zero;
+		float ax = p0.x;
+		float az = p0.z;
+		float bx = d0.x;
+		float bz = d0.z;
+		float cx = p1.x;
+		float cz = p1.z;
+		float dx = d1.x;
+		float dz = d1.z;
+		float denom = bx * dz - bz * dx;
+		if ( Mathf.Abs( denom ) < 0.00001f )
+			return false;
+
+		float t = ( ( cx - ax ) * dz - ( cz - az ) * dx ) / denom;
+		hit = new Vector3( ax + bx * t, ( p0.y + p1.y ) * 0.5f, az + bz * t );
+		return true;
+	}
+
+	static bool SameTrackPair( MinecartTrack a0, MinecartTrack b0, MinecartTrack a1, MinecartTrack b1 )
+	{
+		return ( a0 == a1 && b0 == b1 ) || ( a0 == b1 && b0 == a1 );
+	}
+
+	static bool AnglesMatch( float a0, float b0, float a1, float b1 )
+	{
+		const float eps = 8f;
+		bool direct = Mathf.Abs( Mathf.DeltaAngle( a0 * Mathf.Rad2Deg, a1 * Mathf.Rad2Deg ) ) < eps
+			&& Mathf.Abs( Mathf.DeltaAngle( b0 * Mathf.Rad2Deg, b1 * Mathf.Rad2Deg ) ) < eps;
+		bool swapped = Mathf.Abs( Mathf.DeltaAngle( a0 * Mathf.Rad2Deg, b1 * Mathf.Rad2Deg ) ) < eps
+			&& Mathf.Abs( Mathf.DeltaAngle( b0 * Mathf.Rad2Deg, a1 * Mathf.Rad2Deg ) ) < eps;
+		return direct || swapped;
+	}
+
+	static void SyncCornerOptions( MinecartJunction junction, List<CornerCandidate> candidates )
+	{
+		if ( junction.cornerOptions == null )
+			junction.cornerOptions = new List<MinecartJunctionCornerOption>( candidates.Count );
+
+		List<MinecartJunctionCornerOption> previous = junction.cornerOptions;
+		List<MinecartJunctionCornerOption> next = new List<MinecartJunctionCornerOption>( candidates.Count );
+		for ( int i = 0; i < candidates.Count; i++ )
+		{
+			CornerCandidate c = candidates[ i ];
+			MinecartJunctionCornerOption match = FindPathOption( previous, c.entryA.track, c.entryB.track, c.entryA.angle, c.entryB.angle );
+
+			bool defaultEnabled = c.meshable
+				&& c.cornerAngleDegrees >= ( ActiveGraph != null ? ActiveGraph.MinCornerAngleDegrees : 35f );
+
+			next.Add( new MinecartJunctionCornerOption
+			{
+				label = c.label,
+				trackA = c.entryA.track,
+				trackB = c.entryB.track,
+				angleA = c.entryA.angle,
+				angleB = c.entryB.angle,
+				cornerAngleDegrees = c.cornerAngleDegrees,
+				enabled = match != null ? match.enabled : defaultEnabled
+			} );
+		}
+
+		junction.cornerOptions = next;
+	}
+
+	static MinecartJunctionCornerOption FindCornerOption( MinecartJunction junction, CornerCandidate c )
+	{
+		return FindPathOption( junction.cornerOptions, c.entryA.track, c.entryB.track, c.entryA.angle, c.entryB.angle );
+	}
+
+	static void AppendBezierDualRail( MinecartJunctionGraph graph, JunctionEntry a, JunctionEntry b, Vector3 start, Vector3 control, Vector3 end, float gauge, float railWidth, float railHeight, Vector3 sleeperSize )
+	{
 		if ( ActiveGraph != null )
 			ActiveGraph.EditorAddDebugCorner( ActiveJunctionWorld + start, ActiveJunctionWorld + control, ActiveJunctionWorld + end );
 
 		int samples = graph.CurveSamples;
-		float halfW = railWidth * 0.5f;
-		float halfH = railHeight * 0.5f;
-		float halfGauge = gauge * 0.5f;
 		float sleeperTop = sleeperSize.y;
 
 		Vector3[] centers = new Vector3[ samples ];
@@ -483,26 +1236,7 @@ public static class MinecartJunctionMeshBuilder
 
 		BakeRidePath( a, b, WorldPolylineBuffer );
 		BakeRidePath( b, a, ReverseWorldPolyline( WorldPolylineBuffer ) );
-
-		int leftStart = Verts.Count;
-		for ( int i = 0; i < samples; i++ )
-		{
-			Vector3 center = centers[ i ] + rights[ i ] * -halfGauge + ups[ i ] * ( sleeperTop + halfH );
-			AddRailRing( center, rights[ i ], ups[ i ], halfW, halfH );
-		}
-
-		int rightStart = Verts.Count;
-		for ( int i = 0; i < samples; i++ )
-		{
-			Vector3 center = centers[ i ] + rights[ i ] * halfGauge + ups[ i ] * ( sleeperTop + halfH );
-			AddRailRing( center, rights[ i ], ups[ i ], halfW, halfH );
-		}
-
-		for ( int i = 0; i < samples - 1; i++ )
-		{
-			ConnectRailRings( leftStart + i * 4, leftStart + ( i + 1 ) * 4 );
-			ConnectRailRings( rightStart + i * 4, rightStart + ( i + 1 ) * 4 );
-		}
+		EmitDualRailMesh( centers, rights, ups, samples, gauge, railWidth, railHeight, sleeperTop );
 	}
 
 	static List<Vector3> ReverseWorldPolyline( List<Vector3> source )

@@ -10,6 +10,7 @@ using UnityEngine.Splines;
 /// Carts sample this path by distance. Create via Dragon Loot → Minecart → Create Track.
 /// </summary>
 [RequireComponent( typeof( SplineContainer ) )]
+[ExecuteAlways]
 public class MinecartTrack : MonoBehaviour
 {
 	public const string VisualChildName = "TrackVisual";
@@ -65,6 +66,7 @@ public class MinecartTrack : MonoBehaviour
 	SplineContainer _container;
 	float _cachedLength;
 	bool _lengthDirty = true;
+	Mesh _instanceVisualMesh;
 
 	public static IReadOnlyList<MinecartTrack> ActiveTracks => All;
 
@@ -141,6 +143,29 @@ public class MinecartTrack : MonoBehaviour
 
 	public bool IsUsable => Length >= MinLength;
 
+	/// <summary>
+	/// True when carts may bind, travel, or take junction exits onto this track.
+	/// Gates on spline usability, active state, and parent <see cref="BuildableObject.IsBuilt"/> when present.
+	/// </summary>
+	public bool IsTravelReady
+	{
+		get
+		{
+			if ( !IsUsable || !isActiveAndEnabled )
+				return false;
+
+			// Edit-mode tools/preview: Hierarchy active is enough (matches junction visual gating).
+			if ( !Application.isPlaying )
+				return true;
+
+			BuildableObject buildable = GetComponentInParent<BuildableObject>( true );
+			if ( buildable == null )
+				return true;
+
+			return buildable.IsBuilt;
+		}
+	}
+
 	void OnEnable()
 	{
 		if ( !All.Contains( this ) )
@@ -148,11 +173,18 @@ public class MinecartTrack : MonoBehaviour
 
 		InvalidateLength();
 		RebuildWalkCollider();
+		MinecartJunctionGraph.NotifyTrackActiveChanged( this );
 	}
 
 	void OnDisable()
 	{
 		All.Remove( this );
+		MinecartJunctionGraph.NotifyTrackActiveChanged( this );
+	}
+
+	void OnDestroy()
+	{
+		DestroyInstanceVisualMesh();
 	}
 
 	void OnValidate()
@@ -205,6 +237,73 @@ public class MinecartTrack : MonoBehaviour
 		bakedMesh = mesh;
 	}
 
+	/// <summary>
+	/// Assigns a non-asset instance mesh to TrackVisual without touching the serialized baked mesh.
+	/// </summary>
+	public void ApplyInstanceVisualMesh( Mesh mesh )
+	{
+		if ( mesh == null )
+			return;
+
+		Transform visual = transform.Find( VisualChildName );
+		if ( visual == null )
+		{
+			if ( Application.isPlaying )
+				Destroy( mesh );
+			else
+				DestroyImmediate( mesh );
+			return;
+		}
+
+		MeshFilter filter = visual.GetComponent<MeshFilter>();
+		if ( filter == null )
+			filter = visual.gameObject.AddComponent<MeshFilter>();
+
+		Mesh previous = _instanceVisualMesh;
+		_instanceVisualMesh = mesh;
+		filter.sharedMesh = mesh;
+
+		if ( previous != null && previous != mesh && previous != bakedMesh )
+		{
+			if ( Application.isPlaying )
+				Destroy( previous );
+			else
+				DestroyImmediate( previous );
+		}
+	}
+
+	/// <summary>
+	/// Restores TrackVisual to the serialized baked mesh asset and clears any instance mesh.
+	/// </summary>
+	public void RestoreBakedVisualMesh()
+	{
+		Transform visual = transform.Find( VisualChildName );
+		if ( visual != null )
+		{
+			MeshFilter filter = visual.GetComponent<MeshFilter>();
+			if ( filter != null && bakedMesh != null )
+				filter.sharedMesh = bakedMesh;
+		}
+
+		DestroyInstanceVisualMesh();
+	}
+
+	void DestroyInstanceVisualMesh()
+	{
+		if ( _instanceVisualMesh == null )
+			return;
+
+		Mesh mesh = _instanceVisualMesh;
+		_instanceVisualMesh = null;
+		if ( mesh == bakedMesh )
+			return;
+
+		if ( Application.isPlaying )
+			Destroy( mesh );
+		else
+			DestroyImmediate( mesh );
+	}
+
 	public void RebuildWalkCollider()
 	{
 		InvalidateLength();
@@ -223,6 +322,13 @@ public class MinecartTrack : MonoBehaviour
 		MeshCollider collider = go.GetComponent<MeshCollider>();
 		if ( collider == null )
 			collider = go.AddComponent<MeshCollider>();
+
+		// Unbuilt tracks keep mesh authoring but must not be walkable / rideable platforms.
+		bool travelReady = IsTravelReady;
+		collider.enabled = travelReady;
+		go.SetActive( travelReady );
+		if ( !travelReady )
+			return;
 
 		Mesh previous = collider.sharedMesh;
 		Mesh mesh = BuildWalkColliderMesh();
@@ -402,7 +508,7 @@ public class MinecartTrack : MonoBehaviour
 		for ( int i = 0; i < All.Count; i++ )
 		{
 			MinecartTrack candidate = All[ i ];
-			if ( candidate == null || !candidate.isActiveAndEnabled || !candidate.IsUsable )
+			if ( candidate == null || !candidate.isActiveAndEnabled || !candidate.IsTravelReady )
 				continue;
 
 			float candDistance;
@@ -509,10 +615,30 @@ public class MinecartTrack : MonoBehaviour
 			|| ( IsClosed && Mathf.Abs( signedDelta ) > 0.00001f && !Mathf.Approximately( next, distance ) );
 	}
 
+	/// <summary>
+	/// True when cart clamps (not track ends) would reduce travel for <paramref name="ignoreCart"/>.
+	/// </summary>
+	public bool WouldClampAgainstCarts( float distance, float signedDelta, MinecartInteractable ignoreCart )
+	{
+		float length = Length;
+		if ( length < MinLength || Mathf.Abs( signedDelta ) < 0.00001f )
+			return false;
+
+		if ( ignoreCart != null && ignoreCart.IsHopping )
+			return false;
+
+		float unconstrained = WrapOrClamp( distance + signedDelta, length );
+		float constrained = ClampAgainstCarts( distance, unconstrained, signedDelta, ignoreCart, length );
+		return Mathf.Abs( constrained - unconstrained ) > 0.00001f;
+	}
+
 	float ClampAgainstCarts( float from, float proposed, float signedDelta, MinecartInteractable ignoreCart, float length )
 	{
 		if ( Mathf.Abs( signedDelta ) < 0.00001f )
 			return from;
+
+		if ( ignoreCart != null && ignoreCart.IsHopping )
+			return proposed;
 
 		float result = proposed;
 		float half = ignoreCart != null ? ignoreCart.BlockingHalfLength : 0.8f;
@@ -523,6 +649,9 @@ public class MinecartTrack : MonoBehaviour
 		{
 			MinecartInteractable other = carts[ i ];
 			if ( other == null || other == ignoreCart || other.BoundTrack != this )
+				continue;
+
+			if ( other.IsHopping )
 				continue;
 
 			if ( ignoreCart != null && ignoreCart.SharesConsistWith( other ) )

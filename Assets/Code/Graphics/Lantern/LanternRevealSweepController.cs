@@ -114,7 +114,6 @@ public class LanternRevealSweepController : MonoBehaviour
 		peak = 2f
 	};
 
-	bool _hasCompleted;
 	Coroutine _revealRoutine;
 	Volume _bloomVolume;
 	VolumeProfile _bloomProfile;
@@ -251,7 +250,6 @@ public class LanternRevealSweepController : MonoBehaviour
 			ResetPunchEffects();
 		}
 
-		_hasCompleted = false;
 		_revealRoutine = StartCoroutine( RevealRoutine( overrides ) );
 	}
 
@@ -282,7 +280,6 @@ public class LanternRevealSweepController : MonoBehaviour
 			_revealRoutine = null;
 		}
 
-		_hasCompleted = true;
 		FinishSkylightReveal();
 		ResetPunchEffects();
 
@@ -301,7 +298,6 @@ public class LanternRevealSweepController : MonoBehaviour
 
 	public void DebugResetReveal()
 	{
-		_hasCompleted = false;
 		if ( _revealRoutine != null )
 		{
 			StopCoroutine( _revealRoutine );
@@ -402,7 +398,6 @@ public class LanternRevealSweepController : MonoBehaviour
 		if ( lanternFadeDuration > 0f )
 			yield return new WaitForSeconds( lanternFadeDuration );
 
-		_hasCompleted = true;
 		_revealRoutine = null;
 	}
 

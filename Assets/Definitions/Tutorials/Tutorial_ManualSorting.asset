@@ -17,6 +17,7 @@ MonoBehaviour:
   tags:
   - coins
   - sorting
+  disabled: 0
   trigger: 9
   holdingCategory: 0
   volumeId: 
@@ -37,8 +38,9 @@ MonoBehaviour:
   - tut_coin_stacking
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Put down a big stack, then pick coins off one at a time to sort them.
+  body: Put down a big stack and then pick coins off the stack to sort them.
   keybindHint: 
   tasks:
   - id: place_whole_stack

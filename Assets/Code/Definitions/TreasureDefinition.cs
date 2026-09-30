@@ -136,9 +136,8 @@ public class TreasureDefinition : ScriptableObject
 	[Min( 0f )]
 	public float coinThickness = 0.04f;
 
-	[Tooltip( "Cells this treasure occupies on a minecart cargo grid (X = columns, Y = rows). Minimum 1×1." )]
+	[Tooltip( "Cells this treasure occupies on a minecart cargo grid or mixed display table (X = columns, Y = rows). Minimum 1×1. Coins are always treated as 1×1 on mixed tables." )]
 	public Vector2Int cartGridSize = Vector2Int.one;
-
 	[Header( "Audio" )]
 	[Tooltip( "Random one-shots when this treasure is picked up into the hand." )]
 	public AudioClip[] pickupClips;

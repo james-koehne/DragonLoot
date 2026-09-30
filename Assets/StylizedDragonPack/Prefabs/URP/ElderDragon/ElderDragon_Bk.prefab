@@ -116,8 +116,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _animator: {fileID: 2069686648563157735}
-  _spine01: {fileID: 0}
-  _spine02: {fileID: 0}
+  _spine01: {fileID: 6074419245968649710}
+  _spine02: {fileID: 6709084315277267252}
   _neck01: {fileID: 4947240492185376811}
   _neck02: {fileID: 5736366870686529003}
   _neck03: {fileID: 2483260219861698161}
@@ -150,6 +150,8 @@ MonoBehaviour:
   - 20
   - 22
   - 25
+  _headLookLocalAxis: {x: 0, y: 0, z: 1}
+  _autoDetectHeadLookAxis: 1
   _headWeight: 1
   _headMaxYaw: 80
   _headMaxPitch: 45
@@ -163,8 +165,18 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -9058920394241637731, guid: 97bf5849c1f38994d870d6481197e83f, type: 3}
   m_PrefabInstance: {fileID: 5607989390689793910}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &6074419245968649710 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 1846256759547140760, guid: 97bf5849c1f38994d870d6481197e83f, type: 3}
+  m_PrefabInstance: {fileID: 5607989390689793910}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &6518423687321949214 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1703912541600113512, guid: 97bf5849c1f38994d870d6481197e83f, type: 3}
+  m_PrefabInstance: {fileID: 5607989390689793910}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &6709084315277267252 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8013909246233647550, guid: 97bf5849c1f38994d870d6481197e83f, type: 3}
   m_PrefabInstance: {fileID: 5607989390689793910}
   m_PrefabAsset: {fileID: 0}

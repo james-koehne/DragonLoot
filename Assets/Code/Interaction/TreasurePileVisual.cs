@@ -432,7 +432,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	GoldPileHeightfield _heightfield;
 	TreasurePileInteractable _pile;
 	TreasurePileDefinition _definition;
-	bool _bound;
 	bool _emptied;
 	Vector3 _lastInteractPoint;
 	bool _hasInteractPoint;
@@ -823,7 +822,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		_pile = pile;
 		ResolveDefinition();
 		_emptied = false;
-		_bound = true;
 
 		EnsureChildComponents();
 		ApplyDefinitionTuning();

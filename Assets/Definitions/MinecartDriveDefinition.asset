@@ -37,3 +37,8 @@ MonoBehaviour:
   maxStackPerCell: 0
   unloadDetectRadius: 3
   unloadScatterRadius: 0.35
+  hopHeight: 2.25
+  hopDuration: 0.45
+  hopStaggerDelay: 0.06
+  hopHeightPerExtraCar: 0.12
+  hopBlockerScale: 0.25

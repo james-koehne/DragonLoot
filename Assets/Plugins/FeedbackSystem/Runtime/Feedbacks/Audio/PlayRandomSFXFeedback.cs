@@ -11,10 +11,12 @@ namespace FeedbackSystem
 	{
 		public AudioClip[] Clips;
 
-		[Range( 0f, 1f )]
+		[Tooltip( "Can exceed 1 for boost (e.g. 1.5 = +50%)." )]
+		[Min( 0f )]
 		public float VolumeMin = 1f;
 
-		[Range( 0f, 1f )]
+		[Tooltip( "Can exceed 1 for boost (e.g. 1.5 = +50%)." )]
+		[Min( 0f )]
 		[FormerlySerializedAs( "Volume" )]
 		public float VolumeMax = 1f;
 

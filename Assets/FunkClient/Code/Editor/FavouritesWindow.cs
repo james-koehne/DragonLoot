@@ -102,7 +102,7 @@ public class FavouritesWindow : EditorWindow
 
 	// --- Tracking actual opens ---
 	[UnityEditor.Callbacks.OnOpenAsset]
-	private static bool OnOpenAsset( int instanceID, int line )
+	private static bool OnOpenAsset( EntityId instanceID, int line )
 	{
 		string path = AssetDatabase.GetAssetPath( instanceID );
 		if ( string.IsNullOrEmpty( path ) )

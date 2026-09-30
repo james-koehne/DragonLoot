@@ -124,19 +124,19 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	public float autoStackHeightTolerance = 0.65f;
 
 	[Header( "Auto Stack Anim" )]
-	[Tooltip( "Duration of the hop-then-arc flip onto a nearby stack." )]
+	[Tooltip( "Duration of the arc flip onto a nearby stack." )]
 	[Min( 0.05f )]
 	public float autoStackFlipDuration = 0.4f;
 
-	[Tooltip( "How high the coin rises above max(start,end) before arcing to the stack." )]
+	[Tooltip( "Peak arc height above the start–end chord during auto-stack flight." )]
 	[Min( 0f )]
-	public float autoStackHopHeight = 0.7f;
+	public float autoStackHopHeight = 0.84f;
 
-	[Tooltip( "Fraction of the anim spent rising in place before the lateral arc (0-1)." )]
+	[Tooltip( "Unused by coin append (kept for hop-then-arc callers). Fraction of anim spent rising before the lateral arc." )]
 	[Range( 0.05f, 0.6f )]
 	public float autoStackRiseFraction = 0.35f;
 
-	[Tooltip( "Extra arc height during the lateral hop-to-stack phase." )]
+	[Tooltip( "Unused by coin append (kept for hop-then-arc callers). Extra arc height during the lateral phase." )]
 	[Min( 0f )]
 	public float autoStackSecondaryArcHeight = 0.15f;
 
@@ -144,7 +144,7 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Min( 0f )]
 	public float autoStackFlipSpins = 1.25f;
 
-	[Tooltip( "Random ± fraction applied to hop height per coin (0.25 = ±25%)." )]
+	[Tooltip( "Random ± fraction applied to arc height per coin (0.25 = ±25%)." )]
 	[Range( 0f, 0.75f )]
 	public float autoStackHopHeightVariance = 0.3f;
 
@@ -152,7 +152,7 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Range( 0f, 0.5f )]
 	public float autoStackDurationVariance = 0.2f;
 
-	[Tooltip( "Random ± fraction applied to rise fraction per coin." )]
+	[Tooltip( "Unused by coin append (kept for hop-then-arc callers). Random ± fraction applied to rise fraction." )]
 	[Range( 0f, 0.5f )]
 	public float autoStackRiseFractionVariance = 0.2f;
 
@@ -160,7 +160,7 @@ public class TreasureSurfaceDefinition : ScriptableObject
 	[Range( 0f, 0.5f )]
 	public float autoStackSpinVariance = 0.25f;
 
-	[Tooltip( "Random ± meters of lateral apex offset so hops don't look identical." )]
+	[Tooltip( "Unused by coin append (kept for hop-then-arc callers). Random lateral apex offset." )]
 	[Min( 0f )]
 	public float autoStackApexJitter = 0.08f;
 

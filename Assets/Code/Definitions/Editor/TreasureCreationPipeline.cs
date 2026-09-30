@@ -125,6 +125,8 @@ public static class TreasureCreationPipeline
 				return "Containers";
 			case TreasureCategory.Junk:
 				return "Junk";
+			case TreasureCategory.General:
+				return "General";
 			default:
 				return "Artifacts";
 		}
@@ -261,6 +263,26 @@ public static class TreasureCreationPipeline
 				request.CollideWithPlayerOnPile = false;
 				request.WorldScale = Vector3.one * 0.24f;
 				request.HeldScale = Vector3.one * 0.2f;
+				request.CoinThickness = 0.1f;
+				request.CartGridSize = Vector2Int.one;
+				request.Value = 1;
+				request.Weight = 1;
+				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
+				request.ConvertArtifactMaterials = false;
+				break;
+
+			case TreasureCategory.General:
+				request.ExclusiveCarry = true;
+				request.UsesHeavyThrow = false;
+				request.CanStack = false;
+				request.RigidbodyMass = 0.15f;
+				request.Drag = 0.5f;
+				request.AngularDrag = 0.5f;
+				request.AutoToppleStrength = 0f;
+				request.PickupRadius = 0.35f;
+				request.CollideWithPlayerOnPile = false;
+				request.WorldScale = Vector3.one * 0.5f;
+				request.HeldScale = Vector3.one * 0.85f;
 				request.CoinThickness = 0.1f;
 				request.CartGridSize = Vector2Int.one;
 				request.Value = 1;

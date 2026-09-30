@@ -44,7 +44,7 @@ MonoBehaviour:
   autoStackRadius: 0.36
   autoStackHeightTolerance: 0.65
   autoStackFlipDuration: 0.4
-  autoStackHopHeight: 0.7
+  autoStackHopHeight: 0.84
   autoStackRiseFraction: 0.35
   autoStackSecondaryArcHeight: 0.15
   autoStackFlipSpins: 1.25

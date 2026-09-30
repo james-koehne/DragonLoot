@@ -37,9 +37,10 @@ MonoBehaviour:
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds:
+  - island4_artifact_presentation
   completeAllTasksOnVolumeEnter: 0
-  body: Place the artifact on the presentation stand on this island. Aim at the stand
-    or a slot, then place it.
+  body: Aim at the presentation stand on this island to display the artifact.
   keybindHint: '[{Interact}] or [{SecondaryInteract}] Place'
   tasks:
   - id: place_artifact

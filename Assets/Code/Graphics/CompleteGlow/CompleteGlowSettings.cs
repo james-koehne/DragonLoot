@@ -112,6 +112,18 @@ public class CompleteGlowSettings
 	[Min( 0f )]
 	public float DepthFadeDistance = 0.25f;
 
+	[Header( "Reveal Flash" )]
+	[Tooltip( "When shown at runtime, briefly flash SoftShaft exposure then ease to Exposure." )]
+	public bool PlayExposureFlashOnShow = true;
+	[Min( 0f )]
+	public float FlashExposure = 2.5f;
+	[Min( 0f )]
+	public float FlashDuration = 0.45f;
+	[Tooltip( "Curve over flash duration. 1 = FlashExposure, 0 = resting Exposure." )]
+	public AnimationCurve FlashCurve = new AnimationCurve(
+		new Keyframe( 0f, 1f ),
+		new Keyframe( 1f, 0f, -1.5f, -1.5f ) );
+
 	[Header( "Extras" )]
 	public bool AddPointLight;
 	public bool LightColorFromGlow = true;
@@ -136,6 +148,8 @@ public class CompleteGlowSettings
 			clone.FlareCurve = new AnimationCurve( FlareCurve.keys );
 		if ( HeightFalloffCurve != null )
 			clone.HeightFalloffCurve = new AnimationCurve( HeightFalloffCurve.keys );
+		if ( FlashCurve != null )
+			clone.FlashCurve = new AnimationCurve( FlashCurve.keys );
 		return clone;
 	}
 
@@ -187,6 +201,12 @@ public class CompleteGlowSettings
 		PulseSpeed = other.PulseSpeed;
 		PulseAmount = other.PulseAmount;
 		DepthFadeDistance = other.DepthFadeDistance;
+		PlayExposureFlashOnShow = other.PlayExposureFlashOnShow;
+		FlashExposure = other.FlashExposure;
+		FlashDuration = other.FlashDuration;
+		FlashCurve = other.FlashCurve != null
+			? new AnimationCurve( other.FlashCurve.keys )
+			: new AnimationCurve( new Keyframe( 0f, 1f ), new Keyframe( 1f, 0f, -1.5f, -1.5f ) );
 		AddPointLight = other.AddPointLight;
 		LightColorFromGlow = other.LightColorFromGlow;
 		LightIntensity = other.LightIntensity;

@@ -83,6 +83,7 @@ public static class WorldEventCatalogFallback
 
 	static WorldEventDefinition CreateIntroFairy()
 	{
+		// Permanent companion spawn removed — guides are started via FairyHelper.StartGuide.
 		WorldEventDefinition evt = Create( "intro_fairy" );
 		evt.tags = new[] { "intro" };
 		evt.sessionOnly = true;
@@ -94,15 +95,7 @@ public static class WorldEventCatalogFallback
 				targetId = "intro_ledge"
 			}
 		};
-		evt.actions = new[]
-		{
-			new WorldEventAction
-			{
-				type = WorldEventActionType.SpawnAddressable,
-				addressableKey = "Companions/FairyHelper",
-				spawnAtPlayer = true
-			}
-		};
+		evt.actions = new WorldEventAction[ 0 ];
 		return evt;
 	}
 

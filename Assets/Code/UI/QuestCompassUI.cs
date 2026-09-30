@@ -89,7 +89,7 @@ public class QuestCompassUI : MonoBehaviour
 
 	void Update()
 	{
-		if ( !_hasMarker || group == null || group.alpha <= 0f )
+		if ( group == null || group.alpha <= 0f )
 			return;
 
 		UpdateCompass();
@@ -120,11 +120,13 @@ public class QuestCompassUI : MonoBehaviour
 
 	void ApplyVisibility()
 	{
-		bool show = _hasMarker && !_cinematicHidden;
+		bool showCompass = !_cinematicHidden;
 		if ( group != null )
-			group.alpha = show ? 1f : 0f;
+			group.alpha = showCompass ? 1f : 0f;
+
+		bool showPip = _hasMarker && !_cinematicHidden;
 		if ( pip != null )
-			pip.gameObject.SetActive( show );
+			pip.gameObject.SetActive( showPip );
 	}
 
 	void UpdateCompass()
@@ -151,6 +153,9 @@ public class QuestCompassUI : MonoBehaviour
 		PlaceCardinal( labelS, 180f - yaw );
 		PlaceCardinal( labelW, -90f - yaw );
 
+		if ( !_hasMarker || pip == null || !pip.gameObject.activeSelf )
+			return;
+
 		Vector3 toMarker = _markerWorld - cam.position;
 		toMarker.y = 0f;
 		if ( distance != null )
@@ -158,8 +163,7 @@ public class QuestCompassUI : MonoBehaviour
 
 		if ( toMarker.sqrMagnitude < 0.01f )
 		{
-			if ( pip != null )
-				pip.anchoredPosition = Vector2.zero;
+			pip.anchoredPosition = Vector2.zero;
 			return;
 		}
 
@@ -167,8 +171,7 @@ public class QuestCompassUI : MonoBehaviour
 		float bearing = Mathf.Atan2( toMarker.x, toMarker.z ) * Mathf.Rad2Deg;
 		float relative = Mathf.DeltaAngle( yaw, bearing );
 		float x = Mathf.Clamp( relative / 90f, -1f, 1f ) * HalfWidth;
-		if ( pip != null )
-			pip.anchoredPosition = new Vector2( x, 0f );
+		pip.anchoredPosition = new Vector2( x, 0f );
 	}
 
 	void PlaceCardinal( Text label, float relativeDegrees )

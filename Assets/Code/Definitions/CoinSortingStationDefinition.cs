@@ -107,6 +107,22 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float sortPlayInterval = 1f;
 
+	[Header( "Auto Storage Pull" )]
+	[Tooltip( "When enabled, the hopper automatically pulls whole coin stacks from nearby ground piles and mixed storage tables." )]
+	public bool autoPullFromNearbyStorage = true;
+
+	[Tooltip( "XZ radius around the station used to find pullable coin stacks / mixed storage." )]
+	[Min( 0.25f )]
+	public float storagePullRadius = 3f;
+
+	[Tooltip( "Minimum seconds between storage-pull attempts while the hopper has room." )]
+	[Min( 0.05f )]
+	public float storagePullInterval = 0.35f;
+
+	[Tooltip( "Seconds for a pulled stack to fly into the hopper." )]
+	[Min( 0.05f )]
+	public float storagePullFlightDuration = 0.32f;
+
 	[Header( "Output" )]
 	[Tooltip( "World-space lateral step when starting a new stack beside a full chute stack." )]
 	[Min( 0.05f )]

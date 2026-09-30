@@ -33,11 +33,13 @@ MonoBehaviour:
   maxUprightAngle: 35
   physicsStabilizationDelay: 0.35
   pickupRadius: 0.6
+  nonCoinPickupHoldDelayOverride: -1
   collideWithPlayerOnPile: 1
   keyType: 0
   isSkeletonKey: 0
   chestDefinition: {fileID: 11400000, guid: 73e89bf88a080c543a62700580587045, type: 2}
   icon: {fileID: 0}
+  uiColorHint: {r: 1, g: 1, b: 1, a: 1}
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
   prefab:
@@ -54,12 +56,15 @@ MonoBehaviour:
   canStack: 0
   usesInterleavedBarStack: 0
   coinThickness: 0.8
-  cartGridSize: {x: 2, y: 2}
+  cartGridSize: {x: 4, y: 3}
   pickupClips: []
   pickupVolumeMin: 1
   pickupVolumeMax: 1
   pickupPitchMin: 1
   pickupPitchMax: 1
+  pickupRewardClips: []
+  pickupRewardVolumeMin: 0.45
+  pickupRewardVolumeMax: 0.6
   placeClips: []
   placeVolumeMin: 1
   placeVolumeMax: 1

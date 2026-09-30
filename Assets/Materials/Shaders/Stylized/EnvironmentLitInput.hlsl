@@ -36,4 +36,14 @@ TEXTURE2D(_MetallicGlossMap);   SAMPLER(sampler_MetallicGlossMap);
 TEXTURE2D(_OcclusionMap);       SAMPLER(sampler_OcclusionMap);
 TEXTURE2D(_EmissionMap);        SAMPLER(sampler_EmissionMap);
 
+half EnvironmentLitSampleAlpha(float2 uv)
+{
+    return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uv).a * _BaseColor.a;
+}
+
+void EnvironmentLitAlphaClip(float2 uv)
+{
+    AlphaDiscard(EnvironmentLitSampleAlpha(uv), _Cutoff);
+}
+
 #endif

@@ -4,10 +4,14 @@ using UnityEngine.UI;
 /// <summary>
 /// Circular progress ring around the crosshair for hold charges
 /// (sorter pickup, whole-stack E/F, and non-coin pickup hold).
+/// Outline is a separate filled Image (slightly larger) — Unity UI Outline
+/// does not follow radial fill cleanly.
 /// </summary>
 public class InteractionProgressRingUI : MonoBehaviour
 {
 	[SerializeField] Image _ring;
+	[SerializeField] Image _outline;
+	[SerializeField] float _outlineExtraSize = 4f;
 
 	float _size = 96f;
 
@@ -68,6 +72,12 @@ public class InteractionProgressRingUI : MonoBehaviour
 		}
 
 		PlayerInteraction interaction = player.Interaction;
+		if ( interaction != null && interaction.CoffeeHoldProgress > 0.001f )
+		{
+			SetProgress( interaction.CoffeeHoldProgress, valid: true );
+			return;
+		}
+
 		if ( interaction != null && interaction.NonCoinPickupHoldProgress > 0.001f )
 		{
 			SetProgress( interaction.NonCoinPickupHoldProgress, valid: true );
@@ -80,11 +90,8 @@ public class InteractionProgressRingUI : MonoBehaviour
 	public void SetRingSize( float size )
 	{
 		_size = Mathf.Max( 8f, size );
-		if ( _ring == null )
-			return;
-
-		RectTransform rect = _ring.rectTransform;
-		rect.sizeDelta = new Vector2( _size, _size );
+		ApplySize( _ring, _size );
+		ApplySize( _outline, _size + Mathf.Max( 0f, _outlineExtraSize ) );
 	}
 
 	/// <summary>0 hides the ring; (0,1] shows fill amount.</summary>
@@ -103,6 +110,11 @@ public class InteractionProgressRingUI : MonoBehaviour
 		{
 			_ring.enabled = false;
 			_ring.fillAmount = 0f;
+			if ( _outline != null )
+			{
+				_outline.enabled = false;
+				_outline.fillAmount = 0f;
+			}
 			return;
 		}
 
@@ -111,6 +123,19 @@ public class InteractionProgressRingUI : MonoBehaviour
 		_ring.color = valid
 			? new Color( 1f, 0.92f, 0.45f, 0.85f )
 			: new Color( 1f, 0.35f, 0.3f, 0.85f );
+
+		if ( _outline != null )
+		{
+			_outline.enabled = true;
+			_outline.fillAmount = clamped;
+		}
+	}
+
+	static void ApplySize( Image image, float size )
+	{
+		if ( image == null )
+			return;
+
+		image.rectTransform.sizeDelta = new Vector2( size, size );
 	}
 }
-

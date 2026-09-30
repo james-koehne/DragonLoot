@@ -19,6 +19,12 @@ Shader "DragonLoot/EnvironmentLit"
         _EmissionMap("Emission", 2D) = "white" {}
         _EmissionIntensity("Emission Intensity", Range(0, 8)) = 1
 
+        [Header(Surface)]
+        [Enum(Opaque, 0, Transparent, 1)] _Surface("Surface Type", Float) = 0
+        [Enum(Alpha, 0, Premultiply, 1, Additive, 2, Multiply, 3)] _Blend("Blend Mode", Float) = 0
+        [Toggle(_ALPHATEST_ON)] _AlphaClip("Alpha Clip", Float) = 0
+        _Cutoff("Alpha Clip Threshold", Range(0, 1)) = 0.5
+
         [Header(Local Lighting Response)]
         _RimIntensityScale("Rim Intensity Scale", Range(0, 4)) = 1
         _SpecularIntensityScale("Specular Intensity Scale", Range(0, 4)) = 1
@@ -36,9 +42,14 @@ Shader "DragonLoot/EnvironmentLit"
         _HeightFogSoftness("Height Fog Softness", Range(0.01, 20)) = 4
         _HeightFogStrength("Height Fog Strength", Range(0, 1)) = 1
 
-        [HideInInspector] _Cutoff("Cutoff", Range(0, 1)) = 0.5
-        [HideInInspector] _Surface("__surface", Float) = 0
         [HideInInspector] _Cull("__cull", Float) = 2
+        [HideInInspector] _SrcBlend("__src", Float) = 1
+        [HideInInspector] _DstBlend("__dst", Float) = 0
+        [HideInInspector] _SrcBlendAlpha("__srcA", Float) = 1
+        [HideInInspector] _DstBlendAlpha("__dstA", Float) = 0
+        [HideInInspector] _ZWrite("__zw", Float) = 1
+        [HideInInspector] _AlphaToMask("__alphaToMask", Float) = 0
+        [HideInInspector] _QueueOffset("Queue offset", Float) = 0
     }
 
     SubShader
@@ -49,7 +60,6 @@ Shader "DragonLoot/EnvironmentLit"
             "RenderPipeline" = "UniversalPipeline"
             "UniversalMaterialType" = "Lit"
             "IgnoreProjector" = "True"
-            "Queue" = "Geometry"
         }
         LOD 300
 
@@ -58,8 +68,10 @@ Shader "DragonLoot/EnvironmentLit"
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
 
+            Blend[_SrcBlend][_DstBlend], [_SrcBlendAlpha][_DstBlendAlpha]
+            ZWrite[_ZWrite]
             Cull[_Cull]
-            ZWrite On
+            AlphaToMask[_AlphaToMask]
 
             HLSLPROGRAM
             #pragma target 3.0
@@ -85,6 +97,10 @@ Shader "DragonLoot/EnvironmentLit"
             #pragma multi_compile _ LOD_FADE_CROSSFADE
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
+            #pragma shader_feature_local_fragment _SURFACE_TYPE_TRANSPARENT
+            #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
+            #pragma shader_feature_local_fragment _ALPHAMODULATE_ON
             #pragma shader_feature_local_fragment _HEIGHTFOG
 
             #include "EnvironmentLitLighting.hlsl"
@@ -108,6 +124,7 @@ Shader "DragonLoot/EnvironmentLit"
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
             #include "EnvironmentLitInput.hlsl"
@@ -119,12 +136,14 @@ Shader "DragonLoot/EnvironmentLit"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
+                float2 texcoord   : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct ShadowVaryings
             {
                 float4 positionCS : SV_POSITION;
+                float2 uv         : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -147,6 +166,7 @@ Shader "DragonLoot/EnvironmentLit"
 
                 float3 shadowedWS = ApplyShadowBias(positionWS, normalWS, lightDirectionWS);
                 output.positionCS = TransformWorldToHClip(shadowedWS);
+                output.uv = TRANSFORM_TEX(input.texcoord, _BaseMap);
 #if UNITY_REVERSED_Z
                 output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
 #else
@@ -157,6 +177,7 @@ Shader "DragonLoot/EnvironmentLit"
 
             half4 EnvironmentShadowFrag(ShadowVaryings input) : SV_Target
             {
+                EnvironmentLitAlphaClip(input.uv);
                 return 0;
             }
             ENDHLSL
@@ -177,18 +198,21 @@ Shader "DragonLoot/EnvironmentLit"
             #pragma fragment EnvironmentDepthFrag
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "EnvironmentLitInput.hlsl"
 
             struct DepthAttributes
             {
                 float4 positionOS : POSITION;
+                float2 texcoord   : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct DepthVaryings
             {
                 float4 positionCS : SV_POSITION;
+                float2 uv         : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -200,11 +224,13 @@ Shader "DragonLoot/EnvironmentLit"
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = TRANSFORM_TEX(input.texcoord, _BaseMap);
                 return output;
             }
 
             half4 EnvironmentDepthFrag(DepthVaryings input) : SV_Target
             {
+                EnvironmentLitAlphaClip(input.uv);
                 return 0;
             }
             ENDHLSL
@@ -224,6 +250,7 @@ Shader "DragonLoot/EnvironmentLit"
             #pragma fragment EnvironmentDepthNormalsFrag
             #pragma multi_compile_instancing
             #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DOTS.hlsl"
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "EnvironmentLitInput.hlsl"
 
@@ -231,6 +258,7 @@ Shader "DragonLoot/EnvironmentLit"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
+                float2 texcoord   : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -238,6 +266,7 @@ Shader "DragonLoot/EnvironmentLit"
             {
                 float4 positionCS : SV_POSITION;
                 float3 normalWS   : TEXCOORD0;
+                float2 uv         : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -250,11 +279,13 @@ Shader "DragonLoot/EnvironmentLit"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.uv = TRANSFORM_TEX(input.texcoord, _BaseMap);
                 return output;
             }
 
             half4 EnvironmentDepthNormalsFrag(DepthNormalsVaryings input) : SV_Target
             {
+                EnvironmentLitAlphaClip(input.uv);
                 return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
             }
             ENDHLSL
@@ -272,6 +303,7 @@ Shader "DragonLoot/EnvironmentLit"
             #pragma vertex UniversalVertexMeta
             #pragma fragment EnvironmentMetaFrag
             #pragma shader_feature EDITOR_VISUALIZATION
+            #pragma shader_feature_local_fragment _ALPHATEST_ON
 
             // Core / UnityInput must come before MetaPass so unity_LightmapST is declared.
             #include "EnvironmentLitInput.hlsl"
@@ -279,11 +311,12 @@ Shader "DragonLoot/EnvironmentLit"
 
             half4 EnvironmentMetaFrag(Varyings input) : SV_Target
             {
-                half3 albedo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).rgb * _BaseColor.rgb;
+                half4 albedoSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv) * _BaseColor;
+                AlphaDiscard(albedoSample.a, _Cutoff);
                 half3 emission = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, input.uv).rgb * _EmissionColor.rgb * _EmissionIntensity;
 
                 MetaInput metaInput = (MetaInput)0;
-                metaInput.Albedo = albedo;
+                metaInput.Albedo = albedoSample.rgb;
                 metaInput.Emission = emission;
                 return UniversalFragmentMeta(input, metaInput);
             }
@@ -292,4 +325,5 @@ Shader "DragonLoot/EnvironmentLit"
     }
 
     FallBack "Universal Render Pipeline/Lit"
+    CustomEditor "EnvironmentLitShaderGUI"
 }

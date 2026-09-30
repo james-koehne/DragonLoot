@@ -70,6 +70,17 @@ public class InteractionContextUI : MonoBehaviour
 			return;
 		}
 
+		PlayerBuildMode buildMode = player.BuildMode;
+		if ( buildMode != null && buildMode.IsActive )
+		{
+			if ( buildMode.AimedBuildable != null )
+				AppendDualBound( gameInput.ContextualInteract, gameInput.Interact, "Hold to build" );
+			else
+				AppendPlain( "Aim at a ghost structure" );
+			FinishRefresh();
+			return;
+		}
+
 		if ( minecartPush != null && minecartPush.IsPushing )
 		{
 			AppendBound( gameInput.ContextualInteract, "Pushing (release to stop)" );
@@ -99,6 +110,11 @@ public class InteractionContextUI : MonoBehaviour
 			AppendBound( gameInput.ContextualInteract, "Hold to move sorter" );
 		else if ( focus is DoorInteractable doorFocus && doorFocus.ShowsLockedPrompt )
 			AppendBound( gameInput.ContextualInteract, "Locked" );
+		else if ( focus is CoffeeMachineInteractable coffeeFocus && coffeeFocus.CanInteract( player ) )
+		{
+			string coffeePrompt = coffeeFocus.HoldPromptLabel;
+			AppendBound( gameInput.ContextualInteract, string.IsNullOrEmpty( coffeePrompt ) ? "Hold to craft" : coffeePrompt );
+		}
 		else if ( focus != null && focus.CanInteract( player ) )
 		{
 			string primary = FormatPrimaryPrompt( focus, player );
@@ -133,6 +149,10 @@ public class InteractionContextUI : MonoBehaviour
 
 		if ( carrying && IsCleanBound( gameInput ) && TryGetDirtyActive( carry, out _ ) )
 			AppendBound( gameInput.Clean, "Hold to polish" );
+
+		PlayerCoffeeSip coffeeSip = player.CoffeeSip;
+		if ( coffeeSip != null && coffeeSip.CanOfferSip )
+			AppendBound( gameInput.ContextualInteract, "Sip" );
 
 		FinishRefresh();
 	}
@@ -192,6 +212,12 @@ public class InteractionContextUI : MonoBehaviour
 		if ( focus is MinecartInteractable driveCart && driveCart.IsDriveCart )
 			return driveCart.WantsDriveEnter( player ) ? "Ride minecart" : "Shove / hold to push";
 
+		if ( focus is MinecartInteractable cargoCart && cargoCart.RejectsPlayerPush )
+		{
+			MinecartAutoController auto = cargoCart.ConsistLead.GetComponent<MinecartAutoController>();
+			return auto != null && auto.CanPlayerSend ? "Send cart" : null;
+		}
+
 		if ( focus is MinecartInteractable )
 			return "Shove / hold to push";
 
@@ -203,6 +229,12 @@ public class InteractionContextUI : MonoBehaviour
 
 		if ( focus is CoinSortingStationMoveInteractable )
 			return "Hold to move sorter";
+
+		if ( focus is CoffeeMachineInteractable coffee )
+		{
+			string prompt = coffee.HoldPromptLabel;
+			return string.IsNullOrEmpty( prompt ) ? "Hold to craft" : prompt;
+		}
 
 		if ( focus is TreasurePileInteractable )
 			return "Dig";

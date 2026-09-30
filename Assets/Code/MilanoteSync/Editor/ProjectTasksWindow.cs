@@ -755,7 +755,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 			if ( evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter )
 				return;
 			evt.StopPropagation();
-			evt.PreventDefault();
+			_inboxAddField.focusController.IgnoreEvent( evt );
 			TryAddInboxItemFromField();
 		}, TrickleDown.TrickleDown );
 		addRow.Add( _inboxAddField );
@@ -1031,7 +1031,8 @@ public sealed class ProjectTasksWindow : EditorWindow
 			var editor = evt.currentTarget as TextField;
 			CancelInboxEdit( editor );
 			evt.StopPropagation();
-			evt.PreventDefault();
+			if ( editor != null )
+				editor.focusController.IgnoreEvent( evt );
 			return;
 		}
 
@@ -1042,7 +1043,8 @@ public sealed class ProjectTasksWindow : EditorWindow
 			var editor = evt.currentTarget as TextField;
 			CommitInboxEdit( editor );
 			evt.StopPropagation();
-			evt.PreventDefault();
+			if ( editor != null )
+				editor.focusController.IgnoreEvent( evt );
 		}
 	}
 

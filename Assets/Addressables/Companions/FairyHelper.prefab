@@ -216,27 +216,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b5c13e4a0d76f8b1c3e6a9d4f2b7053, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FairyHelper
-  followOffsetLocal: {x: 0.5, y: 0, z: 0.8}
-  hoverHeight: 0.2
-  surfaceHoverHeight: 0.7
+  mode: 0
   moveSpeed: 4
-  catchUpSpeed: 8
-  farCatchUpDistance: 20
   arriveDistance: 0.12
   turnSpeed: 10
-  surfaceSnapMaxDistance: 2.5
-  surfaceMaxPlayerAbove: 1
-  viewFallbackOffsetLocal: {x: 0.5, y: 0, z: 0.8}
-  cameraSettleSeconds: 0.5
-  cameraRotateSpeedThreshold: 18
-  followYawLerp: 6
-  displaySeekRadius: 6
-  perchHeight: 1.35
-  pileAskRadius: 6
-  hintSeekRadius: 12
-  almostCompleteThreshold: 0.7
-  farGlowDistance: 4
-  farGlowHysteresis: 0.35
   idleBobAmplitude: 0.03
   idleBobSpeed: 2.2
   closeArcAmplitude: 0.55
@@ -245,15 +228,26 @@ MonoBehaviour:
   waveFrequency: 1.4
   curveLookAhead: 1.1
   travelLiftAmplitude: 0.18
+  guideSpawnOffsetLocal: {x: 1.1, y: 1, z: 0.85}
+  guideMoveSpeed: 8.5
+  guideWaitAheadDistance: 8
+  guideResumeDistance: 4.5
+  guideArriveDistance: 1.25
+  guidePlayerArriveDistance: 3.5
+  farGlowDistance: 4
+  farGlowHysteresis: 0.35
+  guideFollowLine: Follow me!
+  guideArriveLine: Here it is, good luck.
+  guideFarewellHoldSeconds: 2.5
+  worldSpline: {fileID: 0}
+  worldSplineSpeed: 1.25
+  worldTalkPauseSeconds: 2.5
+  worldTalkLine: Hello there!
   animator: {fileID: 3216443820167101961}
   speechBubble: {fileID: 9100000000000000008}
   onInteractFeedback: {fileID: 9100000000000000005}
   onFarGlowFeedback: {fileID: 9100000000000000003}
   onLoopFeedback: {fileID: 9069062913381956398}
-  introOffsetLocal: {x: 0.2, y: 0, z: 0.8}
-  introLines:
-  - Hi! I am here to help you on your journey
-  - Talk to me to find out about your progress
 --- !u!1 &1497171693116555209
 GameObject:
   m_ObjectHideFlags: 0

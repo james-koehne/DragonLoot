@@ -10,5 +10,7 @@ public enum TreasureCategory
 	Chest,
 	Container,
 	Resource,
-	Junk
+	Junk,
+	/// <summary>Useful interactables (coffee cup, tools, etc.). Carried in the General pouch with keys/chests.</summary>
+	General
 }

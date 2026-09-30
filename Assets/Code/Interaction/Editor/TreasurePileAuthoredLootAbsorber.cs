@@ -74,7 +74,7 @@ static class TreasurePileAuthoredLootAbsorber
 					stream.GetChangeGameObjectOrComponentPropertiesEvent(
 						i,
 						out ChangeGameObjectOrComponentPropertiesEventArgs args );
-					Object changed = EditorUtility.InstanceIDToObject( args.instanceId );
+					Object changed = EditorUtility.EntityIdToObject( args.instanceId );
 					if ( changed is Transform || changed is GameObject || changed is TreasureItem
 						|| changed is TreasurePileAuthoredItem )
 						PendingIds.Add( args.instanceId );
@@ -117,7 +117,7 @@ static class TreasurePileAuthoredLootAbsorber
 
 			for ( int i = 0; i < ids.Length; i++ )
 			{
-				Object obj = EditorUtility.InstanceIDToObject( ids[ i ] );
+				Object obj = EditorUtility.EntityIdToObject( ids[ i ] );
 				GameObject go = obj as GameObject;
 				if ( go == null )
 				{

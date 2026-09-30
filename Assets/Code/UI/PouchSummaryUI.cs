@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Left-middle toast summarizing the selected pouch after a category switch.
+/// Left-middle toast summarizing the selected pouch after a category switch
+/// or a direct pouch-button re-press of the already-selected pouch.
 /// Slides in from the left, holds, then slides back out. Wire <see cref="group"/>
 /// and <see cref="label"/> on the Interface prefab.
 /// </summary>

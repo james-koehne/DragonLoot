@@ -56,7 +56,7 @@ namespace FeedbackSystem
 			source.minDistance = Mathf.Max( 0.01f, minDistance );
 			source.maxDistance = Mathf.Max( source.minDistance, maxDistance );
 			source.pitch = pitch <= 0f ? 1f : pitch;
-			source.PlayOneShot( clip, volume );
+			FeedbackSfxPlayback.ApplyVolumeAndPlay( source, clip, volume );
 			FeedbackAudioFollower.Attach( source, followTransform );
 		}
 

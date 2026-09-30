@@ -73,6 +73,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1d44f605665d4ec40ae118edb68a00f2
+    m_Address: Assets/Audio/SFX/Machines/pixabay_coffee-machine-40834.mp3
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1dc7ec8901c9444429f37e40101d64c5
     m_Address: MapDefinition
     m_ReadOnly: 0
@@ -97,6 +102,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 26baddbb8754ade428abc52be7839395
     m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_04Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 27210448516e9104aaba8d805a594af5
+    m_Address: Assets/Prefabs/Interaction/Coffee/Cafe_Cup_2.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -201,6 +211,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 52c75a021028e99418ce796bb1fefb31
+    m_Address: Assets/Prefabs/Build/HeldHammer.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 54b18aea4c0eec147b576328346e822d
     m_Address: Assets/Addressables/Treasure/Artifacts/RustyShortswordVisual.prefab
     m_ReadOnly: 0
@@ -269,9 +284,10 @@ MonoBehaviour:
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 775136b9beefb34429b1b28e25b6776f
-    m_Address: Assets/Definitions/BuildModeDefinition.asset
+    m_Address: BuildModeDefinition
     m_ReadOnly: 0
-    m_SerializedLabels: []
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 7eea7f1ff47cb984db4fcb128570d4d5
     m_Address: Assets/Addressables/Treasure/Keys/SkeletonKeyVisual.prefab
@@ -283,6 +299,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 821660c9451a2c74ca99a46d6a7a0beb
+    m_Address: Assets/Audio/SFX/Machines/pixabay_sipping-coffee-6063.wav
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 83a3d21643b327b41a9b0ccfab599fd3
     m_Address: Minecart/CallPost
@@ -370,6 +391,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a70f9cf4b3f18ab4188822ea055515aa
+    m_Address: Assets/Definitions/CoffeeMachineDefinition.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a8e4c2f19b7d4e6a9c3f5d8e1b0a2746
     m_Address: Assets/Definitions/WorldEvents/WorldEvent_IntroFairy.asset
     m_ReadOnly: 0
@@ -426,6 +453,11 @@ MonoBehaviour:
     m_SerializedLabels:
     - Definition
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: baa6d8efc163ebe4e8ea878e97802890
+    m_Address: Assets/Audio/SFX/Machines/pixabay_grinding-coffee-beans.wav
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: bd87e61f6a7101541a36632d608c13f3
     m_Address: Assets/Definitions/GameDefinition.asset
     m_ReadOnly: 0
@@ -476,6 +508,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c8b3b2608bd03c143bb6b2df6ab15cf3
+    m_Address: Assets/Prefabs/Build/WorldHammer.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c961b6c2ba267fd4997d44603e9141d5
     m_Address: Assets/Addressables/Treasure/Artifacts/IronCoronaVisual.prefab
     m_ReadOnly: 0
@@ -507,6 +544,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels:
     - Definition
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d4352fa41194d8b4286a67850dac089f
+    m_Address: Assets/Audio/SFX/Machines/pixabay_slurping-coffee-46191.mp3
+    m_ReadOnly: 0
+    m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d5b1c0a42f6e3b8d9c8a7e6f5d4c3b2a
     m_Address: Assets/Addressables/SapphireVisual.prefab

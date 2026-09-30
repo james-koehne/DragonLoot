@@ -25,6 +25,7 @@ MonoBehaviour:
   ghostShader: {fileID: 4800000, guid: 1e663b1dc789049468dce8ca236ec965, type: 3}
   validGhostColor: {r: 0.25, g: 0.9, b: 0.35, a: 0.34901962}
   invalidGhostColor: {r: 0.95, g: 0.2, b: 0.2, a: 0.35}
+  joinGhostColor: {r: 0.4, g: 0.55, b: 1, a: 0.4}
   ghostFresnelPower: 2.4
   ghostFresnelBoost: 0.7
   ghostPulseAmount: 0.12

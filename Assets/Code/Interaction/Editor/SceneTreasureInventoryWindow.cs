@@ -817,6 +817,7 @@ public class SceneTreasureInventoryWindow : EditorWindow
 		if ( table == null )
 			return;
 
+		// Cell-based upper bound for 1×1 items. Large cartGridSize footprints reduce real item capacity.
 		SerializedObject so = new SerializedObject( table );
 		SerializedProperty maxStackProp = so.FindProperty( "maxStackPerSlot" );
 		int maxStack = maxStackProp != null ? maxStackProp.intValue : 0;

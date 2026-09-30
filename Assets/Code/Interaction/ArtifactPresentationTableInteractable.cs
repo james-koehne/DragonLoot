@@ -193,7 +193,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 
 	public bool CanPlace( TreasureItem item, in PlacementQuery query )
 	{
-		if ( item == null || !IsAvailable )
+		if ( item == null || !CanAcceptPlacement )
 			return false;
 
 		return TryResolvePlacementSlot( item, in query, out _, out bool valid ) && valid;
@@ -403,7 +403,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		return anchor != null ? anchor : transform;
 	}
 
-	bool IsAvailable => !_isComplete || HasEmptySlot();
+	bool CanAcceptPlacement => !_isComplete || HasEmptySlot();
 
 	bool HasEmptySlot()
 	{

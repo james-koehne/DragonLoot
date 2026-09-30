@@ -66,7 +66,7 @@ public class DiscoveryToastUI : MonoBehaviour
 				label = existingLabel.GetComponent<Text>();
 		}
 
-		ToastStackUI stack = ToastStackUI.EnsureOnCanvas( transform );
+		ToastStackUI stack = ToastStackUI.FindOnCanvas( transform );
 		if ( stack != null && label != null && label.font != null )
 			stack.SetLabelFont( label.font );
 		BindStackFeedbacks( stack );

@@ -197,6 +197,7 @@ public class DebugCarrySection : DebugOverlaySection
 		DrawFilterButton( "Chest", (int)TreasureCategory.Chest );
 		DrawFilterButton( "Container", (int)TreasureCategory.Container );
 		DrawFilterButton( "Junk", (int)TreasureCategory.Junk );
+		DrawFilterButton( "General", (int)TreasureCategory.General );
 		GUILayout.EndHorizontal();
 	}
 

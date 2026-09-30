@@ -205,7 +205,11 @@ public class GameMode : MonoBehaviour, IGameMode
 			else
 				Debug.LogWarning( "GameMode: TutorialPopupUI missing on Interface prefab." );
 
-			ToastStackUI.EnsureOnCanvas( interfacePrefab.transform );
+			ToastStackUI toastStack = interfacePrefab.GetComponentInChildren<ToastStackUI>( true );
+			if ( toastStack != null )
+				toastStack.Setup();
+			else
+				Debug.LogWarning( "GameMode: ToastStackUI missing on Interface prefab." );
 
 			DiscoveryToastUI discoveryToast = interfacePrefab.GetComponentInChildren<DiscoveryToastUI>( true );
 			if ( discoveryToast != null )

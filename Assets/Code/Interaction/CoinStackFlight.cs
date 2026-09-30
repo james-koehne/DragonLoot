@@ -134,9 +134,8 @@ public static class CoinStackFlight
 				endRot = endWorldRot == default ? startRot : endWorldRot;
 			}
 
-			float arc = Mathf.Lerp( 0.12f, 0.28f, Mathf.Clamp01( BindScratch.Count / 40f ) );
-			Vector3 pos = Vector3.Lerp( start, end, ease );
-			pos.y += Mathf.Sin( ease * Mathf.PI ) * arc;
+			float arc = Mathf.Lerp( 0.36f, 0.84f, Mathf.Clamp01( BindScratch.Count / 40f ) );
+			Vector3 pos = CoinFlipMotion.EvaluateArcPosition( start, end, u, arc );
 			go.transform.SetPositionAndRotation( pos, Quaternion.Slerp( startRot, endRot, ease ) );
 			yield return null;
 		}

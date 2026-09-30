@@ -2,19 +2,30 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Local-grid A* on the treasure surface with soft edge-clearance costs.
+/// Sparse-grid A* on the treasure surface with edge-margin erosion.
+/// Searches loaded chunks only (no forced streaming of the AABB).
 /// </summary>
 public static class TreasureSurfacePathfinder
 {
 	const float CollinearDotThreshold = 0.998f;
-	const int MaxSearchCells = 131072;
-	const int MaxExpandAttempts = 4;
-	const float ExpandPaddingScale = 2f;
+	const float Sqrt2 = 1.41421356f;
 
 	static readonly int[] NeighborDx4 = { 1, -1, 0, 0 };
 	static readonly int[] NeighborDz4 = { 0, 0, 1, -1 };
 	static readonly int[] NeighborDx8 = { 1, -1, 0, 0, 1, 1, -1, -1 };
 	static readonly int[] NeighborDz8 = { 0, 0, 1, -1, 1, -1, 1, -1 };
+
+	static bool[] s_PaintWalkable;
+	static bool[] s_SearchWalkable;
+	static float[] s_Heights;
+	static float[] s_GScore;
+	static int[] s_CameFrom;
+	static bool[] s_Closed;
+	static int[] s_ErodeQueue;
+	static int[] s_ErodeDist;
+	static readonly MinHeap s_Open = new MinHeap( 256 );
+	static readonly List<Vector3> s_WaypointScratch = new List<Vector3>( 128 );
+	static readonly List<int> s_PathScratch = new List<int>( 128 );
 
 	public static bool TryFindPath(
 		Vector3 from,
@@ -29,194 +40,498 @@ public static class TreasureSurfacePathfinder
 			return false;
 
 		TreasureSurfaceDefinition def = world.Definition;
-		float cellSize = def.CellSize;
+		int stride = settings.ResolveNavStride();
+		int maxCells = settings.ResolveMaxSearchCells();
+		float fineCell = def.CellSize;
+		float navCell = fineCell * stride;
 		float maxStep = settings.ResolveMaxStepHeight();
 
-		if ( !TryResolvePathCell( world, def, from, out int startGx, out int startGz, out float startHeight ) )
+		if ( !TryResolvePathCell( world, def, from, out int startFineX, out int startFineZ, out _ ) )
 			return false;
-		if ( !TryResolvePathCell( world, def, to, out int endGx, out int endGz, out float endHeight ) )
+		if ( !TryResolvePathCell( world, def, to, out int endFineX, out int endFineZ, out _ ) )
 			return false;
 
-		float pad = Mathf.Max( cellSize * 4f, settings.searchPadding );
-		for ( int attempt = 0; attempt < MaxExpandAttempts; attempt++ )
-		{
-			if ( TryFindPathInBounds( world, def, startGx, startGz, startHeight, endGx, endGz, endHeight, pad, cellSize, maxStep, settings, out path ) )
-				return true;
+		int startNavX = startFineX / stride;
+		int startNavZ = startFineZ / stride;
+		int endNavX = endFineX / stride;
+		int endNavZ = endFineZ / stride;
 
-			pad *= ExpandPaddingScale;
-		}
+		float pad = Mathf.Max( navCell * 2f, settings.searchPadding );
+		if ( TryFindPathInBounds( world, def, startNavX, startNavZ, endNavX, endNavZ, pad, stride, navCell, maxStep, maxCells, settings, out path ) )
+			return true;
 
-		return false;
+		// One retry with larger pad if the first pass failed (detour may need more room).
+		float retryPad = pad * 2f;
+		return TryFindPathInBounds( world, def, startNavX, startNavZ, endNavX, endNavZ, retryPad, stride, navCell, maxStep, maxCells, settings, out path );
 	}
 
 	static bool TryFindPathInBounds(
 		TreasureSurfaceWorld world,
 		TreasureSurfaceDefinition def,
-		int startGx,
-		int startGz,
-		float startHeight,
-		int endGx,
-		int endGz,
-		float endHeight,
+		int startNavX,
+		int startNavZ,
+		int endNavX,
+		int endNavZ,
 		float pad,
-		float cellSize,
+		int stride,
+		float navCell,
 		float maxStep,
+		int maxCells,
 		in TreasureSurfacePathSettings settings,
 		out TreasureSurfacePath path )
 	{
 		path = TreasureSurfacePath.Failed;
 
-		Vector3 startWorld = GlobalCellCenter( def, startGx, startGz, startHeight );
-		Vector3 endWorld = GlobalCellCenter( def, endGx, endGz, endHeight );
+		int totalFineX = def.ChunkCountX * def.cellsPerChunk;
+		int totalFineZ = def.ChunkCountZ * def.cellsPerChunk;
+		int totalNavX = ( totalFineX + stride - 1 ) / stride;
+		int totalNavZ = ( totalFineZ + stride - 1 ) / stride;
+
+		int startFineX = NavCenterFine( startNavX, stride, totalFineX );
+		int startFineZ = NavCenterFine( startNavZ, stride, totalFineZ );
+		int endFineX = NavCenterFine( endNavX, stride, totalFineX );
+		int endFineZ = NavCenterFine( endNavZ, stride, totalFineZ );
+
+		Vector3 startWorld = GlobalCellCenter( def, startFineX, startFineZ, def.baseHeight );
+		Vector3 endWorld = GlobalCellCenter( def, endFineX, endFineZ, def.baseHeight );
 
 		float minWx = Mathf.Min( startWorld.x, endWorld.x ) - pad;
 		float maxWx = Mathf.Max( startWorld.x, endWorld.x ) + pad;
 		float minWz = Mathf.Min( startWorld.z, endWorld.z ) - pad;
 		float maxWz = Mathf.Max( startWorld.z, endWorld.z ) + pad;
 
-		TryWorldToGlobalCellClamped( def, new Vector3( minWx, 0f, minWz ), out int minGx, out int minGz );
-		TryWorldToGlobalCellClamped( def, new Vector3( maxWx, 0f, maxWz ), out int maxGx, out int maxGz );
+		TryWorldToGlobalCellClamped( def, new Vector3( minWx, 0f, minWz ), out int minFineX, out int minFineZ );
+		TryWorldToGlobalCellClamped( def, new Vector3( maxWx, 0f, maxWz ), out int maxFineX, out int maxFineZ );
 
-		minGx = Mathf.Min( minGx, Mathf.Min( startGx, endGx ) );
-		maxGx = Mathf.Max( maxGx, Mathf.Max( startGx, endGx ) );
-		minGz = Mathf.Min( minGz, Mathf.Min( startGz, endGz ) );
-		maxGz = Mathf.Max( maxGz, Mathf.Max( startGz, endGz ) );
+		int minNavX = Mathf.Min( minFineX / stride, Mathf.Min( startNavX, endNavX ) );
+		int maxNavX = Mathf.Max( maxFineX / stride, Mathf.Max( startNavX, endNavX ) );
+		int minNavZ = Mathf.Min( minFineZ / stride, Mathf.Min( startNavZ, endNavZ ) );
+		int maxNavZ = Mathf.Max( maxFineZ / stride, Mathf.Max( startNavZ, endNavZ ) );
 
-		int width = maxGx - minGx + 1;
-		int height = maxGz - minGz + 1;
+		minNavX = Mathf.Clamp( minNavX, 0, totalNavX - 1 );
+		maxNavX = Mathf.Clamp( maxNavX, 0, totalNavX - 1 );
+		minNavZ = Mathf.Clamp( minNavZ, 0, totalNavZ - 1 );
+		maxNavZ = Mathf.Clamp( maxNavZ, 0, totalNavZ - 1 );
+
+		int width = maxNavX - minNavX + 1;
+		int height = maxNavZ - minNavZ + 1;
 		if ( width <= 0 || height <= 0 )
 			return false;
 
 		long cellCountLong = ( long )width * height;
-		if ( cellCountLong > MaxSearchCells )
+		if ( cellCountLong > maxCells )
 		{
-			if ( !ShrinkBoundsToBudget( def, startGx, startGz, endGx, endGz, ref minGx, ref maxGx, ref minGz, ref maxGz, out width, out height ) )
-				return false;
-			cellCountLong = ( long )width * height;
-			if ( cellCountLong > MaxSearchCells )
+			if ( !ShrinkNavBoundsToBudget( totalNavX, totalNavZ, startNavX, startNavZ, endNavX, endNavZ, maxCells, ref minNavX, ref maxNavX, ref minNavZ, ref maxNavZ, out width, out height ) )
 				return false;
 		}
 
 		int cellCount = width * height;
-		EnsureChunksLoaded( world, def, minGx, maxGx, minGz, maxGz );
+		EnsureScratch( cellCount );
 
-		bool[] walkable = new bool[ cellCount ];
-		float[] heights = new float[ cellCount ];
-		float[] clearance = new float[ cellCount ];
+		FillNavWalkableAndHeights( world, def, minNavX, minNavZ, width, height, stride, totalFineX, totalFineZ, s_PaintWalkable, s_Heights );
 
-		FillWalkableAndHeights( world, def, minGx, minGz, width, height, walkable, heights );
-
-		int startIdx = ToIndex( startGx, startGz, minGx, minGz, width );
-		int endIdx = ToIndex( endGx, endGz, minGx, minGz, width );
+		int startIdx = ToIndex( startNavX, startNavZ, minNavX, minNavZ, width );
+		int endIdx = ToIndex( endNavX, endNavZ, minNavX, minNavZ, width );
 		if ( startIdx < 0 || startIdx >= cellCount || endIdx < 0 || endIdx >= cellCount )
 			return false;
 
-		if ( !walkable[ startIdx ] )
+		if ( !s_PaintWalkable[ startIdx ] )
 		{
-			if ( !TrySnapToNearestWalkable( walkable, width, height, startIdx, out startIdx ) )
+			if ( !TrySnapToNearestWalkable( s_PaintWalkable, width, height, startIdx, out startIdx ) )
 				return false;
-			FromIndex( startIdx, minGx, minGz, width, out startGx, out startGz );
+			FromIndex( startIdx, minNavX, minNavZ, width, out startNavX, out startNavZ );
 		}
 
-		if ( !walkable[ endIdx ] )
+		if ( !s_PaintWalkable[ endIdx ] )
 		{
-			if ( !TrySnapToNearestWalkable( walkable, width, height, endIdx, out endIdx ) )
+			if ( !TrySnapToNearestWalkable( s_PaintWalkable, width, height, endIdx, out endIdx ) )
 				return false;
-			FromIndex( endIdx, minGx, minGz, width, out endGx, out endGz );
+			FromIndex( endIdx, minNavX, minNavZ, width, out endNavX, out endNavZ );
 		}
 
 		if ( startIdx == endIdx )
 		{
-			Vector3 single = GlobalCellCenter( def, startGx, startGz, heights[ startIdx ] );
-			path = TreasureSurfacePath.FromWaypoints( new List<Vector3> { single } );
+			int fx = NavCenterFine( startNavX, stride, totalFineX );
+			int fz = NavCenterFine( startNavZ, stride, totalFineZ );
+			path = TreasureSurfacePath.FromWaypoints( new List<Vector3>
+			{
+				GlobalCellCenter( def, fx, fz, s_Heights[ startIdx ] )
+			} );
 			return true;
 		}
 
-		BuildClearanceField( walkable, width, height, cellSize, clearance );
+		CopyBool( s_PaintWalkable, s_SearchWalkable, cellCount );
 
-		int[] cameFrom = new int[ cellCount ];
+		int erodeRings = 0;
+		if ( settings.edgeMargin > 0f )
+			erodeRings = Mathf.Max( 1, Mathf.CeilToInt( settings.edgeMargin / navCell ) );
+
+		if ( erodeRings > 0 )
+			ErodeWalkable( s_SearchWalkable, width, height, cellCount, erodeRings );
+
+		// Keep endpoints searchable even if they sit in the eroded band.
+		s_SearchWalkable[ startIdx ] = true;
+		s_SearchWalkable[ endIdx ] = true;
+
+		return RunAStar(
+			def,
+			minNavX,
+			minNavZ,
+			width,
+			height,
+			cellCount,
+			startIdx,
+			endIdx,
+			startNavX,
+			startNavZ,
+			endNavX,
+			endNavZ,
+			stride,
+			navCell,
+			totalFineX,
+			totalFineZ,
+			maxStep,
+			Mathf.Max( 0f, settings.uphillWeight ),
+			maxCells,
+			settings.allowDiagonal,
+			out path );
+	}
+
+	static bool RunAStar(
+		TreasureSurfaceDefinition def,
+		int minNavX,
+		int minNavZ,
+		int width,
+		int height,
+		int cellCount,
+		int startIdx,
+		int endIdx,
+		int startNavX,
+		int startNavZ,
+		int endNavX,
+		int endNavZ,
+		int stride,
+		float navCell,
+		int totalFineX,
+		int totalFineZ,
+		float maxStep,
+		float uphillWeight,
+		int expansionCap,
+		bool allowDiagonal,
+		out TreasureSurfacePath path )
+	{
+		path = TreasureSurfacePath.Failed;
+
 		for ( int i = 0; i < cellCount; i++ )
-			cameFrom[ i ] = -1;
-
-		float[] gScore = new float[ cellCount ];
-		for ( int i = 0; i < cellCount; i++ )
-			gScore[ i ] = float.PositiveInfinity;
-		gScore[ startIdx ] = 0f;
-
-		MinHeap open = new MinHeap( Mathf.Min( 256, cellCount ) );
-		open.Push( startIdx, Heuristic( startGx, startGz, endGx, endGz, cellSize ) );
-
-		bool[] closed = new bool[ cellCount ];
-		int[] dx = settings.allowDiagonal ? NeighborDx8 : NeighborDx4;
-		int[] dz = settings.allowDiagonal ? NeighborDz8 : NeighborDz4;
-		int neighborCount = dx.Length;
-		float edgeMargin = Mathf.Max( 0f, settings.edgeMargin );
-		float edgePenalty = Mathf.Max( 0f, settings.edgePenalty );
-		bool useHeightBlock = maxStep < float.MaxValue * 0.5f;
-
-		while ( open.Count > 0 )
 		{
-			int current = open.Pop();
-			if ( closed[ current ] )
+			s_CameFrom[ i ] = -1;
+			s_GScore[ i ] = float.PositiveInfinity;
+			s_Closed[ i ] = false;
+		}
+
+		s_GScore[ startIdx ] = 0f;
+		s_Open.Clear();
+		s_Open.Push( startIdx, OctileHeuristic( startNavX, startNavZ, endNavX, endNavZ, navCell ) );
+
+		int[] dx = allowDiagonal ? NeighborDx8 : NeighborDx4;
+		int[] dz = allowDiagonal ? NeighborDz8 : NeighborDz4;
+		int neighborCount = dx.Length;
+		bool useHeightBlock = maxStep < float.MaxValue * 0.5f;
+		int closedCount = 0;
+
+		while ( s_Open.Count > 0 )
+		{
+			int current = s_Open.Pop();
+			if ( s_Closed[ current ] )
 				continue;
-			closed[ current ] = true;
+
+			s_Closed[ current ] = true;
+			closedCount++;
+			if ( closedCount > expansionCap )
+				return false;
 
 			if ( current == endIdx )
 			{
-				path = BuildPath( def, cameFrom, heights, minGx, minGz, width, startIdx, endIdx );
+				path = BuildPath( def, s_CameFrom, s_Heights, minNavX, minNavZ, width, startIdx, endIdx, stride, totalFineX, totalFineZ );
 				return path.Success;
 			}
 
-			FromIndex( current, minGx, minGz, width, out int cx, out int cz );
-			float currentHeight = heights[ current ];
+			FromIndex( current, minNavX, minNavZ, width, out int cx, out int cz );
+			float currentHeight = s_Heights[ current ];
 
 			for ( int n = 0; n < neighborCount; n++ )
 			{
 				int nx = cx + dx[ n ];
 				int nz = cz + dz[ n ];
-				if ( nx < minGx || nx > maxGx || nz < minGz || nz > maxGz )
+				if ( nx < minNavX || nx > minNavX + width - 1 || nz < minNavZ || nz > minNavZ + height - 1 )
 					continue;
 
-				int neighbor = ToIndex( nx, nz, minGx, minGz, width );
-				if ( closed[ neighbor ] || !walkable[ neighbor ] )
+				int neighbor = ToIndex( nx, nz, minNavX, minNavZ, width );
+				if ( s_Closed[ neighbor ] || !s_SearchWalkable[ neighbor ] )
 					continue;
 
 				if ( dx[ n ] != 0 && dz[ n ] != 0 )
 				{
-					int orthA = ToIndex( cx + dx[ n ], cz, minGx, minGz, width );
-					int orthB = ToIndex( cx, cz + dz[ n ], minGx, minGz, width );
-					if ( orthA < 0 || orthA >= cellCount || !walkable[ orthA ] )
+					int orthA = ToIndex( cx + dx[ n ], cz, minNavX, minNavZ, width );
+					int orthB = ToIndex( cx, cz + dz[ n ], minNavX, minNavZ, width );
+					if ( orthA < 0 || orthA >= cellCount || !s_SearchWalkable[ orthA ] )
 						continue;
-					if ( orthB < 0 || orthB >= cellCount || !walkable[ orthB ] )
-						continue;
-				}
-
-				if ( useHeightBlock )
-				{
-					float heightDelta = Mathf.Abs( heights[ neighbor ] - currentHeight );
-					if ( heightDelta > maxStep )
+					if ( orthB < 0 || orthB >= cellCount || !s_SearchWalkable[ orthB ] )
 						continue;
 				}
 
-				float stepDist = ( dx[ n ] != 0 && dz[ n ] != 0 ) ? cellSize * 1.41421356f : cellSize;
-				float clearanceShortfall = Mathf.Max( 0f, edgeMargin - clearance[ neighbor ] );
-				float stepCost = stepDist + edgePenalty * clearanceShortfall;
-				float tentative = gScore[ current ] + stepCost;
-				if ( tentative >= gScore[ neighbor ] )
+				float neighborHeight = s_Heights[ neighbor ];
+				float heightDelta = neighborHeight - currentHeight;
+				if ( useHeightBlock && Mathf.Abs( heightDelta ) > maxStep )
 					continue;
 
-				cameFrom[ neighbor ] = current;
-				gScore[ neighbor ] = tentative;
-				float f = tentative + Heuristic( nx, nz, endGx, endGz, cellSize );
-				open.Push( neighbor, f );
+				float stepDist = ( dx[ n ] != 0 && dz[ n ] != 0 ) ? navCell * Sqrt2 : navCell;
+				if ( uphillWeight > 0f && heightDelta > 0f )
+					stepDist += heightDelta * uphillWeight;
+
+				float tentative = s_GScore[ current ] + stepDist;
+				if ( tentative >= s_GScore[ neighbor ] )
+					continue;
+
+				s_CameFrom[ neighbor ] = current;
+				s_GScore[ neighbor ] = tentative;
+				float f = tentative + OctileHeuristic( nx, nz, endNavX, endNavZ, navCell );
+				s_Open.Push( neighbor, f );
 			}
 		}
 
 		return false;
 	}
 
+	static void ErodeWalkable( bool[] walkable, int width, int height, int cellCount, int rings )
+	{
+		EnsureErodeScratch( cellCount );
+		int queueHead = 0;
+		int queueTail = 0;
+
+		for ( int i = 0; i < cellCount; i++ )
+		{
+			s_ErodeDist[ i ] = -1;
+			if ( walkable[ i ] )
+				continue;
+
+			s_ErodeDist[ i ] = 0;
+			s_ErodeQueue[ queueTail++ ] = i;
+		}
+
+		while ( queueHead < queueTail )
+		{
+			int current = s_ErodeQueue[ queueHead++ ];
+			int cd = s_ErodeDist[ current ];
+			if ( cd >= rings )
+				continue;
+
+			int cx = current % width;
+			int cz = current / width;
+			for ( int n = 0; n < NeighborDx8.Length; n++ )
+			{
+				int nx = cx + NeighborDx8[ n ];
+				int nz = cz + NeighborDz8[ n ];
+				if ( nx < 0 || nx >= width || nz < 0 || nz >= height )
+					continue;
+
+				int neighbor = nz * width + nx;
+				if ( s_ErodeDist[ neighbor ] >= 0 )
+					continue;
+
+				s_ErodeDist[ neighbor ] = cd + 1;
+				s_ErodeQueue[ queueTail++ ] = neighbor;
+			}
+		}
+
+		for ( int i = 0; i < cellCount; i++ )
+		{
+			int d = s_ErodeDist[ i ];
+			if ( d > 0 && d <= rings )
+				walkable[ i ] = false;
+		}
+	}
+
+	static void FillNavWalkableAndHeights(
+		TreasureSurfaceWorld world,
+		TreasureSurfaceDefinition def,
+		int minNavX,
+		int minNavZ,
+		int width,
+		int height,
+		int stride,
+		int totalFineX,
+		int totalFineZ,
+		bool[] walkable,
+		float[] heights )
+	{
+		int res = Mathf.Max( 1, def.cellsPerChunk );
+		float baseHeight = def.baseHeight;
+		int half = stride / 2;
+
+		TreasureChunk lastChunk = null;
+		int lastChunkX = int.MinValue;
+		int lastChunkZ = int.MinValue;
+
+		for ( int lz = 0; lz < height; lz++ )
+		{
+			int navZ = minNavZ + lz;
+			int fineZ = navZ * stride + half;
+			if ( fineZ >= totalFineZ )
+				fineZ = totalFineZ - 1;
+
+			for ( int lx = 0; lx < width; lx++ )
+			{
+				int navX = minNavX + lx;
+				int fineX = navX * stride + half;
+				if ( fineX >= totalFineX )
+					fineX = totalFineX - 1;
+
+				int idx = lz * width + lx;
+				int chunkX = fineX / res;
+				int chunkZ = fineZ / res;
+				int localX = fineX - chunkX * res;
+				int localZ = fineZ - chunkZ * res;
+
+				if ( chunkX != lastChunkX || chunkZ != lastChunkZ )
+				{
+					lastChunkX = chunkX;
+					lastChunkZ = chunkZ;
+					lastChunk = world.GetLoadedChunk( new TreasureChunkCoord( chunkX, chunkZ ) );
+				}
+
+				if ( lastChunk == null || !lastChunk.Loaded || lastChunk.PaintTraversable == null )
+				{
+					walkable[ idx ] = false;
+					heights[ idx ] = baseHeight;
+					continue;
+				}
+
+				int cell = lastChunk.Index( localX, localZ );
+				walkable[ idx ] = lastChunk.PaintTraversable[ cell ] != 0;
+				heights[ idx ] = lastChunk.SmoothedHeight != null ? lastChunk.SmoothedHeight[ cell ] : baseHeight;
+			}
+		}
+	}
+
+	static bool ShrinkNavBoundsToBudget(
+		int totalNavX,
+		int totalNavZ,
+		int startNavX,
+		int startNavZ,
+		int endNavX,
+		int endNavZ,
+		int maxCells,
+		ref int minNavX,
+		ref int maxNavX,
+		ref int minNavZ,
+		ref int maxNavZ,
+		out int width,
+		out int height )
+	{
+		int axisMinX = Mathf.Min( startNavX, endNavX );
+		int axisMaxX = Mathf.Max( startNavX, endNavX );
+		int axisMinZ = Mathf.Min( startNavZ, endNavZ );
+		int axisMaxZ = Mathf.Max( startNavZ, endNavZ );
+
+		int padCells = Mathf.Max( axisMaxX - axisMinX, axisMaxZ - axisMinZ ) + 8;
+		while ( padCells >= 1 )
+		{
+			minNavX = Mathf.Max( 0, axisMinX - padCells );
+			maxNavX = Mathf.Min( totalNavX - 1, axisMaxX + padCells );
+			minNavZ = Mathf.Max( 0, axisMinZ - padCells );
+			maxNavZ = Mathf.Min( totalNavZ - 1, axisMaxZ + padCells );
+			width = maxNavX - minNavX + 1;
+			height = maxNavZ - minNavZ + 1;
+			if ( ( long )width * height <= maxCells )
+				return true;
+			padCells /= 2;
+		}
+
+		minNavX = axisMinX;
+		maxNavX = axisMaxX;
+		minNavZ = axisMinZ;
+		maxNavZ = axisMaxZ;
+		width = maxNavX - minNavX + 1;
+		height = maxNavZ - minNavZ + 1;
+		return width > 0 && height > 0 && ( long )width * height <= maxCells;
+	}
+
+	static TreasureSurfacePath BuildPath(
+		TreasureSurfaceDefinition def,
+		int[] cameFrom,
+		float[] heights,
+		int minNavX,
+		int minNavZ,
+		int width,
+		int startIdx,
+		int endIdx,
+		int stride,
+		int totalFineX,
+		int totalFineZ )
+	{
+		s_PathScratch.Clear();
+		int cursor = endIdx;
+		while ( cursor >= 0 )
+		{
+			s_PathScratch.Add( cursor );
+			if ( cursor == startIdx )
+				break;
+			cursor = cameFrom[ cursor ];
+			if ( s_PathScratch.Count > cameFrom.Length + 2 )
+				return TreasureSurfacePath.Failed;
+		}
+
+		if ( s_PathScratch.Count == 0 || s_PathScratch[ s_PathScratch.Count - 1 ] != startIdx )
+			return TreasureSurfacePath.Failed;
+
+		s_WaypointScratch.Clear();
+		for ( int i = s_PathScratch.Count - 1; i >= 0; i-- )
+		{
+			int idx = s_PathScratch[ i ];
+			FromIndex( idx, minNavX, minNavZ, width, out int navX, out int navZ );
+			int fx = NavCenterFine( navX, stride, totalFineX );
+			int fz = NavCenterFine( navZ, stride, totalFineZ );
+			s_WaypointScratch.Add( GlobalCellCenter( def, fx, fz, heights[ idx ] ) );
+		}
+
+		DropCollinear( s_WaypointScratch );
+		return TreasureSurfacePath.FromWaypoints( s_WaypointScratch );
+	}
+
+	static void DropCollinear( List<Vector3> points )
+	{
+		if ( points == null || points.Count < 3 )
+			return;
+
+		int write = 1;
+		for ( int i = 1; i < points.Count - 1; i++ )
+		{
+			Vector3 prev = points[ write - 1 ];
+			Vector3 cur = points[ i ];
+			Vector3 next = points[ i + 1 ];
+			Vector3 a = new Vector3( cur.x - prev.x, 0f, cur.z - prev.z );
+			Vector3 b = new Vector3( next.x - cur.x, 0f, next.z - cur.z );
+			if ( a.sqrMagnitude < 1e-8f || b.sqrMagnitude < 1e-8f )
+				continue;
+
+			a.Normalize();
+			b.Normalize();
+			if ( Vector3.Dot( a, b ) >= CollinearDotThreshold )
+				continue;
+
+			points[ write ] = cur;
+			write++;
+		}
+
+		points[ write ] = points[ points.Count - 1 ];
+		write++;
+		if ( write < points.Count )
+			points.RemoveRange( write, points.Count - write );
+	}
+
 	/// <summary>
-	/// Lenient paint cell under the point (loads chunk). Falls back to a local walkable snap.
+	/// Lenient paint cell under the point. Only ensures the chunk under the query (not the full AABB).
 	/// </summary>
 	static bool TryResolvePathCell(
 		TreasureSurfaceWorld world,
@@ -242,7 +557,6 @@ public static class TreasureSurfacePathfinder
 		if ( TryGetCellPaint( world, def, cellX, cellZ, out bool trav, out height ) && trav )
 			return true;
 
-		// Local spiral snap on loaded paint (does not depend on frozen/streamer nearest search).
 		int res = Mathf.Max( 1, def.cellsPerChunk );
 		int maxRadius = Mathf.Max( 8, res );
 		for ( int r = 1; r <= maxRadius; r++ )
@@ -312,239 +626,6 @@ public static class TreasureSurfacePathfinder
 		return gx >= 0 && gz >= 0 && gx < totalX && gz < totalZ;
 	}
 
-	static bool ShrinkBoundsToBudget(
-		TreasureSurfaceDefinition def,
-		int startGx,
-		int startGz,
-		int endGx,
-		int endGz,
-		ref int minGx,
-		ref int maxGx,
-		ref int minGz,
-		ref int maxGz,
-		out int width,
-		out int height )
-	{
-		// Keep a corridor around the start–end axis instead of a fat AABB when over budget.
-		int axisMinX = Mathf.Min( startGx, endGx );
-		int axisMaxX = Mathf.Max( startGx, endGx );
-		int axisMinZ = Mathf.Min( startGz, endGz );
-		int axisMaxZ = Mathf.Max( startGz, endGz );
-
-		int padCells = 8;
-		while ( padCells >= 2 )
-		{
-			minGx = Mathf.Max( 0, axisMinX - padCells );
-			maxGx = Mathf.Min( def.ChunkCountX * def.cellsPerChunk - 1, axisMaxX + padCells );
-			minGz = Mathf.Max( 0, axisMinZ - padCells );
-			maxGz = Mathf.Min( def.ChunkCountZ * def.cellsPerChunk - 1, axisMaxZ + padCells );
-			width = maxGx - minGx + 1;
-			height = maxGz - minGz + 1;
-			if ( ( long )width * height <= MaxSearchCells )
-				return true;
-			padCells /= 2;
-		}
-
-		minGx = axisMinX;
-		maxGx = axisMaxX;
-		minGz = axisMinZ;
-		maxGz = axisMaxZ;
-		width = maxGx - minGx + 1;
-		height = maxGz - minGz + 1;
-		return width > 0 && height > 0 && ( long )width * height <= MaxSearchCells;
-	}
-
-	static TreasureSurfacePath BuildPath(
-		TreasureSurfaceDefinition def,
-		int[] cameFrom,
-		float[] heights,
-		int minGx,
-		int minGz,
-		int width,
-		int startIdx,
-		int endIdx )
-	{
-		List<int> reverse = new List<int>( 64 );
-		int cursor = endIdx;
-		while ( cursor >= 0 )
-		{
-			reverse.Add( cursor );
-			if ( cursor == startIdx )
-				break;
-			cursor = cameFrom[ cursor ];
-			if ( reverse.Count > cameFrom.Length + 2 )
-				return TreasureSurfacePath.Failed;
-		}
-
-		if ( reverse.Count == 0 || reverse[ reverse.Count - 1 ] != startIdx )
-			return TreasureSurfacePath.Failed;
-
-		List<Vector3> points = new List<Vector3>( reverse.Count );
-		for ( int i = reverse.Count - 1; i >= 0; i-- )
-		{
-			int idx = reverse[ i ];
-			FromIndex( idx, minGx, minGz, width, out int gx, out int gz );
-			points.Add( GlobalCellCenter( def, gx, gz, heights[ idx ] ) );
-		}
-
-		DropCollinear( points );
-		return TreasureSurfacePath.FromWaypoints( points );
-	}
-
-	static void DropCollinear( List<Vector3> points )
-	{
-		if ( points == null || points.Count < 3 )
-			return;
-
-		int write = 1;
-		for ( int i = 1; i < points.Count - 1; i++ )
-		{
-			Vector3 prev = points[ write - 1 ];
-			Vector3 cur = points[ i ];
-			Vector3 next = points[ i + 1 ];
-			Vector3 a = new Vector3( cur.x - prev.x, 0f, cur.z - prev.z );
-			Vector3 b = new Vector3( next.x - cur.x, 0f, next.z - cur.z );
-			if ( a.sqrMagnitude < 1e-8f || b.sqrMagnitude < 1e-8f )
-				continue;
-
-			a.Normalize();
-			b.Normalize();
-			if ( Vector3.Dot( a, b ) >= CollinearDotThreshold )
-				continue;
-
-			points[ write ] = cur;
-			write++;
-		}
-
-		points[ write ] = points[ points.Count - 1 ];
-		write++;
-		if ( write < points.Count )
-			points.RemoveRange( write, points.Count - write );
-	}
-
-	static void BuildClearanceField( bool[] walkable, int width, int height, float cellSize, float[] clearance )
-	{
-		int count = width * height;
-		int[] distCells = new int[ count ];
-		Queue<int> queue = new Queue<int>( Mathf.Min( 256, count ) );
-
-		for ( int i = 0; i < count; i++ )
-		{
-			if ( !walkable[ i ] )
-			{
-				distCells[ i ] = 0;
-				queue.Enqueue( i );
-			}
-			else
-			{
-				distCells[ i ] = int.MaxValue;
-			}
-		}
-
-		if ( queue.Count == 0 )
-		{
-			float openClearance = Mathf.Max( width, height ) * cellSize;
-			for ( int i = 0; i < count; i++ )
-				clearance[ i ] = walkable[ i ] ? openClearance : 0f;
-			return;
-		}
-
-		while ( queue.Count > 0 )
-		{
-			int current = queue.Dequeue();
-			int cd = distCells[ current ];
-			int cx = current % width;
-			int cz = current / width;
-
-			for ( int n = 0; n < NeighborDx8.Length; n++ )
-			{
-				int nx = cx + NeighborDx8[ n ];
-				int nz = cz + NeighborDz8[ n ];
-				if ( nx < 0 || nx >= width || nz < 0 || nz >= height )
-					continue;
-
-				int neighbor = nz * width + nx;
-				int nd = cd + 1;
-				if ( nd >= distCells[ neighbor ] )
-					continue;
-
-				distCells[ neighbor ] = nd;
-				queue.Enqueue( neighbor );
-			}
-		}
-
-		float fallback = Mathf.Max( width, height ) * cellSize;
-		for ( int i = 0; i < count; i++ )
-		{
-			int d = distCells[ i ];
-			if ( d == int.MaxValue )
-				clearance[ i ] = fallback;
-			else
-				clearance[ i ] = d * cellSize;
-		}
-	}
-
-	static void FillWalkableAndHeights(
-		TreasureSurfaceWorld world,
-		TreasureSurfaceDefinition def,
-		int minGx,
-		int minGz,
-		int width,
-		int height,
-		bool[] walkable,
-		float[] heights )
-	{
-		int res = Mathf.Max( 1, def.cellsPerChunk );
-		float baseHeight = def.baseHeight;
-
-		for ( int lz = 0; lz < height; lz++ )
-		{
-			int gz = minGz + lz;
-			for ( int lx = 0; lx < width; lx++ )
-			{
-				int gx = minGx + lx;
-				int idx = lz * width + lx;
-				int chunkX = gx / res;
-				int chunkZ = gz / res;
-				int localX = gx - chunkX * res;
-				int localZ = gz - chunkZ * res;
-
-				TreasureChunk chunk = world.GetLoadedChunk( new TreasureChunkCoord( chunkX, chunkZ ) );
-				if ( chunk == null || !chunk.Loaded || chunk.PaintTraversable == null )
-				{
-					walkable[ idx ] = false;
-					heights[ idx ] = baseHeight;
-					continue;
-				}
-
-				int cell = chunk.Index( localX, localZ );
-				walkable[ idx ] = chunk.PaintTraversable[ cell ] != 0;
-				heights[ idx ] = chunk.SmoothedHeight != null ? chunk.SmoothedHeight[ cell ] : baseHeight;
-			}
-		}
-	}
-
-	static void EnsureChunksLoaded(
-		TreasureSurfaceWorld world,
-		TreasureSurfaceDefinition def,
-		int minGx,
-		int maxGx,
-		int minGz,
-		int maxGz )
-	{
-		int res = Mathf.Max( 1, def.cellsPerChunk );
-		int minChunkX = Mathf.Clamp( minGx / res, 0, def.ChunkCountX - 1 );
-		int maxChunkX = Mathf.Clamp( maxGx / res, 0, def.ChunkCountX - 1 );
-		int minChunkZ = Mathf.Clamp( minGz / res, 0, def.ChunkCountZ - 1 );
-		int maxChunkZ = Mathf.Clamp( maxGz / res, 0, def.ChunkCountZ - 1 );
-
-		for ( int cz = minChunkZ; cz <= maxChunkZ; cz++ )
-		{
-			for ( int cx = minChunkX; cx <= maxChunkX; cx++ )
-				world.EnsureChunkLoaded( new TreasureChunkCoord( cx, cz ) );
-		}
-	}
-
 	static bool TrySnapToNearestWalkable( bool[] walkable, int width, int height, int fromIdx, out int foundIdx )
 	{
 		foundIdx = fromIdx;
@@ -578,11 +659,23 @@ public static class TreasureSurfacePathfinder
 		return false;
 	}
 
-	static float Heuristic( int ax, int az, int bx, int bz, float cellSize )
+	static float OctileHeuristic( int ax, int az, int bx, int bz, float navCell )
 	{
-		float dx = ( ax - bx ) * cellSize;
-		float dz = ( az - bz ) * cellSize;
-		return Mathf.Sqrt( dx * dx + dz * dz );
+		int dx = Mathf.Abs( ax - bx );
+		int dz = Mathf.Abs( az - bz );
+		int min = dx < dz ? dx : dz;
+		int max = dx > dz ? dx : dz;
+		return ( max + ( Sqrt2 - 1f ) * min ) * navCell;
+	}
+
+	static int NavCenterFine( int nav, int stride, int totalFine )
+	{
+		int fine = nav * stride + stride / 2;
+		if ( fine >= totalFine )
+			fine = totalFine - 1;
+		if ( fine < 0 )
+			fine = 0;
+		return fine;
 	}
 
 	static int ToIndex( int gx, int gz, int minGx, int minGz, int width )
@@ -643,6 +736,34 @@ public static class TreasureSurfacePathfinder
 		return new Vector3( wx, height, wz );
 	}
 
+	static void EnsureScratch( int cellCount )
+	{
+		if ( s_PaintWalkable == null || s_PaintWalkable.Length < cellCount )
+		{
+			s_PaintWalkable = new bool[ cellCount ];
+			s_SearchWalkable = new bool[ cellCount ];
+			s_Heights = new float[ cellCount ];
+			s_GScore = new float[ cellCount ];
+			s_CameFrom = new int[ cellCount ];
+			s_Closed = new bool[ cellCount ];
+		}
+	}
+
+	static void EnsureErodeScratch( int cellCount )
+	{
+		if ( s_ErodeQueue == null || s_ErodeQueue.Length < cellCount )
+		{
+			s_ErodeQueue = new int[ cellCount ];
+			s_ErodeDist = new int[ cellCount ];
+		}
+	}
+
+	static void CopyBool( bool[] src, bool[] dst, int count )
+	{
+		for ( int i = 0; i < count; i++ )
+			dst[ i ] = src[ i ];
+	}
+
 	sealed class MinHeap
 	{
 		struct Node
@@ -659,6 +780,11 @@ public static class TreasureSurfacePathfinder
 		public MinHeap( int capacity )
 		{
 			_items = new Node[ Mathf.Max( 16, capacity ) ];
+			_count = 0;
+		}
+
+		public void Clear()
+		{
 			_count = 0;
 		}
 

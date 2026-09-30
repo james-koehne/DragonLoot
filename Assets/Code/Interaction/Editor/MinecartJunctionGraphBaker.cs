@@ -113,6 +113,9 @@ public static class MinecartJunctionGraphBaker
 		for ( int i = 0; i < tracks.Count; i++ )
 		{
 			MinecartTrack a = tracks[ i ];
+			CollectSelfMidPathOverlaps( a, detect, step, graph.MinSelfSeparation, candidates );
+			CollectSelfEndpointOverlaps( a, detect, graph.MinSelfSeparation, candidates );
+
 			for ( int j = i + 1; j < tracks.Count; j++ )
 			{
 				MinecartTrack b = tracks[ j ];
@@ -137,7 +140,8 @@ public static class MinecartJunctionGraphBaker
 				continue;
 
 			Vector3 center = cluster.sum / cluster.count;
-			MinecartJunctionKind preservedKind = graph.EditorFindPreservedKind( center );
+			MinecartJunction preserved = graph.EditorFindPreservedJunction( center );
+			MinecartJunctionKind preservedKind = preserved != null ? preserved.kind : MinecartJunctionKind.Auto;
 			MinecartJunctionKind resolved = MinecartJunctionGraph.ResolveKind( preservedKind, ports );
 			MinecartJunction junction = new MinecartJunction
 			{
@@ -145,6 +149,8 @@ public static class MinecartJunctionGraphBaker
 				kind = preservedKind,
 				resolvedKind = resolved,
 				ports = ports,
+				cornerOptions = MinecartJunctionGraph.CloneCornerOptions( preserved != null ? preserved.cornerOptions : null ),
+				throughOptions = MinecartJunctionGraph.CloneThroughOptions( preserved != null ? preserved.throughOptions : null ),
 				ridePaths = new List<MinecartJunctionRidePath>( 8 )
 			};
 			int junctionIndex = junctions.Count;
@@ -167,6 +173,7 @@ public static class MinecartJunctionGraphBaker
 
 		MinecartTrackMeshBuilder.RebuildAllWithJunctionGaps();
 		MinecartJunctionMeshBuilder.Rebuild( graph );
+		graph.RefreshBuildVisuals();
 
 		if ( !Application.isPlaying )
 			EditorSceneManager.MarkSceneDirty( graph.gameObject.scene );
@@ -229,6 +236,130 @@ public static class MinecartJunctionGraphBaker
 
 		TryEndpoint( from, 0f, other, detectRadius, candidates );
 		TryEndpoint( from, from.Length, other, detectRadius, candidates );
+	}
+
+	static void CollectSelfMidPathOverlaps( MinecartTrack track, float detectRadius, float sampleStep, float minSeparation, List<Candidate> candidates )
+	{
+		if ( track == null || !track.IsUsable )
+			return;
+
+		float length = track.Length;
+		if ( length < minSeparation * 2f )
+			return;
+
+		int samples = Mathf.Max( 2, Mathf.CeilToInt( length / sampleStep ) + 1 );
+		float detectSqr = detectRadius * detectRadius;
+
+		for ( int i = 0; i < samples; i++ )
+		{
+			float distA = length * i / ( samples - 1 );
+			Vector3 posA;
+			Vector3 tanA;
+			Vector3 upA;
+			if ( !track.Evaluate( distA, out posA, out tanA, out upA ) )
+				continue;
+
+			float distB;
+			Vector3 nearestB;
+			if ( !TryGetNearestSelfPoint( track, distA, posA, detectSqr, minSeparation, out distB, out nearestB ) )
+				continue;
+
+			// Dedup unordered pairs by only accepting distA < distB (open) / half-wrap (closed).
+			if ( !ShouldKeepSelfPair( track, distA, distB ) )
+				continue;
+
+			candidates.Add( new Candidate
+			{
+				worldPosition = ( posA + nearestB ) * 0.5f,
+				trackA = track,
+				distanceA = distA,
+				trackB = track,
+				distanceB = distB
+			} );
+		}
+	}
+
+	static void CollectSelfEndpointOverlaps( MinecartTrack track, float detectRadius, float minSeparation, List<Candidate> candidates )
+	{
+		if ( track == null || !track.IsUsable || track.IsClosed )
+			return;
+
+		float length = track.Length;
+		if ( length < minSeparation * 2f )
+			return;
+
+		TrySelfEndpoint( track, 0f, detectRadius, minSeparation, candidates );
+		TrySelfEndpoint( track, length, detectRadius, minSeparation, candidates );
+	}
+
+	static void TrySelfEndpoint( MinecartTrack track, float fromDistance, float detectRadius, float minSeparation, List<Candidate> candidates )
+	{
+		Vector3 pos;
+		Vector3 tan;
+		Vector3 up;
+		if ( !track.Evaluate( fromDistance, out pos, out tan, out up ) )
+			return;
+
+		float otherDistance;
+		Vector3 nearest;
+		float detectSqr = detectRadius * detectRadius;
+		if ( !TryGetNearestSelfPoint( track, fromDistance, pos, detectSqr, minSeparation, out otherDistance, out nearest ) )
+			return;
+
+		candidates.Add( new Candidate
+		{
+			worldPosition = ( pos + nearest ) * 0.5f,
+			trackA = track,
+			distanceA = fromDistance,
+			trackB = track,
+			distanceB = otherDistance
+		} );
+	}
+
+	static bool TryGetNearestSelfPoint( MinecartTrack track, float fromDistance, Vector3 fromPos, float detectSqr, float minSeparation, out float otherDistance, out Vector3 nearest )
+	{
+		otherDistance = 0f;
+		nearest = fromPos;
+		float length = track.Length;
+		float step = Mathf.Max( 0.15f, length / 64f );
+		int samples = Mathf.Max( 2, Mathf.CeilToInt( length / step ) + 1 );
+		float bestSqr = detectSqr;
+		bool found = false;
+
+		for ( int i = 0; i < samples; i++ )
+		{
+			float dist = length * i / ( samples - 1 );
+			if ( Mathf.Abs( track.SignedAlong( fromDistance, dist ) ) < minSeparation )
+				continue;
+
+			Vector3 pos;
+			Vector3 tan;
+			Vector3 up;
+			if ( !track.Evaluate( dist, out pos, out tan, out up ) )
+				continue;
+
+			float sqr = ( pos - fromPos ).sqrMagnitude;
+			if ( sqr > bestSqr )
+				continue;
+
+			bestSqr = sqr;
+			otherDistance = dist;
+			nearest = pos;
+			found = true;
+		}
+
+		return found;
+	}
+
+	static bool ShouldKeepSelfPair( MinecartTrack track, float distA, float distB )
+	{
+		if ( track.IsClosed )
+		{
+			float sep = track.SignedAlong( distA, distB );
+			return sep > 0f;
+		}
+
+		return distA < distB - 0.001f;
 	}
 
 	static void TryEndpoint( MinecartTrack from, float fromDistance, MinecartTrack other, float detectRadius, List<Candidate> candidates )

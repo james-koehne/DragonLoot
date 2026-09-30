@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>Hand rig a treasure is carried in. Keys/chests use General; TreasureCategory.Junk uses Junk.</summary>
+/// <summary>Hand rig a treasure is carried in. General covers Key/Chest/Container/Resource/General; Junk is separate.</summary>
 public enum CarryBucketKind
 {
 	Coin = 0,
@@ -77,6 +77,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	float _bobPhase;
 	float _swayPhase;
 	Vector3 _smoothedMotionOffset;
+	Vector3 _jumpReactionOffset;
+	float _jumpReactionT;
 	float _smoothedUprightPitch;
 	float _cycleCooldown;
 	CarryBucketKind _selected = CarryBucketKind.Coin;
@@ -176,6 +178,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return CarryBucketKind.Artifact;
 			case TreasureCategory.Junk:
 				return CarryBucketKind.Junk;
+			case TreasureCategory.General:
 			default:
 				return CarryBucketKind.General;
 		}
@@ -213,13 +216,28 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 
 		RestackPoses();
-		EventBus.Publish( new PouchChangedEvent
-		{
-			Bucket = kind,
-			Carry = this
-		} );
+		PublishPouchChanged();
 		PublishHeldCategoryChanged();
 		return true;
+	}
+
+	/// <summary>
+	/// Re-fires <see cref="PouchChangedEvent"/> for the currently selected pouch
+	/// (e.g. direct slot press when already selected) so the summary UI can re-show.
+	/// </summary>
+	public void NotifyPouchReselected()
+	{
+		EnsureBuckets();
+		PublishPouchChanged();
+	}
+
+	void PublishPouchChanged()
+	{
+		EventBus.Publish( new PouchChangedEvent
+		{
+			Bucket = _selected,
+			Carry = this
+		} );
 	}
 
 	public bool CycleSelectedBucket()
@@ -351,6 +369,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			case TreasureCategory.Junk:
 				bucket = CarryBucketKind.Junk;
 				return true;
+			case TreasureCategory.General:
 			default:
 				bucket = CarryBucketKind.General;
 				return true;
@@ -368,7 +387,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			case CarryBucketKind.Junk:
 				return TreasureCategory.Junk;
 			case CarryBucketKind.General:
-				return TreasureCategory.Chest;
+				return TreasureCategory.General;
 			default:
 				return TreasureCategory.Coin;
 		}
@@ -3004,23 +3023,29 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		float dt = Time.deltaTime;
 		float moveSpeed = _player != null ? _player.PlanarSpeed : 0f;
 		Vector3 localMove = _player != null ? _player.LocalPlanarVelocity : Vector3.zero;
+		bool grounded = _player == null || _player.IsGrounded;
 		float bobFullSpeed = def != null ? def.bobFullSpeed : 4f;
 		float move01 = Mathf.Clamp01( moveSpeed / Mathf.Max( 0.01f, bobFullSpeed ) );
 		float idleBob = def != null ? def.idleBobScale : 0.15f;
-		float bobWeight = Mathf.Lerp( idleBob, 1f, move01 );
+		float airBob = def != null ? def.airBobScale : 0f;
+		float bobWeight = grounded
+			? Mathf.Lerp( idleBob, 1f, move01 )
+			: airBob;
 
 		float bobAmp = def != null ? def.bobAmplitude : 0.025f;
 		float bobFreq = def != null ? def.bobFrequency : 8f;
-		_bobPhase += dt * bobFreq * Mathf.Lerp( 0.35f, 1f, move01 );
+		if ( grounded && bobWeight > 0.001f )
+			_bobPhase += dt * bobFreq * Mathf.Lerp( 0.35f, 1f, move01 );
 		float bobY = Mathf.Sin( _bobPhase ) * bobAmp * bobWeight;
 
 		Vector3 swayAmp = def != null ? def.swayAmplitude : new Vector3( 0.02f, 0.01f, 0.015f );
 		float swayFreq = def != null ? def.swayFrequency : 1.6f;
 		_swayPhase += dt * swayFreq;
+		float swayWeight = grounded ? bobWeight : Mathf.Max( bobWeight, 0.35f );
 		Vector3 sway = new Vector3(
 			Mathf.Sin( _swayPhase ) * swayAmp.x,
 			Mathf.Cos( _swayPhase * 0.7f ) * swayAmp.y,
-			Mathf.Sin( _swayPhase * 1.3f ) * swayAmp.z ) * bobWeight;
+			Mathf.Sin( _swayPhase * 1.3f ) * swayAmp.z ) * swayWeight;
 
 		float strafeSway = def != null ? def.strafeSway : 0.04f;
 		float moveSway = def != null ? def.moveSway : 0.03f;
@@ -3029,7 +3054,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			0f,
 			Mathf.Clamp( localMove.z, -1f, 1f ) * moveSway );
 
-		Vector3 targetMotion = new Vector3( 0f, bobY, 0f ) + sway + moveOffset;
+		TickJumpReaction( def, immediate );
+		Vector3 targetMotion = new Vector3( 0f, bobY, 0f ) + sway + moveOffset + _jumpReactionOffset;
 		float motionSmooth = def != null ? def.handMotionSmoothSpeed : 12f;
 		if ( immediate || motionSmooth <= 0.01f )
 			_smoothedMotionOffset = targetMotion;
@@ -3075,6 +3101,35 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				bucket.ActiveRoot.localScale = Vector3.one;
 			}
 		}
+	}
+
+	void TickJumpReaction( CarryDefinition def, bool immediate )
+	{
+		Vector3 impulse = def != null ? def.jumpReactionOffset : new Vector3( 0f, -0.08f, -0.03f );
+		float duration = def != null ? Mathf.Max( 0.05f, def.jumpReactionDuration ) : 0.28f;
+
+		if ( immediate )
+		{
+			_jumpReactionOffset = Vector3.zero;
+			_jumpReactionT = 0f;
+			return;
+		}
+
+		if ( _player != null && _player.WasJumpThisFrame )
+		{
+			_jumpReactionOffset = impulse;
+			_jumpReactionT = 1f;
+		}
+
+		if ( _jumpReactionT <= 0.001f )
+		{
+			_jumpReactionOffset = Vector3.zero;
+			return;
+		}
+
+		_jumpReactionT = Mathf.MoveTowards( _jumpReactionT, 0f, Time.deltaTime / duration );
+		float ease = _jumpReactionT * _jumpReactionT;
+		_jumpReactionOffset = impulse * ease;
 	}
 
 	void OnDestroy()

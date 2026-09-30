@@ -8,20 +8,20 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Open display table: accepts any <see cref="TreasureItem"/>.
-/// Slots sit on a horizontal XZ plane. Stackable treasure (<see cref="TreasureDefinition.canStack"/>)
-/// can pile vertically in a slot (same definition); non-stackable treasure (gems) uses one item per slot.
+/// Slots sit on a horizontal XZ plane. Items claim a rectangular footprint via
+/// <see cref="TreasureDefinition.cartGridSize"/> (coins forced to 1×1).
+/// Stackable treasure (<see cref="TreasureDefinition.canStack"/>) can pile vertically
+/// on a matching footprint; non-stackable treasure (gems) uses one item per footprint.
 /// </summary>
 public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, ITreasurePlacementTarget, ITreasureDisplayStackOwner
 {
-	public enum FillDirection
-	{
-		LeftRightTopBottom
-	}
-
 	class SlotStack
 	{
-		public Vector3 LocalBasePosition;
-		public Quaternion LocalRotation;
+		public int OriginX;
+		public int OriginY;
+		public Vector2Int Footprint = Vector2Int.one;
+		public TreasureDefinition Definition;
+		public Quaternion LocalRotation = Quaternion.identity;
 		public readonly List<TreasureItem> Items = new List<TreasureItem>();
 		public CoinStackCylinderVisual Cylinder;
 
@@ -29,7 +29,6 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		public int Count => Items.Count;
 
 		public TreasureItem Top => Items.Count > 0 ? Items[ Items.Count - 1 ] : null;
-		public TreasureDefinition Definition => Items.Count > 0 && Items[ 0 ] != null ? Items[ 0 ].Definition : null;
 	}
 
 	[Header( "Layout" )]
@@ -53,9 +52,6 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	[Min( 0f )]
 	float margin = 0.05f;
 
-	[SerializeField]
-	FillDirection fillDirection = FillDirection.LeftRightTopBottom;
-
 	[Header( "Stacking" )]
 	[Tooltip( "0 = unlimited stack height per slot for canStack treasure." )]
 	[SerializeField]
@@ -71,6 +67,14 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	[Min( 1f )]
 	float bounceScale = 1.15f;
 
+	[Header( "Filters" )]
+	[Tooltip( "Empty = accept any category. When set, only listed categories may be placed." )]
+	[SerializeField]
+	TreasureCategory[] allowedCategories;
+
+	[SerializeField]
+	bool allowDisplayedPickup = true;
+
 	[Header( "Feedback" )]
 	[SerializeField]
 	Text countLabel;
@@ -80,14 +84,17 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	bool drawLayoutGizmosAlways;
 
 	Collider _collider;
-	SlotStack[] _slots;
+	SlotStack[ , ] _cellStacks;
+	readonly List<SlotStack> _stacks = new List<SlotStack>( 16 );
 	readonly List<TreasureItem> _allItems = new List<TreasureItem>();
 	int _itemCount;
 	int _previewOutlineSlot = -1;
 	Feedbacks _placeFeedbacks;
+	bool _burnLocked;
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Table;
-	public bool AllowsDisplayedPickup => true;
+	public bool AllowsDisplayedPickup => allowDisplayedPickup && !_burnLocked;
+	public bool BurnLocked => _burnLocked;
 
 	public int ItemCount => _itemCount;
 	public int SlotCount => DisplayTableSlotLayout.SlotCount( rows, columns );
@@ -99,6 +106,9 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	public float LayoutSlotSpacing => slotSpacing;
 	public float LayoutMargin => margin;
 	public Transform DisplayArea => displayArea != null ? displayArea : transform;
+
+	int GridColumns => Mathf.Max( 1, columns );
+	int GridRows => Mathf.Max( 1, rows );
 
 	void Reset()
 	{
@@ -136,6 +146,43 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		Remove( item );
 	}
 
+	public void SetBurnLocked( bool locked )
+	{
+		_burnLocked = locked;
+	}
+
+	/// <summary>Copies currently displayed items into <paramref name="results"/> (clears first).</summary>
+	public void CopyDisplayedItems( List<TreasureItem> results )
+	{
+		if ( results == null )
+			return;
+
+		results.Clear();
+		for ( int i = 0; i < _allItems.Count; i++ )
+		{
+			TreasureItem item = _allItems[ i ];
+			if ( item != null )
+				results.Add( item );
+		}
+	}
+
+	bool IsCategoryAllowed( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return false;
+		if ( allowedCategories == null || allowedCategories.Length == 0 )
+			return true;
+
+		TreasureCategory category = definition.category;
+		for ( int i = 0; i < allowedCategories.Length; i++ )
+		{
+			if ( allowedCategories[ i ] == category )
+				return true;
+		}
+
+		return false;
+	}
+
 	public bool TryCollectPickupColumn(
 		TreasureItem selected,
 		List<TreasureItem> results,
@@ -148,12 +195,15 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			return false;
 
 		results.Clear();
-		if ( selected == null || _slots == null )
+		if ( selected == null || _cellStacks == null )
 			return false;
 
-		for ( int s = 0; s < _slots.Length; s++ )
+		for ( int s = 0; s < _stacks.Count; s++ )
 		{
-			SlotStack slot = _slots[ s ];
+			SlotStack slot = _stacks[ s ];
+			if ( slot == null )
+				continue;
+
 			int selectedIndex = slot.Items.IndexOf( selected );
 			if ( selectedIndex < 0 )
 				continue;
@@ -184,15 +234,16 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	public bool TryGetSlotIndex( TreasureItem selected, out int slotIndex )
 	{
 		slotIndex = -1;
-		if ( selected == null || _slots == null )
+		if ( selected == null || _cellStacks == null )
 			return false;
 
-		for ( int s = 0; s < _slots.Length; s++ )
+		for ( int s = 0; s < _stacks.Count; s++ )
 		{
-			if ( _slots[ s ].Items.IndexOf( selected ) < 0 )
+			SlotStack stack = _stacks[ s ];
+			if ( stack == null || stack.Items.IndexOf( selected ) < 0 )
 				continue;
 
-			slotIndex = s;
+			slotIndex = SlotIndex( stack.OriginX, stack.OriginY );
 			return true;
 		}
 
@@ -201,10 +252,8 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public int GetSlotCount( int slotIndex )
 	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
-			return 0;
-
-		return _slots[ slotIndex ].Count;
+		SlotStack stack = GetOriginStack( slotIndex );
+		return stack != null ? stack.Count : 0;
 	}
 
 	public void AppendSlotOutlineRenderers( TreasureItem selected, List<Renderer> renderers )
@@ -212,7 +261,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		if ( !TryGetSlotIndex( selected, out int slotIndex ) )
 			return;
 
-		AppendSlotOutlineRenderers( _slots[ slotIndex ], renderers );
+		AppendSlotOutlineRenderers( GetOriginStack( slotIndex ), renderers );
 	}
 
 	public bool TryConsumeSlotDefinitions(
@@ -223,11 +272,12 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	{
 		contact = transform.position;
 		rotation = transform.rotation;
-		if ( into == null || _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( into == null || _cellStacks == null )
 			return false;
 
-		SlotStack slot = _slots[ slotIndex ];
-		if ( slot.Count <= 0 )
+		RemapSlotToOrigin( ref slotIndex );
+		SlotStack slot = GetOriginStack( slotIndex );
+		if ( slot == null || slot.Count <= 0 )
 			return false;
 
 		GetSlotBaseWorldPose( slotIndex, out contact, out rotation );
@@ -262,8 +312,9 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			TreasureItemFactory.Despawn( member );
 		}
 
-		RestackSlot( slotIndex );
-		RefreshSlotCylinder( slotIndex );
+		ClearFootprint( slot );
+		_stacks.Remove( slot );
+		RefreshSlotCylinder( slot );
 		RefreshCountLabel();
 		PublishChanged();
 		return into.Count > 0;
@@ -271,16 +322,25 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public int GetSlotCoinAppendCapacity( int slotIndex, TreasureDefinition probe )
 	{
-		if ( probe == null || probe.category != TreasureCategory.Coin || _slots == null )
+		if ( probe == null || probe.category != TreasureCategory.Coin || _cellStacks == null )
 			return 0;
 		if ( !IsTableStackable( probe ) )
 			return 0;
-		if ( slotIndex < 0 || slotIndex >= _slots.Length )
+
+		RemapSlotToOrigin( ref slotIndex );
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
 			return 0;
 
-		SlotStack slot = _slots[ slotIndex ];
-		if ( slot.IsEmpty )
+		SlotStack slot = _cellStacks[ ox, oy ];
+		if ( slot == null )
+		{
+			if ( !IsRectangleFree( ox, oy, Vector2Int.one ) )
+				return 0;
 			return maxStackPerSlot > 0 ? maxStackPerSlot : int.MaxValue;
+		}
+
+		if ( slot.OriginX != ox || slot.OriginY != oy )
+			return 0;
 
 		if ( !CanStackOnto( probe, slot ) )
 			return 0;
@@ -293,12 +353,21 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	{
 		contact = transform.position;
 		rotation = transform.rotation;
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( _cellStacks == null )
 			return false;
+
+		RemapSlotToOrigin( ref slotIndex );
+		SlotStack slot = GetOriginStack( slotIndex );
+		if ( slot == null )
+		{
+			if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
+				return false;
+			GetCellWorldPose( ox, oy, 0, null, null, Vector2Int.one, out contact, out rotation );
+			return true;
+		}
 
 		GetSlotBaseWorldPose( slotIndex, out contact, out rotation );
 		float height = 0f;
-		SlotStack slot = _slots[ slotIndex ];
 		for ( int i = 0; i < slot.Items.Count; i++ )
 			height += TreasureStackSpacing.GetStep( slot.Items[ i ] );
 		contact += Vector3.up * height;
@@ -307,12 +376,13 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
 	{
-		if ( definitions == null || definitions.Count == 0 || _slots == null )
-			return 0;
-		if ( slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( definitions == null || definitions.Count == 0 || _cellStacks == null )
 			return 0;
 
-		SlotStack slot = _slots[ slotIndex ];
+		RemapSlotToOrigin( ref slotIndex );
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
+			return 0;
+
 		int added = 0;
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
@@ -327,12 +397,12 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			if ( visual == null )
 				break;
 
-			slot.Items.Add( visual );
-			if ( !_allItems.Contains( visual ) )
-				_allItems.Add( visual );
-			_itemCount++;
-			visual.EnterDisplayed( this, pos, rot );
-			NotifySortedDelta( def, 1 );
+			if ( !CommitItem( visual, ox, oy, animate: false ) )
+			{
+				TreasureItemFactory.Despawn( visual );
+				break;
+			}
+
 			PlayTreasurePlaceFeedback( visual );
 			added++;
 		}
@@ -340,7 +410,6 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		if ( added <= 0 )
 			return 0;
 
-		RefreshSlotCylinder( slotIndex );
 		RefreshCountLabel();
 		PublishChanged();
 		return added;
@@ -348,12 +417,15 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public void Remove( TreasureItem item )
 	{
-		if ( item == null || _slots == null )
+		if ( item == null || _cellStacks == null )
 			return;
 
-		for ( int s = 0; s < _slots.Length; s++ )
+		for ( int s = 0; s < _stacks.Count; s++ )
 		{
-			SlotStack slot = _slots[ s ];
+			SlotStack slot = _stacks[ s ];
+			if ( slot == null )
+				continue;
+
 			int index = slot.Items.IndexOf( item );
 			if ( index < 0 )
 				continue;
@@ -361,7 +433,18 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			slot.Items.RemoveAt( index );
 			_allItems.Remove( item );
 			_itemCount = Mathf.Max( 0, _itemCount - 1 );
-			RestackSlot( s );
+
+			if ( slot.Items.Count == 0 )
+			{
+				ClearFootprint( slot );
+				_stacks.RemoveAt( s );
+				RefreshSlotCylinder( slot );
+			}
+			else
+			{
+				RestackSlot( slot );
+			}
+
 			RefreshCountLabel();
 			PublishChanged();
 			NotifySortedDelta( item.Definition, -1 );
@@ -375,6 +458,141 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		}
 	}
 
+	/// <summary>Detaches one displayed item for automated minecart transfer.</summary>
+	public bool TryExtractOneItem( out TreasureItem item )
+	{
+		item = null;
+		for ( int s = _stacks.Count - 1; s >= 0; s-- )
+		{
+			SlotStack slot = _stacks[ s ];
+			if ( slot == null || slot.IsEmpty )
+				continue;
+
+			item = slot.Top;
+			if ( item == null )
+				continue;
+
+			Remove( item );
+			if ( item != null )
+				item.transform.SetParent( null, true );
+			return item != null;
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Finds a ground-stackable coin slot whose full stack fits in <paramref name="maxCoins"/>,
+	/// preferring the nearest to <paramref name="worldPos"/>.
+	/// </summary>
+	public bool TryFindPullableCoinStack(
+		Vector3 worldPos,
+		int maxCoins,
+		out int slotIndex,
+		out int coinCount,
+		out float distSq )
+	{
+		slotIndex = -1;
+		coinCount = 0;
+		distSq = float.MaxValue;
+		if ( maxCoins <= 0 || _stacks == null || _stacks.Count == 0 )
+			return false;
+
+		for ( int s = 0; s < _stacks.Count; s++ )
+		{
+			SlotStack slot = _stacks[ s ];
+			if ( slot == null || slot.IsEmpty || slot.Definition == null )
+				continue;
+			if ( !GroundCoinStack.IsGroundStackableCoin( slot.Definition ) )
+				continue;
+			if ( slot.Count <= 0 || slot.Count > maxCoins )
+				continue;
+
+			int candidateSlot = SlotIndex( slot.OriginX, slot.OriginY );
+			GetSlotBaseWorldPose( candidateSlot, out Vector3 contact, out _ );
+			Vector3 delta = contact - worldPos;
+			float sq = delta.x * delta.x + delta.z * delta.z;
+			if ( sq >= distSq )
+				continue;
+
+			distSq = sq;
+			slotIndex = candidateSlot;
+			coinCount = slot.Count;
+		}
+
+		return slotIndex >= 0 && coinCount > 0;
+	}
+
+	/// <summary>Accepts an already-detached world item into the first free / stackable slot.</summary>
+	public bool TryAcceptWorldItem( TreasureItem item )
+	{
+		if ( item == null || item.Definition == null || _cellStacks == null || !IsAvailable )
+			return false;
+
+		if ( !TryFindAutoPlacement( item.Definition, out int ox, out int oy ) )
+			return false;
+
+		if ( !CommitItem( item, ox, oy, animate: true ) )
+			return false;
+
+		RefreshCountLabel();
+		PublishChanged();
+		return true;
+	}
+
+	public bool CanAcceptWorldItem( TreasureDefinition def )
+	{
+		return def != null && TryFindAutoPlacement( def, out _, out _ );
+	}
+
+	bool TryFindAutoPlacement( TreasureDefinition def, out int ox, out int oy )
+	{
+		ox = 0;
+		oy = 0;
+		if ( def == null || _cellStacks == null )
+			return false;
+
+		Vector2Int footprint = GetItemFootprint( def );
+		int cols = GridColumns;
+		int rowCount = GridRows;
+
+		if ( IsTableStackable( def ) )
+		{
+			for ( int y = 0; y <= rowCount - footprint.y; y++ )
+			{
+				for ( int x = 0; x <= cols - footprint.x; x++ )
+				{
+					SlotStack existing = _cellStacks[ x, y ];
+					if ( existing == null )
+						continue;
+					if ( existing.OriginX != x || existing.OriginY != y )
+						continue;
+					if ( !CanStackOnto( def, existing ) || existing.Footprint != footprint )
+						continue;
+
+					ox = x;
+					oy = y;
+					return true;
+				}
+			}
+		}
+
+		for ( int y = 0; y <= rowCount - footprint.y; y++ )
+		{
+			for ( int x = 0; x <= cols - footprint.x; x++ )
+			{
+				if ( !IsRectangleFree( x, y, footprint ) )
+					continue;
+
+				ox = x;
+				oy = y;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public override bool CanInteract( PlayerController player )
 	{
 		return false;
@@ -386,7 +604,10 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public bool CanPlace( TreasureItem item, in PlacementQuery query )
 	{
-		if ( item == null || !IsAvailable || item.Definition == null )
+		if ( item == null || !IsAvailable || _burnLocked || item.Definition == null )
+			return false;
+
+		if ( !IsCategoryAllowed( item.Definition ) )
 			return false;
 
 		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
@@ -403,7 +624,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	{
 		preview = default;
 		_previewOutlineSlot = -1;
-		if ( item == null )
+		if ( item == null || _burnLocked || item.Definition == null || !IsCategoryAllowed( item.Definition ) )
 			return false;
 
 		if ( !TryResolveNearestSlot( item, in query, out int slotIndex, out int stackIndex, out bool valid ) )
@@ -422,10 +643,12 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	/// </summary>
 	public void AppendPreviewStackOutlineRenderers( List<Renderer> renderers )
 	{
-		if ( renderers == null || _slots == null || _previewOutlineSlot < 0 || _previewOutlineSlot >= _slots.Length )
+		if ( renderers == null || _cellStacks == null || _previewOutlineSlot < 0 )
 			return;
 
-		AppendSlotOutlineRenderers( _slots[ _previewOutlineSlot ], renderers );
+		int slotIndex = _previewOutlineSlot;
+		RemapSlotToOrigin( ref slotIndex );
+		AppendSlotOutlineRenderers( GetOriginStack( slotIndex ), renderers );
 	}
 
 	public bool TryPlace( TreasureItem item, in PlacementQuery query )
@@ -444,6 +667,9 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		if ( !TryResolveNearestSlot( item, in query, out int slotIndex, out int stackIndex, out bool valid ) || !valid )
 			return false;
 
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
+			return false;
+
 		if ( !carry.TryConsumeActive( out TreasureItem removed ) || removed == null || removed != item )
 		{
 			if ( removed != null && removed != item )
@@ -451,15 +677,14 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			return false;
 		}
 
-		_slots[ slotIndex ].Items.Add( removed );
-		if ( !_allItems.Contains( removed ) )
-			_allItems.Add( removed );
-		_itemCount++;
+		if ( !CommitItem( removed, ox, oy, animate: true ) )
+		{
+			removed.EnterPhysics( removed.transform.position, removed.transform.rotation );
+			return false;
+		}
+
 		RefreshCountLabel();
 		PublishChanged();
-		NotifySortedDelta( removed.Definition, 1 );
-
-		StartCoroutine( SnapIntoSlotRoutine( removed, slotIndex, stackIndex ) );
 		return true;
 	}
 
@@ -484,7 +709,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	}
 
 	/// <summary>
-	/// True when at least one carried coin type can append onto this table (mixed stacks split by type).
+	/// True when at least one carried coin can append onto this table (mixed coin stacks stay mixed).
 	/// </summary>
 	public bool CanAcceptWholeMixedCoinStack(
 		IReadOnlyList<TreasureDefinition> definitions,
@@ -496,20 +721,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
 			TreasureDefinition def = definitions[ i ];
-			if ( def == null )
-				continue;
-
-			bool seen = false;
-			for ( int j = 0; j < i; j++ )
-			{
-				if ( definitions[ j ] == def )
-				{
-					seen = true;
-					break;
-				}
-			}
-
-			if ( seen )
+			if ( def == null || def.category != TreasureCategory.Coin )
 				continue;
 
 			if ( TryFindWholeCoinPlaceSlot( def, in query, out _, out _, out _ ) )
@@ -530,7 +742,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		slotIndex = -1;
 		contact = transform.position;
 		rotation = transform.rotation;
-		if ( definition == null || !IsAvailable || !IsTableStackable( definition ) || _slots == null )
+		if ( definition == null || !IsAvailable || !IsTableStackable( definition ) || _cellStacks == null )
 			return false;
 
 		if ( query.HasHit
@@ -538,32 +750,40 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			&& GetSlotCoinAppendCapacity( aimedSlot, definition ) > 0 )
 		{
 			slotIndex = aimedSlot;
+			RemapSlotToOrigin( ref slotIndex );
 			return TryGetSlotAppendPose( slotIndex, out contact, out rotation );
 		}
 
 		Vector3 reference = GetSlotSearchReference( in query );
 		float bestDistSq = float.MaxValue;
 		int bestSlot = -1;
+		int cols = GridColumns;
+		int rowCount = GridRows;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int y = 0; y < rowCount; y++ )
 		{
-			if ( GetSlotCoinAppendCapacity( i, definition ) <= 0 )
-				continue;
+			for ( int x = 0; x < cols; x++ )
+			{
+				int candidate = SlotIndex( x, y );
+				if ( GetSlotCoinAppendCapacity( candidate, definition ) <= 0 )
+					continue;
 
-			if ( !TryGetSlotDistanceSq( reference, i, out float distSq ) )
-				continue;
+				if ( !TryGetSlotDistanceSq( reference, candidate, out float distSq ) )
+					continue;
 
-			if ( distSq >= bestDistSq )
-				continue;
+				if ( distSq >= bestDistSq )
+					continue;
 
-			bestDistSq = distSq;
-			bestSlot = i;
+				bestDistSq = distSq;
+				bestSlot = candidate;
+			}
 		}
 
 		if ( bestSlot < 0 )
 			return false;
 
 		slotIndex = bestSlot;
+		RemapSlotToOrigin( ref slotIndex );
 		return TryGetSlotAppendPose( slotIndex, out contact, out rotation );
 	}
 
@@ -581,13 +801,16 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		slotIndex = -1;
 		stackIndex = 0;
 		valid = false;
-		if ( item == null || item.Definition == null || _slots == null )
+		if ( item == null || item.Definition == null || _cellStacks == null )
 			return false;
 
 		if ( !TryResolveAimedSlot( in query, out slotIndex ) )
 			return false;
 
 		int hoveredSlot = slotIndex;
+		RemapSlotToOrigin( ref hoveredSlot );
+		slotIndex = hoveredSlot;
+
 		if ( TryGetStackIndexForSlot( item, hoveredSlot, out stackIndex ) )
 		{
 			valid = true;
@@ -603,12 +826,13 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			return true;
 		}
 
-		// Invalid: still preview at the hovered slot (top of occupied stack or base).
+		// Invalid: still preview at the hovered origin (top of occupied stack or base).
 		slotIndex = hoveredSlot;
-		if ( slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( !TryGetCell( slotIndex, out _, out _ ) )
 			return false;
 
-		stackIndex = _slots[ slotIndex ].Count;
+		SlotStack hovered = GetOriginStack( slotIndex );
+		stackIndex = hovered != null ? hovered.Count : 0;
 		valid = false;
 		return true;
 	}
@@ -621,26 +845,33 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	{
 		slotIndex = -1;
 		stackIndex = 0;
-		if ( item == null || item.Definition == null || _slots == null )
+		if ( item == null || item.Definition == null || _cellStacks == null )
 			return false;
 
+		Vector2Int footprint = GetItemFootprint( item.Definition );
 		Vector3 reference = GetSlotSearchReference( in query );
 		float bestDistSq = float.MaxValue;
+		int cols = GridColumns;
+		int rowCount = GridRows;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int y = 0; y <= rowCount - footprint.y; y++ )
 		{
-			if ( !TryGetStackIndexForSlot( item, i, out int candidateStack ) )
-				continue;
+			for ( int x = 0; x <= cols - footprint.x; x++ )
+			{
+				if ( !TryGetStackIndexForOrigin( item, x, y, out int candidateStack ) )
+					continue;
 
-			if ( !TryGetSlotDistanceSq( reference, i, out float distSq ) )
-				continue;
+				int candidateSlot = SlotIndex( x, y );
+				if ( !TryGetSlotDistanceSq( reference, candidateSlot, out float distSq ) )
+					continue;
 
-			if ( distSq >= bestDistSq )
-				continue;
+				if ( distSq >= bestDistSq )
+					continue;
 
-			bestDistSq = distSq;
-			slotIndex = i;
-			stackIndex = candidateStack;
+				bestDistSq = distSq;
+				slotIndex = candidateSlot;
+				stackIndex = candidateStack;
+			}
 		}
 
 		return slotIndex >= 0;
@@ -658,13 +889,13 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	bool TryGetSlotDistanceSq( Vector3 worldPoint, int slotIndex, out float distSq )
 	{
 		distSq = float.MaxValue;
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
 			return false;
 
 		Transform area = displayArea != null ? displayArea : transform;
 		Vector3 local = area.InverseTransformPoint( worldPoint );
 		local.y = 0f;
-		Vector3 slotLocal = _slots[ slotIndex ].LocalBasePosition;
+		Vector3 slotLocal = ComputeSlotLocalPosition( SlotIndex( ox, oy ) );
 		slotLocal.y = 0f;
 		distSq = ( slotLocal - local ).sqrMagnitude;
 		return true;
@@ -673,49 +904,75 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	bool TryResolveAimedSlot( in PlacementQuery query, out int slotIndex )
 	{
 		slotIndex = -1;
-		if ( !query.HasHit || query.Hit.collider == null || _slots == null )
+		if ( !query.HasHit || query.Hit.collider == null || _cellStacks == null )
 			return false;
 
 		TreasureItem hitItem = query.Hit.collider.GetComponentInParent<TreasureItem>();
 		if ( hitItem != null && TryFindSlotContaining( hitItem, out slotIndex ) )
 			return true;
 
-		return TryFindNearestSlot( query.Hit.point, out slotIndex, out _ );
+		if ( !TryFindNearestSlot( query.Hit.point, out slotIndex, out _ ) )
+			return false;
+
+		RemapSlotToOrigin( ref slotIndex );
+		return true;
 	}
 
 	bool TryGetStackIndexForSlot( TreasureItem item, int slotIndex, out int stackIndex )
 	{
 		stackIndex = 0;
-		if ( item == null || item.Definition == null || _slots == null
-			|| slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
 			return false;
 
-		SlotStack slot = _slots[ slotIndex ];
-		if ( slot.IsEmpty )
+		return TryGetStackIndexForOrigin( item, ox, oy, out stackIndex );
+	}
+
+	bool TryGetStackIndexForOrigin( TreasureItem item, int originX, int originY, out int stackIndex )
+	{
+		stackIndex = 0;
+		if ( item == null || item.Definition == null || _cellStacks == null )
+			return false;
+
+		if ( originX < 0 || originY < 0 || originX >= GridColumns || originY >= GridRows )
+			return false;
+
+		Vector2Int footprint = GetItemFootprint( item.Definition );
+		SlotStack stack = _cellStacks[ originX, originY ];
+		if ( stack != null )
 		{
-			stackIndex = 0;
+			if ( stack.OriginX != originX || stack.OriginY != originY )
+				return false;
+
+			if ( !CanStackOnto( item.Definition, stack ) )
+				return false;
+
+			if ( stack.Footprint != footprint )
+				return false;
+
+			stackIndex = stack.Count;
 			return true;
 		}
 
-		if ( !CanStackOnto( item.Definition, slot ) )
+		if ( !IsRectangleFree( originX, originY, footprint ) )
 			return false;
 
-		stackIndex = slot.Count;
+		stackIndex = 0;
 		return true;
 	}
 
 	bool TryFindSlotContaining( TreasureItem item, out int slotIndex )
 	{
 		slotIndex = -1;
-		if ( item == null || _slots == null )
+		if ( item == null || _cellStacks == null )
 			return false;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int s = 0; s < _stacks.Count; s++ )
 		{
-			if ( _slots[ i ].Items.IndexOf( item ) < 0 )
+			SlotStack stack = _stacks[ s ];
+			if ( stack == null || stack.Items.IndexOf( item ) < 0 )
 				continue;
 
-			slotIndex = i;
+			slotIndex = SlotIndex( stack.OriginX, stack.OriginY );
 			return true;
 		}
 
@@ -726,16 +983,17 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	{
 		slotIndex = -1;
 		distSq = float.MaxValue;
-		if ( _slots == null )
+		if ( _cellStacks == null )
 			return false;
 
 		Transform area = displayArea != null ? displayArea : transform;
 		Vector3 local = area.InverseTransformPoint( worldPoint );
 		local.y = 0f;
+		int count = SlotCount;
 
-		for ( int i = 0; i < _slots.Length; i++ )
+		for ( int i = 0; i < count; i++ )
 		{
-			Vector3 slotLocal = _slots[ i ].LocalBasePosition;
+			Vector3 slotLocal = ComputeSlotLocalPosition( i );
 			slotLocal.y = 0f;
 			float d = ( slotLocal - local ).sqrMagnitude;
 			if ( d >= distSq )
@@ -748,6 +1006,58 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		return slotIndex >= 0;
 	}
 
+	bool CommitItem( TreasureItem item, int ox, int oy, bool animate )
+	{
+		if ( item == null || item.Definition == null || _cellStacks == null )
+			return false;
+
+		TreasureDefinition def = item.Definition;
+		Vector2Int footprint = GetItemFootprint( def );
+		SlotStack stack = _cellStacks[ ox, oy ];
+		if ( stack != null )
+		{
+			if ( stack.OriginX != ox || stack.OriginY != oy )
+				return false;
+			if ( !CanStackOnto( def, stack ) || stack.Footprint != footprint )
+				return false;
+		}
+		else
+		{
+			if ( !IsRectangleFree( ox, oy, footprint ) )
+				return false;
+
+			stack = new SlotStack
+			{
+				OriginX = ox,
+				OriginY = oy,
+				Footprint = footprint,
+				Definition = def,
+				LocalRotation = Quaternion.identity
+			};
+			_stacks.Add( stack );
+			MarkFootprint( ox, oy, footprint, stack );
+		}
+
+		stack.Items.Add( item );
+		if ( !_allItems.Contains( item ) )
+			_allItems.Add( item );
+		_itemCount++;
+		NotifySortedDelta( def, 1 );
+
+		int stackIndex = stack.Items.Count - 1;
+		int slotIndex = SlotIndex( ox, oy );
+		if ( animate && isActiveAndEnabled )
+		{
+			StartCoroutine( SnapIntoSlotRoutine( item, slotIndex, stackIndex ) );
+			return true;
+		}
+
+		GetSlotWorldPose( slotIndex, stackIndex, item, out Vector3 pos, out Quaternion rot );
+		item.EnterDisplayed( this, pos, rot );
+		RefreshSlotCylinder( stack );
+		return true;
+	}
+
 	bool CanStackOnto( TreasureDefinition placing, SlotStack slot )
 	{
 		if ( placing == null || slot == null || slot.IsEmpty )
@@ -757,10 +1067,20 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			return false;
 
 		TreasureDefinition occupied = slot.Definition;
+		if ( occupied == null && slot.Items.Count > 0 && slot.Items[ 0 ] != null )
+			occupied = slot.Items[ 0 ].Definition;
 		if ( occupied == null || !IsTableStackable( occupied ) )
 			return false;
 
-		if ( placing != occupied )
+		// Coins may mix types in one slot; other stackables remain type-locked.
+		bool placingCoin = placing.category == TreasureCategory.Coin;
+		bool occupiedCoin = occupied.category == TreasureCategory.Coin;
+		if ( placingCoin != occupiedCoin )
+			return false;
+		if ( !placingCoin && placing != occupied )
+			return false;
+
+		if ( slot.Footprint != GetItemFootprint( placing ) )
 			return false;
 
 		if ( maxStackPerSlot > 0 && slot.Count >= maxStackPerSlot )
@@ -774,9 +1094,112 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		return definition != null && definition.canStack;
 	}
 
+	static Vector2Int GetItemFootprint( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return Vector2Int.one;
+		if ( definition.category == TreasureCategory.Coin )
+			return Vector2Int.one;
+		return definition.GetCartGridSize();
+	}
+
+	bool IsRectangleFree( int ox, int oy, Vector2Int footprint )
+	{
+		int cols = GridColumns;
+		int rowCount = GridRows;
+		if ( ox < 0 || oy < 0 || ox + footprint.x > cols || oy + footprint.y > rowCount )
+			return false;
+
+		for ( int y = 0; y < footprint.y; y++ )
+		{
+			for ( int x = 0; x < footprint.x; x++ )
+			{
+				if ( _cellStacks[ ox + x, oy + y ] != null )
+					return false;
+			}
+		}
+
+		return true;
+	}
+
+	void MarkFootprint( int ox, int oy, Vector2Int footprint, SlotStack stack )
+	{
+		for ( int y = 0; y < footprint.y; y++ )
+		{
+			for ( int x = 0; x < footprint.x; x++ )
+				_cellStacks[ ox + x, oy + y ] = stack;
+		}
+	}
+
+	void ClearFootprint( SlotStack stack )
+	{
+		if ( stack == null || _cellStacks == null )
+			return;
+
+		for ( int y = 0; y < stack.Footprint.y; y++ )
+		{
+			for ( int x = 0; x < stack.Footprint.x; x++ )
+			{
+				int cx = stack.OriginX + x;
+				int cy = stack.OriginY + y;
+				if ( cx < 0 || cy < 0 || cx >= GridColumns || cy >= GridRows )
+					continue;
+
+				if ( _cellStacks[ cx, cy ] == stack )
+					_cellStacks[ cx, cy ] = null;
+			}
+		}
+	}
+
+	void RemapSlotToOrigin( ref int slotIndex )
+	{
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) || _cellStacks == null )
+			return;
+
+		SlotStack stack = _cellStacks[ ox, oy ];
+		if ( stack == null )
+			return;
+
+		slotIndex = SlotIndex( stack.OriginX, stack.OriginY );
+	}
+
+	SlotStack GetOriginStack( int slotIndex )
+	{
+		RemapSlotToOrigin( ref slotIndex );
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) || _cellStacks == null )
+			return null;
+
+		SlotStack stack = _cellStacks[ ox, oy ];
+		if ( stack == null )
+			return null;
+		if ( stack.OriginX != ox || stack.OriginY != oy )
+			return null;
+		return stack;
+	}
+
+	bool TryGetCell( int slotIndex, out int ox, out int oy )
+	{
+		ox = 0;
+		oy = 0;
+		int cols = GridColumns;
+		int count = SlotCount;
+		if ( slotIndex < 0 || slotIndex >= count )
+			return false;
+
+		ox = slotIndex % cols;
+		oy = slotIndex / cols;
+		return true;
+	}
+
+	int SlotIndex( int ox, int oy )
+	{
+		return oy * GridColumns + ox;
+	}
+
 	IEnumerator SnapIntoSlotRoutine( TreasureItem item, int slotIndex, int stackIndex )
 	{
-		if ( item == null || _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		SlotStack stack = GetOriginStack( slotIndex );
+		if ( item == null || stack == null )
 			yield break;
 
 		item.BeginFlight();
@@ -799,7 +1222,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			if ( item == null )
 				yield break;
 
-			if ( !_slots[ slotIndex ].Items.Contains( item ) )
+			if ( !stack.Items.Contains( item ) )
 			{
 				item.EndFlight();
 				yield break;
@@ -831,11 +1254,11 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 		item.EndFlight();
 
-		if ( _slots[ slotIndex ].Items.Contains( item ) )
+		if ( stack.Items.Contains( item ) )
 		{
 			GetSlotWorldPose( slotIndex, stackIndex, item, out endWorldPos, out endWorldRot );
 			item.EnterDisplayed( this, endWorldPos, endWorldRot );
-			RefreshSlotCylinder( slotIndex );
+			RefreshSlotCylinder( stack );
 			PlayTreasurePlaceFeedback( item );
 		}
 	}
@@ -858,12 +1281,12 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		TreasureInteractSfx.PlayPlace( item );
 	}
 
-	void RestackSlot( int slotIndex )
+	void RestackSlot( SlotStack slot )
 	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( slot == null )
 			return;
 
-		SlotStack slot = _slots[ slotIndex ];
+		int slotIndex = SlotIndex( slot.OriginX, slot.OriginY );
 		for ( int i = 0; i < slot.Items.Count; i++ )
 		{
 			TreasureItem member = slot.Items[ i ];
@@ -874,77 +1297,101 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			member.EnterDisplayed( this, pos, rot );
 		}
 
-		RefreshSlotCylinder( slotIndex );
+		RefreshSlotCylinder( slot );
 	}
 
-	void RefreshSlotCylinder( int slotIndex )
+	void RefreshSlotCylinder( SlotStack slot )
 	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
+		if ( slot == null )
 			return;
 
-		SlotStack slot = _slots[ slotIndex ];
 		Transform area = displayArea != null ? displayArea : transform;
+		Vector3 localBase = GetFootprintLocalBase( slot.OriginX, slot.OriginY, slot.Footprint );
 		CoinStackCylinderVisual visual = slot.Cylinder;
 		CoinColumnCylinderBinder.Bind(
 			ref visual,
 			area,
 			slot.Items,
 			snap: false,
-			localPosition: slot.LocalBasePosition,
+			localPosition: localBase,
 			localRotation: slot.LocalRotation,
-			hostName: CoinColumnCylinderBinder.HostChildName + "_Mixed_" + slotIndex );
+			hostName: CoinColumnCylinderBinder.HostChildName + "_Mixed_" + SlotIndex( slot.OriginX, slot.OriginY ) );
 		slot.Cylinder = visual;
 	}
 
 	void GetSlotWorldPose( int slotIndex, int stackIndex, TreasureItem item, out Vector3 worldPos, out Quaternion worldRot )
 	{
-		Transform area = displayArea != null ? displayArea : transform;
-		SlotStack slot = _slots[ slotIndex ];
-		Vector3 local = slot.LocalBasePosition;
-		local.y += GetStackHeightForIndex( slot, stackIndex, item );
-		worldPos = area.TransformPoint( local );
-		worldRot = area.rotation * slot.LocalRotation;
+		RemapSlotToOrigin( ref slotIndex );
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
+		{
+			worldPos = transform.position;
+			worldRot = transform.rotation;
+			return;
+		}
+
+		SlotStack stack = GetOriginStack( slotIndex );
+		TreasureDefinition def = item != null ? item.Definition : null;
+		if ( def == null && stack != null )
+			def = stack.Definition;
+
+		Vector2Int footprint = stack != null ? stack.Footprint : GetItemFootprint( def );
+		GetCellWorldPose( ox, oy, stackIndex, item, stack, footprint, out worldPos, out worldRot );
 	}
 
 	void GetSlotBaseWorldPose( int slotIndex, out Vector3 worldPos, out Quaternion worldRot )
 	{
-		Transform area = displayArea != null ? displayArea : transform;
-		SlotStack slot = _slots[ slotIndex ];
-		worldPos = area.TransformPoint( slot.LocalBasePosition );
-		worldRot = area.rotation * slot.LocalRotation;
-	}
-
-	float GetSlotStackHeight( int slotIndex )
-	{
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
-			return TreasureStackSpacing.FallbackStep;
-
-		SlotStack slot = _slots[ slotIndex ];
-		float height = 0f;
-		for ( int i = 0; i < slot.Items.Count; i++ )
-			height += TreasureStackSpacing.GetStep( slot.Items[ i ] );
-
-		return Mathf.Max( TreasureStackSpacing.FallbackStep, height );
-	}
-
-	float GetSlotStackDiameter( int slotIndex, Vector3 placingScale )
-	{
-		float diameter = Mathf.Max( placingScale.x, placingScale.z );
-		if ( _slots == null || slotIndex < 0 || slotIndex >= _slots.Length )
-			return diameter;
-
-		SlotStack slot = _slots[ slotIndex ];
-		for ( int i = 0; i < slot.Items.Count; i++ )
+		RemapSlotToOrigin( ref slotIndex );
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
 		{
-			TreasureItem member = slot.Items[ i ];
-			if ( member == null )
-				continue;
-
-			Vector3 scale = member.GetWorldScale();
-			diameter = Mathf.Max( diameter, Mathf.Max( scale.x, scale.z ) );
+			worldPos = transform.position;
+			worldRot = transform.rotation;
+			return;
 		}
 
-		return diameter;
+		SlotStack stack = GetOriginStack( slotIndex );
+		Vector2Int footprint = stack != null ? stack.Footprint : Vector2Int.one;
+		GetCellWorldPose( ox, oy, 0, null, stack, footprint, out worldPos, out worldRot );
+	}
+
+	void GetCellWorldPose(
+		int ox,
+		int oy,
+		int stackIndex,
+		TreasureItem item,
+		SlotStack stack,
+		Vector2Int footprint,
+		out Vector3 worldPos,
+		out Quaternion worldRot )
+	{
+		Transform area = displayArea != null ? displayArea : transform;
+		Vector3 local = GetFootprintLocalBase( ox, oy, footprint );
+		local.y += GetStackHeightForIndex( stack, stackIndex, item );
+		worldPos = area.TransformPoint( local );
+		Quaternion localRot = stack != null ? stack.LocalRotation : Quaternion.identity;
+		worldRot = area.rotation * localRot;
+	}
+
+	Vector3 GetFootprintLocalBase( int ox, int oy, Vector2Int footprint )
+	{
+		footprint = new Vector2Int( Mathf.Max( 1, footprint.x ), Mathf.Max( 1, footprint.y ) );
+		Vector3 local = ComputeSlotLocalPosition( SlotIndex( ox, oy ) );
+		if ( footprint.x > 1 || footprint.y > 1 )
+		{
+			Vector3 far = local;
+			far.x += ( footprint.x - 1 ) * Mathf.Max( 0.01f, slotSpacing );
+			far.z -= ( footprint.y - 1 ) * Mathf.Max( 0.01f, slotSpacing );
+			local = ( local + far ) * 0.5f;
+		}
+
+		return local;
+	}
+
+	float GetStackHeightForIndex( SlotStack slot, int stackIndex, TreasureItem placing )
+	{
+		if ( slot == null )
+			return TreasureStackSpacing.GetStep( placing ) * Mathf.Max( 0, stackIndex );
+
+		return TreasureStackSpacing.GetOffsetForIndex( slot.Items, placing, stackIndex );
 	}
 
 	static void AppendSlotOutlineRenderers( SlotStack slot, List<Renderer> renderers )
@@ -969,14 +1416,6 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		}
 	}
 
-	float GetStackHeightForIndex( SlotStack slot, int stackIndex, TreasureItem placing )
-	{
-		if ( slot == null )
-			return TreasureStackSpacing.GetStep( placing ) * Mathf.Max( 0, stackIndex );
-
-		return TreasureStackSpacing.GetOffsetForIndex( slot.Items, placing, stackIndex );
-	}
-
 	static void ApplyWorldScaleAsLocal( Transform t, Vector3 desiredLossy )
 	{
 		if ( t.parent == null )
@@ -999,17 +1438,8 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	void RebuildSlots()
 	{
-		int capacity = SlotCount;
-		_slots = new SlotStack[ capacity ];
-		for ( int i = 0; i < capacity; i++ )
-		{
-			_slots[ i ] = new SlotStack
-			{
-				LocalBasePosition = ComputeSlotLocalPosition( i ),
-				LocalRotation = Quaternion.identity
-			};
-		}
-
+		_cellStacks = new SlotStack[ GridColumns, GridRows ];
+		_stacks.Clear();
 		_itemCount = 0;
 		_allItems.Clear();
 	}
@@ -1061,6 +1491,40 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			margin,
 			new Color( 0.25f, 0.85f, 1f, 0.9f ),
 			new Color( 0.25f, 0.85f, 1f, 0.35f ) );
+
+		if ( !Application.isPlaying || _stacks == null )
+			return;
+
+		Gizmos.color = new Color( 1f, 0.55f, 0.15f, 0.85f );
+		for ( int s = 0; s < _stacks.Count; s++ )
+		{
+			SlotStack stack = _stacks[ s ];
+			if ( stack == null || stack.IsEmpty )
+				continue;
+
+			DrawFootprintGizmo( area, stack.OriginX, stack.OriginY, stack.Footprint );
+		}
+	}
+
+	void DrawFootprintGizmo( Transform area, int ox, int oy, Vector2Int footprint )
+	{
+		if ( area == null )
+			return;
+
+		footprint = new Vector2Int( Mathf.Max( 1, footprint.x ), Mathf.Max( 1, footprint.y ) );
+		Vector3 localA = ComputeSlotLocalPosition( SlotIndex( ox, oy ) );
+		Vector3 localB = localA;
+		localB.x += ( footprint.x - 1 ) * Mathf.Max( 0.01f, slotSpacing );
+		localB.z -= ( footprint.y - 1 ) * Mathf.Max( 0.01f, slotSpacing );
+		Vector3 localCenter = ( localA + localB ) * 0.5f;
+		Vector3 localSize = new Vector3(
+			Mathf.Abs( localB.x - localA.x ) + slotSpacing * 0.85f,
+			0.02f,
+			Mathf.Abs( localB.z - localA.z ) + slotSpacing * 0.85f );
+		Matrix4x4 prev = Gizmos.matrix;
+		Gizmos.matrix = area.localToWorldMatrix;
+		Gizmos.DrawWireCube( localCenter, localSize );
+		Gizmos.matrix = prev;
 	}
 
 #if UNITY_EDITOR
@@ -1077,6 +1541,26 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			Vector3 world = area.TransformPoint(
 				DisplayTableSlotLayout.GetSlotLocalPosition( i, rows, columns, slotSpacing, margin ) );
 			UnityEditor.Handles.Label( world + area.up * 0.05f, i.ToString() );
+		}
+
+		if ( !Application.isPlaying || _stacks == null )
+			return;
+
+		UnityEditor.Handles.color = new Color( 1f, 0.55f, 0.15f, 0.95f );
+		for ( int s = 0; s < _stacks.Count; s++ )
+		{
+			SlotStack stack = _stacks[ s ];
+			if ( stack == null || stack.IsEmpty )
+				continue;
+
+			Vector3 localA = ComputeSlotLocalPosition( SlotIndex( stack.OriginX, stack.OriginY ) );
+			Vector3 localB = localA;
+			localB.x += ( stack.Footprint.x - 1 ) * Mathf.Max( 0.01f, slotSpacing );
+			localB.z -= ( stack.Footprint.y - 1 ) * Mathf.Max( 0.01f, slotSpacing );
+			Vector3 center = area.TransformPoint( ( localA + localB ) * 0.5f );
+			UnityEditor.Handles.Label(
+				center + area.up * 0.08f,
+				stack.Footprint.x + "x" + stack.Footprint.y );
 		}
 	}
 #endif

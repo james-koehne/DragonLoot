@@ -570,7 +570,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				return false;
 			}
 
-			BeginAppendFlight( one, transform.rotation );
+			BeginAppendFlight( one, transform.rotation, playerDirected: true );
 			if ( _machineStation != null )
 				_machineStation.PublishHopperLoaded( 1 );
 			return true;
@@ -591,20 +591,20 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 				continue;
 			}
 
-			BeginAppendFlight( member, transform.rotation );
+			BeginAppendFlight( member, transform.rotation, playerDirected: true );
 		}
 
-		NotifyCartHostCargoPlaced();
+		NotifyCartHostCargoPlaced( fromPlayer: true );
 		return true;
 	}
 
 	/// <summary>Absorb a world-loose coin as the next settled slot (no flight).</summary>
-	public bool TryAbsorbLooseImmediate( TreasureItem item )
+	public bool TryAbsorbLooseImmediate( TreasureItem item, bool playerDirected = false )
 	{
 		if ( item == null || !CanAccept( item.Definition ) || item.IsInFlight )
 			return false;
 
-		AbsorbSettledImmediate( item );
+		AbsorbSettledImmediate( item, playerDirected );
 		PlayLandFeedback();
 		RequestJoinPass();
 		return true;
@@ -661,7 +661,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		}
 	}
 
-	public void BeginAppendFlight( TreasureItem item, Quaternion endWorldRot )
+	public void BeginAppendFlight( TreasureItem item, Quaternion endWorldRot, bool playerDirected = false )
 	{
 		if ( item == null || item.Definition == null || !CanAccept( item.Definition ) )
 			return;
@@ -733,7 +733,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			endWorldPos,
 			endWorldRot,
 			duration,
-			useHopThenArc: flip,
+			useHopThenArc: false,
 			hopHeight: hops,
 			riseFraction: riseFraction,
 			secondaryArcHeight: secondaryArc,
@@ -741,7 +741,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			apexOffset: apexOffset ) );
 
 		RequestJoinPass();
-		PublishStackChanged( item.Definition );
+		PublishStackChanged( item.Definition, playerDirected );
 	}
 
 	static float Vary( float baseValue, float varianceFraction )
@@ -1002,7 +1002,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		return false;
 	}
 
-	public void AbsorbSettledImmediate( TreasureItem item )
+	public void AbsorbSettledImmediate( TreasureItem item, bool playerDirected = false )
 	{
 		if ( item == null || item.Definition == null )
 			return;
@@ -1018,10 +1018,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		_settledLive[ slotIndex ] = item;
 		RefreshVisuals( snap: true );
 		RefreshCollider();
-		PublishStackChanged( item.Definition );
+		PublishStackChanged( item.Definition, playerDirected );
 	}
 
-	void PublishStackChanged( TreasureDefinition topCoin )
+	void PublishStackChanged( TreasureDefinition topCoin, bool playerDirected = false )
 	{
 		if ( _machineBuffer || _destroying )
 			return;
@@ -1030,7 +1030,8 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		{
 			Stack = this,
 			Count = _slots.Count,
-			TopCoin = topCoin
+			TopCoin = topCoin,
+			PlayerDirected = playerDirected
 		} );
 	}
 
@@ -1039,7 +1040,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	/// (cylinder / individual visuals come from <see cref="RefreshVisuals"/>).
 	/// Used by machine output (coin sorting station).
 	/// </summary>
-	public bool TryAppendDefinition( TreasureDefinition definition )
+	public bool TryAppendDefinition( TreasureDefinition definition, bool playerDirected = false )
 	{
 		if ( !CanAccept( definition ) || _destroying )
 			return false;
@@ -1050,14 +1051,14 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshVisuals( snap: true );
 		RefreshCollider();
 		PlayLandFeedback();
-		PublishStackChanged( definition );
+		PublishStackChanged( definition, playerDirected );
 		return true;
 	}
 
 	/// <summary>
 	/// Append many logical coins without spawning individuals. Returns how many were accepted.
 	/// </summary>
-	public int TryAppendDefinitions( IReadOnlyList<TreasureDefinition> definitions )
+	public int TryAppendDefinitions( IReadOnlyList<TreasureDefinition> definitions, bool playerDirected = false )
 	{
 		if ( definitions == null || definitions.Count == 0 || _destroying )
 			return 0;
@@ -1083,9 +1084,9 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RequestJoinPass();
 		PlayLandFeedback();
 		if ( !ExcludedFromWorldJoin && added > 0 )
-			PublishStackChanged( definitions[ definitions.Count - 1 ] );
+			PublishStackChanged( definitions[ definitions.Count - 1 ], playerDirected );
 
-		NotifyCartHostCargoPlaced();
+		NotifyCartHostCargoPlaced( fromPlayer: playerDirected );
 		return added;
 	}
 
@@ -1896,12 +1897,12 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		CoinColumnCylinderBinder.ClearAndDestroy( ref _cylinderVisual, null );
 	}
 
-	void NotifyCartHostCargoPlaced()
+	void NotifyCartHostCargoPlaced( bool fromPlayer = false )
 	{
 		if ( !_cartHosted || _cartHost == null )
 			return;
 
-		_cartHost.NotifyCargoPlaced();
+		_cartHost.NotifyCargoPlaced( fromPlayer );
 	}
 
 	void NotifyCartHostDestroyed()
@@ -1912,6 +1913,46 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		MinecartInteractable cart = _cartHost;
 		_cartHost = null;
 		cart.NotifyHostedCoinStackDestroyed( this );
+	}
+
+	/// <summary>Detaches the top settled coin as a world item for automated transfers.</summary>
+	public bool TryExtractTopAsWorldItem( out TreasureItem item )
+	{
+		item = null;
+		if ( _destroying || HasInFlight || SettledCount <= 0 )
+			return false;
+
+		int index = SettledCount - 1;
+		TreasureDefinition def = _slots[ index ];
+		Vector3 pos = GetSlotWorldPosition( index );
+		Quaternion rot = transform.rotation;
+
+		TreasureItem live = index < _settledLive.Count ? _settledLive[ index ] : null;
+		if ( live != null )
+		{
+			_settledLive[ index ] = null;
+			live.transform.SetParent( null, true );
+			TreasureItemFactory.DetachFromPool( live );
+			item = live;
+		}
+		else if ( def != null )
+			item = TreasureItemFactory.SpawnSync( def, pos, rot, null );
+
+		DespawnCoveredLive( index );
+		_slots.RemoveAt( index );
+		InvalidateHeightPrefix();
+		if ( index < _settledLive.Count )
+			_settledLive.RemoveAt( index );
+		DecrementInFlightSlotIndicesAfter( index );
+
+		RefreshVisuals( snap: false );
+		RefreshCollider();
+		PlayRemoveFeedback();
+
+		if ( Count <= 0 )
+			DestroyIfEmpty();
+
+		return item != null;
 	}
 
 	/// <summary>

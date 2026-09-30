@@ -49,6 +49,12 @@ public class CompleteGlowVolume : MonoBehaviour
 	GameObject _dustMotesInstance;
 
 	MaterialPropertyBlock _propertyBlock;
+	float _displayExposure;
+	float _flashElapsed;
+	float _flashPeak;
+	float _flashRest;
+	float _flashDuration;
+	bool _flashing;
 
 	public MeshFilter SourceMeshFilter
 	{
@@ -136,9 +142,11 @@ public class CompleteGlowVolume : MonoBehaviour
 		if ( _propertyBlock == null )
 			_propertyBlock = new MaterialPropertyBlock();
 
+		float exposure = _flashing ? _displayExposure : _settings.Exposure;
+
 		_meshRenderer.GetPropertyBlock( _propertyBlock );
 		_propertyBlock.SetColor( ColorId, _settings.Color );
-		_propertyBlock.SetFloat( ExposureId, _settings.Exposure );
+		_propertyBlock.SetFloat( ExposureId, exposure );
 		_propertyBlock.SetFloat( AlphaId, _settings.AlphaMultiplier );
 		_propertyBlock.SetFloat( HeightMinId, 0f );
 		_propertyBlock.SetFloat( HeightMaxId, Mathf.Max( 0.01f, _settings.Height ) );
@@ -163,6 +171,37 @@ public class CompleteGlowVolume : MonoBehaviour
 					_pointLight.color = _settings.Color;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Snap SoftShaft exposure to FlashExposure, then ease down to resting Exposure.
+	/// Play-mode only; no-op when disabled in settings.
+	/// </summary>
+	public void PlayExposureFlash()
+	{
+		if ( !Application.isPlaying || _settings == null || !_settings.PlayExposureFlashOnShow )
+			return;
+
+		_flashPeak = Mathf.Max( 0f, _settings.FlashExposure );
+		_flashRest = Mathf.Max( 0f, _settings.Exposure );
+		_flashDuration = Mathf.Max( 0f, _settings.FlashDuration );
+		_flashElapsed = 0f;
+		_flashing = true;
+		_displayExposure = _flashPeak;
+		ApplyAppearance();
+
+		if ( _flashDuration <= 0f )
+			CancelExposureFlash();
+	}
+
+	/// <summary>Stops any active flash and restores resting exposure.</summary>
+	public void CancelExposureFlash()
+	{
+		_flashing = false;
+		_flashElapsed = 0f;
+		if ( _settings != null )
+			_displayExposure = _settings.Exposure;
+		ApplyAppearance();
 	}
 
 	public Vector2 ResolveFootprintWorld()
@@ -232,13 +271,46 @@ public class CompleteGlowVolume : MonoBehaviour
 			Mathf.Approximately( lossy.z, 0f ) ? 1f : 1f / lossy.z );
 	}
 
+	void Update()
+	{
+		if ( !_flashing || !Application.isPlaying )
+			return;
+
+		_flashElapsed += Time.deltaTime;
+		float t = _flashDuration > 0f ? Mathf.Clamp01( _flashElapsed / _flashDuration ) : 1f;
+		float curve = 1f;
+		if ( _settings != null && _settings.FlashCurve != null && _settings.FlashCurve.length > 0 )
+			curve = Mathf.Clamp01( _settings.FlashCurve.Evaluate( t ) );
+		else
+			curve = 1f - t;
+
+		_displayExposure = Mathf.LerpUnclamped( _flashRest, _flashPeak, curve );
+		ApplyAppearance();
+
+		if ( t >= 1f )
+		{
+			_flashing = false;
+			_displayExposure = _flashRest;
+			ApplyAppearance();
+		}
+	}
+
 	void OnEnable()
 	{
+		if ( !_flashing && _settings != null )
+			_displayExposure = _settings.Exposure;
 		ApplyAppearance();
+	}
+
+	void OnDisable()
+	{
+		if ( Application.isPlaying )
+			CancelExposureFlash();
 	}
 
 	void OnValidate()
 	{
-		ApplyAppearance();
+		if ( !_flashing )
+			ApplyAppearance();
 	}
 }

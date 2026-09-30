@@ -119,6 +119,14 @@ public class TreasureItemInteractable : InteractableBase
 			&& !cleaningStation.AllowsPickup )
 			return false;
 
+		if ( item.Owner is CoffeeMachineInteractable coffeeMachine
+			&& !coffeeMachine.AllowsCupPickup )
+			return false;
+
+		CoffeeCupState coffeeCup = item.GetComponent<CoffeeCupState>();
+		if ( coffeeCup != null && !coffeeCup.PickupEnabled )
+			return false;
+
 		if ( UsesDisplayedCoinStackPickup( item ) )
 		{
 			PlayerCarry carry = player.Carry;
@@ -193,7 +201,7 @@ public class TreasureItemInteractable : InteractableBase
 			pile.CompleteSteal( item );
 	}
 
-	static bool IsDisplayedPickupLocked( TreasureItem item )
+	public static bool IsDisplayedPickupLocked( TreasureItem item )
 	{
 		if ( item == null || item.State != TreasureItemState.Displayed )
 			return false;

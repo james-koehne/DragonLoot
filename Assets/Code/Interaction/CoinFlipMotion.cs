@@ -4,18 +4,23 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Flight arcs for treasure tweens: coins get a tall arc + flip; gems / other items get a mild arc only.
+/// Flight arcs for treasure tweens: coins get a mild arc + flip; gems / other items get a mild arc only.
 /// </summary>
 public static class CoinFlipMotion
 {
-	public const float DefaultArcHeight = 0.65f;
+	public const float DefaultArcHeight = 0.84f;
 	public const float DefaultSpins = 1.25f;
-	public const float DefaultDuration = 0.32f;
+	public const float DefaultDuration = 0.38f;
 
 	/// <summary>Milder place/pickup arc for gems and non-coin treasure (no flip).</summary>
 	public const float DefaultItemArcHeight = 0.08f;
 
 	public const float DefaultItemArcDuration = 0.22f;
+
+	/// <summary>Peak bump is capped to this fraction of travel so short snaps do not balloon.</summary>
+	const float ArcHeightTravelFraction = 1.2f;
+
+	const float MinScaledArcHeight = 0.15f;
 
 	public static bool IsCoin( TreasureItem item )
 	{
@@ -35,13 +40,29 @@ public static class CoinFlipMotion
 		return u * u * ( 3f - 2f * u );
 	}
 
-	/// <summary>Linear blend with a vertical (or along-up) parabolic arc.</summary>
+	/// <summary>
+	/// Caps requested arc height by travel distance so short flights stay a gentle chord bump.
+	/// </summary>
+	public static float ResolveArcHeight( Vector3 start, Vector3 end, float requestedHeight )
+	{
+		if ( requestedHeight <= 0.0001f )
+			return 0f;
+
+		float travel = Vector3.Distance( start, end );
+		float capped = Mathf.Max( MinScaledArcHeight, travel * ArcHeightTravelFraction );
+		return Mathf.Min( requestedHeight, capped );
+	}
+
+	/// <summary>
+	/// Linear chord blend with a parabolic bump that peaks at mid-flight (midpoint + height).
+	/// </summary>
 	public static Vector3 EvaluateArcPosition( Vector3 start, Vector3 end, float u, float arcHeight, Vector3 up )
 	{
-		float ease = SmoothStep( u );
-		Vector3 pos = Vector3.Lerp( start, end, ease );
-		if ( arcHeight > 0.0001f && up.sqrMagnitude > 0.0001f )
-			pos += up.normalized * ( arcHeight * Mathf.Sin( Mathf.Clamp01( u ) * Mathf.PI ) );
+		float t = Mathf.Clamp01( u );
+		Vector3 pos = Vector3.Lerp( start, end, t );
+		float height = ResolveArcHeight( start, end, arcHeight );
+		if ( height > 0.0001f && up.sqrMagnitude > 0.0001f )
+			pos += up.normalized * ( height * 4f * t * ( 1f - t ) );
 		return pos;
 	}
 
@@ -142,9 +163,10 @@ public static class CoinFlipMotion
 	/// <summary>Local-space arc for non-coin pickup (no spin).</summary>
 	public static Vector3 EvaluateLocalArc( Vector3 startLocalPos, Vector3 endLocalPos, float u, float arcHeight )
 	{
-		float ease = SmoothStep( u );
-		Vector3 localPos = Vector3.Lerp( startLocalPos, endLocalPos, ease );
-		localPos.y += arcHeight * Mathf.Sin( Mathf.Clamp01( u ) * Mathf.PI );
+		float t = Mathf.Clamp01( u );
+		Vector3 localPos = Vector3.Lerp( startLocalPos, endLocalPos, t );
+		float height = ResolveArcHeight( startLocalPos, endLocalPos, arcHeight );
+		localPos.y += height * 4f * t * ( 1f - t );
 		return localPos;
 	}
 
@@ -160,12 +182,13 @@ public static class CoinFlipMotion
 		out Vector3 localPos,
 		out Quaternion localRot )
 	{
-		float ease = SmoothStep( u );
-		localPos = Vector3.Lerp( startLocalPos, endLocalPos, ease );
-		localPos.y += arcHeight * Mathf.Sin( Mathf.Clamp01( u ) * Mathf.PI );
+		float t = Mathf.Clamp01( u );
+		localPos = Vector3.Lerp( startLocalPos, endLocalPos, t );
+		float height = ResolveArcHeight( startLocalPos, endLocalPos, arcHeight );
+		localPos.y += height * 4f * t * ( 1f - t );
 
-		Quaternion baseRot = Quaternion.Slerp( startLocalRot, endLocalRot, ease );
-		float angle = spins * 360f * Mathf.Clamp01( u );
+		Quaternion baseRot = Quaternion.Slerp( startLocalRot, endLocalRot, SmoothStep( t ) );
+		float angle = spins * 360f * t;
 		localRot = Quaternion.AngleAxis( angle, Vector3.right ) * baseRot;
 	}
 

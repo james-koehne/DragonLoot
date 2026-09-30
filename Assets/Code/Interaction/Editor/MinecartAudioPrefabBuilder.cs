@@ -17,17 +17,6 @@ public static class MinecartAudioPrefabBuilder
 	const string MoveClipPath = "Assets/Audio/SFX/Minecart/minecart_move.mp3";
 	const string BrakeClipPath = "Assets/Audio/SFX/Minecart/minecart_brake.mp3";
 
-	static bool _ranThisDomain;
-
-	[InitializeOnLoadMethod]
-	static void QueuePatch()
-	{
-		if ( _ranThisDomain )
-			return;
-		_ranThisDomain = true;
-		EditorApplication.delayCall += EnsureAudioOnPrefabs;
-	}
-
 	[MenuItem( DragonLootMenus.MinecartPatchAudio )]
 	public static void PatchFromMenu()
 	{
@@ -100,6 +89,9 @@ public static class MinecartAudioPrefabBuilder
 					changed |= EnsureBrakeSfx( brake, brakeClip );
 			}
 
+			Feedbacks hopStart = EnsureFeedbackChild( root.transform, "OnHopStartFeedbacks" );
+			Feedbacks hopLand = EnsureFeedbackChild( root.transform, "OnHopLandFeedbacks" );
+
 			SerializedObject so = new SerializedObject( cart );
 			SerializedProperty moveProp = so.FindProperty( "onDriveMoveFeedbacks" );
 			if ( moveProp != null && moveProp.objectReferenceValue != move )
@@ -116,6 +108,20 @@ public static class MinecartAudioPrefabBuilder
 					brakeProp.objectReferenceValue = brake;
 					changed = true;
 				}
+			}
+
+			SerializedProperty hopStartProp = so.FindProperty( "onHopStartFeedbacks" );
+			if ( hopStartProp != null && hopStartProp.objectReferenceValue != hopStart )
+			{
+				hopStartProp.objectReferenceValue = hopStart;
+				changed = true;
+			}
+
+			SerializedProperty hopLandProp = so.FindProperty( "onHopLandFeedbacks" );
+			if ( hopLandProp != null && hopLandProp.objectReferenceValue != hopLand )
+			{
+				hopLandProp.objectReferenceValue = hopLand;
+				changed = true;
 			}
 
 			if ( changed )

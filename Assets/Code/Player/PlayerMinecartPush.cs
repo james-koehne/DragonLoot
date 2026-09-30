@@ -31,6 +31,9 @@ public class PlayerMinecartPush : MonoBehaviour
 		if ( cart == null || !cart.isActiveAndEnabled )
 			return;
 
+		if ( cart.RejectsPlayerPush )
+			return;
+
 		if ( _pending || _follow )
 			return;
 
@@ -47,7 +50,7 @@ public class PlayerMinecartPush : MonoBehaviour
 		if ( _cart != null )
 		{
 			_cart.SetHoldPush( false );
-			_cart.ClearJunctionLook();
+			_cart.ClearJunctionSteer();
 		}
 
 		_cart = null;
@@ -131,7 +134,17 @@ public class PlayerMinecartPush : MonoBehaviour
 		}
 
 		_cart.SetHoldPush( true );
-		_cart.SetJunctionLook( ResolveLookFlat() );
+		float steer = 0f;
+		if ( input.Move != null )
+			steer = input.Move.ReadValue<Vector2>().x;
+		_cart.SetJunctionSteer( steer );
+
+		// Mid-hop: cart owns forced accel to max — do not stack push deltas.
+		if ( _cart.IsHopping )
+		{
+			SetMoving( true );
+			return;
+		}
 
 		Vector3 tangent;
 		if ( !_cart.TryGetTrackTangent( out tangent ) )
@@ -143,20 +156,6 @@ public class PlayerMinecartPush : MonoBehaviour
 		float signed = WalkAlongTangent( tangent ) + MouseSteerAlongTangent( input, tangent );
 		bool moved = Mathf.Abs( signed ) > 0.00001f && _cart.TryPushAlong( signed );
 		SetMoving( moved );
-	}
-
-	Vector3 ResolveLookFlat()
-	{
-		Transform cam = ResolveCamera();
-		Vector3 facing = cam != null ? cam.forward : transform.forward;
-		facing.y = 0f;
-		if ( facing.sqrMagnitude < 0.0001f && _player != null )
-		{
-			facing = _player.transform.forward;
-			facing.y = 0f;
-		}
-
-		return facing;
 	}
 
 	float WalkAlongTangent( Vector3 tangent )

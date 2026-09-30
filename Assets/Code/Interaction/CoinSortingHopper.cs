@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Hopper intake for <see cref="CoinSortingStation"/>: player place/dump onto the
 /// visible hopper <see cref="GroundCoinStack"/>. Coins stay as a stack and are consumed as the
-/// station processes. World coins are not auto-absorbed.
+/// station processes. The station may also auto-pull whole stacks from nearby storage.
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlacementTarget

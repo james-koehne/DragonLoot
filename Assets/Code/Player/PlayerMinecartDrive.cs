@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Sit in a drive minecart: W accelerates, S brakes, S after stop reverses. E or Jump exits.
+/// Sit in a drive minecart: W accelerates cart-forward along the path, S cart-back (no body flip).
+/// A/D pick junction branches relative to the cart body (camera look never chooses a branch). E or Jump exits.
 /// </summary>
-[DefaultExecutionOrder( 100 )]
+[DefaultExecutionOrder( -50 )]
 [DisallowMultipleComponent]
 public class PlayerMinecartDrive : MonoBehaviour
 {
@@ -18,6 +19,8 @@ public class PlayerMinecartDrive : MonoBehaviour
 	float _signedSpeed;
 	bool _wasReverseIntent;
 	int _heldForwardSign = 1;
+	bool _junctionTravelLatched;
+	int _junctionTravelSign = 1;
 
 	public bool IsDriving => _cart != null;
 
@@ -46,6 +49,29 @@ public class PlayerMinecartDrive : MonoBehaviour
 			Exit( inheritVelocity: false );
 
 		Enter( cart );
+	}
+
+	/// <summary>
+	/// After a junction ride starts or handoff completes, latch W to the remapped travel sign until the cart nose
+	/// agrees (or we stop) so Evaluate-sign remaps do not dump throttle through a brake.
+	/// </summary>
+	public void NotifyJunctionTravelSign( int exitTravelSign )
+	{
+		if ( _cart == null )
+			return;
+
+		int sign = exitTravelSign >= 0 ? 1 : -1;
+		_signedSpeed = _cart.DriveSpeed;
+		float speed = Mathf.Abs( _signedSpeed );
+		if ( speed < StopEpsilon )
+			speed = Mathf.Abs( _cart.AlongTrackSpeed );
+
+		if ( speed > StopEpsilon )
+		{
+			_junctionTravelSign = sign;
+			_junctionTravelLatched = true;
+			_heldForwardSign = sign;
+		}
 	}
 
 	void OnDisable()
@@ -88,7 +114,6 @@ public class PlayerMinecartDrive : MonoBehaviour
 			return;
 		}
 
-		_cart.SetJunctionLook( ResolveLookFlat() );
 		TickDriveInput( input, Time.deltaTime );
 	}
 
@@ -112,9 +137,12 @@ public class PlayerMinecartDrive : MonoBehaviour
 	{
 		_cart = cart;
 		_ignoreInteractUntilRelease = true;
-		_signedSpeed = cart.AlongTrackSpeed;
+		_signedSpeed = cart.DriveSpeed;
+		if ( Mathf.Abs( _signedSpeed ) < StopEpsilon )
+			_signedSpeed = cart.AlongTrackSpeed;
 		_wasReverseIntent = false;
-		_heldForwardSign = ResolveForwardSign();
+		_junctionTravelLatched = false;
+		_heldForwardSign = ResolveCartForwardSign();
 		cart.SetDriveSeatCollidersEnabled( false );
 		cart.SetDriveBraking( false );
 		cart.PlayDriveEnterFeedback();
@@ -164,12 +192,13 @@ public class PlayerMinecartDrive : MonoBehaviour
 
 		_cart.SetDriveSeatCollidersEnabled( true );
 		_cart.SetDriveSpeed( _signedSpeed, false );
-		_cart.ClearJunctionLook();
+		_cart.ClearJunctionSteer();
 
 		_cart = null;
 		_signedSpeed = 0f;
 		_ignoreInteractUntilRelease = false;
 		_wasReverseIntent = false;
+		_junctionTravelLatched = false;
 
 		PlayerMinecartRide ride = _player != null ? _player.MinecartRide : null;
 		if ( ride != null )
@@ -180,22 +209,74 @@ public class PlayerMinecartDrive : MonoBehaviour
 
 	void TickDriveInput( GameInput input, float dt )
 	{
-		_signedSpeed = _cart.AlongTrackSpeed;
-		float axis = 0f;
-		if ( input.Move != null )
-			axis = input.Move.ReadValue<Vector2>().y;
+		// Prefer commanded drive speed; while coasting DriveSpeed is 0 — pick up residual along-track speed.
+		_signedSpeed = _cart.DriveSpeed;
+		if ( Mathf.Abs( _signedSpeed ) < StopEpsilon )
+			_signedSpeed = _cart.AlongTrackSpeed;
 
+		Vector2 move = Vector2.zero;
+		if ( input.Move != null )
+			move = input.Move.ReadValue<Vector2>();
+
+		// Junction branches: raw A/D only. Camera / look must never choose an exit.
+		_cart.SetJunctionSteer( move.x );
+
+		float axis = move.y;
 		float maxSpeed = _cart.DriveMaxSpeed;
 		float accel = _cart.DriveAcceleration;
 		float brake = _cart.DriveBrake;
-		int forward = ResolveForwardSign();
+		int forward = ResolveCartForwardSign();
 		float forwardTarget = forward * maxSpeed;
 		float reverseTarget = -forward * maxSpeed;
 		bool powered = true;
 		bool braking = false;
-
 		bool reverseIntent = false;
-		if ( axis > InputDeadzone )
+		bool onJunctionRide = _cart.IsJunctionRiding;
+
+		if ( _cart.IsHopping )
+		{
+			// Mid-hop: always accelerate to drive max along hop travel; ignore brake / coast / S.
+			int hopSign = _cart.HopTravelSign;
+			if ( hopSign == 0 )
+				hopSign = forward;
+			_signedSpeed = Mathf.MoveTowards( _signedSpeed, hopSign * maxSpeed, accel * dt );
+			braking = false;
+			powered = true;
+			_cart.SetDriveBraking( false );
+			_cart.SetDriveSpeed( _signedSpeed, powered );
+			_wasReverseIntent = false;
+			return;
+		}
+
+		if ( onJunctionRide )
+		{
+			// Hold speed through the curve; W/S stay cart +Z (nose), never rail exit sign.
+			int noseSign = forward;
+			float mag = Mathf.Abs( _signedSpeed );
+			if ( mag < StopEpsilon )
+				mag = Mathf.Abs( _cart.AlongTrackSpeed );
+			int travelAlongTrack = Mathf.Abs( _signedSpeed ) > StopEpsilon
+				? ( _signedSpeed >= 0f ? 1 : -1 )
+				: noseSign;
+
+			if ( axis > InputDeadzone )
+				_signedSpeed = Mathf.MoveTowards( _signedSpeed, noseSign * maxSpeed, accel * dt );
+			else if ( axis < -InputDeadzone )
+			{
+				reverseIntent = true;
+				_signedSpeed = Mathf.MoveTowards( _signedSpeed, -noseSign * maxSpeed, accel * dt );
+			}
+			else if ( mag > StopEpsilon )
+				_signedSpeed = travelAlongTrack * mag;
+			else
+				powered = false;
+
+			braking = false;
+			_junctionTravelLatched = true;
+			_junctionTravelSign = noseSign;
+			_heldForwardSign = noseSign;
+		}
+		else if ( axis > InputDeadzone )
 		{
 			if ( _signedSpeed * forward < -StopEpsilon )
 			{
@@ -227,6 +308,10 @@ public class PlayerMinecartDrive : MonoBehaviour
 		_wasReverseIntent = reverseIntent;
 		_cart.SetDriveBraking( braking );
 		_cart.SetDriveSpeed( _signedSpeed, powered );
+
+		// While coasting, mirror cart decay so re-throttle picks up residual speed.
+		if ( !powered )
+			_signedSpeed = _cart.AlongTrackSpeed;
 	}
 
 	void ApplyCartFacing()
@@ -234,8 +319,8 @@ public class PlayerMinecartDrive : MonoBehaviour
 		if ( _cart == null )
 			return;
 
-		// Drive cart forward is local -Z.
-		Vector3 driveForward = -_cart.transform.forward;
+		// Drive cart forward is local +Z (WheelFront).
+		Vector3 driveForward = _cart.transform.forward;
 		driveForward.y = 0f;
 		if ( driveForward.sqrMagnitude < 0.0001f )
 			return;
@@ -244,44 +329,43 @@ public class PlayerMinecartDrive : MonoBehaviour
 		transform.rotation = Quaternion.Euler( 0f, yaw, 0f );
 	}
 
-	int ResolveForwardSign()
+	int ResolveCartForwardSign()
 	{
 		Vector3 tangent;
-		if ( _cart == null || !_cart.TryGetTrackTangent( out tangent ) )
-			return _heldForwardSign;
-
-		Vector3 facing = ResolveLookFlat();
-		tangent.y = 0f;
-		if ( facing.sqrMagnitude < 0.0001f || tangent.sqrMagnitude < 0.0001f )
-			return _heldForwardSign;
-
-		float align = Vector3.Dot( facing.normalized, tangent.normalized );
-		if ( Mathf.Abs( align ) < 0.15f )
-			return _heldForwardSign;
-
-		_heldForwardSign = align >= 0f ? 1 : -1;
-		return _heldForwardSign;
-	}
-
-	Vector3 ResolveLookFlat()
-	{
-		// Drive W/S from live camera look (orbit or first person).
-		if ( GameMode.Instance != null && GameMode.Instance.cameraController != null )
+		int noseSign = _heldForwardSign;
+		if ( _cart != null && _cart.TryGetTrackTangent( out tangent ) )
 		{
-			FirstPersonCameraController fp = GameMode.Instance.cameraController.FirstPerson;
-			if ( fp != null )
+			Vector3 driveForward = _cart.transform.forward;
+			driveForward.y = 0f;
+			tangent.y = 0f;
+			if ( driveForward.sqrMagnitude > 0.0001f && tangent.sqrMagnitude > 0.0001f )
 			{
-				Vector3 camFacing = fp.GetCameraForward();
-				camFacing.y = 0f;
-				if ( camFacing.sqrMagnitude > 0.0001f )
-					return camFacing;
+				float align = Vector3.Dot( driveForward.normalized, tangent.normalized );
+				if ( Mathf.Abs( align ) >= 0.15f )
+					noseSign = align >= 0f ? 1 : -1;
 			}
 		}
 
-		Transform mount = _player != null ? _player.CameraMount : null;
-		Vector3 facing = mount != null ? mount.forward : transform.forward;
-		facing.y = 0f;
-		return facing;
+		// After a junction remap, keep W aligned with exit travel until the nose agrees or we stop.
+		if ( _junctionTravelLatched )
+		{
+			float speed = Mathf.Abs( _signedSpeed );
+			if ( _cart != null )
+				speed = Mathf.Max( speed, Mathf.Abs( _cart.DriveSpeed ) );
+
+			if ( speed <= StopEpsilon )
+				_junctionTravelLatched = false;
+			else if ( noseSign == _junctionTravelSign )
+				_junctionTravelLatched = false;
+			else
+			{
+				_heldForwardSign = _junctionTravelSign;
+				return _junctionTravelSign;
+			}
+		}
+
+		_heldForwardSign = noseSign;
+		return _heldForwardSign;
 	}
 
 	GameInput ResolveInput()

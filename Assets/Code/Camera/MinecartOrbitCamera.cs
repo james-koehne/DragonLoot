@@ -19,8 +19,8 @@ public class MinecartOrbitCamera : MonoBehaviour
 
 	static readonly RaycastHit[] CollisionHits = new RaycastHit[ 24 ];
 
-	/// <summary>Yaw offset from cart forward: 180 = directly behind the cart.</summary>
-	const float BehindCartYawOffset = 180f;
+	/// <summary>Yaw offset from cart forward: 0 = directly behind the cart (chase along +Z).</summary>
+	const float BehindCartYawOffset = 0f;
 
 	CameraController _rig;
 	FirstPersonCameraController _firstPerson;
@@ -34,7 +34,12 @@ public class MinecartOrbitCamera : MonoBehaviour
 	float _enterSeedYawOffset;
 	float _enterSeedPitch;
 	float _idleLookSeconds;
+	float _lastCartYaw;
+	bool _hasLastCartYaw;
 	int _collisionMask = -1;
+
+	/// <summary>Cart yaw jumps larger than this in one frame are treated as discontinuities (e.g. junction handoff).</summary>
+	const float CartYawDiscontinuityDegrees = 60f;
 
 	CameraDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
@@ -114,6 +119,7 @@ public class MinecartOrbitCamera : MonoBehaviour
 		_enterSeedYawOffset = _yawOffsetFromCart;
 		_enterSeedPitch = _orbitPitch;
 		_idleLookSeconds = 0f;
+		_hasLastCartYaw = false;
 		_blend = 0f;
 		_phase = Phase.Entering;
 		EnsureLookLocked();
@@ -298,13 +304,30 @@ public class MinecartOrbitCamera : MonoBehaviour
 	float ResolveWorldOrbitYaw()
 	{
 		float cartYaw = _cart != null ? PlanarYaw( _cart.transform ) : 0f;
+		if ( _cart != null && _hasLastCartYaw )
+		{
+			float jump = Mathf.DeltaAngle( _lastCartYaw, cartYaw );
+			// Preserve world orbit yaw across abrupt cart facing snaps (junction ride ↔ track pose).
+			if ( Mathf.Abs( jump ) >= CartYawDiscontinuityDegrees )
+				_yawOffsetFromCart -= jump;
+		}
+
+		if ( _cart != null )
+		{
+			_lastCartYaw = cartYaw;
+			_hasLastCartYaw = true;
+		}
+		else
+			_hasLastCartYaw = false;
+
 		return cartYaw + _yawOffsetFromCart;
 	}
 
 	Vector3 ResolvePivot()
 	{
+		float hopLift = _cart != null ? _cart.HopLiftY : 0f;
 		if ( _cart != null )
-			return _cart.transform.position + Vector3.up * OrbitHeight;
+			return _cart.transform.position + Vector3.up * ( OrbitHeight + hopLift );
 
 		if ( _player != null )
 			return _player.transform.position + Vector3.up * OrbitHeight;
@@ -400,6 +423,7 @@ public class MinecartOrbitCamera : MonoBehaviour
 		ApplyCrosshairAlpha( 1f );
 		SetCarryHidden( false );
 		_cart = null;
+		_hasLastCartYaw = false;
 		_phase = Phase.Idle;
 		_blend = 0f;
 	}
@@ -422,6 +446,7 @@ public class MinecartOrbitCamera : MonoBehaviour
 		ApplyCrosshairAlpha( 1f );
 		SetCarryHidden( false );
 		_cart = null;
+		_hasLastCartYaw = false;
 		_phase = Phase.Idle;
 		_blend = 0f;
 	}
@@ -452,6 +477,8 @@ public class MinecartOrbitCamera : MonoBehaviour
 		}
 
 		_yawOffsetFromCart = Mathf.DeltaAngle( cartYaw, worldYaw );
+		_lastCartYaw = cartYaw;
+		_hasLastCartYaw = _cart != null;
 	}
 
 	void EnsureLookLocked()

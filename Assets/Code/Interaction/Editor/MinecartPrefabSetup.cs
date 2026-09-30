@@ -12,6 +12,8 @@ public static class MinecartPrefabSetup
 	const string PrefabPath = "Assets/Addressables/Minecart/Minecart.prefab";
 	const string DrivePrefabPath = "Assets/Addressables/Minecart/MinecartDrive.prefab";
 	const string CallPostPrefabPath = "Assets/Addressables/Minecart/CallPost.prefab";
+	const string InputStationPrefabPath = "Assets/Addressables/Minecart/MinecartInputStation.prefab";
+	const string OutputStationPrefabPath = "Assets/Addressables/Minecart/MinecartOutputStation.prefab";
 
 	[MenuItem( DragonLootMenus.MinecartCreateSetup )]
 	[MenuItem( DragonLootMenus.GameObjectMinecartSetup )]
@@ -31,14 +33,35 @@ public static class MinecartPrefabSetup
 	[MenuItem( DragonLootMenus.GameObjectMinecartCallPost )]
 	public static void MenuCreateCallPost()
 	{
-		GameObject prefab = LoadPrefab( CallPostPrefabPath );
+		PlaceNamed( CallPostPrefabPath, "MinecartCallPost", "Place Minecart Call Post" );
+	}
+
+	[MenuItem( DragonLootMenus.MinecartCreateInputStation )]
+	[MenuItem( DragonLootMenus.GameObjectMinecartInputStation )]
+	public static void MenuCreateInputStation()
+	{
+		MinecartStationPrefabBuilder.EnsureEverything();
+		PlaceNamed( InputStationPrefabPath, "MinecartInputStation", "Place Minecart Input Station" );
+	}
+
+	[MenuItem( DragonLootMenus.MinecartCreateOutputStation )]
+	[MenuItem( DragonLootMenus.GameObjectMinecartOutputStation )]
+	public static void MenuCreateOutputStation()
+	{
+		MinecartStationPrefabBuilder.EnsureEverything();
+		PlaceNamed( OutputStationPrefabPath, "MinecartOutputStation", "Place Minecart Output Station" );
+	}
+
+	static void PlaceNamed( string prefabPath, string instanceName, string undoName )
+	{
+		GameObject prefab = LoadPrefab( prefabPath );
 		Scene scene = SceneManager.GetActiveScene();
 		if ( !scene.IsValid() || !scene.isLoaded || prefab == null )
 			return;
 
 		GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab( prefab, scene );
-		instance.name = "MinecartCallPost";
-		Undo.RegisterCreatedObjectUndo( instance, "Place Minecart Call Post" );
+		instance.name = instanceName;
+		Undo.RegisterCreatedObjectUndo( instance, undoName );
 		Selection.activeGameObject = instance;
 	}
 

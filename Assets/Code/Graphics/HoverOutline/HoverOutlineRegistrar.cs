@@ -13,7 +13,8 @@ public static class HoverOutlineRegistrar
 	{
 		None = 0,
 		Pickable = 1,
-		StackVolume = 2
+		StackVolume = 2,
+		BuildMode = 3
 	}
 
 	static readonly List<Renderer> ActiveRenderers = new List<Renderer>( 8 );

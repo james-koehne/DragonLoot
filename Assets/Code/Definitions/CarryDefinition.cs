@@ -94,6 +94,18 @@ public class CarryDefinition : ScriptableObject
 	[Range( 0f, 1f )]
 	public float idleBobScale = 0.15f;
 
+	[Header( "Air / Jump Hand Motion" )]
+	[Tooltip( "Bob scale while airborne (0 = no walk bob in air)." )]
+	[Range( 0f, 1f )]
+	public float airBobScale = 0f;
+
+	[Tooltip( "Local offset impulse applied when jumping (camera-local)." )]
+	public Vector3 jumpReactionOffset = new Vector3( 0f, -0.08f, -0.03f );
+
+	[Tooltip( "Seconds for the jump reaction to spring back to rest." )]
+	[Min( 0.05f )]
+	public float jumpReactionDuration = 0.28f;
+
 	[Header( "Hand Sway" )]
 	[Tooltip( "Positional sway amplitude in HoldRoot local space (XYZ)." )]
 	public Vector3 swayAmplitude = new Vector3( 0.02f, 0.01f, 0.015f );

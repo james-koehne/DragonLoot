@@ -7,13 +7,41 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-static class CompleteGlowMenu
+public static class CompleteGlowMenu
 {
 	public const string MeshFolder = "Assets/Meshes/Generated/CompleteGlow";
 	public const string PresetFolder = "Assets/Definitions/Graphics/CompleteGlow";
 	public const string DefaultPresetPath = PresetFolder + "/CompleteGlow_Default.asset";
 	public const string MagicalPresetPath = PresetFolder + "/CompleteGlow_Magical.asset";
 	public const string SoftSpotlightPresetPath = PresetFolder + "/CompleteGlow_SoftSpotlight.asset";
+	public const string VfxFolder = "Assets/Prefabs/VFX/CompleteGlow";
+	public const string BurstPrefabPath = VfxFolder + "/CompleteGlowBurst.prefab";
+	public const string MotesPrefabPath = VfxFolder + "/CompleteGlowMotes.prefab";
+	public const string DustMoteMaterialPath = "Assets/Materials/Shaders/DustMote/M_DustMote.mat";
+
+	static bool _queuedRevealParticles;
+	const string RevealParticlesConfiguredPrefsKey = "DragonLoot.CompleteGlow.RevealParticlesConfigured.v1";
+
+	[InitializeOnLoadMethod]
+	static void QueueEnsureRevealParticlePrefabs()
+	{
+		if ( _queuedRevealParticles )
+			return;
+		_queuedRevealParticles = true;
+		EditorApplication.delayCall += EnsureRevealParticlePrefabsOnLoad;
+	}
+
+	static void EnsureRevealParticlePrefabsOnLoad()
+	{
+		bool missingBurst = AssetDatabase.LoadAssetAtPath<GameObject>( BurstPrefabPath ) == null;
+		bool missingMotes = AssetDatabase.LoadAssetAtPath<GameObject>( MotesPrefabPath ) == null;
+		bool needsConfigure = !EditorPrefs.GetBool( RevealParticlesConfiguredPrefsKey, false );
+		if ( !missingBurst && !missingMotes && !needsConfigure )
+			return;
+
+		EnsureRevealParticlePrefabs();
+		EditorPrefs.SetBool( RevealParticlesConfiguredPrefsKey, true );
+	}
 
 	[MenuItem( DragonLootMenus.GameObjectBuildCompleteGlow, false, 20 )]
 	static void BuildFromSelection()
@@ -80,6 +108,33 @@ static class CompleteGlowMenu
 		EnsurePresets();
 		Selection.activeObject = AssetDatabase.LoadAssetAtPath<CompleteGlowPreset>( DefaultPresetPath );
 		Debug.Log( "CompleteGlowMenu: presets ensured under " + PresetFolder );
+	}
+
+	[MenuItem( DragonLootMenus.GraphicsCompleteGlowEnsureRevealParticles, priority = 242 )]
+	static void EnsureRevealParticlePrefabsMenu()
+	{
+		EnsureRevealParticlePrefabs();
+	}
+
+	/// <summary>Unity batchmode entry: -executeMethod CompleteGlowMenu.EnsureRevealParticlePrefabsBatch</summary>
+	public static void EnsureRevealParticlePrefabsBatch()
+	{
+		EnsureRevealParticlePrefabs();
+	}
+
+	public static void EnsureRevealParticlePrefabs()
+	{
+		GameObject burst = EnsureBurstPrefab();
+		GameObject motes = EnsureMotesPrefab();
+		AssetDatabase.SaveAssets();
+		AssetDatabase.Refresh();
+
+		if ( burst != null )
+			Selection.activeObject = burst;
+		else if ( motes != null )
+			Selection.activeObject = motes;
+
+		Debug.Log( "CompleteGlowMenu: reveal particle prefabs ensured under " + VfxFolder );
 	}
 
 	[MenuItem( DragonLootMenus.GraphicsCompleteGlowRebuildAll, priority = 241 )]
@@ -403,6 +458,194 @@ static class CompleteGlowMenu
 		s.CrossSection = CompleteGlowCrossSection.RoundedSquare;
 		s.CornerRadius = 0.15f;
 		return s;
+	}
+
+	static GameObject EnsureBurstPrefab()
+	{
+		EnsureFolder( "Assets/Prefabs" );
+		EnsureFolder( "Assets/Prefabs/VFX" );
+		EnsureFolder( VfxFolder );
+
+		GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>( BurstPrefabPath );
+		if ( existing != null )
+		{
+			string contentsPath = BurstPrefabPath;
+			GameObject root = PrefabUtility.LoadPrefabContents( contentsPath );
+			ParticleSystem ps = root.GetComponent<ParticleSystem>();
+			if ( ps == null )
+				ps = root.AddComponent<ParticleSystem>();
+			ConfigureBurstParticles( ps );
+			ApplyDustMoteMaterial( ps );
+			PrefabUtility.SaveAsPrefabAsset( root, BurstPrefabPath );
+			PrefabUtility.UnloadPrefabContents( root );
+			return AssetDatabase.LoadAssetAtPath<GameObject>( BurstPrefabPath );
+		}
+
+		GameObject go = new GameObject( "CompleteGlowBurst" );
+		ParticleSystem newPs = go.AddComponent<ParticleSystem>();
+		ConfigureBurstParticles( newPs );
+		ApplyDustMoteMaterial( newPs );
+
+		GameObject prefab = PrefabUtility.SaveAsPrefabAsset( go, BurstPrefabPath );
+		UnityEngine.Object.DestroyImmediate( go );
+		return prefab;
+	}
+
+	static GameObject EnsureMotesPrefab()
+	{
+		EnsureFolder( "Assets/Prefabs" );
+		EnsureFolder( "Assets/Prefabs/VFX" );
+		EnsureFolder( VfxFolder );
+
+		GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>( MotesPrefabPath );
+		if ( existing != null )
+		{
+			GameObject root = PrefabUtility.LoadPrefabContents( MotesPrefabPath );
+			ParticleSystem ps = root.GetComponent<ParticleSystem>();
+			if ( ps == null )
+				ps = root.AddComponent<ParticleSystem>();
+			ConfigureMoteParticles( ps );
+			ApplyDustMoteMaterial( ps );
+			PrefabUtility.SaveAsPrefabAsset( root, MotesPrefabPath );
+			PrefabUtility.UnloadPrefabContents( root );
+			return AssetDatabase.LoadAssetAtPath<GameObject>( MotesPrefabPath );
+		}
+
+		GameObject go = new GameObject( "CompleteGlowMotes" );
+		ParticleSystem newPs = go.AddComponent<ParticleSystem>();
+		ConfigureMoteParticles( newPs );
+		ApplyDustMoteMaterial( newPs );
+
+		GameObject prefab = PrefabUtility.SaveAsPrefabAsset( go, MotesPrefabPath );
+		UnityEngine.Object.DestroyImmediate( go );
+		return prefab;
+	}
+
+	static void ConfigureBurstParticles( ParticleSystem ps )
+	{
+		ps.Stop( true, ParticleSystemStopBehavior.StopEmittingAndClear );
+
+		ParticleSystem.MainModule main = ps.main;
+		main.loop = false;
+		main.playOnAwake = false;
+		main.duration = 0.35f;
+		main.startLifetime = new ParticleSystem.MinMaxCurve( 0.35f, 0.7f );
+		main.startSpeed = new ParticleSystem.MinMaxCurve( 0.6f, 1.8f );
+		main.startSize = new ParticleSystem.MinMaxCurve( 0.04f, 0.12f );
+		main.startColor = new Color( 1.4f, 1.05f, 0.45f, 0.9f );
+		main.maxParticles = 64;
+		main.simulationSpace = ParticleSystemSimulationSpace.World;
+		main.gravityModifier = 0.15f;
+
+		ParticleSystem.EmissionModule emission = ps.emission;
+		emission.rateOverTime = 0f;
+		emission.SetBursts( new[] { new ParticleSystem.Burst( 0f, 28, 40 ) } );
+
+		ParticleSystem.ShapeModule shape = ps.shape;
+		shape.enabled = true;
+		shape.shapeType = ParticleSystemShapeType.Hemisphere;
+		shape.radius = 0.35f;
+
+		ParticleSystem.ColorOverLifetimeModule color = ps.colorOverLifetime;
+		color.enabled = true;
+		Gradient gradient = new Gradient();
+		gradient.SetKeys(
+			new[]
+			{
+				new GradientColorKey( new Color( 1.6f, 1.2f, 0.5f ), 0f ),
+				new GradientColorKey( new Color( 1f, 0.65f, 0.2f ), 1f )
+			},
+			new[]
+			{
+				new GradientAlphaKey( 0f, 0f ),
+				new GradientAlphaKey( 1f, 0.1f ),
+				new GradientAlphaKey( 0f, 1f )
+			} );
+		color.color = gradient;
+
+		ParticleSystem.SizeOverLifetimeModule size = ps.sizeOverLifetime;
+		size.enabled = true;
+		size.size = new ParticleSystem.MinMaxCurve( 1f, AnimationCurve.EaseInOut( 0f, 1f, 1f, 0f ) );
+
+		ParticleSystem.VelocityOverLifetimeModule velocity = ps.velocityOverLifetime;
+		velocity.enabled = true;
+		velocity.space = ParticleSystemSimulationSpace.Local;
+		// XYZ must share the same MinMaxCurve mode.
+		velocity.x = new ParticleSystem.MinMaxCurve( 0f, 0f );
+		velocity.y = new ParticleSystem.MinMaxCurve( 0.4f, 1.2f );
+		velocity.z = new ParticleSystem.MinMaxCurve( 0f, 0f );
+	}
+
+	static void ConfigureMoteParticles( ParticleSystem ps )
+	{
+		ps.Stop( true, ParticleSystemStopBehavior.StopEmittingAndClear );
+
+		ParticleSystem.MainModule main = ps.main;
+		main.loop = true;
+		main.playOnAwake = false;
+		main.duration = 4f;
+		main.startLifetime = new ParticleSystem.MinMaxCurve( 2.5f, 4.5f );
+		main.startSpeed = new ParticleSystem.MinMaxCurve( 0.02f, 0.08f );
+		main.startSize = new ParticleSystem.MinMaxCurve( 0.03f, 0.08f );
+		main.startColor = new Color( 1.2f, 0.95f, 0.55f, 0.55f );
+		main.maxParticles = 48;
+		main.simulationSpace = ParticleSystemSimulationSpace.Local;
+		main.gravityModifier = 0f;
+
+		ParticleSystem.EmissionModule emission = ps.emission;
+		emission.rateOverTime = 6f;
+		emission.SetBursts( System.Array.Empty<ParticleSystem.Burst>() );
+
+		ParticleSystem.ShapeModule shape = ps.shape;
+		shape.enabled = true;
+		shape.shapeType = ParticleSystemShapeType.Box;
+		shape.scale = new Vector3( 1.2f, 1.4f, 1.2f );
+
+		ParticleSystem.ColorOverLifetimeModule color = ps.colorOverLifetime;
+		color.enabled = true;
+		Gradient gradient = new Gradient();
+		gradient.SetKeys(
+			new[]
+			{
+				new GradientColorKey( new Color( 1.3f, 1f, 0.6f ), 0f ),
+				new GradientColorKey( new Color( 1f, 0.75f, 0.35f ), 1f )
+			},
+			new[]
+			{
+				new GradientAlphaKey( 0f, 0f ),
+				new GradientAlphaKey( 0.65f, 0.25f ),
+				new GradientAlphaKey( 0f, 1f )
+			} );
+		color.color = gradient;
+
+		ParticleSystem.NoiseModule noise = ps.noise;
+		noise.enabled = true;
+		noise.strength = 0.12f;
+		noise.frequency = 0.35f;
+		noise.scrollSpeed = 0.08f;
+		noise.octaveCount = 2;
+
+		ParticleSystem.VelocityOverLifetimeModule velocity = ps.velocityOverLifetime;
+		velocity.enabled = true;
+		velocity.space = ParticleSystemSimulationSpace.Local;
+		// XYZ must share the same MinMaxCurve mode.
+		velocity.x = new ParticleSystem.MinMaxCurve( 0f, 0f );
+		velocity.y = new ParticleSystem.MinMaxCurve( 0.04f, 0.12f );
+		velocity.z = new ParticleSystem.MinMaxCurve( 0f, 0f );
+	}
+
+	static void ApplyDustMoteMaterial( ParticleSystem ps )
+	{
+		ParticleSystemRenderer renderer = ps.GetComponent<ParticleSystemRenderer>();
+		if ( renderer == null )
+			return;
+
+		renderer.renderMode = ParticleSystemRenderMode.Billboard;
+		Material mat = AssetDatabase.LoadAssetAtPath<Material>( DustMoteMaterialPath );
+		if ( mat == null )
+			mat = AssetDatabase.GetBuiltinExtraResource<Material>( "Default-Particle.mat" );
+		if ( mat != null )
+			renderer.sharedMaterial = mat;
 	}
 
 	static void EnsureFolder( string path )
