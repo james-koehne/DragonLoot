@@ -108,6 +108,7 @@ public static class DragonLootMenus
 	// --- UI ---
 	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";
 	public const string UiInstallMap = Root + "/UI/Install Map On Interface";
+	public const string UiInstallBuildableHover = Root + "/UI/Install Buildable Hover Popup";
 
 	public const string GameObjectMapRegion = "GameObject/DragonLoot/Map Region Volume";
 	public const string GameObjectMapLabel = "GameObject/DragonLoot/Map Label Marker";

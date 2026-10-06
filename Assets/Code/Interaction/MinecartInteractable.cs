@@ -170,11 +170,12 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	int _autoForcedExitTravelSign;
 	bool _hopping;
 	float _hopElapsed;
-	float _hopArcDuration;
 	float _hopHeight;
 	float _hopLiftY;
 	float _hopRemainingClear;
-	float _hopDescendElapsed;
+	float _hopDistanceTraveled;
+	float _hopPeakDistance;
+	float _hopLandDistance;
 	int _hopTravelSign = 1;
 	MinecartInteractable _hopBlocker;
 
@@ -436,6 +437,12 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	public float HopHeightPerExtraCar => definition != null ? Mathf.Max( 0f, definition.hopHeightPerExtraCar ) : 0.12f;
 
 	public float HopBlockerScale => definition != null ? Mathf.Max( 0f, definition.hopBlockerScale ) : 0.25f;
+
+	public float HopChainMaxGap => definition != null ? Mathf.Max( 0f, definition.hopChainMaxGap ) : 2.5f;
+
+	public float HopApproachLead => definition != null ? Mathf.Max( 0f, definition.hopApproachLead ) : 2.75f;
+
+	public float HopLandingClearance => definition != null ? Mathf.Max( 0.1f, definition.hopLandingClearance ) : 2.4f;
 
 	public float AlongTrackSpeed => ConsistLead._alongSpeed;
 
@@ -1252,7 +1259,11 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		SnapFollowers();
 
 		if ( _hopping && totalDistance > 0.00001f )
+		{
 			_hopRemainingClear = Mathf.Max( 0f, _hopRemainingClear - totalDistance );
+			_hopDistanceTraveled += totalDistance;
+			UpdateHopLandDistance();
+		}
 
 		float dt = Time.deltaTime;
 		if ( dt > 0.00001f )
@@ -1271,13 +1282,141 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		int travelSign = signedDelta >= 0f ? 1 : -1;
 		if ( !_hopping )
 		{
-			if ( track.WouldClampAgainstCarts( _distanceAlongTrack, signedDelta, this ) )
+			bool atClamp = track.WouldClampAgainstCarts( _distanceAlongTrack, signedDelta, this );
+			bool inLead = TryGetHopApproachGap( travelSign, out float gap ) && gap <= HopApproachLead;
+			if ( ( atClamp || inLead ) && CanStartHop( travelSign ) )
 				BeginOrExtendHop( travelSign );
 		}
 		else
 			BeginOrExtendHop( travelSign );
 
 		return track.TryAdvance( _distanceAlongTrack, signedDelta, this, out nextPos );
+	}
+
+	bool CanStartHop( int travelSign )
+	{
+		MinecartInteractable farBlocker = ResolveHopClusterFarBlocker( travelSign );
+		if ( farBlocker == null )
+			return false;
+
+		return HasHopLandingSpace( travelSign, farBlocker );
+	}
+
+	/// <summary>
+	/// Walk contiguous ahead carts within <see cref="HopChainMaxGap"/> and return the farthest in the cluster.
+	/// </summary>
+	MinecartInteractable ResolveHopClusterFarBlocker( int travelSign )
+	{
+		MinecartInteractable blocker;
+		float clearMeters;
+		if ( !TryComputeHopClearance( travelSign, out blocker, out clearMeters ) )
+			return null;
+
+		float maxGap = HopChainMaxGap;
+		MinecartInteractable far = blocker;
+		float clusterFar = blocker.DistanceAlongTrack + travelSign * blocker.BlockingHalfLength;
+		bool extended = true;
+		while ( extended )
+		{
+			extended = false;
+			MinecartInteractable next = null;
+			float bestGap = float.MaxValue;
+			IReadOnlyList<MinecartInteractable> carts = ActiveCarts;
+			for ( int i = 0; i < carts.Count; i++ )
+			{
+				MinecartInteractable other = carts[ i ];
+				if ( other == null || other == this || other == far || other.BoundTrack != track )
+					continue;
+
+				if ( SharesConsistWith( other ) )
+					continue;
+
+				if ( far.SharesConsistWith( other ) )
+					continue;
+
+				float sep = track.SignedAlong( clusterFar, other.DistanceAlongTrack );
+				if ( travelSign > 0 && sep <= 0.0001f )
+					continue;
+				if ( travelSign < 0 && sep >= -0.0001f )
+					continue;
+
+				float nearAlong = other.DistanceAlongTrack - travelSign * other.BlockingHalfLength;
+				float gap = travelSign * track.SignedAlong( clusterFar, nearAlong );
+				if ( gap < 0f || gap > maxGap || gap >= bestGap )
+					continue;
+
+				bestGap = gap;
+				next = other;
+			}
+
+			if ( next == null )
+				break;
+
+			far = next;
+			clusterFar = next.DistanceAlongTrack + travelSign * next.BlockingHalfLength;
+			extended = true;
+		}
+
+		return far;
+	}
+
+	/// <summary>
+	/// True when free track past the blocker's far bumper can fit this cart (otherwise stop instead of hop).
+	/// </summary>
+	bool HasHopLandingSpace( int travelSign, MinecartInteractable blocker )
+	{
+		if ( track == null || blocker == null || travelSign == 0 )
+			return false;
+
+		float needed = Mathf.Max( HopLandingClearance, BlockingHalfLength * 2f );
+		float blockerFar = blocker.DistanceAlongTrack + travelSign * blocker.BlockingHalfLength;
+		float free = MeasureFreeAlongPast( travelSign, blockerFar, blocker );
+		return free >= needed - 0.0001f;
+	}
+
+	float MeasureFreeAlongPast( int travelSign, float fromAlong, MinecartInteractable ignoreBlocker )
+	{
+		float length = track.Length;
+		float best = float.MaxValue;
+		bool foundCart = false;
+		IReadOnlyList<MinecartInteractable> carts = ActiveCarts;
+		for ( int i = 0; i < carts.Count; i++ )
+		{
+			MinecartInteractable other = carts[ i ];
+			if ( other == null || other == this || other == ignoreBlocker || other.BoundTrack != track )
+				continue;
+
+			if ( SharesConsistWith( other ) )
+				continue;
+
+			if ( ignoreBlocker != null && ignoreBlocker.SharesConsistWith( other ) )
+				continue;
+
+			float sep = track.SignedAlong( fromAlong, other.DistanceAlongTrack );
+			if ( travelSign > 0 && sep <= 0.0001f )
+				continue;
+			if ( travelSign < 0 && sep >= -0.0001f )
+				continue;
+
+			float toNear = Mathf.Abs( sep ) - other.BlockingHalfLength;
+			if ( toNear >= best )
+				continue;
+
+			best = Mathf.Max( 0f, toNear );
+			foundCart = true;
+		}
+
+		if ( foundCart )
+			return best;
+
+		if ( !track.IsClosed )
+		{
+			if ( travelSign > 0 )
+				return Mathf.Max( 0f, length - fromAlong );
+			return Mathf.Max( 0f, fromAlong );
+		}
+
+		return length;
 	}
 
 	void BeginOrExtendHop( int travelSign )
@@ -1290,11 +1429,32 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		{
 			_hopping = true;
 			_hopElapsed = 0f;
-			_hopDescendElapsed = 0f;
-			_hopArcDuration = HopDuration;
+			_hopDistanceTraveled = 0f;
 			_hopRemainingClear = 0f;
+			_hopLandDistance = 0f;
 			_hopLiftY = 0f;
 			_hopTravelSign = travelSign;
+
+			float gap = 0f;
+			TryGetHopApproachGap( travelSign, out gap );
+			MinecartInteractable blocker;
+			float clearMeters;
+			if ( TryComputeHopClearance( travelSign, out blocker, out clearMeters ) )
+			{
+				// Peak over blocker center: gap-to-contact + ownHalf + blockerHalf.
+				float contactHalf = BlockingHalfLength + ( blocker != null ? blocker.BlockingHalfLength : BlockingHalfLength );
+				_hopPeakDistance = Mathf.Max( 0.15f, gap + contactHalf );
+				// Seed clearance before RefreshHopClearance — otherwise the chain-gap gate
+				// treats the initial distant clear as a re-engage and leaves remaining at 0,
+				// which EndHop then snaps to the track mid-arc.
+				_hopBlocker = blocker;
+				_hopRemainingClear = clearMeters;
+				_hopHeight = ComputeHopHeight( blocker );
+			}
+			else
+				_hopPeakDistance = Mathf.Max( 0.15f, HopApproachLead );
+
+			UpdateHopLandDistance();
 			PlayFeedback( onHopStartFeedbacks );
 		}
 
@@ -1311,9 +1471,31 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !TryComputeHopClearance( _hopTravelSign, out blocker, out clearMeters ) )
 			return;
 
+		float maxGap = HopChainMaxGap;
+		if ( _hopRemainingClear > 0.0001f )
+		{
+			// Already clearing — only extend if next target is within maxGap of current commitment.
+			if ( clearMeters > _hopRemainingClear + maxGap )
+				return;
+		}
+		else if ( _hopDistanceTraveled > 0.0001f )
+		{
+			// Cleared current cluster after travel — don't re-engage a distant cart.
+			if ( clearMeters > maxGap )
+				return;
+		}
+
 		_hopBlocker = blocker;
 		_hopRemainingClear = Mathf.Max( _hopRemainingClear, clearMeters );
 		_hopHeight = ComputeHopHeight( blocker );
+		UpdateHopLandDistance();
+	}
+
+	void UpdateHopLandDistance()
+	{
+		float peakAt = Mathf.Max( 0.15f, _hopPeakDistance );
+		float clearanceEnd = _hopDistanceTraveled + Mathf.Max( 0f, _hopRemainingClear );
+		_hopLandDistance = Mathf.Max( _hopLandDistance, peakAt * 2f, clearanceEnd );
 	}
 
 	float ComputeHopHeight( MinecartInteractable blocker )
@@ -1378,6 +1560,52 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		return true;
 	}
 
+	/// <summary>Meters until bumper contact with the nearest ahead non-consist cart (0 if already overlapping).</summary>
+	bool TryGetHopApproachGap( int travelSign, out float gapToContact )
+	{
+		gapToContact = 0f;
+		if ( track == null || travelSign == 0 )
+			return false;
+
+		int faceAlong = _trackFacingSign >= 0 ? 1 : -1;
+		int hitchAlong = -faceAlong;
+		float ownExtent = BlockingHalfLength;
+		if ( hitchAlong == travelSign )
+			ownExtent += FollowerCount * ConsistSpacing;
+
+		float best = float.MaxValue;
+		bool found = false;
+		IReadOnlyList<MinecartInteractable> carts = ActiveCarts;
+		for ( int i = 0; i < carts.Count; i++ )
+		{
+			MinecartInteractable other = carts[ i ];
+			if ( other == null || other == this || other.BoundTrack != track )
+				continue;
+
+			if ( SharesConsistWith( other ) )
+				continue;
+
+			float sep = track.SignedAlong( _distanceAlongTrack, other.DistanceAlongTrack );
+			if ( travelSign > 0 && sep <= 0.0001f )
+				continue;
+			if ( travelSign < 0 && sep >= -0.0001f )
+				continue;
+
+			float gap = Mathf.Max( 0f, Mathf.Abs( sep ) - ownExtent - other.BlockingHalfLength );
+			if ( gap < best )
+			{
+				best = gap;
+				found = true;
+			}
+		}
+
+		if ( !found )
+			return false;
+
+		gapToContact = best;
+		return true;
+	}
+
 	void TickHop( float dt )
 	{
 		if ( !_hopping )
@@ -1389,14 +1617,12 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !_junctionRiding )
 			RefreshHopClearance();
 
-		if ( _hopRemainingClear > 0.0001f )
-			_hopDescendElapsed = 0f;
-		else
-			_hopDescendElapsed += Mathf.Max( 0f, dt );
+		UpdateHopLandDistance();
 
-		float halfArc = Mathf.Max( 0.0001f, _hopArcDuration * 0.5f );
-		float descendDone = halfArc + HopStaggerDelay * FollowerCount;
-		bool arcsDone = _hopRemainingClear <= 0.0001f && _hopDescendElapsed >= descendDone;
+		float landAt = Mathf.Max( 0.15f, _hopLandDistance );
+		float followerStagger = FollowerCount * Mathf.Max( 0.12f, ConsistSpacing * 0.12f );
+		bool pastLand = _hopDistanceTraveled >= landAt + followerStagger;
+		bool arcsDone = pastLand && _hopRemainingClear <= 0.0001f;
 		if ( arcsDone )
 			EndHop( playLandFeedback: true );
 	}
@@ -1406,7 +1632,9 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !_hopping && _hopLiftY <= 0.0001f )
 		{
 			_hopElapsed = 0f;
-			_hopDescendElapsed = 0f;
+			_hopDistanceTraveled = 0f;
+			_hopPeakDistance = 0f;
+			_hopLandDistance = 0f;
 			_hopRemainingClear = 0f;
 			_hopBlocker = null;
 			_hopLiftY = 0f;
@@ -1419,7 +1647,9 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		bool wasHopping = _hopping;
 		_hopping = false;
 		_hopElapsed = 0f;
-		_hopDescendElapsed = 0f;
+		_hopDistanceTraveled = 0f;
+		_hopPeakDistance = 0f;
+		_hopLandDistance = 0f;
 		_hopRemainingClear = 0f;
 		_hopBlocker = null;
 		_hopLiftY = 0f;
@@ -1441,39 +1671,32 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 	void ApplyStaggeredHopVisuals()
 	{
-		float arc = Mathf.Max( 0.0001f, _hopArcDuration );
-		float stagger = HopStaggerDelay;
-		_hopLiftY = EvaluateHopLift( 0, arc, stagger );
+		_hopLiftY = EvaluateHopLift( 0 );
 		ApplyHopVisual( this, _hopLiftY );
 		for ( int i = 0; i < _followers.Count; i++ )
-			ApplyHopVisual( _followers[ i ], EvaluateHopLift( i + 1, arc, stagger ) );
+			ApplyHopVisual( _followers[ i ], EvaluateHopLift( i + 1 ) );
 	}
 
-	float EvaluateHopLift( int carIndex, float arcDuration, float staggerDelay )
+	float EvaluateHopLift( int carIndex )
 	{
-		float half = Mathf.Max( 0.0001f, arcDuration * 0.5f );
-		float localAscend = _hopElapsed - carIndex * staggerDelay;
-		if ( localAscend <= 0f )
+		float staggerMeters = carIndex * Mathf.Max( 0.12f, ConsistSpacing * 0.12f );
+		float localDist = _hopDistanceTraveled - staggerMeters;
+		if ( localDist <= 0f )
 			return 0f;
 
-		// Ascend 0 → peak over the first half of the arc.
-		if ( localAscend < half )
+		float peakAt = Mathf.Max( 0.15f, _hopPeakDistance );
+		float landAt = Mathf.Max( peakAt + 0.15f, _hopLandDistance );
+
+		// Continuous asymmetric arc: rise to crest over blocker, then descend — no peak hold.
+		if ( localDist < peakAt )
 		{
-			float t = Mathf.Clamp01( localAscend / half );
+			float t = Mathf.Clamp01( localDist / peakAt );
 			return Mathf.Sin( t * Mathf.PI * 0.5f ) * _hopHeight;
 		}
 
-		// Hold peak until the consist has cleared blockers (chain-extend never touches ground).
-		if ( _hopRemainingClear > 0.0001f )
-			return _hopHeight;
-
-		// Staggered descend after clearance.
-		float localDescend = _hopDescendElapsed - carIndex * staggerDelay;
-		if ( localDescend <= 0f )
-			return _hopHeight;
-
-		float d = Mathf.Clamp01( localDescend / half );
-		return Mathf.Cos( d * Mathf.PI * 0.5f ) * _hopHeight;
+		float descendSpan = Mathf.Max( 0.15f, landAt - peakAt );
+		float u = Mathf.Clamp01( ( localDist - peakAt ) / descendSpan );
+		return Mathf.Cos( u * Mathf.PI * 0.5f ) * _hopHeight;
 	}
 
 	static void ApplyHopVisual( MinecartInteractable cart, float lift )
@@ -1794,6 +2017,18 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	void CommitJunctionExit( MinecartJunctionGraph graph, int junctionIndex, int travelSign )
 	{
 		int sign = travelSign >= 0 ? 1 : -1;
+
+		// Incomplete junctions are hard stops — never commit a ride onto unfinished arms.
+		if ( !graph.IsJunctionVisuallyComplete( junctionIndex ) )
+		{
+			_committedJunctionId = junctionIndex;
+			_hasCommittedExit = false;
+			_committedExitTrack = null;
+			_committedExitDistance = 0f;
+			_committedExitTravelSign = sign;
+			return;
+		}
+
 		graph.BuildExits( junctionIndex, track, _distanceAlongTrack, sign, JunctionExitBuffer );
 
 		// Auto routes may need opposite-approach exits when bake intoTravelSign is skewed.
@@ -2193,7 +2428,8 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	}
 
 	/// <summary>
-	/// When no legal exit is committed (disabled through / corners), stop at the junction cut instead of rolling across.
+	/// When no legal exit is committed (disabled through / corners / incomplete junction),
+	/// stop short of the junction cut instead of rolling across.
 	/// </summary>
 	bool TryClampAtBlockedThrough( int travelSign, ref float remaining, out float traveled )
 	{
@@ -2209,17 +2445,28 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !graph.TryGetPortDistance( track, _committedJunctionId, _distanceAlongTrack, out junctionDistance ) )
 			return false;
 
-		// If same-track through is allowed, do not clamp — normal advance continues.
-		if ( graph.IsSameTrackThroughAllowed( _committedJunctionId, track ) )
+		bool incomplete = !graph.IsJunctionVisuallyComplete( _committedJunctionId );
+		// Same-track through is fine only on completed junctions.
+		if ( !incomplete && graph.IsSameTrackThroughAllowed( _committedJunctionId, track ) )
 			return false;
 
-		float toJunction = track.SignedAlong( _distanceAlongTrack, junctionDistance );
-		if ( toJunction * travelSign <= 0.00001f )
-			return false;
+		float stopDistance = junctionDistance;
+		float cut = Mathf.Max( 0.05f, graph.JunctionTrackCutRadius );
+		stopDistance = track.WrapDistance( junctionDistance - travelSign * cut );
+
+		float toStop = track.SignedAlong( _distanceAlongTrack, stopDistance );
+		if ( toStop * travelSign <= 0.00001f )
+		{
+			// Already at/past the stop line — pin to stop and consume remaining.
+			_distanceAlongTrack = stopDistance;
+			remaining = 0f;
+			traveled = 0f;
+			return true;
+		}
 
 		float absRemaining = Mathf.Abs( remaining );
-		float absToJunction = Mathf.Abs( toJunction );
-		float step = absToJunction <= absRemaining + 0.0001f ? toJunction : remaining;
+		float absToStop = Mathf.Abs( toStop );
+		float step = absToStop <= absRemaining + 0.0001f ? toStop : remaining;
 		float next;
 		if ( !track.TryAdvance( _distanceAlongTrack, step, this, out next ) )
 			return true;
@@ -2706,7 +2953,16 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !_autoMoving || _holdPush || _drivePowered || _recalling )
 			return;
 
-		if ( !EnsureBoundTrack() || !IsAutoEligible || _autoTargetTrack == null )
+		// Stay bound through junction rides even if exit-arm build state flickers mid-curve.
+		if ( _junctionRiding )
+		{
+			if ( track == null || !IsAutoEligible || _autoTargetTrack == null )
+			{
+				CancelAutoMove( arrived: false );
+				return;
+			}
+		}
+		else if ( !EnsureBoundTrack() || !IsAutoEligible || _autoTargetTrack == null )
 		{
 			CancelAutoMove( arrived: false );
 			return;
@@ -2805,6 +3061,10 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			return;
 
 		if ( !leg.ExitTrack.IsTravelReady )
+			return;
+
+		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+		if ( graph != null && !graph.IsJunctionVisuallyComplete( leg.JunctionIndex ) )
 			return;
 
 		_autoForcedExitValid = true;

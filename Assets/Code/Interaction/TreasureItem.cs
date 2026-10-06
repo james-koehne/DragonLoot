@@ -35,10 +35,23 @@ public class TreasureItem : MonoBehaviour
 	float _connectedGlow;
 	int _artifactSurfaceBouncesRemaining;
 	bool _heldLightingActive;
+	bool _releasedFromPlayerHand;
 
 	public TreasureDefinition Definition => definition;
 	public TreasureItemState State => _state;
 	public bool ReleasedViaAddressables => _releasedViaAddressables;
+	/// <summary>True after this item has left the player's hand at least once since spawn/pile.</summary>
+	public bool ReleasedFromPlayerHand => _releasedFromPlayerHand;
+	/// <summary>Skip non-coin pickup hold: player-released, displayed, or stacked/storage.</summary>
+	public bool IsInstantPickupEligible
+	{
+		get
+		{
+			return _releasedFromPlayerHand
+				|| _state == TreasureItemState.Displayed
+				|| _state == TreasureItemState.Stacked;
+		}
+	}
 	public ITreasureOwner Owner => _owner;
 	public TreasurePileVisual OriginPile => _originPile;
 	public TreasurePileVisual PileOwner => _owner as TreasurePileVisual;
@@ -149,6 +162,7 @@ public class TreasureItem : MonoBehaviour
 		bool sameDefinition = definition == treasure;
 		definition = treasure;
 		_releasedViaAddressables = viaAddressables;
+		_releasedFromPlayerHand = false;
 		if ( !sameDefinition )
 		{
 			_renderers = null;
@@ -231,6 +245,7 @@ public class TreasureItem : MonoBehaviour
 		_meshVisibilityState = null;
 		_streamingHidden = false;
 		_cleanProgress = 1f;
+		_releasedFromPlayerHand = false;
 	}
 
 	public bool IsSettledForWorldStream
@@ -282,6 +297,12 @@ public class TreasureItem : MonoBehaviour
 		}
 	}
 
+	void NoteReleasedFromPlayerHandIfLeavingHeld()
+	{
+		if ( _state == TreasureItemState.Held )
+			_releasedFromPlayerHand = true;
+	}
+
 	public static bool UsesSurfaceSimulation( TreasureDefinition def )
 	{
 		if ( def == null )
@@ -309,6 +330,7 @@ public class TreasureItem : MonoBehaviour
 
 		_owner = pileOwner;
 		_state = TreasureItemState.InPile;
+		_releasedFromPlayerHand = false;
 		_distanceForcedSleep = false;
 		_reclaiming = false;
 
@@ -366,6 +388,7 @@ public class TreasureItem : MonoBehaviour
 			return;
 		}
 
+		NoteReleasedFromPlayerHandIfLeavingHeld();
 		_inFlight = false;
 		LeavePreviousOwner();
 		TreasureProximitySleep.Unregister( this );
@@ -467,6 +490,7 @@ public class TreasureItem : MonoBehaviour
 		entryPos.x = resolved.x;
 		entryPos.z = resolved.z;
 
+		NoteReleasedFromPlayerHandIfLeavingHeld();
 		_inFlight = false;
 		LeavePreviousOwner();
 		TreasureProximitySleep.Unregister( this );
@@ -541,6 +565,7 @@ public class TreasureItem : MonoBehaviour
 			return;
 		}
 
+		NoteReleasedFromPlayerHandIfLeavingHeld();
 		_inFlight = false;
 		LeavePreviousOwner();
 		TreasureProximitySleep.Unregister( this );
@@ -637,6 +662,7 @@ public class TreasureItem : MonoBehaviour
 		Vector3 worldPosition,
 		Quaternion worldRotation )
 	{
+		NoteReleasedFromPlayerHandIfLeavingHeld();
 		_inFlight = false;
 		SetHeldLighting( enabled: false );
 		if ( _owner != displayOwner )
@@ -672,6 +698,7 @@ public class TreasureItem : MonoBehaviour
 
 	public void EnterStacked( ITreasureOwner stackOwner, Transform stackRoot, Vector3 localPosition, Quaternion localRotation )
 	{
+		NoteReleasedFromPlayerHandIfLeavingHeld();
 		_inFlight = false;
 		SetHeldLighting( enabled: false );
 
@@ -1351,6 +1378,13 @@ public class TreasureItem : MonoBehaviour
 
 		RefreshColliderCache();
 
+		// Clear velocity while still dynamic — Unity rejects velocity writes on kinematic bodies.
+		if ( kinematic && !_body.isKinematic )
+		{
+			_body.linearVelocity = Vector3.zero;
+			_body.angularVelocity = Vector3.zero;
+		}
+
 		_body.isKinematic = kinematic;
 		_body.detectCollisions = detectCollisions;
 		_body.useGravity = !kinematic;
@@ -1630,8 +1664,12 @@ public class TreasureItem : MonoBehaviour
 		if ( _body == null )
 			return;
 
-		_body.linearVelocity = Vector3.zero;
-		_body.angularVelocity = Vector3.zero;
+		if ( !_body.isKinematic )
+		{
+			_body.linearVelocity = Vector3.zero;
+			_body.angularVelocity = Vector3.zero;
+		}
+
 		_body.Sleep();
 	}
 

@@ -3652,7 +3652,16 @@ MonoBehaviour:
   _fireBreath: {fileID: 3852728438675423278}
   _playerEyeHeight: 1.6
   _lookTargetOverride: {fileID: 0}
-  _lookBlendSpeed: 4
+  _lookStartDelayMin: 3
+  _lookStartDelayMax: 6
+  _sideEyeEnabled: 1
+  _sideEyeStrength: 1
+  _sideEyeHorizontalOffset: 12
+  _sideEyeVerticalBias: -0.1
+  _sideEyeDepthOffset: -5
+  _sideEyeSideMode: 0
+  _lookBlendSpeedEnter: 1.2
+  _lookBlendSpeedExit: 2.5
   _aimSmoothTime: 0.35
   _maxHeadDegreesPerSecond: 180
   _lookingAnimSpeed: 0.2

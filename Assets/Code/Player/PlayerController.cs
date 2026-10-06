@@ -226,15 +226,14 @@ public class PlayerController : MonoBehaviour
 	public Vector3 FlatMoveIntent => _debugFlatMoveIntent;
 
 	/// <summary>
-	/// Intended ground speed this frame (walk/sprint × carry × timed buff), ignoring collision slowdown.
+	/// Intended ground speed this frame (walk/sprint × timed buff), ignoring collision slowdown.
 	/// </summary>
 	public float DesiredPlanarSpeed
 	{
 		get
 		{
 			bool sprinting = _wantsSprint && _debugFlatMoveIntent.sqrMagnitude > 0.0001f;
-			float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
-			return ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale * GetMoveSpeedBuffMultiplier();
+			return ( sprinting ? SprintSpeed : WalkSpeed ) * GetMoveSpeedBuffMultiplier();
 		}
 	}
 
@@ -1333,8 +1332,7 @@ public class PlayerController : MonoBehaviour
 			_planarVelocity.y = 0f;
 
 		bool sprinting = _wantsSprint && moveIntent.sqrMagnitude > 0.0001f;
-		float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
-		float targetSpeed = ( sprinting ? SprintSpeed : WalkSpeed ) * carryScale * GetMoveSpeedBuffMultiplier();
+		float targetSpeed = ( sprinting ? SprintSpeed : WalkSpeed ) * GetMoveSpeedBuffMultiplier();
 		if ( _slideEnterCharge > 0f && !_isSliding )
 			targetSpeed *= SlideEnterMoveSpeedScale;
 		Vector3 desired = moveIntent.sqrMagnitude > 0.0001f
@@ -1760,8 +1758,7 @@ public class PlayerController : MonoBehaviour
 				surfaceIntent = Vector3.ProjectOnPlane( flatMoveIntent, _groundNormal );
 		}
 
-		float carryScale = _carry != null ? _carry.MoveSpeedMultiplier : 1f;
-		float targetSpeed = ( _wantsSprint ? ClimbSprintSpeed : ClimbSpeed ) * carryScale * GetMoveSpeedBuffMultiplier();
+		float targetSpeed = ( _wantsSprint ? ClimbSprintSpeed : ClimbSpeed ) * GetMoveSpeedBuffMultiplier();
 		Vector3 desired = surfaceIntent.sqrMagnitude > 0.0001f
 			? surfaceIntent.normalized * targetSpeed
 			: Vector3.zero;

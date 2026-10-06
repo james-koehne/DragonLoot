@@ -260,7 +260,8 @@ public class WorldEventSystem : MonoBehaviour
 		return objectives != null && objectives.IsCompleted( objectiveId );
 	}
 
-	bool IsWorldEventCompleted( string eventId )
+	/// <summary>True when the event has fired and its action sequence is no longer running.</summary>
+	public bool IsWorldEventCompleted( string eventId )
 	{
 		if ( string.IsNullOrEmpty( eventId ) )
 			return false;
@@ -418,7 +419,16 @@ public class WorldEventSystem : MonoBehaviour
 
 			if ( sequence.Index >= sequence.Actions.Length )
 			{
+				string completedEventId = sequence.EventId;
 				_runningSequences.Remove( sequence );
+				if ( !string.IsNullOrEmpty( completedEventId ) && !IsEventSequenceRunning( completedEventId ) )
+				{
+					EventBus.Publish( new WorldEventCompletedEvent
+					{
+						Id = completedEventId
+					} );
+				}
+
 				EvaluateAll();
 				return;
 			}
@@ -523,6 +533,9 @@ public class WorldEventSystem : MonoBehaviour
 				break;
 			case WorldEventActionType.CinematicPresentation:
 				StartCinematicPresentation( action, sequence );
+				break;
+			case WorldEventActionType.CinematicCallout:
+				StartCinematicCallout( action, sequence );
 				break;
 			case WorldEventActionType.BrakePlayerMovement:
 				BrakePlayerMovement( action );
@@ -655,6 +668,55 @@ public class WorldEventSystem : MonoBehaviour
 
 		sequence.WaitingCinematicPresentationId = presentationId;
 		sequence.Phase = ActionSequencePhase.WaitingCallback;
+	}
+
+	void StartCinematicCallout( WorldEventAction action, RunningActionSequence sequence )
+	{
+		if ( action == null )
+			return;
+
+		string calloutId = action.cinematicPresentationId;
+		bool began = !string.IsNullOrEmpty( calloutId ) && CinematicCalloutController.TryBegin( calloutId );
+		bool hasDialogue = action.dialogue != null && action.dialogue.Length > 0;
+
+		if ( !hasDialogue )
+		{
+			if ( action.waitUntilFinished && sequence != null )
+			{
+				if ( began )
+				{
+					sequence.Phase = ActionSequencePhase.WaitingCallback;
+					CinematicCalloutController.TryEnd( calloutId, () => CompleteCallbackWait( sequence ) );
+				}
+			}
+			return;
+		}
+
+		if ( !action.waitUntilFinished )
+		{
+			_dialogue.Enqueue( action.dialogue );
+			return;
+		}
+
+		bool completedSync = false;
+		_dialogue.Enqueue( action.dialogue, () =>
+		{
+			if ( began )
+			{
+				CinematicCalloutController.TryEnd( calloutId, () =>
+				{
+					completedSync = true;
+					CompleteCallbackWait( sequence );
+				} );
+				return;
+			}
+
+			completedSync = true;
+			CompleteCallbackWait( sequence );
+		} );
+
+		if ( !completedSync )
+			sequence.Phase = ActionSequencePhase.WaitingCallback;
 	}
 
 	static Vector3 ResolveAudioPosition( WorldEventAction action )

@@ -193,16 +193,33 @@ public class ObjectiveSystem : MonoBehaviour
 			return false;
 
 		string[] prereqs = definition.prerequisiteObjectiveIds;
-		if ( prereqs == null || prereqs.Length == 0 )
-			return true;
-
-		for ( int i = 0; i < prereqs.Length; i++ )
+		if ( prereqs != null )
 		{
-			string prereq = prereqs[ i ];
-			if ( string.IsNullOrEmpty( prereq ) )
-				continue;
-			if ( !IsCompleted( prereq ) )
+			for ( int i = 0; i < prereqs.Length; i++ )
+			{
+				string prereq = prereqs[ i ];
+				if ( string.IsNullOrEmpty( prereq ) )
+					continue;
+				if ( !IsCompleted( prereq ) )
+					return false;
+			}
+		}
+
+		string[] worldEventPrereqs = definition.prerequisiteWorldEventIds;
+		if ( worldEventPrereqs != null && worldEventPrereqs.Length > 0 )
+		{
+			WorldEventSystem worldEvents = WorldEventSystem.Instance;
+			if ( worldEvents == null )
 				return false;
+
+			for ( int i = 0; i < worldEventPrereqs.Length; i++ )
+			{
+				string eventId = worldEventPrereqs[ i ];
+				if ( string.IsNullOrEmpty( eventId ) )
+					continue;
+				if ( !worldEvents.IsWorldEventCompleted( eventId ) )
+					return false;
+			}
 		}
 
 		return true;
@@ -316,6 +333,7 @@ public class ObjectiveSystem : MonoBehaviour
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Subscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Subscribe<WorldEventFiredEvent>( OnWorldEventFired );
+		EventBus.Subscribe<WorldEventCompletedEvent>( OnWorldEventCompleted );
 		_subscribed = true;
 	}
 
@@ -339,6 +357,7 @@ public class ObjectiveSystem : MonoBehaviour
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Unsubscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Unsubscribe<WorldEventFiredEvent>( OnWorldEventFired );
+		EventBus.Unsubscribe<WorldEventCompletedEvent>( OnWorldEventCompleted );
 		_subscribed = false;
 	}
 
@@ -476,6 +495,11 @@ public class ObjectiveSystem : MonoBehaviour
 	void OnWorldEventFired( WorldEventFiredEvent evt )
 	{
 		TryMatchTargetId( ObjectiveSubCompleteType.WorldEventFired, evt.Id );
+	}
+
+	void OnWorldEventCompleted( WorldEventCompletedEvent evt )
+	{
+		RefreshNearbyHud( force: true );
 	}
 
 	void TryMatchComponent( ObjectiveSubCompleteType type, Component component )

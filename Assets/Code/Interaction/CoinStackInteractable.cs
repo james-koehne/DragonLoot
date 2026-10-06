@@ -133,7 +133,7 @@ public class CoinStackInteractable : StackInteractable, ITreasureOwner, ITreasur
 		if ( !IsAvailable || player == null || _taking )
 			return false;
 
-		return CanTakeFromIndex( player, 0 );
+		return CoinCount > 0 && player.Carry != null && Treasure != null;
 	}
 
 	public override void Interact( PlayerController player )
@@ -229,17 +229,23 @@ public class CoinStackInteractable : StackInteractable, ITreasureOwner, ITreasur
 
 	public bool TryTakeFromIndexUp( PlayerController player, int startIndex )
 	{
-		if ( !CanTakeFromIndex( player, startIndex ) )
+		if ( player == null || player.Carry == null || Treasure == null || _taking )
 			return false;
 
 		startIndex = Mathf.Clamp( startIndex, 0, Mathf.Max( 0, CoinCount - 1 ) );
 		int available = CoinCount - startIndex;
-		PlayerCarry carry = player.Carry;
-		if ( carry == null || Treasure == null )
+		if ( available <= 0 )
 			return false;
 
+		PlayerCarry carry = player.Carry;
 		int takeCount = carry.CountAffordableUnits( Treasure, available );
 		if ( takeCount <= 0 )
+		{
+			carry.NotifyPouchFull( Treasure );
+			return false;
+		}
+
+		if ( !CanTakeFromIndex( player, startIndex ) )
 			return false;
 
 		int taken = 0;
@@ -435,12 +441,16 @@ public class CoinStackInteractable : StackInteractable, ITreasureOwner, ITreasur
 		Rigidbody body = item.Body;
 		if ( body != null )
 		{
+			if ( !body.isKinematic )
+			{
+				body.linearVelocity = Vector3.zero;
+				body.angularVelocity = Vector3.zero;
+			}
+
 			body.isKinematic = true;
 			body.detectCollisions = false;
 			body.useGravity = false;
 			body.constraints = RigidbodyConstraints.None;
-			body.linearVelocity = Vector3.zero;
-			body.angularVelocity = Vector3.zero;
 		}
 
 		Vector3 startPos = t.position;

@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3454bda4ebe9284399c0e855eee818f, type: 3}
+  m_Name: Objective_TalkToDragon
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
+  id: obj_talk_to_dragon
+  title: Talk to the Dragon
+  showVolumeId: volume_main_cave
+  showRadius: 40
+  prerequisiteObjectiveIds: []
+  prerequisiteWorldEventIds:
+  - main_cave_entrance
+  subs:
+  - id: talk
+    label: Talk to the Dragon
+    completeType: 5
+    targetId: talk_to_dragon
+    requiredCount: 0
+  rewards: []
+  rewardLabel: 
+  showReward: 0
+  completionToast: 
+  onCompleteWorldEventIds: []

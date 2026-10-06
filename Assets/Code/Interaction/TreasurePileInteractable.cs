@@ -168,6 +168,18 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		if ( player == null || RemainingCount <= 0 )
 			return false;
 
+		return player.Carry != null;
+	}
+
+	public override void Interact( PlayerController player )
+	{
+		if ( player == null || RemainingCount <= 0 )
+			return;
+
+		PlayerCarry carry = player.Carry;
+		if ( carry == null )
+			return;
+
 		TreasureDefinition probe = Treasure;
 		if ( pileVisual != null )
 		{
@@ -176,16 +188,11 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 				probe = any;
 		}
 
-		if ( probe != null )
-			return player.Carry != null && player.Carry.CanAdd( probe );
-
-		return base.CanInteract( player );
-	}
-
-	public override void Interact( PlayerController player )
-	{
-		if ( player == null || RemainingCount <= 0 )
+		if ( probe != null && !carry.CanAdd( probe ) )
+		{
+			carry.NotifyPouchFull( probe );
 			return;
+		}
 
 		StealFromPileAsync( player );
 	}
@@ -250,7 +257,10 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 
 		batchCap = Mathf.Min( batchCap, carry.CountAffordableUnits( probe, batchCap ) );
 		if ( batchCap <= 0 )
+		{
+			carry.NotifyPouchFull( probe );
 			return;
+		}
 
 		StealDefs.Clear();
 		Vector3 carvePos = digPoint;

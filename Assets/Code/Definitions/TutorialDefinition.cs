@@ -93,7 +93,7 @@ public class TutorialTask
 
 	public string label;
 
-	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}, {CyclePouch}, {BuildModeToggle}, {CategorySlot1}..{CategorySlot5}." )]
+	[Tooltip( "Optional control hint shown under this task. Uses {Interact}, {ContextualInteract}, {SecondaryInteract}, {WholeStackPickup}, {WholeStackPlace}, {RotateLeft}, {RotateRight}, {Clean}, {Jump}, {Sprint}, {CyclePouch}, {BuildModeToggle}, {CategorySlot1}..{CategorySlot6}." )]
 	public string keybindHint;
 
 	public TutorialTaskCompleteType completeTrigger;

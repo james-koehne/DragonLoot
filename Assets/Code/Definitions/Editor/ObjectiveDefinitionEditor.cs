@@ -11,6 +11,7 @@ public class ObjectiveDefinitionEditor : Editor
 	SerializedProperty _showVolumeId;
 	SerializedProperty _showRadius;
 	SerializedProperty _prerequisiteObjectiveIds;
+	SerializedProperty _prerequisiteWorldEventIds;
 	SerializedProperty _subs;
 	SerializedProperty _rewards;
 	SerializedProperty _rewardLabel;
@@ -25,6 +26,7 @@ public class ObjectiveDefinitionEditor : Editor
 		_showVolumeId = serializedObject.FindProperty( "showVolumeId" );
 		_showRadius = serializedObject.FindProperty( "showRadius" );
 		_prerequisiteObjectiveIds = serializedObject.FindProperty( "prerequisiteObjectiveIds" );
+		_prerequisiteWorldEventIds = serializedObject.FindProperty( "prerequisiteWorldEventIds" );
 		_subs = serializedObject.FindProperty( "subs" );
 		_rewards = serializedObject.FindProperty( "rewards" );
 		_rewardLabel = serializedObject.FindProperty( "rewardLabel" );
@@ -42,6 +44,7 @@ public class ObjectiveDefinitionEditor : Editor
 		EditorGUILayout.PropertyField( _showVolumeId );
 		EditorGUILayout.PropertyField( _showRadius );
 		EditorGUILayout.PropertyField( _prerequisiteObjectiveIds, includeChildren: true );
+		EditorGUILayout.PropertyField( _prerequisiteWorldEventIds, includeChildren: true );
 		EditorGUILayout.PropertyField( _subs, includeChildren: true );
 		EditorGUILayout.PropertyField( _rewards, includeChildren: true );
 		EditorGUILayout.PropertyField( _rewardLabel );

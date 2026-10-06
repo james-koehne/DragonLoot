@@ -48,6 +48,10 @@ public class DebugWorldEventsSection : DebugOverlaySection
 		if ( GUILayout.Button( "Fairy" ) )
 			system.DebugFireEvent( "intro_fairy" );
 		GUILayout.EndHorizontal();
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Main Cave Entrance" ) )
+			system.DebugFireEvent( "main_cave_entrance" );
+		GUILayout.EndHorizontal();
 
 		GUILayout.Label( "Ignite island lanterns:" );
 		GUILayout.BeginHorizontal();
@@ -63,6 +67,8 @@ public class DebugWorldEventsSection : DebugOverlaySection
 
 		if ( GUILayout.Button( "Fly Camera" ) )
 			CinematicPresentationController.TryPlay( CinematicPresentationController.IntroLedgePresentationId );
+		if ( GUILayout.Button( "Main Cave Callout" ) )
+			CinematicCalloutController.TryBegin( CinematicCalloutController.MainCaveEntranceCalloutId );
 
 		if ( Application.isPlaying )
 		{

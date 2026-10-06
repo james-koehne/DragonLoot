@@ -128,6 +128,18 @@ public class MinecartDefinition : ScriptableObject
 	[Min( 0f )]
 	public float hopBlockerScale = 0.25f;
 
+	[Tooltip( "Max open track (m) after current hop clearance before chain-extend stops. Contiguous carts closer than this keep the hop; larger gaps end it." )]
+	[Min( 0f )]
+	public float hopChainMaxGap = 2.5f;
+
+	[Tooltip( "Begin hop this many meters before bumper contact so the arc peaks over the blocker." )]
+	[Min( 0f )]
+	public float hopApproachLead = 2.75f;
+
+	[Tooltip( "Minimum free track past the blocker's far bumper required to land. If less, stop against the cart instead of hopping." )]
+	[Min( 0.1f )]
+	public float hopLandingClearance = 2.4f;
+
 	void OnValidate()
 	{
 		pushAttachRadius = Mathf.Max( 0.5f, pushAttachRadius );
@@ -157,5 +169,8 @@ public class MinecartDefinition : ScriptableObject
 		hopStaggerDelay = Mathf.Max( 0f, hopStaggerDelay );
 		hopHeightPerExtraCar = Mathf.Max( 0f, hopHeightPerExtraCar );
 		hopBlockerScale = Mathf.Max( 0f, hopBlockerScale );
+		hopChainMaxGap = Mathf.Max( 0f, hopChainMaxGap );
+		hopApproachLead = Mathf.Max( 0f, hopApproachLead );
+		hopLandingClearance = Mathf.Max( 0.1f, hopLandingClearance );
 	}
 }

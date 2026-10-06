@@ -268,11 +268,12 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		int slotIndex,
 		List<TreasureDefinition> into,
 		out Vector3 contact,
-		out Quaternion rotation )
+		out Quaternion rotation,
+		int maxCount )
 	{
 		contact = transform.position;
 		rotation = transform.rotation;
-		if ( into == null || _cellStacks == null )
+		if ( into == null || _cellStacks == null || maxCount <= 0 )
 			return false;
 
 		RemapSlotToOrigin( ref slotIndex );
@@ -295,8 +296,13 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		if ( taken.Count == 0 )
 			return false;
 
+		int takeItems = Mathf.Min( maxCount, taken.Count );
+		int itemStart = taken.Count - takeItems;
 		slot.Items.Clear();
-		for ( int i = 0; i < taken.Count; i++ )
+		for ( int i = 0; i < itemStart; i++ )
+			slot.Items.Add( taken[ i ] );
+
+		for ( int i = itemStart; i < taken.Count; i++ )
 		{
 			TreasureItem member = taken[ i ];
 			into.Add( member.Definition );
@@ -312,8 +318,12 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			TreasureItemFactory.Despawn( member );
 		}
 
-		ClearFootprint( slot );
-		_stacks.Remove( slot );
+		if ( slot.Items.Count == 0 )
+		{
+			ClearFootprint( slot );
+			_stacks.Remove( slot );
+		}
+
 		RefreshSlotCylinder( slot );
 		RefreshCountLabel();
 		PublishChanged();

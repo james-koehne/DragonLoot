@@ -121,18 +121,20 @@ public class MinecartAutoController : MonoBehaviour
 		return true;
 	}
 
-	public void NotifyArrived( MinecartInteractable lead )
+	public void LeaveDock( MinecartStationBase continueTo )
 	{
 		MinecartInteractable cart = Cart;
-		if ( lead != cart || _targetStation == null )
-			return;
+		ClearDock( notifyStation: true );
 
-		MinecartStationBase station = _targetStation;
-		_targetStation = null;
-		_dockedStation = station;
+		if ( continueTo != null && cart != null && cart.IsAutoEligible && MinecartStationBase.AutomationEnabled )
+		{
+			if ( TryDispatchTo( continueTo ) )
+				return;
+		}
+
 		_waitTimer = 0f;
-		_state = AutoState.Docked;
-		station.NotifyCartDocked( cart );
+		_state = AutoState.Idle;
+		_targetStation = null;
 	}
 
 	public void NotifyTravelCancelled( MinecartInteractable lead )
@@ -150,6 +152,20 @@ public class MinecartAutoController : MonoBehaviour
 			_waitTimer = 0f;
 			_state = AutoState.Idle;
 		}
+	}
+
+	public void NotifyArrived( MinecartInteractable lead )
+	{
+		MinecartInteractable cart = Cart;
+		if ( lead != cart || _targetStation == null )
+			return;
+
+		MinecartStationBase station = _targetStation;
+		_targetStation = null;
+		_dockedStation = station;
+		_waitTimer = 0f;
+		_state = AutoState.Docked;
+		station.NotifyCartDocked( cart );
 	}
 
 	/// <summary>
@@ -208,20 +224,25 @@ public class MinecartAutoController : MonoBehaviour
 		LeaveDock( continueTo: null );
 	}
 
-	public void LeaveDock( MinecartStationBase continueTo )
+	/// <summary>Hard-stop automation: cancel travel, undock, and return to Idle.</summary>
+	public void ForceHaltToIdle()
 	{
 		MinecartInteractable cart = Cart;
-		ClearDock( notifyStation: true );
+		if ( _state == AutoState.Idle && ( cart == null || !cart.IsAutoMoving ) )
+			return;
 
-		if ( continueTo != null && cart != null && cart.IsAutoEligible )
+		if ( cart != null && cart.IsAutoMoving )
+			cart.CancelAutoMove( arrived: false );
+		else if ( ( _state == AutoState.Traveling || _state == AutoState.Waiting ) && _targetStation != null )
 		{
-			if ( TryDispatchTo( continueTo ) )
-				return;
+			_targetStation.NotifyInboundCancelled( cart );
+			_targetStation = null;
 		}
 
+		ClearDock( notifyStation: true );
+		_targetStation = null;
 		_waitTimer = 0f;
 		_state = AutoState.Idle;
-		_targetStation = null;
 	}
 
 	void ClearDock( bool notifyStation )
@@ -249,6 +270,18 @@ public class MinecartAutoController : MonoBehaviour
 
 	bool ResumeAfterWait()
 	{
+		if ( !MinecartStationBase.AutomationEnabled )
+		{
+			MinecartStationBase stalled = _targetStation;
+			MinecartInteractable waitingCart = Cart;
+			_waitTimer = 0f;
+			_state = AutoState.Idle;
+			_targetStation = null;
+			if ( stalled != null )
+				stalled.NotifyInboundCancelled( waitingCart );
+			return false;
+		}
+
 		MinecartStationBase station = _targetStation;
 		if ( station == null )
 		{

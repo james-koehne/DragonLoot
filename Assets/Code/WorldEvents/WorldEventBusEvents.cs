@@ -21,6 +21,12 @@ public struct WorldEventFiredEvent
 	public string[] Tags;
 }
 
+/// <summary>A world event action sequence finished (fired and no longer running).</summary>
+public struct WorldEventCompletedEvent
+{
+	public string Id;
+}
+
 /// <summary>Show or clear dragon dialogue line.</summary>
 public struct DragonDialogueChangedEvent
 {

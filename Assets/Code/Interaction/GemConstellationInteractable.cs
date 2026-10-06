@@ -691,7 +691,8 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		int slotIndex,
 		List<TreasureDefinition> into,
 		out Vector3 contact,
-		out Quaternion rotation )
+		out Quaternion rotation,
+		int maxCount )
 	{
 		contact = transform.position;
 		rotation = transform.rotation;

@@ -73,6 +73,9 @@ public class ObjectiveDefinition : ScriptableObject
 
 	public string[] prerequisiteObjectiveIds;
 
+	[Tooltip( "World event ids that must be completed (fired and action sequence finished) before this objective can show." )]
+	public string[] prerequisiteWorldEventIds;
+
 	public ObjectiveSubDefinition[] subs;
 
 	public ObjectiveReward[] rewards;

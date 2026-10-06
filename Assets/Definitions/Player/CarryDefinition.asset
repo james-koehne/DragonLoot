@@ -12,8 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a8e4c2b19f3d4e7a9b6c5d4e3f2a1b0c, type: 3}
   m_Name: CarryDefinition
   m_EditorClassIdentifier: Assembly-CSharp::CarryDefinition
-  maxCarryWeight: 100
-  minBurdenedMoveSpeedScale: 1
+  coinSlotLimit: 100
+  gemSlotLimit: 10
+  artifactSlotLimit: 5
+  resourceSlotLimit: 10
+  generalSlotLimit: 10
+  junkSlotLimit: 10
+  crossPouchPickupOffset: {x: 0, y: -0.5, z: 0.25}
+  crossPouchPickupDuration: 0.28
   holdLocalOffset: {x: -0.52, y: -0.25, z: 0.45}
   holdLocalEuler: {x: 0, y: 0, z: 0}
   activeItemOffset: {x: 0.45, y: -0.25, z: 0.45}

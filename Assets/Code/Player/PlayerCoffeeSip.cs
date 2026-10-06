@@ -46,8 +46,10 @@ public class PlayerCoffeeSip : MonoBehaviour
 			if ( interaction == null )
 				return false;
 
+			// Never sip while looking at a ContextualInteract target (dig, door, chest open, machine, etc.).
+			// Pickup interactables use LMB, so E can still sip when aiming at loose treasure.
 			IInteractable focus = interaction.Current;
-			if ( focus != null && focus.CanInteract( _player ) && !InteractableBase.IsPickupInteract( focus ) )
+			if ( focus != null && !InteractableBase.IsPickupInteract( focus ) )
 				return false;
 
 			return true;
@@ -70,7 +72,7 @@ public class PlayerCoffeeSip : MonoBehaviour
 		EnsureSipFeedbacks();
 	}
 
-	void Update()
+	void LateUpdate()
 	{
 		if ( _player == null || IsSipping )
 			return;

@@ -40,6 +40,9 @@ public class BuildableObject : MonoBehaviour
 	BuildableObject[] _requiredBuildables;
 
 	[SerializeField]
+	BuildableDefinition _definition;
+
+	[SerializeField]
 	bool _startBuilt;
 
 	readonly List<MeshRenderer> _ghostRenderers = new List<MeshRenderer>( 8 );
@@ -66,8 +69,30 @@ public class BuildableObject : MonoBehaviour
 	public Transform BuiltRoot => _builtRoot;
 	public Transform GhostRoot => _ghostRoot;
 	public BuildableObject[] RequiredBuildables => _requiredBuildables;
+	public BuildableDefinition Definition => _definition;
 
 	public static IReadOnlyList<BuildableObject> Active => ActiveBuildables;
+
+	public string ResolveDisplayName()
+	{
+		if ( _definition != null )
+			return _definition.ResolveDisplayName();
+		return name;
+	}
+
+	public string ResolveDescription()
+	{
+		if ( _definition != null )
+			return _definition.ResolveDescription();
+		return string.Empty;
+	}
+
+	public int ResolveCost()
+	{
+		if ( _definition != null )
+			return _definition.ResolveCost();
+		return 0;
+	}
 
 	void Awake()
 	{

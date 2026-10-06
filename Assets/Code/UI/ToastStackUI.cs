@@ -896,6 +896,7 @@ public class ToastStackUI : MonoBehaviour
 				return GemAccent;
 			case CarryBucketKind.Artifact:
 				return ArtifactAccent;
+			case CarryBucketKind.Resource:
 			case CarryBucketKind.General:
 			case CarryBucketKind.Junk:
 				return GeneralAccent;

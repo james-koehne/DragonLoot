@@ -91,7 +91,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		get
 		{
 			PlayerCarry carry = _player != null ? _player.Carry : null;
-			if ( carry == null || carry.Count <= 0 )
+			if ( carry == null || carry.SelectedBucket != CarryBucketKind.Coin )
+				return false;
+			if ( carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
 				return false;
 
 			if ( CanOfferWholeStackPickup )
@@ -114,7 +116,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return false;
 
 		PlayerCarry carry = _player != null ? _player.Carry : null;
-		if ( carry == null || carry.Count <= 0 )
+		if ( carry == null || carry.SelectedBucket != CarryBucketKind.Coin )
+			return false;
+		if ( carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
 			return false;
 
 		if ( CanOfferWholeStackPickup || HasBlockingContextualFocus() )
@@ -199,7 +203,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		}
 
 		PlayerCarry carry = _player != null ? _player.Carry : null;
-		if ( carry != null && carry.Count > 0 )
+		if ( carry != null
+			&& carry.SelectedBucket == CarryBucketKind.Coin
+			&& carry.GetBucketCount( CarryBucketKind.Coin ) > 0 )
 		{
 			TickPlaceCharge();
 			return;
@@ -345,8 +351,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			InputActionSlotPressed( input, 0, CarryBucketKind.Coin, carry );
 			InputActionSlotPressed( input, 1, CarryBucketKind.Gem, carry );
 			InputActionSlotPressed( input, 2, CarryBucketKind.Artifact, carry );
-			InputActionSlotPressed( input, 3, CarryBucketKind.General, carry );
-			InputActionSlotPressed( input, 4, CarryBucketKind.Junk, carry );
+			InputActionSlotPressed( input, 3, CarryBucketKind.Resource, carry );
+			InputActionSlotPressed( input, 4, CarryBucketKind.General, carry );
+			InputActionSlotPressed( input, 5, CarryBucketKind.Junk, carry );
 		}
 
 		if ( input.CyclePouch != null && input.CyclePouch.WasPressedThisFrame() )
@@ -516,11 +523,27 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 
 		DefinitionScratch.Clear();
+		stack.CopySlotDefinitions( DefinitionScratch );
+		if ( DefinitionScratch.Count == 0 )
+			return;
+
+		int takeCount = carry.CountAffordableDefinitionSuffix( DefinitionScratch, 0 );
+		TreasureDefinition probe = DefinitionScratch[ DefinitionScratch.Count - 1 ];
+		DefinitionScratch.Clear();
+		if ( takeCount <= 0 )
+		{
+			if ( probe != null )
+				carry.NotifyPouchFull( probe );
+			else
+				carry.NotifyPouchFull( CarryBucketKind.Coin );
+			return;
+		}
+
 		Vector3 startPos = stack.ContactPosition;
 		Quaternion startRot = stack.transform.rotation;
 		float seed = stack.VariationSeed;
 
-		if ( !stack.TryConsumeAllDefinitions( DefinitionScratch ) || DefinitionScratch.Count == 0 )
+		if ( stack.TryConsumeTopDefinitions( DefinitionScratch, takeCount ) <= 0 || DefinitionScratch.Count == 0 )
 		{
 			DefinitionScratch.Clear();
 			return;
@@ -540,7 +563,27 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 
 		ItemScratch.Clear();
-		if ( !stack.TryConsumeAllItems( ItemScratch ) || ItemScratch.Count == 0 )
+		if ( !stack.TryCopyItemsBottomToTop( ItemScratch ) || ItemScratch.Count == 0 )
+		{
+			ItemScratch.Clear();
+			return;
+		}
+
+		int takeCount = carry.CountAffordableSuffix( ItemScratch );
+		TreasureDefinition probe = ItemScratch[ ItemScratch.Count - 1 ] != null
+			? ItemScratch[ ItemScratch.Count - 1 ].Definition
+			: null;
+		ItemScratch.Clear();
+		if ( takeCount <= 0 )
+		{
+			if ( probe != null )
+				carry.NotifyPouchFull( probe );
+			else
+				carry.NotifyPouchFull( CarryBucketKind.Artifact );
+			return;
+		}
+
+		if ( stack.TryConsumeTopItems( ItemScratch, takeCount ) <= 0 || ItemScratch.Count == 0 )
 		{
 			ItemScratch.Clear();
 			return;
@@ -564,12 +607,27 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( carry == null || display == null )
 			return;
 
+		int slotCount = display.GetSlotCount( slotIndex );
+		if ( slotCount <= 0 )
+			return;
+
+		bool goldBarDisplay = display is GoldBarDisplayTableInteractable;
+		CarryBucketKind bucket = goldBarDisplay ? CarryBucketKind.Artifact : CarryBucketKind.Coin;
+		int room = carry.GetRemainingSlots( bucket );
+		if ( room <= 0 )
+		{
+			carry.NotifyPouchFull( bucket );
+			return;
+		}
+
+		int takeCount = Mathf.Min( room, slotCount );
 		DefinitionScratch.Clear();
 		if ( !display.TryConsumeSlotDefinitions(
 			slotIndex,
 			DefinitionScratch,
 			out Vector3 startPos,
-			out Quaternion startRot ) || DefinitionScratch.Count == 0 )
+			out Quaternion startRot,
+			takeCount ) || DefinitionScratch.Count == 0 )
 		{
 			DefinitionScratch.Clear();
 			return;
@@ -580,9 +638,22 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			taken.Add( DefinitionScratch[ i ] );
 		DefinitionScratch.Clear();
 
-		if ( display is GoldBarDisplayTableInteractable || ( taken[ 0 ] != null && GoldBarStack.IsStackable( taken[ 0 ] ) ) )
+		if ( goldBarDisplay || ( taken[ 0 ] != null && GoldBarStack.IsStackable( taken[ 0 ] ) ) )
 		{
-			carry.TryAbsorbDefinitionsAtHeldBottom( taken, CarryBucketKind.Artifact );
+			ItemScratch.Clear();
+			for ( int i = 0; i < taken.Count; i++ )
+			{
+				TreasureDefinition def = taken[ i ];
+				if ( def == null )
+					continue;
+				TreasureItem spawned = TreasureItemFactory.SpawnSync( def, startPos, startRot );
+				if ( spawned != null )
+					ItemScratch.Add( spawned );
+			}
+
+			if ( ItemScratch.Count > 0 )
+				carry.TryAbsorbAtHeldBottom( ItemScratch );
+			ItemScratch.Clear();
 			return;
 		}
 
@@ -603,14 +674,23 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		int count = taken.Count;
 		CoinStackInteractSfx.PlayStackPickup( startPos );
 
-		Transform holdRoot = carry.GetHoldRoot( CarryBucketKind.Coin );
 		CarryDefinition carryDef = null;
 		carryDef = RuntimeDefinition.Resolve( ref carryDef );
-		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
-		duration = PlayerDigPickupSpeed.ScaleDuration( duration );
-		Vector3 endLocal = carryDef != null ? carryDef.heldStackOffset : Vector3.zero;
+		bool crossPouch = carry.SelectedBucket != CarryBucketKind.Coin;
+		Transform holdRoot = carry.GetHoldRoot( CarryBucketKind.Coin );
+		Transform endParent = crossPouch ? carry.CameraLookTransform : holdRoot;
+		Vector3 endLocal = crossPouch
+			? ( carryDef != null ? carryDef.crossPouchPickupOffset : new Vector3( 0f, -0.05f, 0.55f ) )
+			: ( carryDef != null ? carryDef.heldStackOffset : Vector3.zero );
 
-		if ( holdRoot == null )
+		float duration;
+		if ( crossPouch && carryDef != null && carryDef.crossPouchPickupDuration >= 0.05f )
+			duration = carryDef.crossPouchPickupDuration;
+		else
+			duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
+		duration = PlayerDigPickupSpeed.ScaleDuration( duration );
+
+		if ( endParent == null )
 		{
 			carry.TryAbsorbDefinitionsAtHeldBottom( taken, CarryBucketKind.Coin );
 			CoinStackInteractSfx.PlayStackHandLand( first, count, startPos );
@@ -622,7 +702,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			startPos,
 			startRot,
 			variationSeed,
-			holdRoot,
+			endParent,
 			endLocal,
 			duration,
 			() =>
@@ -631,7 +711,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 					return;
 
 				carry.TryAbsorbDefinitionsAtHeldBottom( taken, CarryBucketKind.Coin );
-				Vector3 handPos = holdRoot.TransformPoint( endLocal );
+				Vector3 handPos = endParent.TransformPoint( endLocal );
 				CoinStackInteractSfx.PlayStackHandLand( first, count, handPos );
 			} );
 	}
@@ -649,6 +729,20 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			if ( gem != null )
 				ItemScratch.Add( gem );
 		}
+
+		int takeCount = carry.CountAffordablePrefix( ItemScratch );
+		if ( takeCount <= 0 )
+		{
+			TreasureDefinition probe = ItemScratch.Count > 0 && ItemScratch[ 0 ] != null
+				? ItemScratch[ 0 ].Definition
+				: null;
+			carry.NotifyPouchFull( probe );
+			ItemScratch.Clear();
+			return;
+		}
+
+		if ( takeCount < ItemScratch.Count )
+			ItemScratch.RemoveRange( takeCount, ItemScratch.Count - takeCount );
 
 		// Remove from pyramid first so absorb owns them cleanly.
 		for ( int i = 0; i < ItemScratch.Count; i++ )

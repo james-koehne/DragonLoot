@@ -41,7 +41,7 @@ public abstract class StackInteractable : InteractableBase
 		if ( !base.CanInteract( player ) || remainingCount <= 0 )
 			return false;
 
-		return player != null && player.CanReceiveInteractable( this );
+		return player != null && player.Carry != null;
 	}
 
 	public override void Interact( PlayerController player )

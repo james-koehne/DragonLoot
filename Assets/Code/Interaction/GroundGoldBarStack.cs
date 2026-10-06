@@ -548,12 +548,7 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 		if ( !IsAvailable || player == null || _taking || HasInFlight || Count <= 0 )
 			return false;
 
-		PlayerCarry carry = player.Carry;
-		if ( carry == null )
-			return false;
-
-		TreasureItem top = _items[ _items.Count - 1 ];
-		return top != null && top.Definition != null && carry.CanAdd( top.Definition );
+		return player.Carry != null;
 	}
 
 	public override void Interact( PlayerController player )
@@ -575,7 +570,10 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 
 		PlayerCarry carry = player.Carry;
 		if ( !carry.CanAdd( top.Definition ) )
+		{
+			carry.NotifyPouchFull( top.Definition );
 			return false;
+		}
 
 		_taking = true;
 		_items.RemoveAt( _items.Count - 1 );
@@ -598,6 +596,53 @@ public class GroundGoldBarStack : InteractableBase, ITreasureOwner, ITreasurePla
 		else
 			PlayRemoveFeedback();
 		return true;
+	}
+
+	public bool TryCopyItemsBottomToTop( List<TreasureItem> into )
+	{
+		if ( into == null || _destroying )
+			return false;
+
+		for ( int i = 0; i < _items.Count; i++ )
+		{
+			if ( _items[ i ] != null )
+				into.Add( _items[ i ] );
+		}
+
+		return into.Count > 0;
+	}
+
+	public int TryConsumeTopItems( List<TreasureItem> into, int maxCount )
+	{
+		if ( into == null || maxCount <= 0 || _destroying )
+			return 0;
+
+		int taken = 0;
+		while ( taken < maxCount && _items.Count > 0 )
+		{
+			int topIndex = _items.Count - 1;
+			TreasureItem member = _items[ topIndex ];
+			_items.RemoveAt( topIndex );
+			if ( member == null )
+				continue;
+
+			member.DetachOwnerSilently();
+			member.transform.SetParent( null, true );
+			into.Insert( 0, member );
+			taken++;
+		}
+
+		if ( taken == 0 )
+			return 0;
+
+		RestackSettled();
+		RefreshCollider();
+		if ( Count <= 0 && !HasInFlight )
+			DestroyIfEmpty();
+		else
+			PlayRemoveFeedback();
+
+		return taken;
 	}
 
 	public bool TryConsumeAllItems( List<TreasureItem> into )

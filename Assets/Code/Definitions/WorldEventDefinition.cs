@@ -23,7 +23,8 @@ public enum WorldEventActionType
 	LanternRevealSweep = 4,
 	CinematicPresentation = 5,
 	BrakePlayerMovement = 6,
-	IgniteLanterns = 7
+	IgniteLanterns = 7,
+	CinematicCallout = 8
 }
 
 [Serializable]
@@ -84,7 +85,7 @@ public class WorldEventAction
 	[Tooltip( "When true, delayBefore only delays this action; later actions continue immediately without waiting for the delay." )]
 	public bool onlyDelayThisAction;
 
-	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; cinematic waits until presentation ends; brake waits brake duration; IgniteLanterns waits fade duration." )]
+	[Tooltip( "When true, later actions wait until this one finishes. Dialogue waits until lines complete; audio waits clip length; cinematic waits until presentation ends; callout waits until dialogue finishes and bars restore; brake waits brake duration; IgniteLanterns waits fade duration." )]
 	public bool waitUntilFinished;
 
 	[Tooltip( "Dialogue lines when type is Dialogue." )]
@@ -154,7 +155,7 @@ public class WorldEventAction
 	[Min( 0f )]
 	public float lanternIgniteFadeDuration;
 
-	[Tooltip( "Presentation id for CinematicPresentation. Matches CinematicPresentationController. Timing and cues live on the controller." )]
+	[Tooltip( "Presentation id for CinematicPresentation (spline tour) or CinematicCallout (letterbox / FOV / look-at). Matches the scene controller id." )]
 	public string cinematicPresentationId;
 
 	[Tooltip( "Seconds to interpolate planar velocity to zero when type is BrakePlayerMovement. 0 = instant stop." )]

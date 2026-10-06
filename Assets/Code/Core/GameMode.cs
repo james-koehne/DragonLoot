@@ -147,6 +147,12 @@ public class GameMode : MonoBehaviour, IGameMode
 				contextUi = interfacePrefab.AddComponent<InteractionContextUI>();
 			contextUi.Setup();
 
+			BuildableHoverUI buildableHover = ResolveUniqueInterfaceChild<BuildableHoverUI>( interfacePrefab, "BuildableHoverPopup" );
+			if ( buildableHover != null )
+				buildableHover.Setup();
+			else
+				Debug.LogWarning( "GameMode: BuildableHoverUI missing on Interface prefab." );
+
 			InteractionProgressRingUI progressRing = interfacePrefab.GetComponentInChildren<InteractionProgressRingUI>( true );
 			if ( progressRing != null )
 				progressRing.Setup();
@@ -171,14 +177,11 @@ public class GameMode : MonoBehaviour, IGameMode
 			if ( pauseMenu != null )
 				pauseMenu.Setup();
 
-			MapUI mapUi = interfacePrefab.GetComponentInChildren<MapUI>( true );
-			if ( mapUi == null )
-			{
-				GameObject mapGo = new GameObject( "Map", typeof( RectTransform ), typeof( CanvasGroup ), typeof( MapUI ) );
-				mapGo.transform.SetParent( interfacePrefab.transform, false );
-				mapUi = mapGo.GetComponent<MapUI>();
-			}
-			mapUi.Setup();
+			MapUI mapUi = ResolveUniqueInterfaceChild<MapUI>( interfacePrefab, "Map" );
+			if ( mapUi != null )
+				mapUi.Setup();
+			else
+				Debug.LogWarning( "GameMode: MapUI missing on Interface prefab." );
 
 			PouchSummaryUI pouchSummary = interfacePrefab.GetComponentInChildren<PouchSummaryUI>( true );
 			if ( pouchSummary != null )
@@ -198,6 +201,15 @@ public class GameMode : MonoBehaviour, IGameMode
 					pouchBar = barGo.AddComponent<PouchBarUI>();
 			}
 			pouchBar.Setup();
+
+			PouchFullHintUI pouchFullHint = interfacePrefab.GetComponentInChildren<PouchFullHintUI>( true );
+			if ( pouchFullHint == null )
+			{
+				GameObject hintGo = new GameObject( "PouchFullHint", typeof( RectTransform ), typeof( CanvasGroup ), typeof( PouchFullHintUI ) );
+				hintGo.transform.SetParent( interfacePrefab.transform, false );
+				pouchFullHint = hintGo.GetComponent<PouchFullHintUI>();
+			}
+			pouchFullHint.Setup();
 
 			TutorialPopupUI tutorialPopup = interfacePrefab.GetComponentInChildren<TutorialPopupUI>( true );
 			if ( tutorialPopup != null )
@@ -241,6 +253,37 @@ public class GameMode : MonoBehaviour, IGameMode
 			gameObject.AddComponent<DebugOverlay>();
 
 		loaded = true;
+	}
+
+	/// <summary>
+	/// Finds a unique named HUD child on Interface. Never creates a second sibling when one already exists.
+	/// Extra duplicates (if any) are destroyed so play mode cannot keep stacking them.
+	/// </summary>
+	static T ResolveUniqueInterfaceChild<T>( GameObject interfaceRoot, string childName ) where T : Component
+	{
+		if ( interfaceRoot == null || string.IsNullOrEmpty( childName ) )
+			return null;
+
+		Transform keep = null;
+		for ( int i = 0; i < interfaceRoot.transform.childCount; i++ )
+		{
+			Transform child = interfaceRoot.transform.GetChild( i );
+			if ( child == null || child.name != childName )
+				continue;
+			if ( keep == null )
+				keep = child;
+			else
+				Destroy( child.gameObject );
+		}
+
+		if ( keep != null )
+		{
+			T onNamed = keep.GetComponent<T>();
+			if ( onNamed != null )
+				return onNamed;
+		}
+
+		return interfaceRoot.GetComponentInChildren<T>( true );
 	}
 
 	void WireGameController( GameController game )

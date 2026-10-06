@@ -39,3 +39,9 @@ MonoBehaviour:
   unloadScatterRadius: 0.35
   hopHeight: 2.25
   hopDuration: 0.45
+  hopStaggerDelay: 0.06
+  hopHeightPerExtraCar: 0.12
+  hopBlockerScale: 0.25
+  hopChainMaxGap: 2.5
+  hopApproachLead: 2.75
+  hopLandingClearance: 2.4

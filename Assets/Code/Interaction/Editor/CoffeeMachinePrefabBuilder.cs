@@ -279,7 +279,6 @@ public static class CoffeeMachinePrefabBuilder
 		existing.displayName = "Coffee";
 		existing.category = TreasureCategory.General;
 		existing.value = 1;
-		existing.weight = 1;
 		existing.exclusiveCarry = true;
 		existing.cannotThrow = false;
 		existing.suppressDiscoveryPopup = true;

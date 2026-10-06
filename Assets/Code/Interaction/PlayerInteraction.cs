@@ -55,6 +55,7 @@ public class PlayerInteraction : MonoBehaviour
 	bool _primaryNonCoinCharging;
 	bool _primaryHoldBlocked;
 	int _nonCoinPickupKey;
+	TreasureItem _frozenPickupItem;
 	HoverOutlineVisualSettings _cachedPickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 
 	public IInteractable Current => _current;
@@ -1038,6 +1039,9 @@ public class PlayerInteraction : MonoBehaviour
 			&& InteractableBase.AcceptsPrimary( _current )
 			&& _current.CanInteract( _player );
 		bool nonCoinPickup = canPickup && IsNonCoinPickup( _current );
+		// Player-placed / storage loot repeats like coins; dig piles still use a one-shot charge.
+		bool continuousPickup = canPickup && ( !nonCoinPickup || IsContinuousHoldPickup( _current ) );
+		bool chargedNonCoin = canPickup && nonCoinPickup && !continuousPickup;
 
 		if ( input.Interact.WasPressedThisFrame() )
 		{
@@ -1050,9 +1054,20 @@ public class PlayerInteraction : MonoBehaviour
 				return;
 			}
 
-			if ( nonCoinPickup )
-				UpdateNonCoinPickupChargeState( true );
-			else if ( canPickup )
+			if ( chargedNonCoin )
+			{
+				if ( ResolveNonCoinPickupHoldDelay( _current ) <= 0f )
+				{
+					TryPickupInteractWithFocus();
+					_primaryRepeatTimer = 0f;
+					_primaryPastInitialDelay = false;
+					_primaryHoldBlocked = true;
+					ClearNonCoinPickupCharge();
+				}
+				else
+					UpdateNonCoinPickupChargeState( true );
+			}
+			else if ( continuousPickup )
 			{
 				TryPickupInteractWithFocus();
 				_primaryRepeatTimer = 0f;
@@ -1075,7 +1090,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _primaryHoldBlocked )
 			return;
 
-		if ( nonCoinPickup )
+		if ( chargedNonCoin )
 		{
 			UpdateNonCoinPickupChargeState( true );
 			if ( !_primaryNonCoinCharging )
@@ -1113,7 +1128,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _current != null )
 			_previousPrimaryFocus = _current;
 
-		bool repeatPickup = InteractableBase.IsPickupInteract( _current );
+		bool repeatPickup = continuousPickup;
 		bool repeatPrimaryHold = InteractableBase.AcceptsPrimary( _current );
 		if ( !repeatPickup && !repeatPrimaryHold )
 			return;
@@ -1134,6 +1149,21 @@ public class PlayerInteraction : MonoBehaviour
 			TryInteractWithFocus();
 	}
 
+	/// <summary>
+	/// Hold-LMB repeats for coins and for loot the player previously placed (instant-eligible /
+	/// ground stacks). Dig-pile non-coins still use a one-shot charge.
+	/// </summary>
+	bool IsContinuousHoldPickup( IInteractable focus )
+	{
+		if ( focus is GroundCoinStack || focus is GroundGoldBarStack || focus is StackInteractable )
+			return true;
+
+		if ( !TryResolveFocusedTreasureItem( focus, out TreasureItem item ) || item == null )
+			return false;
+
+		return item.IsInstantPickupEligible;
+	}
+
 	void UpdateNonCoinPickupChargeState( bool nonCoinHold )
 	{
 		if ( !nonCoinHold )
@@ -1150,6 +1180,10 @@ public class PlayerInteraction : MonoBehaviour
 		_nonCoinPickupKey = pickupKey;
 		_activeNonCoinPickupHoldDelay = ResolveNonCoinPickupHoldDelay( _current );
 		_primaryRepeatTimer = 0f;
+		if ( _activeNonCoinPickupHoldDelay > 0f )
+			TryFreezeFocusedPickupItem();
+		else
+			ClearFrozenPickupItem();
 	}
 
 	void ClearNonCoinPickupCharge()
@@ -1157,6 +1191,65 @@ public class PlayerInteraction : MonoBehaviour
 		_primaryNonCoinCharging = false;
 		_nonCoinPickupKey = 0;
 		_activeNonCoinPickupHoldDelay = 0f;
+		ClearFrozenPickupItem();
+	}
+
+	void TryFreezeFocusedPickupItem()
+	{
+		if ( !TryResolveFocusedTreasureItem( _current, out TreasureItem item ) || item == null )
+		{
+			ClearFrozenPickupItem();
+			return;
+		}
+
+		if ( item.IsInFlight || !item.IsWorldLoose )
+		{
+			ClearFrozenPickupItem();
+			return;
+		}
+
+		if ( _frozenPickupItem == item )
+			return;
+
+		item.SettlePhysicsInPlace();
+		_frozenPickupItem = item;
+	}
+
+	void ClearFrozenPickupItem()
+	{
+		_frozenPickupItem = null;
+	}
+
+	bool TryResolveFocusedTreasureItem( IInteractable focus, out TreasureItem item )
+	{
+		item = null;
+		if ( focus == null )
+			return false;
+
+		TreasureItemInteractable itemInteractable = focus as TreasureItemInteractable;
+		if ( itemInteractable != null )
+		{
+			item = itemInteractable.Item;
+			return item != null;
+		}
+
+		ChestInteractable chest = focus as ChestInteractable;
+		if ( chest != null )
+		{
+			item = chest.Item;
+			return item != null;
+		}
+
+		PickupInteractable pickup = focus as PickupInteractable;
+		if ( pickup != null )
+		{
+			item = pickup.GetComponent<TreasureItem>();
+			if ( item == null )
+				item = pickup.GetComponentInChildren<TreasureItem>();
+			return item != null;
+		}
+
+		return false;
 	}
 
 	void TryContextualRepeatInput( GameInput input )
@@ -1499,6 +1592,15 @@ public class PlayerInteraction : MonoBehaviour
 
 	float ResolveNonCoinPickupHoldDelay( IInteractable focus )
 	{
+		if ( TryResolveFocusedTreasureItem( focus, out TreasureItem focusedItem )
+			&& focusedItem != null
+			&& focusedItem.IsInstantPickupEligible )
+			return 0f;
+
+		// Definition-based stacks / gold-bar towers are storage — no dig hold.
+		if ( focus is StackInteractable || focus is GroundGoldBarStack )
+			return 0f;
+
 		if ( !TryResolveNonCoinPickup( focus, out TreasureDefinition definition, out _ ) )
 			return 0f;
 

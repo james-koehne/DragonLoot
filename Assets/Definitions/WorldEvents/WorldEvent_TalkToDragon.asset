@@ -1,0 +1,120 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01449b8dcbcb86042a2df930c3e785bd, type: 3}
+  m_Name: WorldEvent_TalkToDragon
+  m_EditorClassIdentifier: Assembly-CSharp::WorldEventDefinition
+  id: talk_to_dragon
+  tags:
+  - intro
+  - dragon
+  conditions:
+  - type: 6
+    targetId: main_cave_entrance
+    requiredTreasure: {fileID: 0}
+    filterByCategory: 0
+    requiredCategory: 0
+    excludeGoldBars: 0
+    requireGoldBars: 0
+    delaySeconds: 0
+  - type: 1
+    targetId: volume_talk_to_dragon
+    requiredTreasure: {fileID: 0}
+    filterByCategory: 0
+    requiredCategory: 0
+    excludeGoldBars: 0
+    requireGoldBars: 0
+    delaySeconds: 0
+  actions:
+  - type: 6
+    delayBefore: 0
+    onlyDelayThisAction: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    spawnAtPlayer: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternGroupId: 
+    lanternIgniteFadeDuration: 0
+    cinematicPresentationId: 
+    playerBrakeDuration: 0.4
+  - type: 8
+    delayBefore: 0
+    onlyDelayThisAction: 0
+    waitUntilFinished: 1
+    dialogue:
+    - speaker: Dragon
+      text: Ah. You've found me at last, little Hoardkeeper.
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: I've spent a lifetime collecting this treasure. I'm ready to retire.
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: "Unfortunately, the hoard has become\u2026 completely disorganized."
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: I need someone to take care of it. That someone is you.
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: 'Your first task: get the Workshop operational. Clear the entrance, then
+        clear out the mess inside.'
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfxVol: 0.5
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    spawnAtPlayer: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternGroupId: 
+    lanternIgniteFadeDuration: 0
+    cinematicPresentationId: talk_to_dragon_callout
+    playerBrakeDuration: 1
+  sessionOnly: 0
+  manualOnly: 0

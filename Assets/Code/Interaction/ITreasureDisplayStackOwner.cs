@@ -37,7 +37,8 @@ public interface ITreasureDisplayStackOwner : ITreasureOwner
 		int slotIndex,
 		List<TreasureDefinition> into,
 		out Vector3 contact,
-		out Quaternion rotation );
+		out Quaternion rotation,
+		int maxCount );
 
 	/// <summary>
 	/// How many more stackable coins this slot can accept (0 if invalid / non-coin / full).

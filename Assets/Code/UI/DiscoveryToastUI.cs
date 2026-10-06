@@ -249,6 +249,7 @@ public class DiscoveryToastUI : MonoBehaviour
 				return gemPouchSprite;
 			case CarryBucketKind.Artifact:
 				return artifactPouchSprite;
+			case CarryBucketKind.Resource:
 			case CarryBucketKind.General:
 			case CarryBucketKind.Junk:
 				return generalPouchSprite;

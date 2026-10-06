@@ -41,9 +41,12 @@ public class CinematicCue
 }
 
 /// <summary>
-/// Intro ledge cinematic: detach camera, lag-walk the player to a ledge, tour an open camera
+/// Cinematic presentation: detach camera, lag-walk the player to a pose, tour an open camera
 /// spline (look path ahead), then return to the player while looking at the dragon.
 /// Letterbox, FOV punch, input lock, HUD hide, timed cues, and <see cref="CinematicPresentationEndedEvent"/> remain.
+///
+/// Used by intro ledge (<see cref="IntroLedgePresentationId"/>).
+/// For dialogue callouts without a tour, use <see cref="CinematicCalloutController"/>.
 ///
 /// Scene setup (manual in Editor):
 /// 1. Add <see cref="CinematicPresentationController"/> to the level.
@@ -83,8 +86,12 @@ public class CinematicPresentationController : MonoBehaviour
 	Transform _gnomeLedgeTarget;
 
 	[SerializeField]
-	[Tooltip( "Look-at target while returning to the player after the tour (e.g. dragon)." )]
+	[Tooltip( "Look-at target while returning to the player after the tour (e.g. dragon head aim point)." )]
 	Transform _returnLookTarget;
+
+	[SerializeField]
+	[Tooltip( "Dragon that looks at the touring camera during the spline tour." )]
+	DragonController _dragon;
 
 	[Header( "UI Envelope" )]
 	[SerializeField]
@@ -159,7 +166,26 @@ public class CinematicPresentationController : MonoBehaviour
 	[SerializeField]
 	[Min( 0f )]
 	[Tooltip( "Seconds to move from path end back to CameraMount while looking at the return target." )]
-	float _reattachDuration = 1.2f;
+	float _reattachDuration = 2.6f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "First seconds of reattach stay especially slow before ramping to full return speed." )]
+	float _reattachSlowStartDuration = 1f;
+
+	[SerializeField]
+	[Range( 0f, 0.5f )]
+	[Tooltip( "Fraction of total travel completed during the slow-start window." )]
+	float _reattachSlowStartTravel = 0.08f;
+
+	[SerializeField]
+	[Tooltip( "Normalized time (0-1) → Hermite parameter (0-1) after the slow-start window." )]
+	AnimationCurve _reattachProgressCurve = AnimationCurve.Linear( 0f, 0f, 1f, 1f );
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Peak camera speed (m/s) when arriving at the player during reattach. 0 = derive from distance / duration." )]
+	float _reattachPeakSpeed;
 
 	[Header( "Lantern Reveal" )]
 	[SerializeField]
@@ -198,6 +224,8 @@ public class CinematicPresentationController : MonoBehaviour
 	CinematicPresentationPhase _phase = CinematicPresentationPhase.Idle;
 	float _elapsed;
 	bool[] _cueFired;
+	DragonController _tourLookDragon;
+	bool _dragonTourLookActive;
 
 #if UNITY_EDITOR
 	[RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.SubsystemRegistration )]
@@ -216,6 +244,8 @@ public class CinematicPresentationController : MonoBehaviour
 	public Transform GnomeLedgeTarget => _gnomeLedgeTarget;
 
 	public Transform ReturnLookTarget => _returnLookTarget;
+
+	public DragonController Dragon => _dragon;
 
 	public float EnvelopeRise => _envelopeRise;
 
@@ -728,6 +758,8 @@ public class CinematicPresentationController : MonoBehaviour
 		CrosshairUI crosshair,
 		float baseFov )
 	{
+		BeginDragonTourLook( ResolveTourCameraLookTarget( cameraRig, firstPerson ) );
+
 		Vector3 enterStartPos = cameraRig.transform.position;
 		Quaternion enterStartRot = ResolveCameraWorldRotation( cameraRig, firstPerson );
 
@@ -735,7 +767,10 @@ public class CinematicPresentationController : MonoBehaviour
 		Vector3 splineStartTangent;
 		Vector3 splineStartUp;
 		if ( !CinematicSplineLook.TryEvaluate( _cameraPath, 0f, out splineStartPos, out splineStartTangent, out splineStartUp ) )
+		{
+			ClearDragonTourLook();
 			yield break;
+		}
 
 		Vector3 lookStart;
 		if ( !TryResolveLookPoint( splineStartPos, ResolveLookAheadT( 0f ), out lookStart ) )
@@ -828,6 +863,63 @@ public class CinematicPresentationController : MonoBehaviour
 				endLook = endPos + cameraRig.transform.forward;
 			ApplyCameraPose( cameraRig, firstPerson, endPos, CinematicSplineLook.LookRotation( endPos, endLook, Vector3.up ) );
 		}
+
+		ClearDragonTourLook();
+	}
+
+	static Transform ResolveTourCameraLookTarget( CameraController cameraRig, FirstPersonCameraController firstPerson )
+	{
+		if ( firstPerson != null && firstPerson.Camera != null )
+			return firstPerson.Camera.transform;
+		if ( cameraRig != null )
+			return cameraRig.transform;
+		return null;
+	}
+
+	void BeginDragonTourLook( Transform cameraTransform )
+	{
+		ClearDragonTourLook();
+		if ( cameraTransform == null )
+			return;
+
+		DragonController dragon = ResolveTourDragon();
+		if ( dragon == null )
+			return;
+
+		dragon.SetLookTarget( cameraTransform );
+		_tourLookDragon = dragon;
+		_dragonTourLookActive = true;
+	}
+
+	void ClearDragonTourLook()
+	{
+		if ( !_dragonTourLookActive )
+			return;
+
+		if ( _tourLookDragon != null )
+			_tourLookDragon.ClearLookTarget();
+
+		_tourLookDragon = null;
+		_dragonTourLookActive = false;
+	}
+
+	DragonController ResolveTourDragon()
+	{
+		if ( _dragon != null )
+			return _dragon;
+
+		if ( _returnLookTarget == null )
+			return null;
+
+		DragonController onSelf = _returnLookTarget.GetComponent<DragonController>();
+		if ( onSelf != null )
+			return onSelf;
+
+		DragonController inParent = _returnLookTarget.GetComponentInParent<DragonController>();
+		if ( inParent != null )
+			return inParent;
+
+		return _returnLookTarget.GetComponentInChildren<DragonController>( true );
 	}
 
 	float EstimateTourSpeedAlongPath( float normalizedTime, float pathLength, float tourDuration )
@@ -867,8 +959,20 @@ public class CinematicPresentationController : MonoBehaviour
 			yield break;
 
 		Vector3 startPos = cameraRig.transform.position;
+		Quaternion startRot = ResolveCameraWorldRotation( cameraRig, firstPerson );
+		Vector3 endPos = mount.position;
 		float duration = Mathf.Max( 0f, _reattachDuration );
 		float localElapsed = 0f;
+
+		Vector3 toEnd = endPos - startPos;
+		float dist = toEnd.magnitude;
+		Vector3 endDir = dist > 0.0001f ? toEnd / dist : cameraRig.transform.forward;
+		float peakSpeed = _reattachPeakSpeed > 0.0001f
+			? _reattachPeakSpeed
+			: dist / Mathf.Max( 0.1f, duration );
+		// Near-zero start tangent keeps the first beat crawling; end tangent hits full return speed.
+		Vector3 m0 = endDir * ( peakSpeed * duration * 0.01f );
+		Vector3 m1 = endDir * ( peakSpeed * duration );
 
 		while ( localElapsed < duration )
 		{
@@ -877,10 +981,19 @@ public class CinematicPresentationController : MonoBehaviour
 			_elapsed += dt;
 			TickCues();
 
-			Vector3 targetPos = mount.position;
-			float w = duration > 0.0001f ? Mathf.SmoothStep( 0f, 1f, Mathf.Clamp01( localElapsed / duration ) ) : 1f;
-			Vector3 pos = Vector3.Lerp( startPos, targetPos, w );
-			Quaternion rot = ResolveReturnLookRotation( pos, mount );
+			endPos = mount.position;
+			toEnd = endPos - startPos;
+			dist = toEnd.magnitude;
+			endDir = dist > 0.0001f ? toEnd / dist : endDir;
+			peakSpeed = _reattachPeakSpeed > 0.0001f
+				? _reattachPeakSpeed
+				: dist / Mathf.Max( 0.1f, duration );
+			m1 = endDir * ( peakSpeed * duration );
+
+			float w = EvaluateReattachTravelWeight( localElapsed, duration );
+			Vector3 pos = EvaluateHermite( startPos, m0, endPos, m1, w );
+			Quaternion desiredRot = ResolveReturnLookRotation( pos, mount );
+			Quaternion rot = Quaternion.Slerp( startRot, desiredRot, w );
 			ApplyCameraPose( cameraRig, firstPerson, pos, rot );
 			ApplyUiEnvelope( fovChannel, letterboxChannel, letterbox, firstPerson, crosshair, baseFov, _elapsed );
 			yield return null;
@@ -901,6 +1014,37 @@ public class CinematicPresentationController : MonoBehaviour
 		}
 
 		ReparentCameraToMount( cameraRig, player );
+	}
+
+	float EvaluateReattachTravelWeight( float localElapsed, float duration )
+	{
+		if ( duration <= 0.0001f )
+			return 1f;
+
+		float slowWindow = Mathf.Clamp( _reattachSlowStartDuration, 0f, duration );
+		float slowTravel = Mathf.Clamp01( _reattachSlowStartTravel );
+
+		if ( slowWindow > 0.0001f && localElapsed <= slowWindow )
+		{
+			float u = Mathf.Clamp01( localElapsed / slowWindow );
+			// Quadratic ease inside the crawl window so the first second barely moves.
+			return slowTravel * ( u * u );
+		}
+
+		float remainElapsed = Mathf.Max( 0f, localElapsed - slowWindow );
+		float remainDuration = Mathf.Max( 0.0001f, duration - slowWindow );
+		float remainT = Mathf.Clamp01( remainElapsed / remainDuration );
+		float easedRemain = EvaluateReattachProgress( remainT );
+		return Mathf.Lerp( slowTravel, 1f, easedRemain );
+	}
+
+	float EvaluateReattachProgress( float normalizedTime )
+	{
+		float t = Mathf.Clamp01( normalizedTime );
+		if ( _reattachProgressCurve != null && _reattachProgressCurve.keys != null && _reattachProgressCurve.keys.Length > 0 )
+			return Mathf.Clamp01( _reattachProgressCurve.Evaluate( t ) );
+
+		return t * t;
 	}
 
 	Quaternion ResolveReturnLookRotation( Vector3 cameraPosition, Transform mount )
@@ -1062,6 +1206,8 @@ public class CinematicPresentationController : MonoBehaviour
 
 	void ResetPresentationState()
 	{
+		ClearDragonTourLook();
+
 		PlayerController player = ResolvePlayer();
 		if ( _placePlayerAtLedge && player != null )
 			player.SnapToWorldPose( _playerEndPos, _playerEndRot );

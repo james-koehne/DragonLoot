@@ -1013,7 +1013,11 @@ public class PlayerPlacement : MonoBehaviour
 			? interaction.GetSoftReleaseVelocity()
 			: interaction.GetReleaseVelocity( item );
 
-		if ( !carry.TryRemoveBottomCluster( out System.Collections.Generic.List<TreasureItem> cluster )
+		// Always leave from the right-hand ActiveRoot, not mid-pickup / refill pose.
+		Transform hand = carry.ActiveRoot;
+		Vector3 throwOrigin = hand != null ? hand.position : item.transform.position;
+
+		if ( !carry.TryRemoveBottomCluster( out System.Collections.Generic.List<TreasureItem> cluster, snapToHand: true )
 			|| cluster == null
 			|| cluster.Count == 0 )
 			return false;
@@ -1035,7 +1039,10 @@ public class PlayerPlacement : MonoBehaviour
 			if ( member == null )
 				continue;
 
-			Vector3 start = member.transform.position;
+			// Snap spam-interrupted hold motion so prediction + flight share the hand origin.
+			// Keep the snapped held rotation from consume; only force the hand position.
+			member.transform.position = throwOrigin;
+			Vector3 start = throwOrigin;
 			Vector3 memberVelocity = throwVelocity;
 			ThrowFlightPath path = new ThrowFlightPath();
 			paths[ i ] = path;

@@ -105,6 +105,10 @@ public class WorldEventDefinitionEditor : Editor
 				return "IgniteLanterns " + ( string.IsNullOrEmpty( action.lanternGroupId ) ? "(no group)" : action.lanternGroupId );
 			case WorldEventActionType.CinematicPresentation:
 				return "Cinematic " + ( string.IsNullOrEmpty( action.cinematicPresentationId ) ? "(no id)" : action.cinematicPresentationId );
+			case WorldEventActionType.CinematicCallout:
+				int calloutLines = action.dialogue != null ? action.dialogue.Length : 0;
+				return "Callout " + ( string.IsNullOrEmpty( action.cinematicPresentationId ) ? "(no id)" : action.cinematicPresentationId ) +
+				       " (" + calloutLines + " line" + ( calloutLines == 1 ? "" : "s" ) + ")";
 			case WorldEventActionType.BrakePlayerMovement:
 				return "Brake " + action.playerBrakeDuration.ToString( "0.##" ) + "s";
 			default:
@@ -192,6 +196,10 @@ public class WorldEventActionDrawer : PropertyDrawer
 				break;
 			case WorldEventActionType.CinematicPresentation:
 				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
+				break;
+			case WorldEventActionType.CinematicCallout:
+				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
+				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "dialogue" ), true ) + 2f;
 				break;
 			case WorldEventActionType.BrakePlayerMovement:
 				height += line;
@@ -281,6 +289,17 @@ public class WorldEventActionDrawer : PropertyDrawer
 					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
 					EditorGUI.HelpBox( help,
 						"Phases and cues live on CinematicPresentationController. Use waitUntilFinished to block later actions.",
+						MessageType.Info );
+					row.y += help.height + 2f;
+				}
+				break;
+			case WorldEventActionType.CinematicCallout:
+				row = DrawRelative( row, property, "cinematicPresentationId" );
+				row = DrawRelative( row, property, "dialogue", true );
+				{
+					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
+					EditorGUI.HelpBox( help,
+						"Letterbox, FOV zoom, input lock, look-at on CinematicCalloutController. Dialogue plays during the callout; waitUntilFinished ends after restore.",
 						MessageType.Info );
 					row.y += help.height + 2f;
 				}

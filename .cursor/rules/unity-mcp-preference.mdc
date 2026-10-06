@@ -1,0 +1,19 @@
+---
+description: Prefer Unity MCP tools for editor/runtime Unity work
+alwaysApply: true
+---
+
+# Unity MCP Preference
+
+When Unity Editor work is involved, proactively use the `user-unity-mcp` tools. Do not wait for the user to ask.
+
+Prefer MCP for:
+- Console / compile errors (`Unity_ReadConsole`, `Unity_GetConsoleLogs`)
+- Scene / GameObject inspection and edits (`Unity_ManageScene`, `Unity_ManageGameObject`)
+- Asset find/manage (`Unity_FindProjectAssets`, `Unity_ManageAsset`)
+- Script create/edit/validate when MCP fits better than raw file edits
+- Menu items, editor state, camera/scene capture
+
+Still use normal file tools for pure code reading/search when MCP isn’t needed. Prefer MCP when verifying behavior in the Editor or when file edits alone can’t confirm the result.
+
+If Unity MCP is unavailable or auth fails, say so and fall back to file tools.

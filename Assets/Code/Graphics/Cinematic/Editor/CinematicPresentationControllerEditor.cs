@@ -10,6 +10,7 @@ public class CinematicPresentationControllerEditor : Editor
 	SerializedProperty _baseFov;
 	SerializedProperty _gnomeLedgeTarget;
 	SerializedProperty _returnLookTarget;
+	SerializedProperty _dragon;
 	SerializedProperty _envelopeRise;
 	SerializedProperty _envelopeHold;
 	SerializedProperty _envelopeFall;
@@ -42,6 +43,7 @@ public class CinematicPresentationControllerEditor : Editor
 		_baseFov = serializedObject.FindProperty( "_baseFov" );
 		_gnomeLedgeTarget = serializedObject.FindProperty( "_gnomeLedgeTarget" );
 		_returnLookTarget = serializedObject.FindProperty( "_returnLookTarget" );
+		_dragon = serializedObject.FindProperty( "_dragon" );
 		_envelopeRise = serializedObject.FindProperty( "_envelopeRise" );
 		_envelopeHold = serializedObject.FindProperty( "_envelopeHold" );
 		_envelopeFall = serializedObject.FindProperty( "_envelopeFall" );
@@ -72,6 +74,7 @@ public class CinematicPresentationControllerEditor : Editor
 		EditorGUILayout.PropertyField( _baseFov );
 		EditorGUILayout.PropertyField( _gnomeLedgeTarget, new GUIContent( "Gnome Ledge Target" ) );
 		EditorGUILayout.PropertyField( _returnLookTarget, new GUIContent( "Return Look Target" ) );
+		EditorGUILayout.PropertyField( _dragon, new GUIContent( "Dragon (Tour Look)" ) );
 		EditorGUILayout.PropertyField( _cameraPath );
 		EditorGUILayout.PropertyField( _lookPath );
 

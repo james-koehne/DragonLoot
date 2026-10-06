@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3454bda4ebe9284399c0e855eee818f, type: 3}
+  m_Name: Objective_Workshop
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
+  id: obj_workshop
+  title: Workshop
+  showVolumeId: volume_workshop
+  showRadius: 40
+  prerequisiteObjectiveIds:
+  - obj_talk_to_dragon
+  prerequisiteWorldEventIds: []
+  subs:
+  - id: clear_entrance
+    label: Clear the workshop entrance
+    completeType: 2
+    targetId: workshop_entrance_pile
+    requiredCount: 0
+  - id: clear_interior
+    label: Clear treasure from the workshop
+    completeType: 2
+    targetId: 
+    requiredCount: 0
+  rewards: []
+  rewardLabel: Workshop Access
+  showReward: 1
+  completionToast: 
+  onCompleteWorldEventIds: []

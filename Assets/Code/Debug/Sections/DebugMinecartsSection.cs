@@ -13,6 +13,13 @@ public class DebugMinecartsSection : DebugOverlaySection
 		IReadOnlyList<MinecartInteractable> carts = MinecartInteractable.ActiveCarts;
 		GUILayout.Label( $"Active carts: {carts.Count}" );
 
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Spawn auto cart" ) )
+			SpawnNearPlayer( drive: false );
+		if ( GUILayout.Button( "Spawn drive cart" ) )
+			SpawnNearPlayer( drive: true );
+		GUILayout.EndHorizontal();
+
 		MinecartInteractable lead = ResolveNearbyLead();
 		if ( lead == null )
 		{
@@ -51,6 +58,25 @@ public class DebugMinecartsSection : DebugOverlaySection
 
 		if ( !string.IsNullOrEmpty( s_lastStatus ) )
 			GUILayout.Label( s_lastStatus );
+	}
+
+	static void SpawnNearPlayer( bool drive )
+	{
+		PlayerController player = DebugOverlay.GetPlayer();
+		if ( player == null )
+		{
+			s_lastStatus = "No player";
+			return;
+		}
+
+		MinecartInteractable spawned;
+		if ( !MinecartConsistUtility.TrySpawnOnNearestTrack( player.transform.position, drive, out spawned ) )
+		{
+			s_lastStatus = "No nearby travel-ready track";
+			return;
+		}
+
+		s_lastStatus = drive ? $"Spawned drive cart ({spawned.name})" : $"Spawned auto cart ({spawned.name})";
 	}
 
 	static void AddCar( MinecartInteractable lead, bool drive )

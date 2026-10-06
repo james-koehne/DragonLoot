@@ -28,12 +28,10 @@ public class DebugCarrySection : DebugOverlaySection
 			return;
 		}
 
-		GUILayout.Label( $"Weight: {carry.UsedWeight} (burden {carry.CarryBurden01:P0}, move x{carry.MoveSpeedMultiplier:0.##})" );
-		GUILayout.Label( $"Reference weight: {carry.MaxCarryWeight}" );
 		GUILayout.Label( $"Selected: {carry.SelectedBucket}  Total: {carry.TotalCount}" );
 		GUILayout.Label( $"Count: {carry.Count}  Held: {carry.HeldCount}" );
 		GUILayout.Label( $"Has Active: {carry.HasActive}" );
-		GUILayout.Label( $"Buckets C/G/A/N/J: {carry.GetBucketCount( CarryBucketKind.Coin )}/{carry.GetBucketCount( CarryBucketKind.Gem )}/{carry.GetBucketCount( CarryBucketKind.Artifact )}/{carry.GetBucketCount( CarryBucketKind.General )}/{carry.GetBucketCount( CarryBucketKind.Junk )}" );
+		GUILayout.Label( $"Slots C/G/A/R/N/J: {FormatBucketSlots( carry, CarryBucketKind.Coin )}/{FormatBucketSlots( carry, CarryBucketKind.Gem )}/{FormatBucketSlots( carry, CarryBucketKind.Artifact )}/{FormatBucketSlots( carry, CarryBucketKind.Resource )}/{FormatBucketSlots( carry, CarryBucketKind.General )}/{FormatBucketSlots( carry, CarryBucketKind.Junk )}" );
 
 		if ( carry.TryPeekActive( out TreasureDefinition def ) && def != null )
 			GUILayout.Label( $"Active: {def.name}" );
@@ -45,6 +43,10 @@ public class DebugCarrySection : DebugOverlaySection
 			carry.TrySetSelectedBucket( CarryBucketKind.Gem );
 		if ( GUILayout.Button( "Artifacts" ) )
 			carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
+		GUILayout.EndHorizontal();
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Resources" ) )
+			carry.TrySetSelectedBucket( CarryBucketKind.Resource );
 		if ( GUILayout.Button( "General" ) )
 			carry.TrySetSelectedBucket( CarryBucketKind.General );
 		if ( GUILayout.Button( "Junk" ) )
@@ -196,9 +198,15 @@ public class DebugCarrySection : DebugOverlaySection
 		DrawFilterButton( "Key", (int)TreasureCategory.Key );
 		DrawFilterButton( "Chest", (int)TreasureCategory.Chest );
 		DrawFilterButton( "Container", (int)TreasureCategory.Container );
+		DrawFilterButton( "Resource", (int)TreasureCategory.Resource );
 		DrawFilterButton( "Junk", (int)TreasureCategory.Junk );
 		DrawFilterButton( "General", (int)TreasureCategory.General );
 		GUILayout.EndHorizontal();
+	}
+
+	static string FormatBucketSlots( PlayerCarry carry, CarryBucketKind kind )
+	{
+		return carry.GetBucketCount( kind ) + "/" + carry.GetSlotLimit( kind );
 	}
 
 	static void DrawFilterButton( string label, int filter )

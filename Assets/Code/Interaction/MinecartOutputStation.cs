@@ -5,9 +5,23 @@ using UnityEngine;
 /// </summary>
 public class MinecartOutputStation : MinecartStationBase
 {
+	static readonly Color OutputRoleTint = new Color( 0.12f, 0.72f, 0.78f, 1f );
+
+	protected override Color RoleTint => OutputRoleTint;
+
+	protected override string DefaultInteractionName => "Dismiss cart";
+
 	void Reset()
 	{
-		SetInteractionName( "Send cart" );
+		SetInteractionName( DefaultInteractionName );
+	}
+
+	public override void RequestImmediateSend()
+	{
+		if ( !HasActiveInputStation() )
+			return;
+
+		base.RequestImmediateSend();
 	}
 
 	protected override bool TryTransferOnce( MinecartInteractable cart )
@@ -36,6 +50,9 @@ public class MinecartOutputStation : MinecartStationBase
 
 	protected override void OnForcedOrIdleLeave( MinecartInteractable cart, MinecartAutoController auto )
 	{
+		if ( !HasActiveInputStation() )
+			return;
+
 		if ( auto != null )
 			auto.LeaveDock( null );
 	}

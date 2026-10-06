@@ -2,6 +2,13 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
+public enum SideEyeSideMode
+{
+	Auto = 0,
+	ForceLeft = 1,
+	ForceRight = 2
+}
+
 /// <summary>
 /// Elder dragon gameplay hook: look at a target (explicit or auto player in range),
 /// swap to Idle_Looking via Animator bool <c>Looking</c>, and aim spine/neck/head in LateUpdate.
@@ -12,12 +19,14 @@ public class DragonController : MonoBehaviour
 {
 	public const string LookingParam = "Looking";
 	public const string CastingParam = "Casting";
+	public const string IdleLookingState = "Idle_Looking";
 
 	const int SupportBoneCount = 5;
 	const int HeadBoneIndex = 5;
 
 	static readonly int LookingHash = Animator.StringToHash( LookingParam );
 	static readonly int CastingHash = Animator.StringToHash( CastingParam );
+	static readonly int IdleLookingHash = Animator.StringToHash( IdleLookingState );
 
 	[Header( "References" )]
 	[SerializeField] Animator _animator;
@@ -35,12 +44,32 @@ public class DragonController : MonoBehaviour
 	[SerializeField] float _playerEyeHeight = 1.6f;
 	[Tooltip( "When set, overrides baseline look-trigger aiming (e.g. incinerator)." )]
 	[SerializeField] Transform _lookTargetOverride;
+	[SerializeField] float _lookStartDelayMin = 3f;
+	[SerializeField] float _lookStartDelayMax = 6f;
+
+	[Header( "Side Eye" )]
+	[SerializeField] bool _sideEyeEnabled = true;
+	[Tooltip( "0 = look straight at focus, 1 = full side-eye offset." )]
+	[SerializeField] [Range( 0f, 1f )] float _sideEyeStrength = 1f;
+	[Tooltip( "Horizontal offset from the focus point (meters)." )]
+	[SerializeField] float _sideEyeHorizontalOffset = 0.7f;
+	[Tooltip( "Vertical bias added to the aim point (meters)." )]
+	[SerializeField] float _sideEyeVerticalBias = -0.1f;
+	[Tooltip( "Forward/back offset along focus direction (negative = look slightly past)." )]
+	[SerializeField] float _sideEyeDepthOffset = 0f;
+	[Tooltip( "Auto = side the player approaches from. ForceLeft/ForceRight lock the glance side." )]
+	[SerializeField] SideEyeSideMode _sideEyeSideMode = SideEyeSideMode.Auto;
+	[Tooltip( "How far past center the player must move before Auto side-eye flips (0-1 side dot)." )]
+	[SerializeField] [Range( 0.05f, 0.5f )] float _sideEyeSwitchHysteresis = 0.15f;
 
 	[Header( "Aim" )]
-	[SerializeField] float _lookBlendSpeed = 4f;
-	[SerializeField] float _aimSmoothTime = 0.35f;
-	[SerializeField] float _maxHeadDegreesPerSecond = 180f;
+	[SerializeField] float _lookBlendSpeedEnter = 1.2f;
+	[SerializeField] float _lookBlendSpeedExit = 2.5f;
+	[SerializeField] float _aimSmoothTime = 0.55f;
+	[SerializeField] float _maxHeadDegreesPerSecond = 120f;
 	[SerializeField] float _lookingAnimSpeed = 0.2f;
+	[Tooltip( "Wait until Idle_Looking has fully entered (no transition) before bone-aim starts." )]
+	[SerializeField] bool _waitForIdleLookingPose = true;
 	[Tooltip( "Offset along the head look axis from the head bone (eye-ish aim origin)." )]
 	[SerializeField] float _headLookOriginOffset = 0.25f;
 	[Tooltip( "Local axis along support bones toward the next joint (calibrated on Awake if zero)." )]
@@ -80,6 +109,10 @@ public class DragonController : MonoBehaviour
 	bool _casting;
 	bool _hasCastingParam;
 	readonly HashSet<DragonLookTrigger> _activeLookTriggers = new HashSet<DragonLookTrigger>();
+	float _lookStartDelayRemaining;
+	bool _lookStartDelayArmed;
+	int _sideEyeSign = 1;
+	bool _lookPoseReady;
 
 	public bool IsLooking => _looking;
 	public bool IsCasting => _casting;
@@ -160,6 +193,9 @@ public class DragonController : MonoBehaviour
 			ApplyCastingParam( false );
 		}
 		_activeLookTriggers.Clear();
+		_lookStartDelayArmed = false;
+		_lookStartDelayRemaining = 0f;
+		_lookPoseReady = false;
 		RestoreAnimatorSpeed();
 	}
 
@@ -172,18 +208,36 @@ public class DragonController : MonoBehaviour
 		{
 			_looking = shouldLook;
 			ApplyLookingParam( _looking );
-			if ( !_looking )
+			if ( _looking )
 			{
-				_aimVelocity = Vector3.zero;
+				// Animator starts transitioning to Idle_Looking; bone aim waits until that pose is in.
+				_lookPoseReady = false;
+				_aimInitialized = false;
 				_headRotationInitialized = false;
+				_aimVelocity = Vector3.zero;
 			}
+			else
+			{
+				_lookPoseReady = false;
+				_aimVelocity = Vector3.zero;
+				_lookStartDelayArmed = false;
+				_lookStartDelayRemaining = 0f;
+			}
+		}
+
+		if ( _looking && !_lookPoseReady && IsIdleLookingPoseReady() )
+		{
+			_lookPoseReady = true;
+			BeginLookSmoothing( _rawAimPoint );
 		}
 	}
 
 	void LateUpdate()
 	{
-		float targetWeight = _looking ? 1f : 0f;
-		_lookWeight = Mathf.MoveTowards( _lookWeight, targetWeight, _lookBlendSpeed * Time.deltaTime );
+		bool aimActive = _looking && _lookPoseReady;
+		float targetWeight = aimActive ? 1f : 0f;
+		float blendSpeed = aimActive ? _lookBlendSpeedEnter : _lookBlendSpeedExit;
+		_lookWeight = Mathf.MoveTowards( _lookWeight, targetWeight, Mathf.Max( 0.01f, blendSpeed ) * Time.deltaTime );
 		if ( !_casting )
 			ApplyAnimatorSpeedDamp( _lookWeight );
 		else
@@ -211,24 +265,156 @@ public class DragonController : MonoBehaviour
 		shouldLook = false;
 		aimPoint = _aimInitialized ? _smoothedAimPoint : ( transform.position + transform.forward * 2f );
 
-		// Explicit override (incinerator, cinematics, etc.) always wins.
+		// Explicit override (incinerator, cinematics, etc.) always wins — no delay.
 		if ( _lookTargetOverride != null )
 		{
+			_lookStartDelayArmed = false;
+			_lookStartDelayRemaining = 0f;
 			shouldLook = true;
-			aimPoint = _lookTargetOverride.position;
+			UpdateSideEyeSign( _lookTargetOverride.position );
+			aimPoint = GetSideEyeAimPoint( _lookTargetOverride.position );
 			return;
 		}
 
 		// Baseline: player inside any authored look-trigger sphere.
 		if ( _activeLookTriggers.Count <= 0 || GameMode.Instance == null )
+		{
+			_lookStartDelayArmed = false;
+			_lookStartDelayRemaining = 0f;
 			return;
+		}
 
 		PlayerController player = GameMode.Instance.Player;
 		if ( player == null )
+		{
+			_lookStartDelayArmed = false;
+			_lookStartDelayRemaining = 0f;
+			return;
+		}
+
+		Vector3 playerAim = GetPlayerAimPoint( player );
+		UpdateSideEyeSign( playerAim );
+		aimPoint = GetSideEyeAimPoint( playerAim );
+
+		if ( _looking )
+		{
+			shouldLook = true;
+			return;
+		}
+
+		if ( !_lookStartDelayArmed )
+		{
+			float min = Mathf.Max( 0f, _lookStartDelayMin );
+			float max = Mathf.Max( min, _lookStartDelayMax );
+			_lookStartDelayRemaining = Random.Range( min, max );
+			_lookStartDelayArmed = true;
+		}
+
+		_lookStartDelayRemaining -= Time.deltaTime;
+		if ( _lookStartDelayRemaining > 0f )
 			return;
 
 		shouldLook = true;
-		aimPoint = GetPlayerAimPoint( player );
+	}
+
+	void BeginLookSmoothing( Vector3 aimPoint )
+	{
+		// Seed aim from the head's current facing so the first frame does not snap to the player.
+		Transform head = _head != null ? _head : transform;
+		Vector3 seedDir = GetHeadLookWorldDir( head );
+		if ( seedDir.sqrMagnitude < 0.0001f )
+			seedDir = transform.forward;
+
+		float seedDistance = Vector3.Distance( head.position, aimPoint );
+		if ( seedDistance < 0.5f )
+			seedDistance = 2f;
+
+		_smoothedAimPoint = head.position + seedDir.normalized * seedDistance;
+		_aimVelocity = Vector3.zero;
+		_aimInitialized = true;
+		_headRotationInitialized = false;
+	}
+
+	bool IsIdleLookingPoseReady()
+	{
+		if ( !_waitForIdleLookingPose )
+			return true;
+
+		// Spell cast uses its own anim — don't block bone aim on Idle_Looking.
+		if ( _casting )
+			return true;
+
+		if ( _animator == null || !_hasLookingParam )
+			return true;
+
+		if ( !_animator.isInitialized )
+			return false;
+
+		if ( _animator.IsInTransition( 0 ) )
+			return false;
+
+		AnimatorStateInfo state = _animator.GetCurrentAnimatorStateInfo( 0 );
+		return state.shortNameHash == IdleLookingHash;
+	}
+
+	void UpdateSideEyeSign( Vector3 playerAim )
+	{
+		if ( _sideEyeSideMode == SideEyeSideMode.ForceLeft )
+		{
+			_sideEyeSign = -1;
+			return;
+		}
+
+		if ( _sideEyeSideMode == SideEyeSideMode.ForceRight )
+		{
+			_sideEyeSign = 1;
+			return;
+		}
+
+		Transform pivot = _head != null ? _head : transform;
+		Vector3 toPlayer = playerAim - pivot.position;
+		toPlayer.y = 0f;
+		if ( toPlayer.sqrMagnitude < 0.0001f )
+			return;
+
+		Vector3 bodyRight = Flatten( transform.right );
+		float side = Vector3.Dot( toPlayer.normalized, bodyRight );
+		float hysteresis = Mathf.Clamp( _sideEyeSwitchHysteresis, 0.05f, 0.5f );
+
+		// Opposite of body-side: glance inward. Hysteresis avoids flicker when crossing center.
+		if ( side > hysteresis )
+			_sideEyeSign = -1;
+		else if ( side < -hysteresis )
+			_sideEyeSign = 1;
+	}
+
+	Vector3 GetSideEyeAimPoint( Vector3 focusPoint )
+	{
+		if ( !_sideEyeEnabled || _sideEyeStrength <= 0.0001f )
+			return focusPoint;
+
+		Transform pivot = _head != null ? _head : transform;
+		Vector3 toFocus = focusPoint - pivot.position;
+		Vector3 flat = toFocus;
+		flat.y = 0f;
+		Vector3 side;
+		if ( flat.sqrMagnitude > 0.0001f )
+			side = Vector3.Cross( Vector3.up, flat.normalized );
+		else
+			side = Flatten( transform.right );
+
+		if ( side.sqrMagnitude < 0.0001f )
+			side = Vector3.right;
+		else
+			side.Normalize();
+
+		Vector3 depthDir = flat.sqrMagnitude > 0.0001f ? flat.normalized : Flatten( transform.forward );
+		Vector3 offset =
+			side * ( _sideEyeHorizontalOffset * _sideEyeSign )
+			+ Vector3.up * _sideEyeVerticalBias
+			+ depthDir * _sideEyeDepthOffset;
+
+		return focusPoint + offset * Mathf.Clamp01( _sideEyeStrength );
 	}
 
 	Vector3 GetPlayerAimPoint( PlayerController player )

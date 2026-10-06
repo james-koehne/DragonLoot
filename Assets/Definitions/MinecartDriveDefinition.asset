@@ -41,4 +41,7 @@ MonoBehaviour:
   hopDuration: 0.45
   hopStaggerDelay: 0.06
   hopHeightPerExtraCar: 0.12
-  hopBlockerScale: 0.25
+  hopBlockerScale: 0.61
+  hopChainMaxGap: 2.5
+  hopApproachLead: 2
+  hopLandingClearance: 2.4

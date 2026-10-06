@@ -134,7 +134,10 @@ public class PouchSummaryUI : MonoBehaviour
 		carry.BuildBucketSummary( evt.Bucket, _defs, _counts );
 
 		_builder.Length = 0;
-		_builder.AppendLine( BucketTitle( evt.Bucket ) );
+		int held = carry.GetBucketCount( evt.Bucket );
+		int limit = carry.GetSlotLimit( evt.Bucket );
+		_builder.Append( BucketTitle( evt.Bucket ) );
+		_builder.Append( " (" ).Append( held ).Append( "/" ).Append( limit ).AppendLine( ")" );
 		if ( _defs.Count == 0 )
 			_builder.Append( "(empty)" );
 		else
@@ -231,20 +234,6 @@ public class PouchSummaryUI : MonoBehaviour
 
 	static string BucketTitle( CarryBucketKind kind )
 	{
-		switch ( kind )
-		{
-			case CarryBucketKind.Coin:
-				return "Coins";
-			case CarryBucketKind.Gem:
-				return "Gems";
-			case CarryBucketKind.Artifact:
-				return "Artifacts";
-			case CarryBucketKind.General:
-				return "General";
-			case CarryBucketKind.Junk:
-				return "Junk";
-			default:
-				return "Pouch";
-		}
+		return PlayerCarry.BucketDisplayName( kind );
 	}
 }

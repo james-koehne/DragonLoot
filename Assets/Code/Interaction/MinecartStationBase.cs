@@ -20,6 +20,10 @@ public abstract class MinecartStationBase : InteractableBase
 	MixedDisplayTableInteractable storage;
 
 	[SerializeField]
+	[Tooltip( "World pose projected onto the bound track for auto-cart docking. Defaults to this transform." )]
+	Transform dockPoint;
+
+	[SerializeField]
 	[Min( 0.5f )]
 	float trackSnapRadius = 6f;
 
@@ -34,11 +38,15 @@ public abstract class MinecartStationBase : InteractableBase
 
 	static readonly List<MinecartStationBase> All = new List<MinecartStationBase>( 8 );
 	static readonly int BaseColorId = Shader.PropertyToID( "_BaseColor" );
+	static readonly int ColorId = Shader.PropertyToID( "_Color" );
 	static readonly int EmissionColorId = Shader.PropertyToID( "_EmissionColor" );
+	static readonly int EmissionIntensityId = Shader.PropertyToID( "_EmissionIntensity" );
 	static readonly Color PresentBaseColor = new Color( 0.18f, 0.85f, 0.22f, 1f );
-	static readonly Color PresentEmissionColor = new Color( 0.4f, 2.5f, 0.5f, 1f );
+	static readonly Color PresentEmissionColor = new Color( 0.25f, 0.75f, 0.3f, 1f );
 	static readonly Color CallingBaseColor = new Color( 0.95f, 0.72f, 0.12f, 1f );
-	static readonly Color CallingEmissionColor = new Color( 2.2f, 1.4f, 0.2f, 1f );
+	static readonly Color CallingEmissionColor = new Color( 0.85f, 0.6f, 0.15f, 1f );
+	const float LampEmissionBase = 0.55f;
+	const float LampEmissionIntensity = LampEmissionBase * 3f;
 
 	protected MinecartInteractable DockedCart { get; private set; }
 	protected MinecartInteractable InboundCart { get; private set; }
@@ -49,20 +57,27 @@ public abstract class MinecartStationBase : InteractableBase
 	bool _jobCompleteWaiting;
 	Renderer _lampRenderer;
 	MaterialPropertyBlock _lampBlock;
+	MaterialPropertyBlock _roleBlock;
 	bool _lampCalling;
 
 	public static IReadOnlyList<MinecartStationBase> ActiveStations => All;
 
+	/// <summary>When false, stations will not auto-call or auto-route carts.</summary>
+	public static bool AutomationEnabled { get; private set; } = true;
+
 	public MinecartTrack BoundTrack => track;
 
 	public MixedDisplayTableInteractable Storage => storage;
+
+	/// <summary>World position used when projecting the station onto the track for auto docking.</summary>
+	public Vector3 DockWorldPosition => dockPoint != null ? dockPoint.position : transform.position;
 
 	public float TrackStopDistance
 	{
 		get
 		{
 			EnsureBoundTrack();
-			return track != null ? track.GetNearestDistance( transform.position ) : 0f;
+			return track != null ? track.GetNearestDistance( DockWorldPosition ) : 0f;
 		}
 	}
 
@@ -80,6 +95,11 @@ public abstract class MinecartStationBase : InteractableBase
 
 	protected virtual bool ShowsCallVisualization => false;
 
+	/// <summary>Prefab role-marker tint (arrow / RoleLamp). Call lamp stays separate.</summary>
+	protected virtual Color RoleTint => Color.white;
+
+	protected virtual string DefaultInteractionName => "Send cart";
+
 	protected abstract bool TryTransferOnce( MinecartInteractable cart );
 
 	protected abstract bool ShouldLeaveAfterTransfer( MinecartInteractable cart );
@@ -88,15 +108,30 @@ public abstract class MinecartStationBase : InteractableBase
 
 	protected virtual void Awake()
 	{
-		if ( string.IsNullOrEmpty( InteractionName ) || InteractionName == "Interactable" )
-			SetInteractionName( "Send cart" );
+		if ( string.IsNullOrEmpty( InteractionName )
+		     || InteractionName == "Interactable"
+		     || InteractionName == "Send cart" )
+			SetInteractionName( DefaultInteractionName );
 
 		if ( storage == null )
 			storage = GetComponentInChildren<MixedDisplayTableInteractable>( true );
 
+		if ( dockPoint == null )
+		{
+			Transform found = transform.Find( "DockPoint" );
+			if ( found != null )
+				dockPoint = found;
+		}
+
 		Transform lamp = transform.Find( "Lamp" );
 		if ( lamp != null )
+		{
 			_lampRenderer = lamp.GetComponent<Renderer>();
+			EnsureEmissionEnabled( _lampRenderer );
+		}
+
+		ApplyRoleTint();
+		ApplyIdleLamp();
 	}
 
 	protected virtual void OnEnable()
@@ -111,6 +146,7 @@ public abstract class MinecartStationBase : InteractableBase
 		_jobCompleteWaiting = false;
 		_lampCalling = false;
 		PlayFeedbacks( onIdleFeedbacks );
+		ApplyIdleLamp();
 	}
 
 	protected virtual void OnDisable()
@@ -152,6 +188,72 @@ public abstract class MinecartStationBase : InteractableBase
 		OnForcedOrIdleLeave( DockedCart, auto );
 	}
 
+	/// <summary>Stop every automated cart immediately and ignore further automation until resumed.</summary>
+	public static void StopAllAutomation()
+	{
+		AutomationEnabled = false;
+
+		IReadOnlyList<MinecartInteractable> carts = MinecartInteractable.ActiveCarts;
+		for ( int i = 0; i < carts.Count; i++ )
+		{
+			MinecartInteractable cart = carts[ i ];
+			if ( cart == null || !cart.IsConsistLead )
+				continue;
+
+			MinecartAutoController auto = cart.GetComponent<MinecartAutoController>();
+			if ( auto != null )
+				auto.ForceHaltToIdle();
+		}
+
+		for ( int i = 0; i < All.Count; i++ )
+		{
+			MinecartStationBase station = All[ i ];
+			if ( station != null )
+				station.ClearAutomationReservations();
+		}
+	}
+
+	public static void ResumeAutomation()
+	{
+		AutomationEnabled = true;
+	}
+
+	/// <summary>
+	/// Green button: if a cart is docked, force leave; otherwise dispatch the nearest available cart here.
+	/// </summary>
+	public virtual void RequestImmediateSend()
+	{
+		if ( DockedCart != null )
+		{
+			RequestForcedLeave();
+			return;
+		}
+
+		MinecartInteractable cart = FindNearestAvailableCart();
+		if ( cart != null )
+			TryBeginCall( cart );
+	}
+
+	protected static bool HasActiveInputStation()
+	{
+		IReadOnlyList<MinecartStationBase> stations = ActiveStations;
+		for ( int i = 0; i < stations.Count; i++ )
+		{
+			if ( stations[ i ] is MinecartInputStation )
+				return true;
+		}
+
+		return false;
+	}
+
+	void ClearAutomationReservations()
+	{
+		InboundCart = null;
+		_lampCalling = false;
+		PlayFeedbacks( onIdleFeedbacks );
+		ApplyIdleLamp();
+	}
+
 	/// <summary>Player placed cargo while docked — refresh the leave inactivity timer.</summary>
 	public void NotifyPlayerCargoOnDockedCart()
 	{
@@ -187,6 +289,7 @@ public abstract class MinecartStationBase : InteractableBase
 		_jobCompleteWaiting = false;
 		_lampCalling = false;
 		PlayFeedbacks( onIdleFeedbacks );
+		ApplyIdleLamp();
 	}
 
 	public void NotifyInboundCancelled( MinecartInteractable cart )
@@ -196,6 +299,7 @@ public abstract class MinecartStationBase : InteractableBase
 
 		_lampCalling = false;
 		PlayFeedbacks( onIdleFeedbacks );
+		ApplyIdleLamp();
 	}
 
 	protected bool TryBeginCall( MinecartInteractable cart )
@@ -302,9 +406,6 @@ public abstract class MinecartStationBase : InteractableBase
 			return;
 		}
 
-		if ( IsTransferBusy( cart ) )
-			return;
-
 		if ( _transferTimer < TransferInterval )
 			return;
 
@@ -326,29 +427,6 @@ public abstract class MinecartStationBase : InteractableBase
 		_jobCompleteWaiting = true;
 		_inactivityTimer = 0f;
 		_transferTimer = 0f;
-	}
-
-	bool IsTransferBusy( MinecartInteractable cart )
-	{
-		if ( cart != null && cart.HasTransferInFlight )
-			return true;
-
-		MixedDisplayTableInteractable table = storage;
-		if ( table == null )
-			return false;
-
-		IReadOnlyList<TreasureItem> displayed = table.DisplayedItems;
-		if ( displayed == null )
-			return false;
-
-		for ( int i = 0; i < displayed.Count; i++ )
-		{
-			TreasureItem item = displayed[ i ];
-			if ( item != null && item.IsInFlight )
-				return true;
-		}
-
-		return false;
 	}
 
 	protected virtual bool CanTransferProgress( MinecartInteractable cart )
@@ -379,6 +457,7 @@ public abstract class MinecartStationBase : InteractableBase
 		{
 			_lampCalling = false;
 			PlayFeedbacks( onIdleFeedbacks );
+			ApplyIdleLamp();
 		}
 	}
 
@@ -392,9 +471,10 @@ public abstract class MinecartStationBase : InteractableBase
 		}
 
 		float radius = Mathf.Max( TrackSnapRadius, 12f );
+		Vector3 dockPos = DockWorldPosition;
 		MinecartTrack graphTrack;
 		float graphDistance;
-		if ( TryGetNearestGraphTrack( transform.position, radius, graph, out graphTrack, out graphDistance ) )
+		if ( TryGetNearestGraphTrack( dockPos, radius, graph, out graphTrack, out graphDistance ) )
 		{
 			track = graphTrack;
 			_bound = true;
@@ -409,7 +489,7 @@ public abstract class MinecartStationBase : InteractableBase
 
 		MinecartTrack nearest;
 		float distance;
-		if ( MinecartTrack.TryGetNearest( transform.position, radius, out nearest, out distance ) )
+		if ( MinecartTrack.TryGetNearest( dockPos, radius, out nearest, out distance ) )
 		{
 			track = nearest;
 			_bound = track != null && track.IsTravelReady;
@@ -488,18 +568,89 @@ public abstract class MinecartStationBase : InteractableBase
 		ApplyLampColors( CallingBaseColor, CallingEmissionColor );
 	}
 
+	void ApplyIdleLamp()
+	{
+		if ( _lampRenderer == null )
+			return;
+
+		if ( HasDockedCart || HasInboundCart )
+			return;
+
+		Color tint = RoleTint;
+		if ( tint.a <= 0f || tint == Color.white )
+			tint = CallingBaseColor;
+
+		ApplyLampColors( tint, tint );
+	}
+
 	void ApplyLampColors( Color baseColor, Color emission )
 	{
 		if ( _lampRenderer == null )
 			return;
+
+		EnsureEmissionEnabled( _lampRenderer );
 
 		if ( _lampBlock == null )
 			_lampBlock = new MaterialPropertyBlock();
 
 		_lampRenderer.GetPropertyBlock( _lampBlock );
 		_lampBlock.SetColor( BaseColorId, baseColor );
+		_lampBlock.SetColor( ColorId, baseColor );
 		_lampBlock.SetColor( EmissionColorId, emission );
+		_lampBlock.SetFloat( EmissionIntensityId, LampEmissionIntensity );
 		_lampRenderer.SetPropertyBlock( _lampBlock );
+	}
+
+	void ApplyRoleTint()
+	{
+		Color tint = RoleTint;
+		if ( tint.a <= 0f || tint == Color.white )
+			return;
+
+		Transform roleLamp = transform.Find( "RoleLamp" );
+		if ( roleLamp == null )
+			return;
+
+		if ( _roleBlock == null )
+			_roleBlock = new MaterialPropertyBlock();
+
+		ApplyTintToRenderers( roleLamp, tint, tint );
+	}
+
+	void ApplyTintToRenderers( Transform root, Color baseColor, Color emission )
+	{
+		Renderer[] renderers = root.GetComponentsInChildren<Renderer>( true );
+		for ( int i = 0; i < renderers.Length; i++ )
+		{
+			Renderer renderer = renderers[ i ];
+			if ( renderer == null )
+				continue;
+
+			EnsureEmissionEnabled( renderer );
+
+			renderer.GetPropertyBlock( _roleBlock );
+			_roleBlock.SetColor( BaseColorId, baseColor );
+			_roleBlock.SetColor( ColorId, baseColor );
+			_roleBlock.SetColor( EmissionColorId, emission );
+			_roleBlock.SetFloat( EmissionIntensityId, LampEmissionIntensity );
+			renderer.SetPropertyBlock( _roleBlock );
+		}
+	}
+
+	static void EnsureEmissionEnabled( Renderer renderer )
+	{
+		if ( renderer == null )
+			return;
+
+		Material mat = renderer.material;
+		if ( mat == null )
+			return;
+
+		if ( mat.HasProperty( EmissionIntensityId ) && mat.GetFloat( EmissionIntensityId ) < 0.01f )
+			mat.SetFloat( EmissionIntensityId, LampEmissionIntensity );
+
+		if ( mat.HasProperty( EmissionColorId ) && mat.GetColor( EmissionColorId ).maxColorComponent < 0.01f )
+			mat.SetColor( EmissionColorId, Color.white );
 	}
 
 	static void PlayFeedbacks( Feedbacks feedbacks )
@@ -523,10 +674,23 @@ public abstract class MinecartStationBase : InteractableBase
 		storage = value;
 	}
 
+	public void EditorSetDockPoint( Transform value )
+	{
+		dockPoint = value;
+	}
+
 	public void EditorSetFeedbacks( Feedbacks call, Feedbacks arrive, Feedbacks idle )
 	{
 		onCallFeedbacks = call;
 		onArriveFeedbacks = arrive;
 		onIdleFeedbacks = idle;
+	}
+
+	void OnDrawGizmosSelected()
+	{
+		Vector3 pos = DockWorldPosition;
+		Gizmos.color = new Color( 0.2f, 0.85f, 1f, 0.9f );
+		Gizmos.DrawWireSphere( pos, 0.22f );
+		Gizmos.DrawLine( pos + Vector3.up * 0.35f, pos - Vector3.up * 0.05f );
 	}
 }

@@ -1,0 +1,96 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01449b8dcbcb86042a2df930c3e785bd, type: 3}
+  m_Name: WorldEvent_MainCaveEntrance
+  m_EditorClassIdentifier: Assembly-CSharp::WorldEventDefinition
+  id: main_cave_entrance
+  tags:
+  - intro
+  conditions:
+  - type: 1
+    targetId: volume_main_cave_entrance
+    requiredTreasure: {fileID: 0}
+    filterByCategory: 0
+    requiredCategory: 0
+    excludeGoldBars: 0
+    requireGoldBars: 0
+    delaySeconds: 2
+  actions:
+  - type: 6
+    delayBefore: 0
+    onlyDelayThisAction: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    spawnAtPlayer: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternGroupId: 
+    lanternIgniteFadeDuration: 0
+    cinematicPresentationId: 
+    playerBrakeDuration: 0.5
+  - type: 8
+    delayBefore: 0
+    onlyDelayThisAction: 0
+    waitUntilFinished: 1
+    dialogue:
+    - speaker: Dragon
+      text: Well done with the islands, little Hoardkeeper.
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+      sfxVol: 0.5
+    - speaker: Dragon
+      text: Come see me and take the minecart. Far less fuss than walking the whole
+        way.
+      pauseAfter: 0
+      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+      sfxVol: 0.5
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    spawnAtPlayer: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: 
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternGroupId: 
+    lanternIgniteFadeDuration: 0
+    cinematicPresentationId: main_cave_entrance_callout
+    playerBrakeDuration: 1
+  sessionOnly: 0
+  manualOnly: 0

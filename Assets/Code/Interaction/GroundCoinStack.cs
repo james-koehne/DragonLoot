@@ -1138,6 +1138,69 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	}
 
 	/// <summary>
+	/// Copies every logical slot into <paramref name="into"/> without consuming.
+	/// </summary>
+	public void CopySlotDefinitions( System.Collections.Generic.List<TreasureDefinition> into )
+	{
+		if ( into == null )
+			return;
+
+		for ( int i = 0; i < _slots.Count; i++ )
+		{
+			if ( _slots[ i ] != null )
+				into.Add( _slots[ i ] );
+		}
+	}
+
+	/// <summary>
+	/// Removes up to <paramref name="maxCount"/> definitions from the top of the stack
+	/// into <paramref name="into"/> ordered bottom-to-top among the taken portion.
+	/// Leaves the remainder on the stack.
+	/// </summary>
+	public int TryConsumeTopDefinitions( System.Collections.Generic.List<TreasureDefinition> into, int maxCount )
+	{
+		if ( into == null || maxCount <= 0 || _destroying )
+			return 0;
+
+		int taken = 0;
+		while ( taken < maxCount && _slots.Count > 0 )
+		{
+			int top = _slots.Count - 1;
+			if ( IsSlotInFlight( top ) )
+				break;
+
+			TreasureDefinition definition = _slots[ top ];
+			DespawnCoveredLive( top );
+			_slots.RemoveAt( top );
+			InvalidateHeightPrefix();
+			if ( top < _settledLive.Count )
+				_settledLive.RemoveAt( top );
+
+			if ( definition != null )
+			{
+				into.Insert( 0, definition );
+				taken++;
+			}
+		}
+
+		if ( taken == 0 )
+			return 0;
+
+		RefreshVisuals( snap: true );
+		RefreshCollider();
+		if ( Count <= 0 )
+		{
+			if ( _machineBuffer || _chuteOutput )
+				PlayRemoveFeedback();
+			DestroyIfEmpty();
+		}
+		else
+			PlayRemoveFeedback();
+
+		return taken;
+	}
+
+	/// <summary>
 	/// Copies every logical slot into <paramref name="into"/> (including mixed stacks),
 	/// despawns live / in-flight items. Machine buffers and chute outputs persist empty;
 	/// world stacks are destroyed / released to the streamer.
@@ -1259,7 +1322,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( !IsAvailable || player == null || _taking || HasInFlight || Count <= 0 )
 			return false;
 
-		return CanTakeFromIndex( player, ResolvePickupStartIndex( player ) );
+		return player.Carry != null;
 	}
 
 	public override void Interact( PlayerController player )
@@ -1347,7 +1410,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return false;
 
 		TreasureDefinition def = _slots[ startIndex ];
-		return def != null && carry.CanAdd( def );
+		return def != null;
 	}
 
 	/// <summary>LMB: take only the aimed coin into the right hand.</summary>
@@ -1362,9 +1425,19 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( !CanTakeFromIndex( player, index ) )
 			return false;
 
+		PlayerCarry carry = player.Carry;
+		TreasureDefinition aimedDef = _slots[ index ];
+		if ( aimedDef == null )
+			return false;
+
+		if ( !carry.CanAdd( aimedDef ) )
+		{
+			carry.NotifyPouchFull( aimedDef );
+			return false;
+		}
+
 		int countBefore = SettledCount;
 		_taking = true;
-		TreasureDefinition aimedDef = _slots[ index ];
 		Vector3 aimPos = GetSlotWorldPosition( index );
 		Quaternion rot = transform.rotation;
 
@@ -1378,7 +1451,6 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		RefreshVisuals( snap: false );
 		RefreshCollider();
 
-		PlayerCarry carry = player.Carry;
 		TreasureItem aimedCoin = TreasureItemFactory.RentVisualCoin( aimedDef, aimPos, rot );
 		bool receivedActive = aimedCoin != null && carry.TryReceiveActiveCoinFromWorld( aimedCoin );
 		if ( !receivedActive && aimedCoin != null )

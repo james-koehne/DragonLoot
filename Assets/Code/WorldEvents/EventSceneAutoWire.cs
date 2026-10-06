@@ -3,7 +3,8 @@ using UnityEngine;
 /// <summary>
 /// Scene ids for event volumes / targets. Runtime only creates missing intro volumes — never stub targets.
 /// Author in Level (not auto-created):
-/// - <see cref="IdVolumeMainCave"/> (`volume_main_cave`) — Digging tutorial context
+/// - <see cref="IdVolumeMainCaveEntrance"/> (`volume_main_cave_entrance`) — Main cave entrance world event
+/// - <see cref="IdVolumeMainCave"/> (`volume_main_cave`) — Digging tutorial / Talk to Dragon show context
 /// - <see cref="IdVolumeCoinHall"/> (`volume_coin_hall`) — Coin Displays tutorial context
 /// - <see cref="IdVolumeArtifactMuseum"/> (`volume_artifact_museum`) — Artifacts tutorial arrive task
 /// - <see cref="IdVolumeWorkshop"/> (`volume_workshop`) — Coin Sorter tutorial arrive task
@@ -17,6 +18,9 @@ public static class EventSceneAutoWire
 
 	public const string IdVolumeHallwayEnter = "volume_hallway_enter";
 	public const string IdVolumeHallwayEnd = "volume_hallway_end";
+
+	/// <summary>Author in Level: thin trigger at main cave mouth (world event main_cave_entrance).</summary>
+	public const string IdVolumeMainCaveEntrance = "volume_main_cave_entrance";
 
 	/// <summary>Author in Level: covers diggable main cave (Tutorial Digging show context).</summary>
 	public const string IdVolumeMainCave = "volume_main_cave";

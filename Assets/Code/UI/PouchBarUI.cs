@@ -27,11 +27,13 @@ public class PouchBarUI : MonoBehaviour
 		public Image icon;
 		public Text binding;
 		public Text label;
+		public Text capacity;
 		public RectTransform newItemRoot;
 		public Image newItemIcon;
 		public Text newItemCount;
 		public Feedbacks arriveFeedback;
 		public Feedbacks starIdleFeedback;
+		public Feedbacks pouchFullFeedback;
 	}
 
 	[SerializeField] Slot[] slots = new Slot[ PlayerCarry.BucketCount ];
@@ -68,8 +70,11 @@ public class PouchBarUI : MonoBehaviour
 			Instance.Unlock();
 	}
 
-	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotGeneral", "SlotJunk" };
-	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "General", "Junk" };
+	static readonly Color CapacityNormalColor = new Color( 1f, 1f, 1f, 0.9f );
+	static readonly Color CapacityFullColor = new Color( 1f, 0.82f, 0.45f, 1f );
+
+	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotResource", "SlotGeneral", "SlotJunk" };
+	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "Resources", "General", "Junk" };
 
 	public void Setup()
 	{
@@ -93,6 +98,31 @@ public class PouchBarUI : MonoBehaviour
 	{
 		_cinematicHidden = hidden;
 		ApplyVisibility();
+	}
+
+	/// <summary>Soft nudge when a pouch rejects a pickup because it is full.</summary>
+	public static void NotifyPouchFull( CarryBucketKind kind )
+	{
+		if ( Instance == null )
+			return;
+		Instance.PlayPouchFull( kind );
+	}
+
+	void PlayPouchFull( CarryBucketKind kind )
+	{
+		int index = (int)kind;
+		if ( slots == null || index < 0 || index >= slots.Length )
+			return;
+
+		Slot slot = slots[ index ];
+		if ( slot == null )
+			return;
+
+		if ( slot.root != null && !slot.root.gameObject.activeSelf )
+			slot.root.gameObject.SetActive( true );
+
+		if ( slot.pouchFullFeedback != null )
+			slot.pouchFullFeedback.Play();
 	}
 
 	/// <summary>Pouch HUD sprite for the given carry bucket, or null if unwired.</summary>
@@ -253,9 +283,12 @@ public class PouchBarUI : MonoBehaviour
 
 		CarryBucketKind kind = (CarryBucketKind)index;
 		int held = carry != null ? carry.GetBucketCount( kind ) : 0;
+		int limit = carry != null ? carry.GetSlotLimit( kind ) : 0;
 		bool visible = held > 0;
 		if ( slot.root.gameObject.activeSelf != visible )
 			slot.root.gameObject.SetActive( visible );
+
+		ApplyCapacity( slot, held, limit );
 
 		if ( !visible )
 		{
@@ -271,6 +304,17 @@ public class PouchBarUI : MonoBehaviour
 
 		int newCount = ( carry != null && !isSelected ) ? carry.GetNewItemTypeCount( kind ) : 0;
 		ApplyNewItemBadge( slot, index, newCount );
+	}
+
+	static void ApplyCapacity( Slot slot, int held, int limit )
+	{
+		if ( slot == null || slot.capacity == null )
+			return;
+
+		limit = Mathf.Max( 1, limit );
+		held = Mathf.Max( 0, held );
+		slot.capacity.text = held + "/" + limit;
+		slot.capacity.color = held >= limit ? CapacityFullColor : CapacityNormalColor;
 	}
 
 	void RefreshCycle( PlayerCarry carry )
@@ -428,7 +472,10 @@ public class PouchBarUI : MonoBehaviour
 				slot.binding = FindChildText( slotT, "Binding" );
 			if ( slot.label == null )
 				slot.label = FindChildText( slotT, "Label" );
+			if ( slot.capacity == null )
+				slot.capacity = FindChildText( slotT, "Capacity" );
 
+			EnsureCapacity( slot, slotT );
 			EnsureNewItem( slot );
 			BindSlotFeedbacks( slot, slotT );
 
@@ -447,6 +494,7 @@ public class PouchBarUI : MonoBehaviour
 		}
 
 		OrderSlots();
+		CopySlotIconIfEmpty( CarryBucketKind.Resource, CarryBucketKind.General );
 		CopySlotIconIfEmpty( CarryBucketKind.Junk, CarryBucketKind.General );
 	}
 
@@ -520,7 +568,7 @@ public class PouchBarUI : MonoBehaviour
 			rect.anchorMax = new Vector2( 0.5f, 0f );
 			rect.pivot = new Vector2( 0.5f, 0f );
 			rect.anchoredPosition = new Vector2( 0f, 16f );
-			rect.sizeDelta = new Vector2( 720f, 140f );
+			rect.sizeDelta = new Vector2( 820f, 140f );
 		}
 
 		HorizontalLayoutGroup layout = GetComponent<HorizontalLayoutGroup>();
@@ -551,13 +599,16 @@ public class PouchBarUI : MonoBehaviour
 
 		Text binding = CreateText( slotGo.transform, "Binding", "", new Vector2( 0.5f, 0.5f ), new Vector2( 0f, -22f ), new Vector2( 120f, 24f ), 18 );
 		Text label = CreateText( slotGo.transform, "Label", labelText, new Vector2( 0.5f, 0f ), new Vector2( 0f, 8f ), new Vector2( 120f, 24f ), 16 );
+		Text capacity = CreateText( slotGo.transform, "Capacity", "0/0", new Vector2( 0.5f, 0f ), new Vector2( 0f, 28f ), new Vector2( 120f, 22f ), 14 );
+		capacity.color = CapacityNormalColor;
 
 		Slot slot = new Slot
 		{
 			root = slotGroup,
 			icon = icon,
 			binding = binding,
-			label = label
+			label = label,
+			capacity = capacity
 		};
 		EnsureNewItem( slot );
 		return slot;
@@ -647,6 +698,28 @@ public class PouchBarUI : MonoBehaviour
 			if ( starIdleT != null )
 				slot.starIdleFeedback = starIdleT.GetComponent<Feedbacks>();
 		}
+
+		if ( slot.pouchFullFeedback == null )
+		{
+			Transform fullT = slotT.Find( "PouchFullFeedbacks" );
+			if ( fullT != null )
+				slot.pouchFullFeedback = fullT.GetComponent<Feedbacks>();
+		}
+	}
+
+	void EnsureCapacity( Slot slot, Transform slotT )
+	{
+		if ( slot == null || slotT == null )
+			return;
+
+		if ( slot.capacity == null )
+			slot.capacity = FindChildText( slotT, "Capacity" );
+
+		if ( slot.capacity != null )
+			return;
+
+		slot.capacity = CreateText( slotT, "Capacity", "0/0", new Vector2( 0.5f, 0f ), new Vector2( 0f, 28f ), new Vector2( 120f, 22f ), 14 );
+		slot.capacity.color = CapacityNormalColor;
 	}
 
 	void CreateCycle()

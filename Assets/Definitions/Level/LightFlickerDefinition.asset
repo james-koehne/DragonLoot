@@ -235,8 +235,8 @@ MonoBehaviour:
     tertiarySpeed: 4.4
     affectColor: 1
     colorAmount: 0.55
-    tintA: {r: 0.80359995, g: 1.0110434, b: 1.3999999, a: 1}
-    tintB: {r: 0.80907327, g: 0.7654501, b: 1.3500001, a: 1}
+    tintA: {r: 0.9729999, g: 1.1206049, b: 1.3999999, a: 1}
+    tintB: {r: 0.9683782, g: 0.93825006, b: 1.3500001, a: 1}
     affectEmissionColor: 1
     emissionColorAmount: 0.7
     emissionTintA: {r: 0.35, g: 1.4, b: 2.4, a: 1}

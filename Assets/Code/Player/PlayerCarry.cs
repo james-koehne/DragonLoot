@@ -3,19 +3,21 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>Hand rig a treasure is carried in. General covers Key/Chest/Container/Resource/General; Junk is separate.</summary>
+/// <summary>Hand rig a treasure is carried in. Resource is materials; General covers keys/tools/coffee; Junk is separate.</summary>
 public enum CarryBucketKind
 {
 	Coin = 0,
 	Gem = 1,
 	Artifact = 2,
-	General = 3,
-	Junk = 4
+	Resource = 3,
+	General = 4,
+	Junk = 5
 }
 
 public class PlayerCarry : MonoBehaviour, ITreasureOwner
 {
-	public const int BucketCount = 5;
+	public const int BucketCount = 6;
+	const float PouchFullNotifyCooldown = 0.12f;
 
 	struct CarriedEntry
 	{
@@ -62,6 +64,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	// Scratch for affordability simulation, indexed by CarryBucketKind.
 	readonly bool[] _simExclusive = new bool[ BucketCount ];
 	readonly bool[] _simAny = new bool[ BucketCount ];
+	readonly int[] _simCount = new int[ BucketCount ];
 	readonly int[] _insertCursor = new int[ BucketCount ];
 	readonly bool[] _bucketTouched = new bool[ BucketCount ];
 
@@ -73,7 +76,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	bool _minecartDriveHidden;
 	bool _buildModeHidden;
 	int _nextToken = 1;
-	int _usedCapacity;
 	float _bobPhase;
 	float _swayPhase;
 	Vector3 _smoothedMotionOffset;
@@ -88,39 +90,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	readonly HashSet<string> _newCountScratch = new HashSet<string>();
 	float _pouchViewElapsed;
 	float _coinHandVariationSeed;
+	float _pouchFullNotifyTime = -999f;
 
 	CarryDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Player;
-
-	public int UsedCapacity => _usedCapacity;
-	public int UsedWeight => _usedCapacity;
-
-	public int MaxCarryWeight
-	{
-		get
-		{
-			CarryDefinition def = Definition;
-			return def != null ? Mathf.Max( 1, def.maxCarryWeight ) : 10;
-		}
-	}
-
-	/// <summary>Legacy name — same as <see cref="MaxCarryWeight"/> (burden reference, not a pickup cap).</summary>
-	public int MaxCapacity => MaxCarryWeight;
-
-	/// <summary>0 = empty hands, 1 = at or above <see cref="MaxCarryWeight"/>. Weight is global across buckets.</summary>
-	public float CarryBurden01 => Mathf.Clamp01( (float)_usedCapacity / MaxCarryWeight );
-
-	/// <summary>Linear walk/sprint multiplier from carried weight; never below definition floor.</summary>
-	public float MoveSpeedMultiplier
-	{
-		get
-		{
-			CarryDefinition def = Definition;
-			float floor = def != null ? def.minBurdenedMoveSpeedScale : 1f;
-			return Mathf.Lerp( 1f, floor, CarryBurden01 );
-		}
-	}
 
 	/// <summary>Category currently shown in the active (right hand) pose.</summary>
 	public CarryBucketKind SelectedBucket => _selected;
@@ -176,6 +150,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return CarryBucketKind.Gem;
 			case TreasureCategory.Artifact:
 				return CarryBucketKind.Artifact;
+			case TreasureCategory.Resource:
+				return CarryBucketKind.Resource;
 			case TreasureCategory.Junk:
 				return CarryBucketKind.Junk;
 			case TreasureCategory.General:
@@ -184,9 +160,30 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 	}
 
+	/// <summary>Camera look transform used as the parent for cross-pouch pickup flights.</summary>
+	public Transform CameraLookTransform => _cameraLook != null ? _cameraLook.transform : null;
+
 	public int GetBucketCount( CarryBucketKind kind )
 	{
 		return GetBucket( kind ).Count;
+	}
+
+	public int GetSlotLimit( CarryBucketKind kind )
+	{
+		CarryDefinition def = Definition;
+		if ( def != null )
+			return def.GetSlotLimit( kind );
+		return 10;
+	}
+
+	public int GetRemainingSlots( CarryBucketKind kind )
+	{
+		return Mathf.Max( 0, GetSlotLimit( kind ) - GetBucketCount( kind ) );
+	}
+
+	public bool HasSlotRoom( CarryBucketKind kind )
+	{
+		return GetBucketCount( kind ) < GetSlotLimit( kind );
 	}
 
 	public Transform GetHoldRoot( CarryBucketKind kind )
@@ -366,6 +363,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			case TreasureCategory.Artifact:
 				bucket = CarryBucketKind.Artifact;
 				return true;
+			case TreasureCategory.Resource:
+				bucket = CarryBucketKind.Resource;
+				return true;
 			case TreasureCategory.Junk:
 				bucket = CarryBucketKind.Junk;
 				return true;
@@ -384,6 +384,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return TreasureCategory.Gem;
 			case CarryBucketKind.Artifact:
 				return TreasureCategory.Artifact;
+			case CarryBucketKind.Resource:
+				return TreasureCategory.Resource;
 			case CarryBucketKind.Junk:
 				return TreasureCategory.Junk;
 			case CarryBucketKind.General:
@@ -583,6 +585,10 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				return "CoinRig";
 			case CarryBucketKind.Gem:
 				return "GemRig";
+			case CarryBucketKind.Artifact:
+				return "ArtifactRig";
+			case CarryBucketKind.Resource:
+				return "ResourceRig";
 			case CarryBucketKind.General:
 				return "GeneralRig";
 			case CarryBucketKind.Junk:
@@ -797,7 +803,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				TreasureItemFactory.Despawn( bucket.Active.Item );
 			}
 
-			_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( bucket.Active.Definition ) );
 		}
 
 		for ( int i = 0; i < bucket.Held.Count; i++ )
@@ -813,7 +818,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				TreasureItemFactory.Despawn( entry.Item );
 			}
 
-			_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 		}
 
 		bucket.HasActive = false;
@@ -851,7 +855,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			TreasureItemFactory.Despawn( bucket.Active.Item );
 		}
 
-		_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( activeDef ) );
 		bucket.HasActive = false;
 		bucket.Active = default;
 
@@ -873,7 +876,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				TreasureItemFactory.Despawn( entry.Item );
 			}
 
-			_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 		}
 
 		if ( connectedHeld > 0 )
@@ -1049,7 +1051,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			if ( def != null )
 			{
 				into.Add( def );
-				_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( def ) );
 			}
 		}
 
@@ -1088,13 +1089,15 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return false;
 
 		if ( !CanAdd( item.Definition ) )
+		{
+			TryNotifyPouchFull( item.Definition );
 			return false;
+		}
 
-		DemoteActiveCoinToHeldDefinitions( bucket );
+		if ( bucket.HasActive )
+			DemoteActiveCoinToHeldDefinitions( bucket );
 
-		int cost = GetCost( item.Definition );
 		int token = _nextToken++;
-		_usedCapacity += cost;
 
 		item.BeginHold( this );
 		item.SetMeshVisible( true );
@@ -1212,7 +1215,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			{
 				CarriedEntry activeEntry = bucket.Active;
 				AbortHoldTween( activeEntry.Token, snapToHand: false, item );
-				_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( activeEntry.Definition ) );
 				bucket.HasActive = false;
 				bucket.Active = default;
 				item.SetMeshVisible( true );
@@ -1229,7 +1231,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 				CarriedEntry entry = bucket.Held[ i ];
 				bucket.Held.RemoveAt( i );
-				_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 				AbortHoldTween( entry.Token, snapToHand: false, item );
 				item.SetMeshVisible( true );
 				item.EndFlight();
@@ -1239,20 +1240,16 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 	}
 
-	public int GetCost( TreasureDefinition treasure )
-	{
-		if ( treasure == null )
-			return 1;
-
-		return Mathf.Max( 1, treasure.weight );
-	}
-
 	public bool CanAdd( TreasureDefinition treasure )
 	{
 		if ( treasure == null )
 			return false;
 
-		return PassesMixingRules( treasure, GetBucketFor( treasure ) );
+		CategoryBucket bucket = GetBucketFor( treasure );
+		if ( !PassesMixingRules( treasure, bucket ) )
+			return false;
+
+		return HasSlotRoom( bucket.Kind );
 	}
 
 	public bool CanAdd( TreasureItem item )
@@ -1310,7 +1307,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	}
 
 	/// <summary>
-	/// How many items from the start of a bottom-to-top list can still be added (mixing rules only).
+	/// How many items from the start of a bottom-to-top list can still be added (mixing + slot limits).
 	/// </summary>
 	public int CountAffordablePrefix( IReadOnlyList<TreasureItem> orderedBottomToTop )
 	{
@@ -1369,7 +1366,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	/// <summary>
 	/// How many definitions from the end of a bottom-to-top slot list (from top down to startIndex)
-	/// can still be added (mixing rules only).
+	/// can still be added (mixing + slot limits).
 	/// </summary>
 	public int CountAffordableDefinitionSuffix( IReadOnlyList<TreasureDefinition> orderedBottomToTop, int startIndex )
 	{
@@ -1401,14 +1398,21 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		for ( int i = 0; i < BucketCount; i++ )
 		{
 			CategoryBucket bucket = _buckets[ i ];
+			_simCount[ i ] = bucket.Count;
 			_simAny[ i ] = bucket.Count > 0;
 			_simExclusive[ i ] = HasExclusiveCarried( bucket );
 		}
 	}
 
-	/// <summary>Advances the per-bucket mixing simulation; false when the add would be rejected.</summary>
+	/// <summary>Advances the per-bucket mixing + slot simulation; false when the add would be rejected.</summary>
 	bool SimulateAdd( TreasureDefinition def, int bucketIndex )
 	{
+		if ( bucketIndex < 0 || bucketIndex >= BucketCount )
+			return false;
+
+		if ( _simCount[ bucketIndex ] >= GetSlotLimit( (CarryBucketKind)bucketIndex ) )
+			return false;
+
 		if ( _simExclusive[ bucketIndex ] )
 			return false;
 
@@ -1419,6 +1423,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			_simExclusive[ bucketIndex ] = true;
 
 		_simAny[ bucketIndex ] = true;
+		_simCount[ bucketIndex ]++;
 		return true;
 	}
 
@@ -1435,6 +1440,70 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return false;
 
 		return !HasExclusiveCarried( bucket );
+	}
+
+	void TryNotifyPouchFull( TreasureDefinition treasure )
+	{
+		if ( treasure == null )
+			return;
+
+		CategoryBucket bucket = GetBucketFor( treasure );
+		if ( bucket == null )
+			return;
+
+		if ( !PassesMixingRules( treasure, bucket ) )
+			return;
+
+		if ( HasSlotRoom( bucket.Kind ) )
+			return;
+
+		if ( Time.unscaledTime - _pouchFullNotifyTime < PouchFullNotifyCooldown )
+			return;
+
+		_pouchFullNotifyTime = Time.unscaledTime;
+		PouchBarUI.NotifyPouchFull( bucket.Kind );
+		PouchFullHintUI.Notify( BucketDisplayName( bucket.Kind ) + " pouch is full" );
+	}
+
+	/// <summary>Soft mid-screen nudge when a pickup is rejected because the pouch is full.</summary>
+	public void NotifyPouchFull( TreasureDefinition treasure )
+	{
+		TryNotifyPouchFull( treasure );
+	}
+
+	/// <summary>Soft mid-screen nudge for a known pouch that has no free slots.</summary>
+	public void NotifyPouchFull( CarryBucketKind kind )
+	{
+		if ( HasSlotRoom( kind ) )
+			return;
+
+		if ( Time.unscaledTime - _pouchFullNotifyTime < PouchFullNotifyCooldown )
+			return;
+
+		_pouchFullNotifyTime = Time.unscaledTime;
+		PouchBarUI.NotifyPouchFull( kind );
+		PouchFullHintUI.Notify( BucketDisplayName( kind ) + " pouch is full" );
+	}
+
+	public static string BucketDisplayName( CarryBucketKind kind )
+	{
+		switch ( kind )
+		{
+			case CarryBucketKind.Coin:
+				return "Coins";
+			case CarryBucketKind.Gem:
+				return "Gems";
+			case CarryBucketKind.Artifact:
+				return "Artifacts";
+			case CarryBucketKind.Resource:
+				return "Resources";
+			case CarryBucketKind.General:
+				return "General";
+			case CarryBucketKind.Junk:
+				return "Junk";
+			default:
+				return "Pouch";
+		}
 	}
 
 	static bool HasExclusiveCarried( CategoryBucket bucket )
@@ -1455,14 +1524,16 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	public bool TryAdd( TreasureDefinition treasure )
 	{
 		if ( !CanAdd( treasure ) )
+		{
+			TryNotifyPouchFull( treasure );
 			return false;
+		}
 
 		CategoryBucket bucket = GetBucketFor( treasure );
 		if ( bucket.HoldRoot == null || bucket.ActiveRoot == null )
 			return false;
 
 		int token = _nextToken++;
-		_usedCapacity += GetCost( treasure );
 
 		CarriedEntry entry = new CarriedEntry
 		{
@@ -1494,8 +1565,13 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
 			TreasureDefinition treasure = definitions[ i ];
-			if ( treasure == null || !CanAdd( treasure ) )
+			if ( treasure == null )
 				break;
+			if ( !CanAdd( treasure ) )
+			{
+				TryNotifyPouchFull( treasure );
+				break;
+			}
 
 			if ( !AddDefinitionEntry( treasure ) )
 				break;
@@ -1521,7 +1597,10 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		for ( int i = 0; i < count; i++ )
 		{
 			if ( !CanAdd( treasure ) )
+			{
+				TryNotifyPouchFull( treasure );
 				break;
+			}
 
 			if ( !AddDefinitionEntry( treasure ) )
 				break;
@@ -1545,7 +1624,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return false;
 
 		int token = _nextToken++;
-		_usedCapacity += GetCost( treasure );
 
 		CarriedEntry entry = new CarriedEntry
 		{
@@ -1574,8 +1652,13 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	public bool TryAddExisting( TreasureItem item )
 	{
-		if ( item == null || !CanAdd( item ) )
+		if ( item == null )
 			return false;
+		if ( !CanAdd( item ) )
+		{
+			TryNotifyPouchFull( item.Definition );
+			return false;
+		}
 
 		CategoryBucket bucket = GetBucketFor( item.Definition );
 		if ( bucket.HoldRoot == null || bucket.ActiveRoot == null )
@@ -1778,8 +1861,10 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			if ( !PassesMixingRules( def, bucket ) )
 				break;
 
+			if ( !HasSlotRoom( bucket.Kind ) )
+				break;
+
 			int token = _nextToken++;
-			_usedCapacity += GetCost( def );
 
 			CarriedEntry entry = new CarriedEntry
 			{
@@ -1838,7 +1923,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			TreasureItem live = ResolveLiveItem( bucket, entry, activeParent );
 			if ( live == null )
 			{
-				_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 				AbortHoldTween( entry.Token, snapToHand: false, null );
 				continue;
 			}
@@ -1891,7 +1975,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return false;
 
 		int token = _nextToken++;
-		_usedCapacity += GetCost( item.Definition );
 
 		item.BeginHold( this );
 		item.SetMeshVisible( true );
@@ -2116,6 +2199,15 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	public bool TryConsumeActive( out TreasureItem item )
 	{
+		return TryConsumeActive( out item, snapToHand: false );
+	}
+
+	/// <param name="snapToHand">
+	/// When true, abort any in-flight hold tween / pose ease and snap to the right-hand
+	/// Active pose before detaching (used for throw so spam releases always leave from the hand).
+	/// </param>
+	public bool TryConsumeActive( out TreasureItem item, bool snapToHand )
+	{
 		item = null;
 
 		CategoryBucket bucket = GetBucket( _selected );
@@ -2127,10 +2219,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( item == null )
 			return false;
 
-		AbortHoldTween( entry.Token, snapToHand: false, item );
+		AbortHoldTween( entry.Token, snapToHand, item );
 		bucket.HasActive = false;
 		bucket.Active = default;
-		_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 
 		item.SetMeshVisible( true );
 		item.SetHeldShadows( enabled: true );
@@ -2185,10 +2276,15 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	public bool TryRemoveBottomCluster( out List<TreasureItem> items )
 	{
+		return TryRemoveBottomCluster( out items, snapToHand: false );
+	}
+
+	public bool TryRemoveBottomCluster( out List<TreasureItem> items, bool snapToHand )
+	{
 		// Snapshot — callers keep this list across async place/throw motions.
 		items = new List<TreasureItem>( 1 );
 
-		if ( !TryConsumeActive( out TreasureItem single ) || single == null )
+		if ( !TryConsumeActive( out TreasureItem single, snapToHand ) || single == null )
 			return false;
 
 		items.Add( single );
@@ -2336,7 +2432,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	void DetachResolvedEntry( CarriedEntry entry, TreasureItem item )
 	{
-		_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 		AbortHoldTween( entry.Token, snapToHand: false, item );
 
 		item.SetMeshVisible( true );
@@ -2371,7 +2466,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			CoinColumnCylinderBinder.ClearAndDestroy( ref bucket.HeldCylinder, null );
 		}
 
-		_usedCapacity = 0;
 	}
 
 	async void SpawnHeldItemAsync( TreasureDefinition treasure, int token )
@@ -2432,7 +2526,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		if ( isActive )
 		{
-			_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( bucket.Active.Definition ) );
 			bucket.HasActive = false;
 			bucket.Active = default;
 			PromoteFromHeld( bucket );
@@ -2442,7 +2535,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		CarriedEntry entry = bucket.Held[ heldIndex ];
 		bucket.Held.RemoveAt( heldIndex );
-		_usedCapacity = Mathf.Max( 0, _usedCapacity - GetCost( entry.Definition ) );
 		RestackPoses();
 	}
 
@@ -2470,7 +2562,13 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	{
 		if ( !_holdTweens.TryGetValue( token, out Coroutine routine ) )
 		{
-			if ( !snapToHand && knownItem != null )
+			if ( snapToHand )
+			{
+				TrySnapItemToHandPose( token, knownItem );
+				return;
+			}
+
+			if ( knownItem != null )
 				knownItem.EndFlight();
 			return;
 		}
@@ -2486,14 +2584,32 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( item == null )
 			return;
 
-		if ( snapToHand && TryFindEntry( token, out CategoryBucket snapBucket, out bool snapActive, out int snapHeldIndex ) )
+		if ( snapToHand )
 		{
-			item.EndFlight();
-			AttachImmediate( snapBucket, item, snapActive, snapHeldIndex );
+			TrySnapItemToHandPose( token, item );
 			return;
 		}
 
 		item.EndFlight();
+	}
+
+	void TrySnapItemToHandPose( int token, TreasureItem knownItem )
+	{
+		TreasureItem item = knownItem;
+		if ( !TryFindEntry( token, out CategoryBucket snapBucket, out bool snapActive, out int snapHeldIndex ) )
+		{
+			if ( item != null )
+				item.EndFlight();
+			return;
+		}
+
+		if ( item == null )
+			item = snapActive ? snapBucket.Active.Item : snapBucket.Held[ snapHeldIndex ].Item;
+		if ( item == null )
+			return;
+
+		item.EndFlight();
+		AttachImmediate( snapBucket, item, snapActive, snapHeldIndex );
 	}
 
 	void AbortAllHoldTweens( bool snapToHand )
@@ -2527,8 +2643,14 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			yield break;
 		}
 
+		CarryDefinition def = Definition;
+		bool crossPouch = playPickupFeedback
+			&& bucket.Kind != _selected
+			&& _cameraLook != null;
+
+		Transform flightParent = crossPouch ? _cameraLook.transform : parent;
 		Transform t = item.transform;
-		t.SetParent( parent, true );
+		t.SetParent( flightParent, true );
 
 		Vector3 startLocalPos = t.localPosition;
 		Quaternion startLocalRot = t.localRotation;
@@ -2536,10 +2658,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		CarriedEntry entry = isActive ? bucket.Active : bucket.Held[ heldIndex ];
 		bool keepWorldScale = entry.IsClusterAnchor || entry.ClusterId != 0;
-		Vector3 endLocalPos = GetLocalPose( bucket, isActive, heldIndex );
+		Vector3 endLocalPos = crossPouch
+			? ( def != null ? def.crossPouchPickupOffset : new Vector3( 0f, -0.05f, 0.55f ) )
+			: GetLocalPose( bucket, isActive, heldIndex );
 		Vector3 endLocalScale = keepWorldScale ? item.GetWorldScale() : item.GetHeldScale();
 
-		CarryDefinition def = Definition;
 		bool hasOverride = durationOverride > 0.0001f;
 		// Pickup flights always use the full coin flip; hand refills use a short arc.
 		bool flipCoin = CoinFlipMotion.IsCoin( item )
@@ -2548,7 +2671,16 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		float duration;
 		float arcHeight;
 		float spins = 0f;
-		if ( flipCoin )
+		if ( crossPouch )
+		{
+			float configured = def != null ? def.crossPouchPickupDuration : 0.28f;
+			if ( configured < 0.05f )
+				configured = def != null ? def.holdTweenDuration : 0.2f;
+			duration = Mathf.Max( 0.05f, hasOverride ? Mathf.Max( durationOverride, configured ) : configured );
+			arcHeight = def != null ? def.itemArcHeight : CoinFlipMotion.DefaultItemArcHeight;
+			flipCoin = false;
+		}
+		else if ( flipCoin )
 		{
 			float configured = def != null ? def.coinFlipDuration : CoinFlipMotion.DefaultDuration;
 			if ( configured < 0.05f )
@@ -2580,40 +2712,46 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				yield break;
 			}
 
-			Transform desiredParent = GetItemParent( bucket, isActive );
-			if ( desiredParent != null && t.parent != desiredParent )
+			if ( !crossPouch )
 			{
-				// Soft retarget between hands — keep remaining flight time so pickups aren't cut short.
-				t.SetParent( desiredParent, true );
-				startLocalPos = t.localPosition;
-				startLocalRot = t.localRotation;
-				startLocalScale = t.localScale;
-				float remaining = Mathf.Max( 0.05f, originalDuration - elapsed );
-				duration = remaining;
-				elapsed = 0f;
-				originalDuration = duration;
-				if ( CoinFlipMotion.IsCoin( item ) && playPickupFeedback )
+				Transform desiredParent = GetItemParent( bucket, isActive );
+				if ( desiredParent != null && t.parent != desiredParent )
 				{
-					flipCoin = true;
-					arcHeight = def != null ? def.coinFlipArcHeight : CoinFlipMotion.DefaultArcHeight;
-					spins = def != null ? def.coinFlipSpins : CoinFlipMotion.DefaultSpins;
+					// Soft retarget between hands — keep remaining flight time so pickups aren't cut short.
+					t.SetParent( desiredParent, true );
+					startLocalPos = t.localPosition;
+					startLocalRot = t.localRotation;
+					startLocalScale = t.localScale;
+					float remaining = Mathf.Max( 0.05f, originalDuration - elapsed );
+					duration = remaining;
+					elapsed = 0f;
+					originalDuration = duration;
+					if ( CoinFlipMotion.IsCoin( item ) && playPickupFeedback )
+					{
+						flipCoin = true;
+						arcHeight = def != null ? def.coinFlipArcHeight : CoinFlipMotion.DefaultArcHeight;
+						spins = def != null ? def.coinFlipSpins : CoinFlipMotion.DefaultSpins;
+					}
+					else
+					{
+						flipCoin = false;
+						float itemArc = def != null ? def.itemArcHeight : CoinFlipMotion.DefaultItemArcHeight;
+						arcHeight = Mathf.Min( arcHeight, itemArc );
+					}
 				}
-				else
-				{
-					flipCoin = false;
-					float itemArc = def != null ? def.itemArcHeight : CoinFlipMotion.DefaultItemArcHeight;
-					arcHeight = Mathf.Min( arcHeight, itemArc );
-				}
+
+				endLocalPos = GetLocalPose( bucket, isActive, heldIndex );
 			}
 
 			elapsed += Time.deltaTime;
 			float u = Mathf.Clamp01( elapsed / duration );
 
-			endLocalPos = GetLocalPose( bucket, isActive, heldIndex );
 			entry = isActive ? bucket.Active : bucket.Held[ heldIndex ];
 			keepWorldScale = entry.IsClusterAnchor || entry.ClusterId != 0;
 			endLocalScale = keepWorldScale ? item.GetWorldScale() : item.GetHeldScale();
-			Quaternion endLocalRot = item.GetHeldLocalRotation( isActive );
+			Quaternion endLocalRot = crossPouch
+				? Quaternion.identity
+				: item.GetHeldLocalRotation( isActive );
 
 			if ( flipCoin )
 			{

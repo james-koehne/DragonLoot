@@ -507,11 +507,15 @@ public static class TreasureSurfaceThrow
 			Rigidbody body = item.Body;
 			if ( body != null )
 			{
+				if ( !body.isKinematic )
+				{
+					body.linearVelocity = Vector3.zero;
+					body.angularVelocity = Vector3.zero;
+				}
+
 				body.isKinematic = true;
 				body.detectCollisions = false;
 				body.useGravity = false;
-				body.linearVelocity = Vector3.zero;
-				body.angularVelocity = Vector3.zero;
 			}
 
 			startPos[ i ] = t.position;

@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 public sealed class GameInput : System.IDisposable
 {
 	public const int AbilitySlotCount = 4;
-	public const int CategorySlotCount = 5;
+	public const int CategorySlotCount = 6;
 
 	readonly InputActionMap _game;
 

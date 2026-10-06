@@ -19,7 +19,7 @@ MonoBehaviour:
   suppressDiscoveryPopup: 1
   value: 1
   weight: 1
-  exclusiveCarry: 1
+  exclusiveCarry: 0
   usesHeavyThrow: 0
   cannotThrow: 0
   placeOnGroundOrArtifactSlotOnly: 0

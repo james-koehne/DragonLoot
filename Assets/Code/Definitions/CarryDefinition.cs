@@ -1,18 +1,40 @@
 using UnityEngine;
-using UnityEngine.Serialization;
 
 [CreateAssetMenu( fileName = "CarryDefinition", menuName = "Definitions/CarryDefinition" )]
 public class CarryDefinition : ScriptableObject
 {
-	[Header( "Carry Weight" )]
-	[Tooltip( "Carried weight at or above this value applies full movement burden (see minBurdenedMoveSpeedScale)." )]
+	[Header( "Pouch Slot Limits" )]
+	[Tooltip( "Max items in the Coin pouch. Each item uses 1 slot." )]
 	[Min( 1 )]
-	[FormerlySerializedAs( "maxCapacity" )]
-	public int maxCarryWeight = 10;
+	public int coinSlotLimit = 100;
 
-	[Tooltip( "Walk/sprint speed multiplier at full burden. Set to 1 to disable weight move penalty." )]
-	[Range( 0.02f, 1f )]
-	public float minBurdenedMoveSpeedScale = 1f;
+	[Tooltip( "Max items in the Gem pouch. Each item uses 1 slot." )]
+	[Min( 1 )]
+	public int gemSlotLimit = 10;
+
+	[Tooltip( "Max items in the Artifact pouch. Each item uses 1 slot." )]
+	[Min( 1 )]
+	public int artifactSlotLimit = 5;
+
+	[Tooltip( "Max items in the Resource pouch. Each item uses 1 slot." )]
+	[Min( 1 )]
+	public int resourceSlotLimit = 10;
+
+	[Tooltip( "Max items in the General pouch (keys, tools, coffee, etc.). Each item uses 1 slot." )]
+	[Min( 1 )]
+	public int generalSlotLimit = 10;
+
+	[Tooltip( "Max items in the Junk pouch. Each item uses 1 slot." )]
+	[Min( 1 )]
+	public int junkSlotLimit = 10;
+
+	[Header( "Cross-Pouch Pickup" )]
+	[Tooltip( "Camera-local point items fly toward when landing in a pouch that is not currently selected." )]
+	public Vector3 crossPouchPickupOffset = new Vector3( 0f, -0.05f, 0.55f );
+
+	[Tooltip( "Flight duration into the cross-pouch midpoint. 0 uses holdTweenDuration / wholeStackAbsorbTweenDuration." )]
+	[Min( 0f )]
+	public float crossPouchPickupDuration = 0.28f;
 
 	[Header( "Hold Root Pose" )]
 	[Tooltip( "Local offset of HoldRoot under the camera (held stack / hand position)." )]
@@ -304,6 +326,28 @@ public class CarryDefinition : ScriptableObject
 	[Range( 0f, 1f )]
 	public float pileStealExtraClinkVolumeScale = 0.4f;
 
+	/// <summary>Slot limit for the given pouch. Falls back to 10 when the kind is unknown.</summary>
+	public int GetSlotLimit( CarryBucketKind kind )
+	{
+		switch ( kind )
+		{
+			case CarryBucketKind.Coin:
+				return Mathf.Max( 1, coinSlotLimit );
+			case CarryBucketKind.Gem:
+				return Mathf.Max( 1, gemSlotLimit );
+			case CarryBucketKind.Artifact:
+				return Mathf.Max( 1, artifactSlotLimit );
+			case CarryBucketKind.Resource:
+				return Mathf.Max( 1, resourceSlotLimit );
+			case CarryBucketKind.General:
+				return Mathf.Max( 1, generalSlotLimit );
+			case CarryBucketKind.Junk:
+				return Mathf.Max( 1, junkSlotLimit );
+			default:
+				return 10;
+		}
+	}
+
 	/// <summary>Hold seconds for E/F based on stack or carried quantity.</summary>
 	public float ResolveWholeStackHoldSeconds( int quantity )
 	{
@@ -343,8 +387,12 @@ public class CarryDefinition : ScriptableObject
 
 	void OnValidate()
 	{
-		maxCarryWeight = Mathf.Max( 1, maxCarryWeight );
-		minBurdenedMoveSpeedScale = Mathf.Clamp( minBurdenedMoveSpeedScale, 0.02f, 1f );
+		coinSlotLimit = Mathf.Max( 1, coinSlotLimit );
+		gemSlotLimit = Mathf.Max( 1, gemSlotLimit );
+		artifactSlotLimit = Mathf.Max( 1, artifactSlotLimit );
+		resourceSlotLimit = Mathf.Max( 1, resourceSlotLimit );
+		generalSlotLimit = Mathf.Max( 1, generalSlotLimit );
+		junkSlotLimit = Mathf.Max( 1, junkSlotLimit );
 		heldStackHorizontalSpread = Mathf.Max( 0f, heldStackHorizontalSpread );
 		itemCycleSpeed = Mathf.Max( 0.1f, itemCycleSpeed );
 		stackPoseSmoothSpeed = Mathf.Max( 0.1f, stackPoseSmoothSpeed );
@@ -352,6 +400,7 @@ public class CarryDefinition : ScriptableObject
 		stackPadding = Mathf.Max( 0f, stackPadding );
 		fallbackStackStep = Mathf.Max( 0.001f, fallbackStackStep );
 		holdTweenDuration = Mathf.Max( 0.05f, holdTweenDuration );
+		crossPouchPickupDuration = Mathf.Max( 0f, crossPouchPickupDuration );
 		coinFlipDuration = Mathf.Max( 0f, coinFlipDuration );
 		coinFlipArcHeight = Mathf.Max( 0f, coinFlipArcHeight );
 		coinFlipSpins = Mathf.Max( 0f, coinFlipSpins );

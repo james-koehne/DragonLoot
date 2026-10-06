@@ -6,14 +6,20 @@ using UnityEngine;
 /// </summary>
 public class MinecartInputStation : MinecartStationBase
 {
+	static readonly Color InputRoleTint = new Color( 0.95f, 0.62f, 0.12f, 1f );
+
 	[SerializeField]
 	MinecartOutputStation linkedOutput;
 
 	protected override bool ShowsCallVisualization => true;
 
+	protected override Color RoleTint => InputRoleTint;
+
+	protected override string DefaultInteractionName => "Send loaded cart";
+
 	void Reset()
 	{
-		SetInteractionName( "Send cart" );
+		SetInteractionName( DefaultInteractionName );
 	}
 
 	protected override void Update()
@@ -24,6 +30,9 @@ public class MinecartInputStation : MinecartStationBase
 
 	void TryAutoCall()
 	{
+		if ( !MinecartStationBase.AutomationEnabled )
+			return;
+
 		if ( HasDockedCart || HasInboundCart )
 			return;
 
@@ -103,7 +112,7 @@ public class MinecartInputStation : MinecartStationBase
 			return;
 
 		MinecartOutputStation output = linkedOutput;
-		if ( output != null && cart != null && cart.ItemCount > 0 )
+		if ( output != null && cart != null && cart.ItemCount > 0 && MinecartStationBase.AutomationEnabled )
 			auto.LeaveDock( output );
 		else
 			auto.LeaveDock( null );

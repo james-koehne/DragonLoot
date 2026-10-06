@@ -356,7 +356,6 @@ public class TreasureCreationWindow : EditorWindow
 
 		EditorGUI.indentLevel++;
 		_request.Value = EditorGUILayout.IntField( "Value", _request.Value );
-		_request.Weight = EditorGUILayout.IntField( "Weight", _request.Weight );
 		_request.ExclusiveCarry = EditorGUILayout.Toggle( "Exclusive Carry", _request.ExclusiveCarry );
 		_request.UsesHeavyThrow = EditorGUILayout.Toggle( "Uses Heavy Throw", _request.UsesHeavyThrow );
 		_request.CannotThrow = EditorGUILayout.Toggle( "Cannot Throw", _request.CannotThrow );

@@ -694,6 +694,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "CategorySlot6",
+                    "type": "Button",
+                    "id": "8a90b1c2-d3e4-5f60-b1c2-3d4e5f607183",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "WholeStackPickup",
                     "type": "Button",
                     "id": "a218db73-5a4f-4408-998b-691bebe01c7e",
@@ -1054,6 +1063,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "CategorySlot5",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f4a5b6c7-d8e9-0123-def0-234567890006",
+                    "path": "<Keyboard>/6",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "CategorySlot6",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

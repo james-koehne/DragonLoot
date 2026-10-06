@@ -265,6 +265,9 @@ public static class MinecartNetworkPathfinder
 		if ( junction == null || junction.ridePaths == null )
 			return;
 
+		if ( !graph.IsJunctionVisuallyComplete( current.JunctionIndex ) )
+			return;
+
 		int arriveSign = current.ArriveSign != 0 ? ( current.ArriveSign >= 0 ? 1 : -1 ) : 0;
 		for ( int i = 0; i < junction.ridePaths.Count; i++ )
 		{

@@ -299,11 +299,14 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		int slotIndex,
 		List<TreasureDefinition> into,
 		out Vector3 contact,
-		out Quaternion rotation )
+		out Quaternion rotation,
+		int maxCount )
 	{
 		contact = transform.position;
 		rotation = transform.rotation;
 		if ( !AllowsDisplayedPickup || into == null || Slots == null || slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
+		if ( maxCount <= 0 )
 			return false;
 
 		DisplaySlot slot = Slots[ slotIndex ];
@@ -314,7 +317,10 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 		if ( slot.Definitions.Count > 0 )
 		{
-			for ( int i = 0; i < slot.Definitions.Count; i++ )
+			int available = slot.Definitions.Count;
+			int take = Mathf.Min( maxCount, available );
+			int start = available - take;
+			for ( int i = start; i < available; i++ )
 			{
 				TreasureDefinition def = slot.Definitions[ i ];
 				if ( def == null )
@@ -324,10 +330,15 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 				NotifySortedDelta( def, -1 );
 			}
 
-			slot.Definitions.Clear();
-			for ( int i = 0; i < slot.Items.Count; i++ )
+			slot.Definitions.RemoveRange( start, available - start );
+
+			// Despawn any live meshes for removed top definitions (keep lower visuals).
+			int keepLive = slot.Definitions.Count;
+			while ( slot.Items.Count > keepLive )
 			{
-				TreasureItem member = slot.Items[ i ];
+				int liveIndex = slot.Items.Count - 1;
+				TreasureItem member = slot.Items[ liveIndex ];
+				slot.Items.RemoveAt( liveIndex );
 				if ( member == null )
 					continue;
 				_displayedItems.Remove( member );
@@ -340,7 +351,6 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 				TreasureItemFactory.Despawn( member );
 			}
 
-			slot.Items.Clear();
 			_isComplete = false;
 			SetCompletedVisual( false );
 			RestackSlot( slotIndex );
@@ -350,6 +360,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 			OnDisplaySlotChanged( slotIndex );
 			return into.Count > 0;
 		}
+
 		List<TreasureItem> taken = new List<TreasureItem>( slot.Items.Count );
 		for ( int i = 0; i < slot.Items.Count; i++ )
 		{
@@ -363,8 +374,13 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( taken.Count == 0 )
 			return false;
 
+		int takeItems = Mathf.Min( maxCount, taken.Count );
+		int itemStart = taken.Count - takeItems;
 		slot.Items.Clear();
-		for ( int i = 0; i < taken.Count; i++ )
+		for ( int i = 0; i < itemStart; i++ )
+			slot.Items.Add( taken[ i ] );
+
+		for ( int i = itemStart; i < taken.Count; i++ )
 		{
 			TreasureItem member = taken[ i ];
 			into.Add( member.Definition );

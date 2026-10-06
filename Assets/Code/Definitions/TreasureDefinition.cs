@@ -22,10 +22,6 @@ public class TreasureDefinition : ScriptableObject
 	[Min( 0 )]
 	public int value = 1;
 
-	[Tooltip( "Carry weight. Movement slows linearly with total carried weight; coins/gems typically use 1." )]
-	[Min( 1 )]
-	public int weight = 1;
-
 	[Tooltip( "When true, this treasure cannot be carried with any other items." )]
 	public bool exclusiveCarry = false;
 
@@ -319,7 +315,6 @@ public class TreasureDefinition : ScriptableObject
 			displayName = name;
 
 		value = Mathf.Max( 0, value );
-		weight = Mathf.Max( 1, weight );
 		throwForceScale = Mathf.Max( 0f, throwForceScale );
 		throwUpBiasScale = Mathf.Max( 0f, throwUpBiasScale );
 		EnsurePhysicsDefaults();

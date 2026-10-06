@@ -32,7 +32,6 @@ public static class TreasureCreationPipeline
 		public string Variant;
 
 		public int Value = 1;
-		public int Weight = 1;
 		public bool ExclusiveCarry;
 		public bool UsesHeavyThrow;
 		public bool CannotThrow;
@@ -227,7 +226,6 @@ public static class TreasureCreationPipeline
 				request.CoinThickness = 0.08f;
 				request.CartGridSize = Vector2Int.one;
 				request.Value = request.IsSkeletonKey ? 200 : 40;
-				request.Weight = 1;
 				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 				if ( string.IsNullOrEmpty( request.Variant ) )
 					request.Variant = request.IsSkeletonKey ? "Skeleton" : request.KeyType.ToString();
@@ -266,7 +264,6 @@ public static class TreasureCreationPipeline
 				request.CoinThickness = 0.1f;
 				request.CartGridSize = Vector2Int.one;
 				request.Value = 1;
-				request.Weight = 1;
 				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 				request.ConvertArtifactMaterials = false;
 				break;
@@ -286,7 +283,6 @@ public static class TreasureCreationPipeline
 				request.CoinThickness = 0.1f;
 				request.CartGridSize = Vector2Int.one;
 				request.Value = 1;
-				request.Weight = 1;
 				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 				request.ConvertArtifactMaterials = false;
 				break;
@@ -326,7 +322,6 @@ public static class TreasureCreationPipeline
 		request.CoinThickness = 0.4f;
 		request.CartGridSize = new Vector2Int( 2, 2 );
 		request.Value = 150;
-		request.Weight = 10;
 		request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 	}
 
@@ -345,7 +340,6 @@ public static class TreasureCreationPipeline
 		request.Category = source.category;
 		request.Variant = source.variant;
 		request.Value = source.value;
-		request.Weight = source.weight;
 		request.ExclusiveCarry = source.exclusiveCarry;
 		request.UsesHeavyThrow = source.usesHeavyThrow;
 		request.CannotThrow = source.cannotThrow;
@@ -562,7 +556,6 @@ public static class TreasureCreationPipeline
 		def.category = request.Category;
 		def.variant = request.Variant;
 		def.value = request.Value;
-		def.weight = Mathf.Max( 1, request.Weight );
 		def.exclusiveCarry = request.ExclusiveCarry;
 		def.usesHeavyThrow = request.UsesHeavyThrow;
 		def.cannotThrow = request.CannotThrow;

@@ -130,10 +130,7 @@ public class TreasureItemInteractable : InteractableBase
 		if ( UsesDisplayedCoinStackPickup( item ) )
 		{
 			PlayerCarry carry = player.Carry;
-			if ( carry == null )
-				return false;
-
-			return carry.CanAdd( item.Definition );
+			return carry != null;
 		}
 
 		if ( UsesColumnPickup( item ) )
@@ -142,13 +139,10 @@ public class TreasureItemInteractable : InteractableBase
 			if ( carry == null )
 				return false;
 
-			if ( !TryCollectPickupColumn( item, SupportBuffer, player ) )
-				return false;
-
-			return carry.CountAffordableSuffix( SupportBuffer ) > 0;
+			return TryCollectPickupColumn( item, SupportBuffer, player );
 		}
 
-		return player.CanReceiveTreasureItem( item );
+		return player.Carry != null;
 	}
 
 	public override void Interact( PlayerController player )
@@ -354,6 +348,10 @@ public class TreasureItemInteractable : InteractableBase
 		int takeCount = carry.CountAffordableSuffix( SupportBuffer );
 		if ( takeCount <= 0 )
 		{
+			TreasureDefinition probe = SupportBuffer[ SupportBuffer.Count - 1 ] != null
+				? SupportBuffer[ SupportBuffer.Count - 1 ].Definition
+				: item.Definition;
+			carry.NotifyPouchFull( probe );
 			CleanupBuffer.Clear();
 			return;
 		}

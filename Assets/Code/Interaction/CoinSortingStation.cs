@@ -1518,7 +1518,7 @@ public class CoinSortingStation : MonoBehaviour
 			return false;
 
 		StoragePullScratch.Clear();
-		if ( !table.TryConsumeSlotDefinitions( slotIndex, StoragePullScratch, out Vector3 startPos, out Quaternion startRot )
+		if ( !table.TryConsumeSlotDefinitions( slotIndex, StoragePullScratch, out Vector3 startPos, out Quaternion startRot, int.MaxValue )
 			|| StoragePullScratch.Count == 0 )
 		{
 			StoragePullScratch.Clear();
