@@ -47,5 +47,23 @@ namespace FeedbackSystem
 
 			follower.Begin( follow );
 		}
+
+		public static void Detach( AudioSource source )
+		{
+			if ( source == null )
+				return;
+
+			FeedbackAudioFollower follower = source.GetComponent<FeedbackAudioFollower>();
+			if ( follower == null )
+				return;
+
+			follower.Clear();
+		}
+
+		public void Clear()
+		{
+			_follow = null;
+			enabled = false;
+		}
 	}
 }

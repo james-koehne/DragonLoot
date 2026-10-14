@@ -14,11 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasureDefinition
   id: Crate_01
   displayName: Crate
-  category: 8
+  category: 10
   variant: Wood
   suppressDiscoveryPopup: 0
   value: 150
-  weight: 10
   exclusiveCarry: 0
   usesHeavyThrow: 1
   cannotThrow: 0
@@ -37,7 +36,7 @@ MonoBehaviour:
   collideWithPlayerOnPile: 1
   keyType: 0
   isSkeletonKey: 0
-  chestDefinition: {fileID: 11400000, guid: 822ff4e06454a684b9455c1671aa1964, type: 2}
+  chestDefinition: {fileID: 0}
   icon: {fileID: 0}
   uiColorHint: {r: 1, g: 1, b: 1, a: 1}
   meshOverride: {fileID: 0}

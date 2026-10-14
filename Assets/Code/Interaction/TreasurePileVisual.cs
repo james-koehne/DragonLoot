@@ -846,6 +846,87 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			bridge.NotifyHeightChanged( worldPos, radius );
 	}
 
+	GameSavePileEntry _pendingSaveApply;
+
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	public bool TryCaptureSave( out GameSavePileEntry entry )
+	{
+		entry = null;
+		if ( _heightfield == null || !_heightfield.IsInitialized )
+			return false;
+
+		ushort[] packed = null;
+		if ( !_heightfield.CopyToNormalizedU16( ref packed ) || packed == null || packed.Length == 0 )
+			return false;
+
+		entry = new GameSavePileEntry
+		{
+			persistenceId = ResolvePersistenceId(),
+			resolutionX = _heightfield.ResolutionX,
+			resolutionZ = _heightfield.ResolutionZ,
+			maxHeight = _heightfield.MaxHeight,
+			heightsU16Base64 = GameSaveBinary.EncodeU16( packed ),
+			emptied = _emptied,
+			remaining = new List<GameSaveIdCount>()
+		};
+
+		if ( lootInstances != null )
+			lootInstances.CaptureRemainingForSave( entry.remaining );
+
+		return !string.IsNullOrEmpty( entry.persistenceId );
+	}
+
+	public void ApplyFromSave( GameSavePileEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		if ( _heightfield == null || !_heightfield.IsInitialized || lootInstances == null || !lootInstances.IsReady )
+		{
+			_pendingSaveApply = entry;
+			return;
+		}
+
+		ApplySaveNow( entry );
+	}
+
+	void ApplySaveNow( GameSavePileEntry entry )
+	{
+		if ( entry == null || _heightfield == null || !_heightfield.IsInitialized )
+			return;
+
+		ushort[] packed = GameSaveBinary.DecodeU16( entry.heightsU16Base64 );
+		if ( packed != null && packed.Length == _heightfield.ResolutionX * _heightfield.ResolutionZ )
+		{
+			if ( entry.maxHeight > 0.01f )
+				_heightfield.CopyFromPackedU16( packed, entry.maxHeight );
+			else
+				_heightfield.CopyFromNormalizedU16( packed );
+
+			if ( terrainMesh != null )
+			{
+				terrainMesh.Bind( _heightfield, syncCollider: false );
+				if ( Application.isPlaying )
+					terrainMesh.BeginDeferredColliderCook();
+			}
+
+			TreasurePileSurfaceBridge bridge = GetComponent<TreasurePileSurfaceBridge>();
+			if ( bridge != null )
+				bridge.RestampFull();
+		}
+
+		_emptied = entry.emptied;
+		if ( lootInstances != null )
+			lootInstances.ApplyRemainingFromSave( entry.remaining );
+
+		if ( _pile != null )
+			_pile.SyncRemainingFromVisual();
+	}
+
 	async void WireSystemsAsync()
 	{
 		HideLegacyStaticMeshes();
@@ -900,6 +981,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		TreasurePileSurfaceBridge bridge = GetComponent<TreasurePileSurfaceBridge>();
 		if ( bridge != null )
 			bridge.RestampFull();
+
+		if ( _pendingSaveApply != null )
+		{
+			GameSavePileEntry pending = _pendingSaveApply;
+			_pendingSaveApply = null;
+			ApplySaveNow( pending );
+		}
 	}
 
 	public void ReleaseTreasure( TreasureItem item )
@@ -1688,12 +1776,6 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		authoredMaxHeight = 0.01f;
 		authoredHeightFormat = AuthoredFormatWorldMeters;
 		authoredRevision++;
-	}
-
-	[System.Obsolete( "Use ResetAuthoredToEmpty" )]
-	public void ResetAuthoredToMound()
-	{
-		ResetAuthoredToEmpty();
 	}
 
 	/// <summary>

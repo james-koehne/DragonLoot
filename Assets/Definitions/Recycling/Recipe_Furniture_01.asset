@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2266e3fd11b1ce479397f7c966a6d6b, type: 3}
+  m_Name: Recipe_Furniture_01
+  m_EditorClassIdentifier: Assembly-CSharp::RecyclingRecipeDefinition
+  input: {fileID: 11400000, guid: d415192ed1d746b4d8f1d11aa3a17375, type: 2}
+  outputs:
+  - resource: {fileID: 11400000, guid: df869cf9d06b32e46816ab80ada29a28, type: 2}
+    count: 1
+  - resource: {fileID: 11400000, guid: a2c5860669fc0c74ebc10abe2aa963d1, type: 2}
+    count: 1
+  chewWood: 1
+  chewMetal: 1

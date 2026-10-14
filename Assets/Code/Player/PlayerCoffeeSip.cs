@@ -260,7 +260,7 @@ public class PlayerCoffeeSip : MonoBehaviour
 		if ( _randomSfx == null )
 		{
 			_randomSfx = new PlayRandomSFXFeedback();
-			_randomSfx.SpatialBlend = 0f;
+			_randomSfx.Playback.SpatialBlend = 0f;
 			sipFeedbacks.AddFeedback( _randomSfx );
 		}
 
@@ -276,8 +276,8 @@ public class PlayerCoffeeSip : MonoBehaviour
 		CoffeeMachineDefinition def = ResolvedDefinition;
 		float volMin = RuntimeDefinition.Get( def, d => d.sipVolumeMin, 1.5f );
 		float volMax = RuntimeDefinition.Get( def, d => d.sipVolumeMax, 1.5f );
-		_randomSfx.VolumeMin = volMin;
-		_randomSfx.VolumeMax = volMax;
+		_randomSfx.Playback.VolumeMin = volMin;
+		_randomSfx.Playback.VolumeMax = volMax;
 	}
 
 	void EnsureSipClipsLoaded()

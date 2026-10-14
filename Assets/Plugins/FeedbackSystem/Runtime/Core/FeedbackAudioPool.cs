@@ -21,16 +21,19 @@ namespace FeedbackSystem
 			{
 				AudioSource source = _sources[i];
 				if ( source != null && source.isPlaying )
+				{
 					source.Stop();
+					FeedbackAudioFollower.Detach( source );
+				}
 			}
 		}
 
-		public static void Play( AudioClip clip, float volume, float pitch, Vector3 position )
+		public static AudioSource Play( AudioClip clip, float volume, float pitch, Vector3 position )
 		{
-			Play( clip, volume, pitch, position, spatialBlend: 0f, minDistance: 1f, maxDistance: 20f );
+			return Play( clip, volume, pitch, position, spatialBlend: 0f, minDistance: 1f, maxDistance: 20f );
 		}
 
-		public static void Play(
+		public static AudioSource Play(
 			AudioClip clip,
 			float volume,
 			float pitch,
@@ -40,24 +43,40 @@ namespace FeedbackSystem
 			float maxDistance,
 			Transform followTransform = null )
 		{
-			if ( !FeedbackSfxPlayback.Enabled || clip == null )
-				return;
+			FeedbackSfxSettings settings = new FeedbackSfxSettings
+			{
+				SpatialBlend = spatialBlend,
+				MinDistance = minDistance,
+				MaxDistance = maxDistance
+			};
+			return Play( clip, volume, pitch, position, settings, followTransform );
+		}
+
+		public static AudioSource Play(
+			AudioClip clip,
+			float volume,
+			float pitch,
+			Vector3 position,
+			FeedbackSfxSettings settings,
+			Transform followTransform = null )
+		{
+			if ( !FeedbackSfxPlayback.Enabled || clip == null || settings == null )
+				return null;
 
 			Ensure();
 			AudioSource source = NextSource();
 			if ( source == null )
-				return;
+				return null;
 
 			if ( followTransform != null )
 				position = followTransform.position;
 
 			source.transform.position = position;
-			source.spatialBlend = Mathf.Clamp01( spatialBlend );
-			source.minDistance = Mathf.Max( 0.01f, minDistance );
-			source.maxDistance = Mathf.Max( source.minDistance, maxDistance );
+			settings.ApplyToSource( source );
 			source.pitch = pitch <= 0f ? 1f : pitch;
 			FeedbackSfxPlayback.ApplyVolumeAndPlay( source, clip, volume );
 			FeedbackAudioFollower.Attach( source, followTransform );
+			return source;
 		}
 
 		static void Ensure()

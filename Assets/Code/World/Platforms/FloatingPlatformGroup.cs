@@ -231,6 +231,22 @@ public class FloatingPlatformGroup : MonoBehaviour
 		SinkAll();
 	}
 
+	public void ApplySavedActivated( bool activated )
+	{
+		AutoFillPlatformsIfEmpty();
+		CaptureMissingRestPosesBeforeSink();
+		ConfigureAllPlatforms();
+		if ( activated )
+			SnapActivated();
+		else
+		{
+			_activated = false;
+			SinkAll();
+		}
+
+		_initialized = true;
+	}
+
 	bool ShouldRestoreActivated()
 	{
 		if ( string.IsNullOrEmpty( triggerId ) && triggerType != FloatingPlatformTriggerType.Manual )

@@ -4,12 +4,12 @@ using System.IO;
 using FeedbackSystem;
 
 using UnityEditor;
-using UnityEditor.Callbacks;
 
 using UnityEngine;
 
 /// <summary>
 /// Builds Input/Output station prefabs, station definition, and ensures cargo carts have auto controller.
+/// Menu-only — does not rewrite prefabs on script reload.
 /// </summary>
 public static class MinecartStationPrefabBuilder
 {
@@ -20,42 +20,8 @@ public static class MinecartStationPrefabBuilder
 	const string OutputPrefabPath = Folder + "/MinecartOutputStation.prefab";
 	const string CargoPrefabPath = Folder + "/Minecart.prefab";
 	const string MixedTablePrefabPath = "Assets/Addressables/Tables/MixedDisplayTable.prefab";
-	const string AutoBuildKey = "DragonLoot.MinecartStations.AutoBuilt";
 	const string StationLampMaterialPath = "Assets/Materials/Minecart/M_MinecartStationLamp.mat";
 	const string StationPoleMaterialPath = "Assets/Materials/Minecart/M_MinecartStationPole.mat";
-
-	[DidReloadScripts]
-	static void AutoBuildOnceAfterCompile()
-	{
-		if ( EditorApplication.isPlayingOrWillChangePlaymode )
-			return;
-
-		EditorApplication.delayCall += () =>
-		{
-			try
-			{
-				EnsureAutomationButtonsOnPrefabs();
-				EnsureRoleVisualsOnPrefabs();
-			}
-			catch ( System.Exception ex )
-			{
-				Debug.LogWarning( "MinecartStationPrefabBuilder buttons/role: " + ex.Message );
-			}
-
-			if ( SessionState.GetBool( AutoBuildKey, false ) )
-				return;
-
-			SessionState.SetBool( AutoBuildKey, true );
-			try
-			{
-				EnsureEverything();
-			}
-			catch ( System.Exception ex )
-			{
-				Debug.LogWarning( "MinecartStationPrefabBuilder auto-build: " + ex.Message );
-			}
-		};
-	}
 
 	[MenuItem( DragonLootMenus.MinecartBuildStations )]
 	public static void BuildFromMenu()

@@ -3,6 +3,7 @@ using System;
 using FeedbackSystem;
 
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Looping spatial SFX whose pitch and volume follow <see cref="IFeedbackIntensity"/>.
@@ -10,13 +11,22 @@ using UnityEngine;
 /// </summary>
 [Serializable]
 [FeedbackInfo( "Audio/Loop SFX" )]
-public class LoopSfxFeedback : Feedback, IFeedbackTick
+public class LoopSfxFeedback : Feedback, IFeedbackTick, ISerializationCallbackReceiver
 {
 	const float IntensityEpsilon = 0.02f;
 
 	public AudioClip Clip;
 
 	public AudioSource AudioSource;
+
+	public FeedbackSfxSettings Playback = new FeedbackSfxSettings
+	{
+		SpatialBlend = 1f,
+		MinDistance = 2f,
+		MaxDistance = 30f,
+		DopplerLevel = 0.4f,
+		RolloffMode = AudioRolloffMode.Linear
+	};
 
 	[Range( -3f, 3f )]
 	[Tooltip( "Pitch at intensity 0." )]
@@ -26,11 +36,11 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 	[Tooltip( "Pitch at intensity 1." )]
 	public float PitchAtMax = 1.2f;
 
-	[Range( 0f, 1f )]
+	[Min( 0f )]
 	[Tooltip( "Volume at intensity 0 (before fade)." )]
-	public float VolumeAtRest = 0f;
+	public float VolumeAtRest;
 
-	[Range( 0f, 1f )]
+	[Min( 0f )]
 	[Tooltip( "Volume at intensity 1 (before fade / brake duck)." )]
 	public float VolumeAtMax = 0.85f;
 
@@ -50,17 +60,24 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 	[Tooltip( "When true, only audible while FeedbackBraking and intensity > 0 (speed-fades to silence at stop)." )]
 	public bool RequireBraking;
 
-	[Range( 0f, 1f )]
-	public float SpatialBlend = 1f;
+	[FormerlySerializedAs( "SpatialBlend" )]
+	[SerializeField, HideInInspector]
+	float _migrateSpatialBlend = 1f;
 
-	[Min( 0.01f )]
-	public float MinDistance = 2f;
+	[FormerlySerializedAs( "MinDistance" )]
+	[SerializeField, HideInInspector]
+	float _migrateMinDistance = 2f;
 
-	[Min( 0.01f )]
-	public float MaxDistance = 30f;
+	[FormerlySerializedAs( "MaxDistance" )]
+	[SerializeField, HideInInspector]
+	float _migrateMaxDistance = 30f;
 
-	[Range( 0f, 5f )]
-	public float DopplerLevel = 0.4f;
+	[FormerlySerializedAs( "DopplerLevel" )]
+	[SerializeField, HideInInspector]
+	float _migrateDopplerLevel = 0.4f;
+
+	[SerializeField, HideInInspector]
+	bool _serializedPlaybackMerged;
 
 	float _fade;
 	float _brakeMul = 1f;
@@ -72,13 +89,13 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 		if ( Clip == null )
 			return;
 
-		EnsureAudioSource();
+		LoopSfxSourceUtil.EnsureAudioSource( Owner != null ? Owner.gameObject : null, ref AudioSource );
 		if ( AudioSource == null )
 			return;
 
 		Cancel( hardStop: false );
 		_intensity = ResolveIntensity();
-		ConfigureSource();
+		LoopSfxSourceUtil.ConfigureLoopSource( AudioSource, Playback );
 		AudioSource.clip = Clip;
 		AudioSource.loop = true;
 		_fade = 0f;
@@ -111,12 +128,8 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 			return false;
 		}
 
-		if ( !FeedbackSfxPlayback.Enabled )
-		{
-			if ( AudioSource.isPlaying )
-				AudioSource.Pause();
+		if ( LoopSfxSourceUtil.TickFxMutedPause( AudioSource ) )
 			return true;
-		}
 
 		if ( _intensity == null )
 			_intensity = ResolveIntensity();
@@ -175,17 +188,6 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 		}
 	}
 
-	void ConfigureSource()
-	{
-		AudioSource.playOnAwake = false;
-		AudioSource.loop = true;
-		AudioSource.spatialBlend = Mathf.Clamp01( SpatialBlend );
-		AudioSource.minDistance = Mathf.Max( 0.01f, MinDistance );
-		AudioSource.maxDistance = Mathf.Max( AudioSource.minDistance, MaxDistance );
-		AudioSource.dopplerLevel = Mathf.Max( 0f, DopplerLevel );
-		AudioSource.rolloffMode = AudioRolloffMode.Linear;
-	}
-
 	void ApplyMix( float intensity )
 	{
 		float pitch = Mathf.Lerp( PitchAtRest, PitchAtMax, intensity );
@@ -194,8 +196,7 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 		AudioSource.pitch = Mathf.Clamp( pitch, -3f, 3f );
 
 		float volume = Mathf.Lerp( VolumeAtRest, VolumeAtMax, intensity );
-		volume *= Mathf.Clamp01( _fade ) * Mathf.Clamp01( _brakeMul );
-		AudioSource.volume = Mathf.Clamp01( volume );
+		AudioSource.volume = LoopSfxSourceUtil.ApplyVolumeGain( volume, _fade, _brakeMul );
 	}
 
 	IFeedbackIntensity ResolveIntensity()
@@ -206,13 +207,46 @@ public class LoopSfxFeedback : Feedback, IFeedbackTick
 		return Owner.GetComponentInParent<IFeedbackIntensity>();
 	}
 
-	void EnsureAudioSource()
+	public void OnBeforeSerialize()
 	{
-		if ( AudioSource != null || Owner == null )
+		MergeMigrateIntoPlayback();
+	}
+
+	public void OnAfterDeserialize()
+	{
+		MergeMigrateIntoPlayback();
+	}
+
+	void MergeMigrateIntoPlayback()
+	{
+		if ( _serializedPlaybackMerged )
 			return;
 
-		AudioSource = Owner.GetComponent<AudioSource>();
-		if ( AudioSource == null )
-			AudioSource = Owner.gameObject.AddComponent<AudioSource>();
+		if ( Playback == null )
+			Playback = new FeedbackSfxSettings();
+
+		if ( NeedsSpatialMigration() )
+		{
+			Playback.SpatialBlend = _migrateSpatialBlend;
+			Playback.MinDistance = _migrateMinDistance;
+			Playback.MaxDistance = _migrateMaxDistance;
+			Playback.DopplerLevel = _migrateDopplerLevel;
+			Playback.RolloffMode = AudioRolloffMode.Linear;
+		}
+
+		_serializedPlaybackMerged = true;
+	}
+
+	bool NeedsSpatialMigration()
+	{
+		if ( !Mathf.Approximately( _migrateSpatialBlend, 1f ) )
+			return true;
+		if ( !Mathf.Approximately( _migrateMinDistance, 2f ) )
+			return true;
+		if ( !Mathf.Approximately( _migrateMaxDistance, 30f ) )
+			return true;
+		if ( !Mathf.Approximately( _migrateDopplerLevel, 0.4f ) )
+			return true;
+		return false;
 	}
 }

@@ -315,6 +315,37 @@ public class ChestInteractable : InteractableBase
 		return TryOpen();
 	}
 
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	/// <summary>Restores lock/open visuals without re-spawning loot (loot lives in world streamer).</summary>
+	public void ApplySavedState( ChestState savedState, bool destroyed )
+	{
+		if ( destroyed )
+		{
+			_pendingDestroy = true;
+			FinishSmashDestroy();
+			return;
+		}
+
+		_lockpickEndsAt = -1f;
+		if ( savedState == ChestState.Opened )
+		{
+			state = ChestState.Opened;
+			RefreshInteractionName();
+			PlayOpenFeedback();
+			return;
+		}
+
+		if ( savedState == ChestState.Lockpicking )
+			savedState = ChestState.Unlocked;
+
+		state = savedState;
+		RefreshInteractionName();
+	}
+
 	bool TryOpen()
 	{
 		if ( state != ChestState.Unlocked || _pendingDestroy )

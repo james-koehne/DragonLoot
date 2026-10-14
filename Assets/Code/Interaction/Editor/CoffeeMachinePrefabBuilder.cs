@@ -338,123 +338,6 @@ public static class CoffeeMachinePrefabBuilder
 		}
 	}
 
-	static void WireMachinePrefab( TreasureDefinition cupDef )
-	{
-		if ( !File.Exists( MachinePath ) )
-		{
-			Debug.LogWarning( "CoffeeMachinePrefabBuilder: missing machine prefab at " + MachinePath );
-			return;
-		}
-
-		GameObject root = PrefabUtility.LoadPrefabContents( MachinePath );
-		try
-		{
-			Transform rootXf = root.transform;
-			ClearGeneratedChildren( rootXf );
-
-			CoffeeMachineInteractable machine = root.GetComponent<CoffeeMachineInteractable>();
-			if ( machine == null )
-				machine = root.AddComponent<CoffeeMachineInteractable>();
-
-			BoxCollider box = root.GetComponent<BoxCollider>();
-			if ( box == null && root.GetComponent<Collider>() == null )
-			{
-				box = root.AddComponent<BoxCollider>();
-				box.center = new Vector3( 0f, 0.45f, 0f );
-				box.size = new Vector3( 1.2f, 1.0f, 0.7f );
-			}
-
-			Transform sockets = EnsureChild( rootXf, "Sockets" );
-			Transform portafilterRest = EnsurePose( sockets, "PortafilterRest", new Vector3( 0.45f, 0.35f, 0.1f ), Quaternion.Euler( 0f, 20f, 0f ) );
-			Transform portafilterLift = EnsurePose( sockets, "PortafilterLift", new Vector3( 0.35f, 0.55f, 0.15f ), Quaternion.Euler( -10f, 10f, 0f ) );
-			Transform portafilterUnderGrinder = EnsurePose( sockets, "PortafilterUnderGrinder", new Vector3( 0.55f, 0.22f, 0.25f ), Quaternion.Euler( 0f, 0f, 0f ) );
-			Transform portafilterApproachHead = EnsurePose( sockets, "PortafilterApproachHead", new Vector3( 0f, 0.42f, 0.22f ), Quaternion.Euler( 0f, 0f, -20f ) );
-			Transform portafilterLocked = EnsurePose( sockets, "PortafilterLocked", new Vector3( 0f, 0.38f, 0.18f ), Quaternion.Euler( 0f, 0f, -70f ) );
-
-			Transform tampMat = EnsurePose( sockets, "TampMat", new Vector3( 0.55f, 0.32f, -0.05f ), Quaternion.identity );
-			Transform tampLift = EnsurePose( sockets, "TampLift", new Vector3( 0.55f, 0.5f, -0.05f ), Quaternion.identity );
-			Transform tampHover = EnsurePose( sockets, "TampHover", new Vector3( 0.55f, 0.42f, 0.25f ), Quaternion.identity );
-			Transform tampPress = EnsurePose( sockets, "TampPress", new Vector3( 0.55f, 0.3f, 0.25f ), Quaternion.identity );
-
-			Transform cupPark = EnsurePose( sockets, "CupPark", new Vector3( -0.35f, 0.2f, 0.15f ), Quaternion.identity );
-			Transform cupUnderSpout = EnsurePose( sockets, "CupUnderSpout", new Vector3( 0f, 0.18f, 0.32f ), Quaternion.identity );
-
-			GameObject grinder = NestPrefab( rootXf, GrinderPath, "Grinder", new Vector3( 0.55f, 0f, 0.25f ), Quaternion.identity );
-			GameObject portafilterGo = NestPrefab( rootXf, PortafilterPath, "Portafilter", portafilterRest.localPosition, portafilterRest.localRotation );
-			GameObject tampMatGo = NestPrefab( rootXf, TampMatPath, "TamperMat", new Vector3( 0.55f, 0.3f, -0.05f ), Quaternion.identity );
-			GameObject tampGo = NestPrefab( rootXf, TampPath, "Tamp", tampMat.localPosition, tampMat.localRotation );
-			GameObject cupGo = NestPrefab( rootXf, CupPath, "Cup", cupPark.localPosition, cupPark.localRotation );
-
-			if ( tampMatGo != null )
-				tampMat.position = tampMatGo.transform.position;
-
-			Feedbacks grindFb = EnsureSfxFeedback( rootXf, "OnGrindFeedbacks", GrindClipPath, spatial: true );
-			Feedbacks tampFb = EnsureSfxFeedback( rootXf, "OnTampFeedbacks", null, spatial: true );
-			Feedbacks lockFb = EnsureSfxFeedback( rootXf, "OnLockFeedbacks", null, spatial: true );
-			Feedbacks brewFb = EnsureSfxFeedback( rootXf, "OnBrewFeedbacks", BrewClipPath, spatial: true );
-
-			SerializedObject so = new SerializedObject( machine );
-			SetRef( so, "portafilter", portafilterGo != null ? portafilterGo.transform : null );
-			SetRef( so, "tamp", tampGo != null ? tampGo.transform : null );
-			SetRef( so, "cupRoot", cupGo != null ? cupGo.transform : null );
-			SetRef( so, "portafilterRest", portafilterRest );
-			SetRef( so, "portafilterLift", portafilterLift );
-			SetRef( so, "portafilterUnderGrinder", portafilterUnderGrinder );
-			SetRef( so, "portafilterApproachHead", portafilterApproachHead );
-			SetRef( so, "portafilterLocked", portafilterLocked );
-			SetRef( so, "tampMat", tampMat );
-			SetRef( so, "tampLift", tampLift );
-			SetRef( so, "tampHover", tampHover );
-			SetRef( so, "tampPress", tampPress );
-			SetRef( so, "cupPark", cupPark );
-			SetRef( so, "cupUnderSpout", cupUnderSpout );
-			SetRef( so, "grindFeedbacks", grindFb );
-			SetRef( so, "tampFeedbacks", tampFb );
-			SetRef( so, "lockFeedbacks", lockFb );
-			SetRef( so, "brewFeedbacks", brewFb );
-			SetRef( so, "coffeeCupDefinition", cupDef );
-			so.ApplyModifiedPropertiesWithoutUndo();
-
-			if ( cupGo != null )
-			{
-				TreasureItem cupItem = cupGo.GetComponent<TreasureItem>();
-				if ( cupItem != null )
-					cupItem.Bind( cupDef, viaAddressables: false );
-
-				CoffeeCupState cupState = cupGo.GetComponent<CoffeeCupState>();
-				if ( cupState != null )
-					cupState.DisablePickup();
-			}
-
-			if ( portafilterGo != null )
-				portafilterGo.transform.SetPositionAndRotation( portafilterRest.position, portafilterRest.rotation );
-			if ( tampGo != null )
-				tampGo.transform.SetPositionAndRotation( tampMat.position, tampMat.rotation );
-
-			PrefabUtility.SaveAsPrefabAsset( root, MachinePath );
-		}
-		finally
-		{
-			PrefabUtility.UnloadPrefabContents( root );
-		}
-	}
-
-	static void ClearGeneratedChildren( Transform root )
-	{
-		string[] generated =
-		{
-			"Sockets", "Grinder", "Portafilter", "TamperMat", "Tamp", "Cup",
-			"OnGrindFeedbacks", "OnTampFeedbacks", "OnLockFeedbacks", "OnBrewFeedbacks"
-		};
-
-		for ( int i = 0; i < generated.Length; i++ )
-		{
-			Transform child = root.Find( generated[ i ] );
-			if ( child != null )
-				Object.DestroyImmediate( child.gameObject );
-		}
-	}
-
 	static Transform EnsureChild( Transform parent, string name )
 	{
 		Transform existing = parent.Find( name );
@@ -473,26 +356,6 @@ public static class CoffeeMachinePrefabBuilder
 		pose.localRotation = localRot;
 		pose.localScale = Vector3.one;
 		return pose;
-	}
-
-	static GameObject NestPrefab( Transform parent, string prefabPath, string childName, Vector3 localPos, Quaternion localRot )
-	{
-		GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>( prefabPath );
-		if ( prefab == null )
-		{
-			Debug.LogWarning( "CoffeeMachinePrefabBuilder: missing prefab " + prefabPath );
-			return null;
-		}
-
-		GameObject instance = PrefabUtility.InstantiatePrefab( prefab, parent ) as GameObject;
-		if ( instance == null )
-			return null;
-
-		instance.name = childName;
-		instance.transform.localPosition = localPos;
-		instance.transform.localRotation = localRot;
-		instance.transform.localScale = Vector3.one;
-		return instance;
 	}
 
 	static Feedbacks EnsureSfxFeedback( Transform root, string childName, string clipPath, bool spatial )
@@ -517,12 +380,12 @@ public static class CoffeeMachinePrefabBuilder
 		}
 
 		sfx.Clip = clip;
-		sfx.SpatialBlend = spatial ? 1f : 0f;
-		sfx.MinDistance = 1f;
-		sfx.MaxDistance = 18f;
-		sfx.VolumeMin = 0.85f;
-		sfx.VolumeMax = 1f;
-		sfx.FollowCallerTransform = true;
+		sfx.Playback.SpatialBlend = spatial ? 1f : 0f;
+		sfx.Playback.MinDistance = 1f;
+		sfx.Playback.MaxDistance = 18f;
+		sfx.Playback.VolumeMin = 0.85f;
+		sfx.Playback.VolumeMax = 1f;
+		sfx.Playback.FollowCallerTransform = true;
 		EditorUtility.SetDirty( feedbacks );
 		return feedbacks;
 	}
@@ -540,13 +403,5 @@ public static class CoffeeMachinePrefabBuilder
 		return feedbacks;
 	}
 
-	static void SetRef( SerializedObject so, string propertyName, Object value )
-	{
-		SerializedProperty prop = so.FindProperty( propertyName );
-		if ( prop == null )
-			return;
-
-		prop.objectReferenceValue = value;
-	}
 }
 #endif

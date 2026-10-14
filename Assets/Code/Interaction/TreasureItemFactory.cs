@@ -458,6 +458,17 @@ public static class TreasureItemFactory
 		_poolRoot = root.transform;
 	}
 
+	public static void ClearPoolRoot()
+	{
+		if ( _poolRoot == null )
+			return;
+
+		GameObject root = _poolRoot.gameObject;
+		_poolRoot = null;
+		if ( root != null )
+			Object.Destroy( root );
+	}
+
 	static TreasureItem CreateFallback(
 		TreasureDefinition definition,
 		Vector3 position,

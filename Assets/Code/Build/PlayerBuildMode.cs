@@ -573,9 +573,9 @@ public class PlayerBuildMode : MonoBehaviour
 		if ( loop == null )
 		{
 			loop = new AmbientLoopSfxFeedback();
-			loop.SpatialBlend = 1f;
-			loop.MinDistance = 1.25f;
-			loop.MaxDistance = 28f;
+			loop.Playback.SpatialBlend = 1f;
+			loop.Playback.MinDistance = 1.25f;
+			loop.Playback.MaxDistance = 28f;
 			feedbacks.AddFeedback( loop );
 		}
 
@@ -611,10 +611,10 @@ public class PlayerBuildMode : MonoBehaviour
 		if ( sfx == null )
 		{
 			sfx = new PlaySFXFeedback();
-			sfx.SpatialBlend = spatial ? 1f : 0f;
-			sfx.MinDistance = 1.25f;
-			sfx.MaxDistance = 28f;
-			sfx.FollowCallerTransform = false;
+			sfx.Playback.SpatialBlend = spatial ? 1f : 0f;
+			sfx.Playback.MinDistance = 1.25f;
+			sfx.Playback.MaxDistance = 28f;
+			sfx.Playback.FollowCallerTransform = false;
 			feedbacks.AddFeedback( sfx );
 		}
 
@@ -655,12 +655,12 @@ public class PlayerBuildMode : MonoBehaviour
 		if ( sfx == null )
 		{
 			sfx = new PlayRandomSFXFeedback();
-			sfx.MinDistance = 1.25f;
-			sfx.MaxDistance = 28f;
+			sfx.Playback.MinDistance = 1.25f;
+			sfx.Playback.MaxDistance = 28f;
 			feedbacks.AddFeedback( sfx );
 		}
 
-		sfx.SpatialBlend = spatial ? 1f : 0f;
+		sfx.Playback.SpatialBlend = spatial ? 1f : 0f;
 		return sfx;
 	}
 
@@ -677,18 +677,18 @@ public class PlayerBuildMode : MonoBehaviour
 		{
 			_buildCompleteSfx.Clip = def != null ? def.buildCompleteClip : null;
 			float vol = def != null ? def.buildCompleteVolume : 1f;
-			_buildCompleteSfx.VolumeMin = vol;
-			_buildCompleteSfx.VolumeMax = vol;
+			_buildCompleteSfx.Playback.VolumeMin = vol;
+			_buildCompleteSfx.Playback.VolumeMax = vol;
 		}
 
 		if ( _buildHitSfx != null )
 		{
 			_buildHitSfx.Clips = def != null ? def.buildHitClips : null;
-			_buildHitSfx.VolumeMin = def != null ? def.buildHitVolumeMin : 1f;
-			_buildHitSfx.VolumeMax = def != null ? def.buildHitVolumeMax : 1f;
-			_buildHitSfx.PitchMin = def != null ? def.buildHitPitchMin : 0.95f;
-			_buildHitSfx.PitchMax = def != null ? def.buildHitPitchMax : 1.05f;
-			_buildHitSfx.SpatialBlend = 1f;
+			_buildHitSfx.Playback.VolumeMin = def != null ? def.buildHitVolumeMin : 1f;
+			_buildHitSfx.Playback.VolumeMax = def != null ? def.buildHitVolumeMax : 1f;
+			_buildHitSfx.Playback.PitchMin = def != null ? def.buildHitPitchMin : 0.95f;
+			_buildHitSfx.Playback.PitchMax = def != null ? def.buildHitPitchMax : 1.05f;
+			_buildHitSfx.Playback.SpatialBlend = 1f;
 		}
 	}
 

@@ -7,80 +7,127 @@ namespace FeedbackSystem
 {
 	[Serializable]
 	[FeedbackInfo( "Audio/Play SFX" )]
-	public class PlaySFXFeedback : Feedback
+	public class PlaySFXFeedback : Feedback, ISerializationCallbackReceiver
 	{
 		public AudioClip Clip;
 
-		[Tooltip( "Can exceed 1 for boost (e.g. 1.5 = +50%)." )]
-		[Min( 0f )]
-		public float VolumeMin = 1f;
+		public FeedbackSfxSettings Playback = new FeedbackSfxSettings();
 
-		[Tooltip( "Can exceed 1 for boost (e.g. 1.5 = +50%)." )]
-		[Min( 0f )]
+		[FormerlySerializedAs( "VolumeMin" )]
+		[SerializeField, HideInInspector]
+		float _migrateVolumeMin = 1f;
+
+		[FormerlySerializedAs( "VolumeMax" )]
 		[FormerlySerializedAs( "Volume" )]
-		public float VolumeMax = 1f;
+		[SerializeField, HideInInspector]
+		float _migrateVolumeMax = 1f;
 
-		[Range( -3f, 3f )]
-		public float PitchMin = 1f;
+		[FormerlySerializedAs( "PitchMin" )]
+		[SerializeField, HideInInspector]
+		float _migratePitchMin = 1f;
 
-		[Range( -3f, 3f )]
+		[FormerlySerializedAs( "PitchMax" )]
 		[FormerlySerializedAs( "Pitch" )]
-		public float PitchMax = 1f;
+		[SerializeField, HideInInspector]
+		float _migratePitchMax = 1f;
 
-		[Range( 0f, 1f )]
-		[Tooltip( "0 = 2D, 1 = full 3D at the play position." )]
-		public float SpatialBlend;
+		[FormerlySerializedAs( "SpatialBlend" )]
+		[SerializeField, HideInInspector]
+		float _migrateSpatialBlend;
 
-		[Min( 0.01f )]
-		public float MinDistance = 1f;
+		[FormerlySerializedAs( "MinDistance" )]
+		[SerializeField, HideInInspector]
+		float _migrateMinDistance = 1f;
 
-		[Min( 0.01f )]
-		public float MaxDistance = 20f;
+		[FormerlySerializedAs( "MaxDistance" )]
+		[SerializeField, HideInInspector]
+		float _migrateMaxDistance = 20f;
 
-		[Tooltip( "When enabled, the AudioSource tracks Context.Source (or the Feedbacks owner) for the duration of playback." )]
-		public bool FollowCallerTransform;
+		[FormerlySerializedAs( "FollowCallerTransform" )]
+		[SerializeField, HideInInspector]
+		bool _migrateFollowCallerTransform;
 
-		public AudioSource AudioSource;
+		[FormerlySerializedAs( "AudioSource" )]
+		[SerializeField, HideInInspector]
+		AudioSource _migrateAudioSource;
+
+		[SerializeField, HideInInspector]
+		bool _serializedPlaybackMerged;
+
+		[NonSerialized]
+		FeedbackOneShotVoice _voice = new FeedbackOneShotVoice();
 
 		public override void Play()
 		{
+			GameObject ownerGo = Owner != null ? Owner.gameObject : null;
 			FeedbackSfxPlayback.Play(
 				Clip,
-				VolumeMin,
-				VolumeMax,
-				PitchMin,
-				PitchMax,
-				AudioSource,
-				ResolvePosition(),
-				SpatialBlend,
-				MinDistance,
-				MaxDistance,
-				ResolveFollowTransform() );
+				Playback,
+				FeedbackSfxResolve.ResolvePosition( Context, ownerGo ),
+				FeedbackSfxResolve.ResolveFollowTransform( Playback.FollowCallerTransform, Context, ownerGo ),
+				_voice );
 		}
 
-		Transform ResolveFollowTransform()
+		public override void Stop()
 		{
-			if ( !FollowCallerTransform )
-				return null;
-
-			if ( Context != null && Context.Source != null )
-				return Context.Source.transform;
-
-			if ( Owner != null )
-				return Owner.transform;
-
-			return null;
+			_voice.StopAll();
 		}
 
-		Vector3 ResolvePosition()
+		public override void Reset()
 		{
-			if ( Context != null )
-				return Context.Position;
+			_voice.StopAll();
+		}
 
-			if ( Owner != null )
-				return Owner.transform.position;
+		public void OnBeforeSerialize()
+		{
+			MergeMigrateIntoPlayback();
+		}
 
-			return Vector3.zero;
+		public void OnAfterDeserialize()
+		{
+			MergeMigrateIntoPlayback();
+		}
+
+		void MergeMigrateIntoPlayback()
+		{
+			if ( _serializedPlaybackMerged )
+				return;
+
+			if ( Playback == null )
+				Playback = new FeedbackSfxSettings();
+
+			if ( NeedsFlatFieldMigration() )
+			{
+				Playback.VolumeMin = _migrateVolumeMin;
+				Playback.VolumeMax = _migrateVolumeMax;
+				Playback.PitchMin = _migratePitchMin;
+				Playback.PitchMax = _migratePitchMax;
+				Playback.SpatialBlend = _migrateSpatialBlend;
+				Playback.MinDistance = _migrateMinDistance;
+				Playback.MaxDistance = _migrateMaxDistance;
+				Playback.FollowCallerTransform = _migrateFollowCallerTransform;
+				Playback.AudioSource = _migrateAudioSource;
+			}
+
+			_serializedPlaybackMerged = true;
+		}
+
+		bool NeedsFlatFieldMigration()
+		{
+			// ReferenceEquals: OnAfterDeserialize can run off the main thread; Unity Object.!= is unsafe there.
+			if ( !ReferenceEquals( _migrateAudioSource, null ) || _migrateFollowCallerTransform || _migrateSpatialBlend > 0f )
+				return true;
+
+			if ( !Mathf.Approximately( _migrateVolumeMin, 1f ) || !Mathf.Approximately( _migrateVolumeMax, 1f ) )
+				return true;
+
+			if ( !Mathf.Approximately( _migratePitchMin, 1f ) || !Mathf.Approximately( _migratePitchMax, 1f ) )
+				return true;
+
+			if ( !Mathf.Approximately( _migrateMinDistance, 1f ) || !Mathf.Approximately( _migrateMaxDistance, 20f ) )
+				return true;
+
+			return false;
 		}
 	}
 }

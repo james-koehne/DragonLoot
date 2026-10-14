@@ -1728,6 +1728,110 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		_displayedItems.Clear();
 	}
 
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	public void CaptureSave( GameSaveDisplayTableEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		entry.persistenceId = ResolvePersistenceId();
+		if ( entry.slots == null )
+			entry.slots = new List<GameSaveDisplaySlotEntry>();
+		else
+			entry.slots.Clear();
+
+		if ( Slots == null )
+			return;
+
+		for ( int i = 0; i < Slots.Length; i++ )
+		{
+			DisplaySlot slot = Slots[ i ];
+			if ( slot == null || slot.Definitions.Count <= 0 )
+				continue;
+
+			GameSaveDisplaySlotEntry slotEntry = new GameSaveDisplaySlotEntry
+			{
+				slotIndex = i,
+				definitionIds = new List<string>( slot.Definitions.Count )
+			};
+			for ( int d = 0; d < slot.Definitions.Count; d++ )
+			{
+				string id = GameSaveTreasureIds.GetId( slot.Definitions[ d ] );
+				if ( !string.IsNullOrEmpty( id ) )
+					slotEntry.definitionIds.Add( id );
+			}
+
+			if ( slotEntry.definitionIds.Count > 0 )
+				entry.slots.Add( slotEntry );
+		}
+	}
+
+	public void ApplySave( GameSaveDisplayTableEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		ClearAllForSave();
+		if ( entry.slots == null || Slots == null )
+			return;
+
+		List<TreasureDefinition> defs = new List<TreasureDefinition>( 16 );
+		for ( int i = 0; i < entry.slots.Count; i++ )
+		{
+			GameSaveDisplaySlotEntry slotEntry = entry.slots[ i ];
+			if ( slotEntry == null || slotEntry.definitionIds == null || slotEntry.definitionIds.Count <= 0 )
+				continue;
+			if ( slotEntry.slotIndex < 0 || slotEntry.slotIndex >= Slots.Length )
+				continue;
+
+			defs.Clear();
+			for ( int d = 0; d < slotEntry.definitionIds.Count; d++ )
+			{
+				TreasureDefinition def = GameSaveTreasureIds.Resolve( slotEntry.definitionIds[ d ] );
+				if ( def != null )
+					defs.Add( def );
+			}
+
+			if ( defs.Count > 0 )
+				TryAppendSlotDefinitions( slotEntry.slotIndex, defs, respectPerSlotMax: false );
+		}
+	}
+
+	void ClearAllForSave()
+	{
+		if ( Slots == null )
+			return;
+
+		for ( int i = 0; i < Slots.Length; i++ )
+		{
+			DisplaySlot slot = Slots[ i ];
+			if ( slot == null )
+				continue;
+
+			for ( int j = slot.Items.Count - 1; j >= 0; j-- )
+			{
+				TreasureItem item = slot.Items[ j ];
+				if ( item != null )
+					TreasureItemFactory.Despawn( item );
+			}
+
+			slot.Items.Clear();
+			slot.Definitions.Clear();
+			CoinColumnCylinderBinder.ClearAndDestroy( ref slot.Cylinder, null );
+		}
+
+		_displayedItems.Clear();
+		_currentCount = 0;
+		_isComplete = false;
+		SetCompletedVisual( false );
+		RefreshCountLabel();
+		PublishChanged();
+	}
+
 	/// <summary>
 	/// Slot centers on a single horizontal plane (local XZ). Row/column index never changes base Y.
 	/// </summary>

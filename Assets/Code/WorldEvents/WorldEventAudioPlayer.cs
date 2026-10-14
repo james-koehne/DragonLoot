@@ -55,13 +55,13 @@ public static class WorldEventAudioPlayer
 			return;
 
 		_sfx.Clip = clip;
-		_sfx.VolumeMin = Mathf.Clamp01( volumeMin );
-		_sfx.VolumeMax = Mathf.Clamp01( volumeMax );
-		_sfx.PitchMin = pitchMin;
-		_sfx.PitchMax = pitchMax;
-		_sfx.SpatialBlend = Mathf.Clamp01( spatialBlend );
-		_sfx.MinDistance = Mathf.Max( 0.01f, minDistance );
-		_sfx.MaxDistance = Mathf.Max( _sfx.MinDistance, maxDistance );
+		_sfx.Playback.VolumeMin = Mathf.Clamp01( volumeMin );
+		_sfx.Playback.VolumeMax = Mathf.Clamp01( volumeMax );
+		_sfx.Playback.PitchMin = pitchMin;
+		_sfx.Playback.PitchMax = pitchMax;
+		_sfx.Playback.SpatialBlend = Mathf.Clamp01( spatialBlend );
+		_sfx.Playback.MinDistance = Mathf.Max( 0.01f, minDistance );
+		_sfx.Playback.MaxDistance = Mathf.Max( _sfx.Playback.MinDistance, maxDistance );
 
 		FeedbackContext context = new FeedbackContext();
 		context.Position = position;

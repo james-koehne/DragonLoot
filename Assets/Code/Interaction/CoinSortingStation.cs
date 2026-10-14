@@ -82,6 +82,10 @@ public class CoinSortingStation : MonoBehaviour
 	[SerializeField]
 	Feedbacks onSortingShakeFeedback;
 
+	[Tooltip( "Rotating sort one-shots while coins are processing." )]
+	[SerializeField]
+	Feedbacks onSortingClipSfxFeedback;
+
 	readonly Dictionary<TreasureDefinition, GroundCoinStack> _activeOutputByType =
 		new Dictionary<TreasureDefinition, GroundCoinStack>();
 	readonly Dictionary<TreasureDefinition, int> _fullStackIndexByType =
@@ -105,6 +109,7 @@ public class CoinSortingStation : MonoBehaviour
 	bool _loggedMissingGauge;
 	bool _loggedMissingCrankSpin;
 	bool _sortingShakeActive;
+	bool _sortingClipSfxActive;
 	bool _storagePullInFlight;
 	int _pendingStoragePullCount;
 	float _nextStoragePullTime;
@@ -127,6 +132,10 @@ public class CoinSortingStation : MonoBehaviour
 	}
 
 	public CoinSortingStationDefinition Definition => ResolveDefinition();
+
+	public Feedbacks OnCrankClickFeedbacks => onCrankClickFeedback;
+
+	public Feedbacks OnSortingClipSfxFeedbacks => onSortingClipSfxFeedback;
 
 	public Rigidbody Body => EnsureBody();
 
@@ -227,14 +236,11 @@ public class CoinSortingStation : MonoBehaviour
 	void Awake()
 	{
 		ResolveDefinition();
-		EnsureChildRefs();
+		ResolveChildRefs();
 		EnsureBodyPlacementCollider();
 		EnsureBody();
 		StripNestedRigidbodies();
-		EnsureSettleFeedback();
-		EnsureSortedFeedback();
-		EnsureCrankAudio();
-		EnsureWorldTimer();
+		BindWorldTimer();
 		BindVisuals();
 		if ( hopper != null )
 			hopper.BindStation( this );
@@ -264,9 +270,10 @@ public class CoinSortingStation : MonoBehaviour
 		}
 
 		TickSortingShake();
+		TickSortingClipSfx();
 	}
 
-	void EnsureChildRefs()
+	void ResolveChildRefs()
 	{
 		if ( hopper == null )
 			hopper = GetComponentInChildren<CoinSortingHopper>( true );
@@ -281,13 +288,7 @@ public class CoinSortingStation : MonoBehaviour
 		if ( moveInteractable == null )
 			moveInteractable = GetComponentInChildren<CoinSortingStationMoveInteractable>( true );
 		if ( moveInteractable == null )
-		{
-			Transform body = transform.Find( "Body" );
-			GameObject host = body != null ? body.gameObject : gameObject;
-			moveInteractable = host.GetComponent<CoinSortingStationMoveInteractable>();
-			if ( moveInteractable == null )
-				moveInteractable = host.AddComponent<CoinSortingStationMoveInteractable>();
-		}
+			Debug.LogWarning( $"CoinSortingStation '{name}': MoveInteractable is missing on the prefab.", this );
 
 		EnsureSortedOutput();
 	}
@@ -320,71 +321,6 @@ public class CoinSortingStation : MonoBehaviour
 		}
 	}
 
-	void EnsureSettleFeedback()
-	{
-		if ( onPlacedFeedback != null )
-			return;
-
-		onPlacedFeedback = GetComponent<Feedbacks>();
-		if ( onPlacedFeedback == null )
-			onPlacedFeedback = gameObject.AddComponent<Feedbacks>();
-
-		if ( onPlacedFeedback.FeedbackList != null && onPlacedFeedback.FeedbackList.Count > 0 )
-			return;
-
-		onPlacedFeedback.AddFeedback( new PunchScaleFeedback
-		{
-			Target = transform,
-			Punch = new Vector3( 0.06f, -0.08f, 0.06f ),
-			Duration = 0.22f
-		} );
-		onPlacedFeedback.AddFeedback( new ShakeTransformFeedback
-		{
-			Target = transform,
-			Duration = 0.18f,
-			Strength = 0.035f
-		} );
-	}
-
-	void EnsureSortedFeedback()
-	{
-		if ( onSortedFeedback == null )
-		{
-			Transform existing = transform.Find( "OnSortedFeedbacks" );
-			GameObject host = existing != null ? existing.gameObject : new GameObject( "OnSortedFeedbacks" );
-			if ( existing == null )
-				host.transform.SetParent( transform, false );
-
-			onSortedFeedback = host.GetComponent<Feedbacks>();
-			if ( onSortedFeedback == null )
-				onSortedFeedback = host.AddComponent<Feedbacks>();
-		}
-
-		onSortedFeedback.Initialize();
-		if ( onSortedFeedback.FeedbackList != null && onSortedFeedback.FeedbackList.Count > 0 )
-			return;
-
-		Transform crankTarget = crank != null ? crank.transform : transform;
-		onSortedFeedback.AddFeedback( new PunchRotationFeedback
-		{
-			Target = crankTarget,
-			Punch = new Vector3( 80f, 0f, 0f ),
-			Duration = 0.16f
-		} );
-		onSortedFeedback.AddFeedback( new PunchScaleFeedback
-		{
-			Target = crankTarget,
-			Punch = new Vector3( 0.08f, 0.08f, 0.08f ),
-			Duration = 0.16f
-		} );
-	}
-
-	void EnsureCrankAudio()
-	{
-		if ( GetComponent<CoinSortingCrankAudio>() == null )
-			gameObject.AddComponent<CoinSortingCrankAudio>();
-	}
-
 	void BindVisuals()
 	{
 		if ( energyGauge != null )
@@ -403,12 +339,16 @@ public class CoinSortingStation : MonoBehaviour
 			Debug.LogWarning( $"CoinSortingStation '{name}': CrankSpin is missing on the prefab.", this );
 		}
 
+		if ( onSortedFeedback != null )
+			onSortedFeedback.Initialize();
 		if ( onCrankClickFeedback != null )
 			onCrankClickFeedback.Initialize();
 		if ( onGaugeFullFeedback != null )
 			onGaugeFullFeedback.Initialize();
 		if ( onSortingShakeFeedback != null )
 			onSortingShakeFeedback.Initialize();
+		if ( onSortingClipSfxFeedback != null )
+			onSortingClipSfxFeedback.Initialize();
 	}
 
 	bool RequiresManualCrank()
@@ -488,12 +428,6 @@ public class CoinSortingStation : MonoBehaviour
 		}
 	}
 
-	/// <summary>Legacy name — rebuilds from chute children only.</summary>
-	public void BindOutputStacksInBounds()
-	{
-		RebindChuteOutputStacks();
-	}
-
 	void CollectChuteOutputStacks( Transform chute, TreasureDefinition key, List<GroundCoinStack> into )
 	{
 		into.Clear();
@@ -551,14 +485,12 @@ public class CoinSortingStation : MonoBehaviour
 
 	public void PlayPlacedFeedback()
 	{
-		EnsureSettleFeedback();
 		if ( onPlacedFeedback != null )
 			onPlacedFeedback.Play();
 	}
 
 	public void PlaySortedFeedback()
 	{
-		EnsureSortedFeedback();
 		if ( onSortedFeedback != null )
 			onSortedFeedback.Play();
 	}
@@ -1051,48 +983,21 @@ public class CoinSortingStation : MonoBehaviour
 
 	void EnsureDefaultUpgradeLevel()
 	{
-		if ( _defaultLevelEnsured )
-			return;
-
-		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
-		if ( player == null )
-			return;
-
-		UpgradeSystem system = UpgradeSystem.Ensure( player );
-		if ( system == null )
-			return;
-
 		CoinSortingStationDefinition def = ResolveDefinition();
 		string id = def != null
 			? def.ResolveUpgradeId()
 			: CoinSortingStationDefinition.DefaultUpgradeId;
-
-		if ( !system.TryGetDefinition( id, out _ ) )
-		{
-			_defaultLevelEnsured = true;
-			return;
-		}
-
-		if ( !system.IsUnlocked( id ) || system.GetUpgradeLevel( id ) < 1 )
-			system.SetUpgradeLevel( id, 1 );
-
-		_defaultLevelEnsured = true;
+		UpgradeSystem.TryEnsureDefaultStationLevel( id, 1, ref _defaultLevelEnsured );
 	}
 
 	int ResolveStationLevel()
 	{
 		EnsureDefaultUpgradeLevel();
-		UpgradeSystem system = UpgradeSystem.Instance;
-		if ( system == null )
-			return 1;
-
 		CoinSortingStationDefinition def = ResolveDefinition();
 		string id = def != null
 			? def.ResolveUpgradeId()
 			: CoinSortingStationDefinition.DefaultUpgradeId;
-
-		int level = system.GetUpgradeLevel( id );
-		return level < 1 ? 1 : level;
+		return UpgradeSystem.ResolveStationLevel( id, 1 );
 	}
 
 	public void NotifyCrankPulse()
@@ -1116,10 +1021,6 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		if ( _isRepositioning || !RequiresManualCrank() )
 			return;
-
-		CoinSortingCrankAudio crankAudio = GetComponent<CoinSortingCrankAudio>();
-		if ( crankAudio != null )
-			crankAudio.NotifyPulse();
 
 		if ( onCrankClickFeedback != null )
 			onCrankClickFeedback.Play();
@@ -1657,6 +1558,32 @@ public class CoinSortingStation : MonoBehaviour
 			onSortingShakeFeedback.Stop();
 	}
 
+	void TickSortingClipSfx()
+	{
+		bool want = !_isRepositioning && IsProcessing;
+		if ( want == _sortingClipSfxActive )
+			return;
+
+		if ( want )
+			StartSortingClipSfx();
+		else
+			StopSortingClipSfx();
+	}
+
+	void StartSortingClipSfx()
+	{
+		_sortingClipSfxActive = true;
+		if ( onSortingClipSfxFeedback != null )
+			onSortingClipSfxFeedback.Play();
+	}
+
+	void StopSortingClipSfx()
+	{
+		_sortingClipSfxActive = false;
+		if ( onSortingClipSfxFeedback != null )
+			onSortingClipSfxFeedback.Stop();
+	}
+
 	void PlayGaugeFullFeedback()
 	{
 		if ( onGaugeFullFeedback != null )
@@ -1700,10 +1627,13 @@ public class CoinSortingStation : MonoBehaviour
 			_processAccumulator = 0f;
 	}
 
-	void EnsureWorldTimer()
+	void BindWorldTimer()
 	{
 		if ( _worldTimer != null )
+		{
+			_worldTimer.BindStation( this );
 			return;
+		}
 
 		if ( worldTimer != null )
 			_worldTimer = worldTimer;
@@ -1712,40 +1642,12 @@ public class CoinSortingStation : MonoBehaviour
 
 		if ( _worldTimer == null )
 		{
-			Transform parent = energyGauge != null ? energyGauge.transform : transform;
-			Transform existing = parent.Find( "WorldTimer" );
-			GameObject host = existing != null ? existing.gameObject : new GameObject( "WorldTimer", typeof( RectTransform ) );
-			if ( existing == null )
-			{
-				host.transform.SetParent( parent, false );
-				PlaceWorldTimerAboveWell( host.transform, parent );
-			}
-
-			_worldTimer = host.GetComponent<CoinSortingStationWorldTimer>();
-			if ( _worldTimer == null )
-				_worldTimer = host.AddComponent<CoinSortingStationWorldTimer>();
+			Debug.LogWarning( $"CoinSortingStation '{name}': WorldTimer is missing on the prefab.", this );
+			return;
 		}
 
 		worldTimer = _worldTimer;
 		_worldTimer.BindStation( this );
-	}
-
-	static void PlaceWorldTimerAboveWell( Transform timer, Transform gauge )
-	{
-		if ( timer == null )
-			return;
-
-		float wellTop = 0.24f;
-		if ( gauge != null )
-		{
-			Transform well = gauge.Find( "Well" );
-			if ( well != null )
-				wellTop = well.localPosition.y + Mathf.Abs( well.localScale.y ) * 0.5f;
-		}
-
-		timer.localPosition = new Vector3( 0f, wellTop + 0.06f, 0f );
-		timer.localRotation = Quaternion.identity;
-		timer.localScale = Vector3.one * 0.0025f;
 	}
 
 	/// <summary>
@@ -2188,9 +2090,98 @@ public class CoinSortingStation : MonoBehaviour
 		onSortingShakeFeedback = value;
 	}
 
+	public void EditorSetSortingClipSfxFeedback( Feedbacks value )
+	{
+		onSortingClipSfxFeedback = value;
+	}
+
 	public void EditorSetSortedOutput( Transform value )
 	{
 		sortedOutput = value;
 	}
 #endif
+
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	public void CaptureSave( GameSaveStationEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		entry.persistenceId = ResolvePersistenceId();
+		entry.kind = "coinSorting";
+		if ( entry.hopperIds == null )
+			entry.hopperIds = new List<string>();
+		else
+			entry.hopperIds.Clear();
+
+		if ( entry.pendingOutput == null )
+			entry.pendingOutput = new List<GameSaveIdCount>();
+		else
+			entry.pendingOutput.Clear();
+
+		GroundCoinStack hopper = _hopperStack;
+		if ( hopper != null && hopper.Count > 0 )
+		{
+			List<TreasureDefinition> slots = new List<TreasureDefinition>( hopper.Count );
+			hopper.CaptureStreamingSlots( slots, out _, out _, out _ );
+			for ( int i = 0; i < slots.Count; i++ )
+			{
+				string id = GameSaveTreasureIds.GetId( slots[ i ] );
+				if ( !string.IsNullOrEmpty( id ) )
+					entry.hopperIds.Add( id );
+			}
+		}
+
+		foreach ( KeyValuePair<TreasureDefinition, int> pair in _pendingOutputByType )
+		{
+			if ( pair.Key == null || pair.Value <= 0 )
+				continue;
+			string id = GameSaveTreasureIds.GetId( pair.Key );
+			if ( string.IsNullOrEmpty( id ) )
+				continue;
+			entry.pendingOutput.Add( new GameSaveIdCount { definitionId = id, count = pair.Value } );
+		}
+	}
+
+	public void ApplySave( GameSaveStationEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		_pendingOutputByType.Clear();
+		GroundCoinStack hopper = EnsureHopperStack();
+		if ( hopper != null )
+		{
+			List<TreasureDefinition> slots = new List<TreasureDefinition>();
+			if ( entry.hopperIds != null )
+			{
+				for ( int i = 0; i < entry.hopperIds.Count; i++ )
+				{
+					TreasureDefinition def = GameSaveTreasureIds.Resolve( entry.hopperIds[ i ] );
+					if ( def != null )
+						slots.Add( def );
+				}
+			}
+
+			hopper.RestoreStreamingSlots( slots, 0f );
+		}
+
+		if ( entry.pendingOutput != null )
+		{
+			for ( int i = 0; i < entry.pendingOutput.Count; i++ )
+			{
+				GameSaveIdCount pending = entry.pendingOutput[ i ];
+				if ( pending == null || pending.count <= 0 )
+					continue;
+				TreasureDefinition def = GameSaveTreasureIds.Resolve( pending.definitionId );
+				if ( def == null )
+					continue;
+				_pendingOutputByType[ def ] = pending.count;
+			}
+		}
+	}
 }

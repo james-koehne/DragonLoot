@@ -3,6 +3,7 @@ using System;
 using FeedbackSystem;
 
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Constant looping spatial SFX (companion ambience). Always audible while playing;
@@ -10,13 +11,22 @@ using UnityEngine;
 /// </summary>
 [Serializable]
 [FeedbackInfo( "Audio/Ambient Loop SFX" )]
-public class AmbientLoopSfxFeedback : Feedback, IFeedbackTick
+public class AmbientLoopSfxFeedback : Feedback, IFeedbackTick, ISerializationCallbackReceiver
 {
 	public AudioClip Clip;
 
 	public AudioSource AudioSource;
 
-	[Range( 0f, 1f )]
+	public FeedbackSfxSettings Playback = new FeedbackSfxSettings
+	{
+		SpatialBlend = 1f,
+		MinDistance = 1.5f,
+		MaxDistance = 18f,
+		DopplerLevel = 0.15f,
+		RolloffMode = AudioRolloffMode.Linear
+	};
+
+	[Min( 0f )]
 	public float Volume = 0.55f;
 
 	[Range( -3f, 3f )]
@@ -28,20 +38,28 @@ public class AmbientLoopSfxFeedback : Feedback, IFeedbackTick
 	[Min( 0f )]
 	public float FadeOutSeconds = 0.45f;
 
-	[Range( 0f, 1f )]
-	[Tooltip( "0 = 2D, 1 = full 3D." )]
-	public float SpatialBlend = 1f;
+	[FormerlySerializedAs( "SpatialBlend" )]
+	[SerializeField, HideInInspector]
+	float _migrateSpatialBlend = 1f;
 
-	[Min( 0.01f )]
-	public float MinDistance = 1.5f;
+	[FormerlySerializedAs( "MinDistance" )]
+	[SerializeField, HideInInspector]
+	float _migrateMinDistance = 1.5f;
 
-	[Min( 0.01f )]
-	public float MaxDistance = 18f;
+	[FormerlySerializedAs( "MaxDistance" )]
+	[SerializeField, HideInInspector]
+	float _migrateMaxDistance = 18f;
 
-	[Range( 0f, 5f )]
-	public float DopplerLevel = 0.15f;
+	[FormerlySerializedAs( "DopplerLevel" )]
+	[SerializeField, HideInInspector]
+	float _migrateDopplerLevel = 0.15f;
 
-	public AudioRolloffMode RolloffMode = AudioRolloffMode.Linear;
+	[FormerlySerializedAs( "RolloffMode" )]
+	[SerializeField, HideInInspector]
+	AudioRolloffMode _migrateRolloffMode = AudioRolloffMode.Linear;
+
+	[SerializeField, HideInInspector]
+	bool _serializedPlaybackMerged;
 
 	float _fade;
 	bool _running;
@@ -52,12 +70,12 @@ public class AmbientLoopSfxFeedback : Feedback, IFeedbackTick
 		if ( Clip == null )
 			return;
 
-		EnsureAudioSource();
+		LoopSfxSourceUtil.EnsureAudioSource( Owner != null ? Owner.gameObject : null, ref AudioSource );
 		if ( AudioSource == null )
 			return;
 
 		Cancel( hardStop: false );
-		ConfigureSource();
+		LoopSfxSourceUtil.ConfigureLoopSource( AudioSource, Playback );
 		AudioSource.clip = Clip;
 		AudioSource.loop = true;
 		_fade = 0f;
@@ -96,12 +114,8 @@ public class AmbientLoopSfxFeedback : Feedback, IFeedbackTick
 			return false;
 		}
 
-		if ( !FeedbackSfxPlayback.Enabled )
-		{
-			if ( AudioSource.isPlaying )
-				AudioSource.Pause();
+		if ( LoopSfxSourceUtil.TickFxMutedPause( AudioSource ) )
 			return true;
-		}
 
 		float fadeTarget = _fadingOut ? 0f : 1f;
 		float fadeSeconds = _fadingOut ? FadeOutSeconds : FadeInSeconds;
@@ -149,33 +163,57 @@ public class AmbientLoopSfxFeedback : Feedback, IFeedbackTick
 		}
 	}
 
-	void ConfigureSource()
-	{
-		AudioSource.playOnAwake = false;
-		AudioSource.loop = true;
-		AudioSource.spatialBlend = Mathf.Clamp01( SpatialBlend );
-		AudioSource.minDistance = Mathf.Max( 0.01f, MinDistance );
-		AudioSource.maxDistance = Mathf.Max( AudioSource.minDistance, MaxDistance );
-		AudioSource.dopplerLevel = Mathf.Max( 0f, DopplerLevel );
-		AudioSource.rolloffMode = RolloffMode;
-	}
-
 	void ApplyMix()
 	{
 		float pitch = Pitch;
 		if ( pitch <= 0f )
 			pitch = 1f;
 		AudioSource.pitch = Mathf.Clamp( pitch, -3f, 3f );
-		AudioSource.volume = Mathf.Clamp01( Volume * Mathf.Clamp01( _fade ) );
+		AudioSource.volume = LoopSfxSourceUtil.ApplyVolumeGain( Volume, _fade, 1f );
 	}
 
-	void EnsureAudioSource()
+	public void OnBeforeSerialize()
 	{
-		if ( AudioSource != null || Owner == null )
+		MergeMigrateIntoPlayback();
+	}
+
+	public void OnAfterDeserialize()
+	{
+		MergeMigrateIntoPlayback();
+	}
+
+	void MergeMigrateIntoPlayback()
+	{
+		if ( _serializedPlaybackMerged )
 			return;
 
-		AudioSource = Owner.GetComponent<AudioSource>();
-		if ( AudioSource == null )
-			AudioSource = Owner.gameObject.AddComponent<AudioSource>();
+		if ( Playback == null )
+			Playback = new FeedbackSfxSettings();
+
+		if ( NeedsSpatialMigration() )
+		{
+			Playback.SpatialBlend = _migrateSpatialBlend;
+			Playback.MinDistance = _migrateMinDistance;
+			Playback.MaxDistance = _migrateMaxDistance;
+			Playback.DopplerLevel = _migrateDopplerLevel;
+			Playback.RolloffMode = _migrateRolloffMode;
+		}
+
+		_serializedPlaybackMerged = true;
+	}
+
+	bool NeedsSpatialMigration()
+	{
+		if ( !Mathf.Approximately( _migrateSpatialBlend, 1f ) )
+			return true;
+		if ( !Mathf.Approximately( _migrateMinDistance, 1.5f ) )
+			return true;
+		if ( !Mathf.Approximately( _migrateMaxDistance, 18f ) )
+			return true;
+		if ( !Mathf.Approximately( _migrateDopplerLevel, 0.15f ) )
+			return true;
+		if ( _migrateRolloffMode != AudioRolloffMode.Linear )
+			return true;
+		return false;
 	}
 }

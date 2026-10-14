@@ -2,9 +2,9 @@ using UnityEngine;
 
 public class DebugObjectivesSection : DebugOverlaySection
 {
-	public string Title => "Objectives";
+	static string s_filter = string.Empty;
 
-	Vector2 _scroll;
+	public string Title => "Objectives";
 
 	public void Draw()
 	{
@@ -40,7 +40,8 @@ public class DebugObjectivesSection : DebugOverlaySection
 
 		GUILayout.Space( 4f );
 		GUILayout.Label( "Force complete:" );
-		_scroll = GUILayout.BeginScrollView( _scroll, GUILayout.Height( 220f ) );
+		DebugOverlayGui.DrawSearchField( ref s_filter );
+		string filter = s_filter != null ? s_filter.Trim() : string.Empty;
 		if ( catalog != null && catalog.objectives != null )
 		{
 			for ( int i = 0; i < catalog.objectives.Count; i++ )
@@ -50,6 +51,11 @@ public class DebugObjectivesSection : DebugOverlaySection
 					continue;
 
 				string label = def.ResolveTitle();
+				if ( !string.IsNullOrEmpty( filter ) &&
+				     label.IndexOf( filter, System.StringComparison.OrdinalIgnoreCase ) < 0 &&
+				     def.id.IndexOf( filter, System.StringComparison.OrdinalIgnoreCase ) < 0 )
+					continue;
+
 				bool done = system.IsCompleted( def.id );
 				GUILayout.BeginHorizontal();
 				GUILayout.Label( ( done ? "[done] " : "" ) + label, GUILayout.ExpandWidth( true ) );
@@ -85,7 +91,5 @@ public class DebugObjectivesSection : DebugOverlaySection
 				}
 			}
 		}
-
-		GUILayout.EndScrollView();
 	}
 }

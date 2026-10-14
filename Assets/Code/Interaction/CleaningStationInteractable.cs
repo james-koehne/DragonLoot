@@ -417,4 +417,71 @@ public class CleaningStationInteractable : InteractableBase, ITreasureOwner, ITr
 				intakeVolume = found.GetComponent<Collider>();
 		}
 	}
+
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	public void CaptureSave( GameSaveStationEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		entry.persistenceId = ResolvePersistenceId();
+		entry.kind = "cleaning";
+		entry.state = (int)_phase;
+		entry.travelNormalized = _travelDuration > 0.05f ? Mathf.Clamp01( _travelElapsed / _travelDuration ) : 0f;
+		entry.cleanProgress = _occupant != null ? _occupant.CleanProgress : 0f;
+		entry.occupantId = _occupant != null ? GameSaveTreasureIds.GetId( _occupant.Definition ) : null;
+	}
+
+	public void ApplySave( GameSaveStationEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		if ( _occupant != null )
+		{
+			TreasureItem old = _occupant;
+			ClearOccupant( freeItemOwnership: false );
+			TreasureItemFactory.Despawn( old );
+		}
+
+		if ( string.IsNullOrEmpty( entry.occupantId ) )
+			return;
+
+		TreasureDefinition def = GameSaveTreasureIds.Resolve( entry.occupantId );
+		if ( def == null )
+			return;
+
+		EnsureSockets();
+		TreasureItem item = TreasureItemFactory.SpawnSync( def, transform.position, transform.rotation, null );
+		if ( item == null )
+			return;
+
+		item.SetCleanProgress( entry.cleanProgress );
+		_occupant = item;
+		_travelDuration = RuntimeDefinition.Get( ResolveDefinition(), d => d.stationBeltTravelSeconds, 4f );
+		_travelElapsed = Mathf.Clamp01( entry.travelNormalized ) * Mathf.Max( 0.05f, _travelDuration );
+
+		Phase phase = Phase.Empty;
+		if ( entry.state >= 0 && entry.state <= (int)Phase.AwaitingPickup )
+			phase = (Phase)entry.state;
+
+		if ( phase == Phase.AwaitingPickup || entry.travelNormalized >= 0.999f )
+		{
+			item.SetClean();
+			Transform exit = exitSocket != null ? exitSocket : transform;
+			item.EnterDisplayed( this, exit, exit.position, exit.rotation );
+			_phase = Phase.AwaitingPickup;
+			return;
+		}
+
+		_phase = Phase.Travelling;
+		float u = Mathf.Clamp01( entry.travelNormalized );
+		GetPathPose( u, out Vector3 pos, out Quaternion rot );
+		Transform parent = ResolvePathParent( u );
+		item.EnterDisplayed( this, parent, pos, rot );
+	}
 }

@@ -1,8 +1,12 @@
+using System.Collections.Generic;
+
 using UnityEngine;
 
 public class DebugCoinSortingStationSection : DebugOverlaySection
 {
 	static int s_stationIndex;
+	static string s_stationSearch = string.Empty;
+	static readonly List<CoinSortingStation> s_stationList = new List<CoinSortingStation>( 8 );
 
 	public string Title => "Coin Sorting Station";
 
@@ -43,7 +47,7 @@ public class DebugCoinSortingStationSection : DebugOverlaySection
 		}
 
 		GUILayout.Space( 6f );
-		var stations = CoinSortingStation.ActiveStations;
+		IReadOnlyList<CoinSortingStation> stations = CoinSortingStation.ActiveStations;
 		GUILayout.Label( $"Stations: {stations.Count}" );
 		if ( stations.Count == 0 )
 		{
@@ -51,18 +55,33 @@ public class DebugCoinSortingStationSection : DebugOverlaySection
 			return;
 		}
 
-		if ( s_stationIndex >= stations.Count )
+		s_stationList.Clear();
+		for ( int i = 0; i < stations.Count; i++ )
+		{
+			if ( stations[ i ] != null )
+				s_stationList.Add( stations[ i ] );
+		}
+
+		if ( s_stationList.Count == 0 )
+		{
+			GUILayout.Label( "No active CoinSortingStation in scene." );
+			return;
+		}
+
+		if ( s_stationIndex >= s_stationList.Count )
 			s_stationIndex = 0;
 
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "◀", GUILayout.Width( 28f ) ) )
-			s_stationIndex = ( s_stationIndex + stations.Count - 1 ) % stations.Count;
-		GUILayout.Label( $"#{s_stationIndex + 1}: {stations[ s_stationIndex ].name}" );
-		if ( GUILayout.Button( "▶", GUILayout.Width( 28f ) ) )
-			s_stationIndex = ( s_stationIndex + 1 ) % stations.Count;
-		GUILayout.EndHorizontal();
+		DebugOverlayGui.DrawFilteredPicker(
+			s_stationList,
+			station => station.name,
+			ref s_stationIndex,
+			ref s_stationSearch,
+			"No stations" );
 
-		CoinSortingStation station = stations[ s_stationIndex ];
+		if ( s_stationIndex < 0 || s_stationIndex >= s_stationList.Count )
+			return;
+
+		CoinSortingStation station = s_stationList[ s_stationIndex ];
 		GUILayout.Label( $"Station level: {station.StationLevel}" );
 		GUILayout.Label( $"Hopper stack: {station.BufferedCount} / {station.HopperCapacity}" );
 		GUILayout.Label( $"Processing: {station.IsProcessing}  Crank: {station.IsCrankActive}" );

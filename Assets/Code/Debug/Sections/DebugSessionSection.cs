@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -5,6 +6,7 @@ using UnityEngine;
 public class DebugSessionSection : DebugOverlaySection
 {
 	readonly DebugOverlay _host;
+	static string s_spawnFilter = string.Empty;
 
 	public DebugSessionSection( DebugOverlay host )
 	{
@@ -39,62 +41,68 @@ public class DebugSessionSection : DebugOverlaySection
 	static void DrawSpawns()
 	{
 		GUILayout.Space( 6f );
-		GUILayout.Label( "Spawn on play" );
-
-		string selected = DebugSpawnRegistry.SelectedSpawnId;
-		if ( DrawSpawnChoice( string.Empty, "Default (intro)", selected ) )
-			DebugSpawnRegistry.SelectedSpawnId = string.Empty;
+		GUILayout.Label( "Spawns (select = spawn on play, Go = teleport)" );
 
 		IReadOnlyList<DebugSpawnPoint> points = DebugSpawnRegistry.GetAll();
-		for ( int i = 0; i < points.Count; i++ )
+		int totalChoices = 1 + ( points.Count > 0 ? points.Count : DebugSpawnRegistry.FallbackVolumes.Length );
+		if ( totalChoices > 6 )
+			DebugOverlayGui.DrawSearchField( ref s_spawnFilter, "Filter" );
+
+		string selected = DebugSpawnRegistry.SelectedSpawnId;
+		string filter = s_spawnFilter != null ? s_spawnFilter.Trim() : string.Empty;
+
+		DrawSpawnRow( string.Empty, "Default (intro)", selected, filter );
+
+		if ( points.Count > 0 )
 		{
-			DebugSpawnPoint point = points[ i ];
-			if ( point == null || string.IsNullOrEmpty( point.Id ) )
-				continue;
+			for ( int i = 0; i < points.Count; i++ )
+			{
+				DebugSpawnPoint point = points[ i ];
+				if ( point == null || string.IsNullOrEmpty( point.Id ) )
+					continue;
 
-			string label = point.SkipIntro ? point.DisplayName + " (skip intro)" : point.DisplayName;
-			if ( DrawSpawnChoice( point.Id, label, selected ) )
-				DebugSpawnRegistry.SelectedSpawnId = point.Id;
+				string label = point.SkipIntro ? point.DisplayName + " (skip intro)" : point.DisplayName;
+				DrawSpawnRow( point.Id, label, selected, filter );
+			}
 		}
-
-		if ( points.Count == 0 )
+		else
 		{
 			GUILayout.Label( "No DebugSpawnPoints — fallback volumes:" );
 			for ( int i = 0; i < DebugSpawnRegistry.FallbackVolumes.Length; i++ )
 			{
 				DebugSpawnRegistry.FallbackVolume fallback = DebugSpawnRegistry.FallbackVolumes[ i ];
-				if ( DrawSpawnChoice( fallback.VolumeId, fallback.DisplayName + " (skip intro)", selected ) )
-					DebugSpawnRegistry.SelectedSpawnId = fallback.VolumeId;
-			}
-		}
-
-		GUILayout.Space( 4f );
-		GUILayout.Label( "Teleport now" );
-		for ( int i = 0; i < points.Count; i++ )
-		{
-			DebugSpawnPoint point = points[ i ];
-			if ( point == null || string.IsNullOrEmpty( point.Id ) )
-				continue;
-
-			if ( GUILayout.Button( "Go: " + point.DisplayName ) )
-				DebugSpawnRegistry.TryTeleportTo( point.Id );
-		}
-
-		if ( points.Count == 0 )
-		{
-			for ( int i = 0; i < DebugSpawnRegistry.FallbackVolumes.Length; i++ )
-			{
-				DebugSpawnRegistry.FallbackVolume fallback = DebugSpawnRegistry.FallbackVolumes[ i ];
-				if ( GUILayout.Button( "Go: " + fallback.DisplayName ) )
-					DebugSpawnRegistry.TryTeleportTo( fallback.VolumeId );
+				DrawSpawnRow( fallback.VolumeId, fallback.DisplayName + " (skip intro)", selected, filter );
 			}
 		}
 	}
 
-	static bool DrawSpawnChoice( string id, string label, string selected )
+	static void DrawSpawnRow( string id, string label, string selected, string filter )
 	{
+		if ( !string.IsNullOrEmpty( filter ) &&
+		     label.IndexOf( filter, StringComparison.OrdinalIgnoreCase ) < 0 &&
+		     ( id == null || id.IndexOf( filter, StringComparison.OrdinalIgnoreCase ) < 0 ) )
+			return;
+
 		bool isSelected = selected == id;
-		bool next = GUILayout.Toggle( isSelected, label );
-		return next && !isSelected;
+		GUILayout.BeginHorizontal();
+		bool next = GUILayout.Toggle( isSelected, label, GUILayout.ExpandWidth( true ) );
+		if ( next && !isSelected )
+			DebugSpawnRegistry.SelectedSpawnId = id;
+
+		GUI.enabled = !string.IsNullOrEmpty( id );
+		if ( GUILayout.Button( "Go", GUILayout.Width( 36f ) ) )
+		{
+			if ( DebugSpawnRegistry.TryTeleportTo( id ) )
+			{
+				DebugOverlay.RecordRecentTeleport( id );
+				DebugOverlay.SetLastAction( "Teleported: " + label );
+			}
+			else
+			{
+				DebugOverlay.SetLastAction( "Teleport failed: " + label );
+			}
+		}
+		GUI.enabled = true;
+		GUILayout.EndHorizontal();
 	}
 }

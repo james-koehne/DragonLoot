@@ -384,6 +384,105 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		return true;
 	}
 
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	public void CaptureSave( GameSaveDisplayTableEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		entry.persistenceId = ResolvePersistenceId();
+		if ( entry.slots == null )
+			entry.slots = new List<GameSaveDisplaySlotEntry>();
+		else
+			entry.slots.Clear();
+
+		for ( int s = 0; s < _stacks.Count; s++ )
+		{
+			SlotStack stack = _stacks[ s ];
+			if ( stack == null || stack.Items.Count <= 0 )
+				continue;
+
+			int slotIndex = stack.OriginY * GridColumns + stack.OriginX;
+			GameSaveDisplaySlotEntry slotEntry = new GameSaveDisplaySlotEntry
+			{
+				slotIndex = slotIndex,
+				definitionIds = new List<string>( stack.Items.Count )
+			};
+			for ( int i = 0; i < stack.Items.Count; i++ )
+			{
+				TreasureItem item = stack.Items[ i ];
+				if ( item == null || item.Definition == null )
+					continue;
+				string id = GameSaveTreasureIds.GetId( item.Definition );
+				if ( !string.IsNullOrEmpty( id ) )
+					slotEntry.definitionIds.Add( id );
+			}
+
+			if ( slotEntry.definitionIds.Count > 0 )
+				entry.slots.Add( slotEntry );
+		}
+	}
+
+	public void ApplySave( GameSaveDisplayTableEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		ClearAllForSave();
+		if ( entry.slots == null )
+			return;
+
+		List<TreasureDefinition> defs = new List<TreasureDefinition>( 16 );
+		for ( int i = 0; i < entry.slots.Count; i++ )
+		{
+			GameSaveDisplaySlotEntry slotEntry = entry.slots[ i ];
+			if ( slotEntry == null || slotEntry.definitionIds == null || slotEntry.definitionIds.Count <= 0 )
+				continue;
+
+			defs.Clear();
+			for ( int d = 0; d < slotEntry.definitionIds.Count; d++ )
+			{
+				TreasureDefinition def = GameSaveTreasureIds.Resolve( slotEntry.definitionIds[ d ] );
+				if ( def != null )
+					defs.Add( def );
+			}
+
+			if ( defs.Count > 0 )
+				TryAppendSlotDefinitions( slotEntry.slotIndex, defs );
+		}
+	}
+
+	void ClearAllForSave()
+	{
+		for ( int s = _stacks.Count - 1; s >= 0; s-- )
+		{
+			SlotStack stack = _stacks[ s ];
+			if ( stack == null )
+				continue;
+
+			for ( int i = stack.Items.Count - 1; i >= 0; i-- )
+			{
+				TreasureItem item = stack.Items[ i ];
+				if ( item != null )
+					TreasureItemFactory.Despawn( item );
+			}
+
+			stack.Items.Clear();
+			ClearFootprint( stack );
+			CoinColumnCylinderBinder.ClearAndDestroy( ref stack.Cylinder, null );
+		}
+
+		_stacks.Clear();
+		_allItems.Clear();
+		_itemCount = 0;
+		RefreshCountLabel();
+		PublishChanged();
+	}
+
 	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
 	{
 		if ( definitions == null || definitions.Count == 0 || _cellStacks == null )

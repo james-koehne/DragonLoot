@@ -38,6 +38,14 @@ public sealed class UpgradeSystem
 		}
 	}
 
+	public static void ClearInstance()
+	{
+		if ( Instance == null )
+			return;
+		Instance._player = null;
+		Instance = null;
+	}
+
 	void BindPlayer( PlayerController player )
 	{
 		_player = player;
@@ -148,6 +156,47 @@ public sealed class UpgradeSystem
 
 		if ( changed )
 			PersistProgress();
+	}
+
+	/// <summary>
+	/// Ensures station upgrades start at least at <paramref name="minimumLevel"/> once the player and catalog exist.
+	/// Returns false while the player is not ready (caller should retry).
+	/// </summary>
+	public static bool TryEnsureDefaultStationLevel( string upgradeId, int minimumLevel, ref bool doneFlag )
+	{
+		if ( doneFlag )
+			return true;
+
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		if ( player == null )
+			return false;
+
+		UpgradeSystem system = Ensure( player );
+		if ( system == null )
+			return false;
+
+		if ( string.IsNullOrEmpty( upgradeId ) || !system.TryGetDefinition( upgradeId, out _ ) )
+		{
+			doneFlag = true;
+			return true;
+		}
+
+		if ( !system.IsUnlocked( upgradeId ) || system.GetUpgradeLevel( upgradeId ) < minimumLevel )
+			system.SetUpgradeLevel( upgradeId, minimumLevel );
+
+		doneFlag = true;
+		return true;
+	}
+
+	/// <summary>Unlocked upgrade level, floored to <paramref name="fallback"/> when locked or below 1.</summary>
+	public static int ResolveStationLevel( string upgradeId, int fallback = 1 )
+	{
+		UpgradeSystem system = Instance;
+		if ( system == null )
+			return fallback;
+
+		int level = system.GetUpgradeLevel( upgradeId );
+		return level < 1 ? fallback : level;
 	}
 
 	/// <summary>Unlocks if needed, clamps to <c>0..maxLevel</c>, and persists.</summary>

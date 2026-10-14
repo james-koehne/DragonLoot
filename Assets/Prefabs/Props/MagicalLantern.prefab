@@ -291,15 +291,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: d654059b387b9684c80b102ceb7cb53b, type: 3}
-        VolumeMin: 0.3
-        VolumeMax: 0.4
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 1
-        MinDistance: 1
-        MaxDistance: 240
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.3
+          VolumeMax: 0.4
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 240
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.3
+        _migrateVolumeMax: 0.4
+        _migratePitchMin: 0.95
+        _migratePitchMax: 1.05
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 240
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &4322141470051418172
 GameObject:
   m_ObjectHideFlags: 0
@@ -362,15 +376,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 0}
-        VolumeMin: 0.7
-        VolumeMax: 0.9
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 1
-        MinDistance: 1
-        MaxDistance: 12
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.7
+          VolumeMax: 0.9
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 12
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.7
+        _migrateVolumeMax: 0.9
+        _migratePitchMin: 0.95
+        _migratePitchMax: 1.05
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 12
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &6854770929486987704
 GameObject:
   m_ObjectHideFlags: 0

@@ -35,13 +35,16 @@ public class GameController : MonoBehaviour
 
 		_runBootstrapped = true;
 
+		GameSaveSystem.ApplyPendingProgress();
+
 		InitializeSystems();
 		await LoadLevelAdditive();
 		if ( TreasureSurfaceWorld.Instance != null )
 			TreasureSurfaceWorld.Instance.RebindAuthoring();
 		TreasureSurfaceBlocker.RefreshAll();
 		ApplyEnvironmentLighting();
-		PlacePlayerAtSpawn();
+		if ( !GameSaveSystem.ShouldSkipDefaultSpawn )
+			PlacePlayerAtSpawn();
 		HallwayFogBlend hallwayFog = HallwayFogBlend.Active;
 		if ( hallwayFog != null )
 		{
@@ -198,7 +201,7 @@ public class GameController : MonoBehaviour
 	public void StartGame()
 	{
 		if ( PlayerController != null )
-			PlayerController.ResetForNewRun();
+			PlayerController.ResetForNewRun( clearCarry: !GameSaveSystem.ShouldSkipCarryClearOnStart );
 
 		EnterState( GameState.GameRun );
 	}

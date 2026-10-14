@@ -4,8 +4,8 @@ using UnityEngine;
 
 public class DebugUpgradesSection : DebugOverlaySection
 {
-	static Vector2 s_listScroll;
 	static readonly Dictionary<string, string> s_levelFieldText = new Dictionary<string, string>();
+	static string s_catalogFilter = string.Empty;
 
 	public string Title => "Upgrades";
 
@@ -31,15 +31,29 @@ public class DebugUpgradesSection : DebugOverlaySection
 
 		GUILayout.Space( 6f );
 		GUILayout.Label( "Catalog" );
-		s_listScroll = GUILayout.BeginScrollView( s_listScroll, GUILayout.Height( 220f ) );
+		DebugOverlayGui.DrawSearchField( ref s_catalogFilter );
+		string filter = s_catalogFilter != null ? s_catalogFilter.Trim() : string.Empty;
 		for ( int i = 0; i < catalog.Count; i++ )
 		{
 			UpgradeDefinition def = catalog[ i ];
 			if ( def == null )
 				continue;
+			if ( !MatchesFilter( def, filter ) )
+				continue;
 			DrawUpgradeRow( system, def );
 		}
-		GUILayout.EndScrollView();
+	}
+
+	static bool MatchesFilter( UpgradeDefinition def, string filter )
+	{
+		if ( string.IsNullOrEmpty( filter ) )
+			return true;
+		string name = def.ResolveDisplayName();
+		if ( name != null && name.IndexOf( filter, System.StringComparison.OrdinalIgnoreCase ) >= 0 )
+			return true;
+		if ( !string.IsNullOrEmpty( def.id ) && def.id.IndexOf( filter, System.StringComparison.OrdinalIgnoreCase ) >= 0 )
+			return true;
+		return false;
 	}
 
 	static UpgradeSystem ResolveSystem( PlayerController player )

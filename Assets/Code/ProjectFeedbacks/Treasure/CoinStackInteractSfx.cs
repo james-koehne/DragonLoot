@@ -81,13 +81,13 @@ public static class CoinStackInteractSfx
 			return;
 
 		_stackSfx.Clips = clips;
-		_stackSfx.VolumeMin = volumeMin;
-		_stackSfx.VolumeMax = volumeMax;
-		_stackSfx.PitchMin = pitchMin;
-		_stackSfx.PitchMax = pitchMax;
-		_stackSfx.SpatialBlend = 1f;
-		_stackSfx.MinDistance = StackSpatialMinDistance;
-		_stackSfx.MaxDistance = StackSpatialMaxDistance;
+		_stackSfx.Playback.VolumeMin = volumeMin;
+		_stackSfx.Playback.VolumeMax = volumeMax;
+		_stackSfx.Playback.PitchMin = pitchMin;
+		_stackSfx.Playback.PitchMax = pitchMax;
+		_stackSfx.Playback.SpatialBlend = 1f;
+		_stackSfx.Playback.MinDistance = StackSpatialMinDistance;
+		_stackSfx.Playback.MaxDistance = StackSpatialMaxDistance;
 
 		_stackHost.transform.position = position;
 

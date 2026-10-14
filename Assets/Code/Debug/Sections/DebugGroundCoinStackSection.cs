@@ -22,6 +22,7 @@ public class DebugGroundCoinStackSection : DebugOverlaySection
 	static int s_selectedIndex;
 	static int s_fillMode;
 	static string s_lastStatus = "";
+	static string s_pickerSearch = string.Empty;
 
 	static List<TreasureDefinition> s_catalog;
 	static readonly List<TreasureDefinition> s_slotBuffer = new List<TreasureDefinition>( 1024 );
@@ -41,10 +42,49 @@ public class DebugGroundCoinStackSection : DebugOverlaySection
 		if ( s_selectedIndex >= s_catalog.Count )
 			s_selectedIndex = 0;
 
-		TreasureDefinition selected = s_catalog[ s_selectedIndex ];
-		string selectedLabel = FormatLabel( selected );
-
 		GUILayout.Label( $"Active stacks: {GroundCoinStack.ActiveStacks.Count}" );
+
+		DebugOverlayGui.DrawFilteredPicker(
+			s_catalog,
+			FormatLabel,
+			ref s_selectedIndex,
+			ref s_pickerSearch,
+			"No stackable coins" );
+
+		if ( s_selectedIndex < 0 || s_selectedIndex >= s_catalog.Count )
+			return;
+
+		TreasureDefinition selected = s_catalog[ s_selectedIndex ];
+
+		DebugOverlayGui.DrawAmountPresets( ref s_amount, 1, GroundCoinStack.DefaultMaxHeight, 1, 10, 50, 100, 500 );
+
+		if ( GUILayout.Button( $"Spawn at cursor ({s_amount})" ) )
+		{
+			SpawnSingle( selected );
+			DebugOverlay.SetLastAction( s_lastStatus );
+		}
+
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Despawn nearest" ) )
+		{
+			DespawnNearest();
+			DebugOverlay.SetLastAction( s_lastStatus );
+		}
+		if ( GUILayout.Button( "Despawn all" ) )
+		{
+			DespawnAll();
+			DebugOverlay.SetLastAction( s_lastStatus );
+		}
+		GUILayout.EndHorizontal();
+
+		DebugOverlayGui.DrawStatus( s_lastStatus );
+
+		if ( DebugOverlayGui.DrawAdvancedFoldout( "GroundCoin.Advanced", "Advanced / stress" ) )
+			DrawAdvanced( selected );
+	}
+
+	void DrawAdvanced( TreasureDefinition selected )
+	{
 		GUILayout.Label(
 			$"Stream resident {WorldTreasureStreamer.ResidentCoinStackCount}  hidden {WorldTreasureStreamer.HiddenCoinStackCount}  pool {WorldTreasureStreamer.CoinPoolFreeCount}" );
 		GUILayout.Label(
@@ -52,37 +92,8 @@ public class DebugGroundCoinStackSection : DebugOverlaySection
 		GUILayout.Label(
 			$"Loose hidden {WorldTreasureStreamer.HiddenLooseCount}  wake {WorldTreasureStreamer.WakesLastTick} evict {WorldTreasureStreamer.EvictsLastTick} extract {WorldTreasureStreamer.ExtractsLastTick} cells {WorldTreasureStreamer.CellsTicked}" );
 
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "◀", GUILayout.Width( 28f ) ) )
-			s_selectedIndex = ( s_selectedIndex + s_catalog.Count - 1 ) % s_catalog.Count;
-		GUILayout.Label( selectedLabel, GUILayout.MinWidth( 80f ) );
-		if ( GUILayout.Button( "▶", GUILayout.Width( 28f ) ) )
-			s_selectedIndex = ( s_selectedIndex + 1 ) % s_catalog.Count;
-		GUILayout.EndHorizontal();
-
 		DrawFillMode();
 
-		GUILayout.Label( $"Amount: {s_amount}" );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "1" ) )
-			s_amount = 1;
-		if ( GUILayout.Button( "10" ) )
-			s_amount = 10;
-		if ( GUILayout.Button( "50" ) )
-			s_amount = 50;
-		if ( GUILayout.Button( "100" ) )
-			s_amount = 100;
-		if ( GUILayout.Button( "500" ) )
-			s_amount = 500;
-		if ( GUILayout.Button( "1000" ) )
-			s_amount = 1000;
-		GUILayout.EndHorizontal();
-		s_amount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_amount, 1, GroundCoinStack.DefaultMaxHeight ) );
-
-		if ( GUILayout.Button( $"Spawn at cursor ({s_amount})" ) )
-			SpawnSingle( selected );
-
-		GUILayout.Space( 6f );
 		GUILayout.Label( $"Grid stacks: {s_gridCount}" );
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "4" ) )
@@ -97,8 +108,6 @@ public class DebugGroundCoinStackSection : DebugOverlaySection
 			s_gridCount = 100;
 		GUILayout.EndHorizontal();
 		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "100" ) )
-			s_gridCount = 100;
 		if ( GUILayout.Button( "1000" ) )
 			s_gridCount = 1000;
 		if ( GUILayout.Button( "10000" ) )
@@ -116,22 +125,16 @@ public class DebugGroundCoinStackSection : DebugOverlaySection
 		s_gridSpacing = GUILayout.HorizontalSlider( s_gridSpacing, 0.05f, 3f );
 
 		if ( GUILayout.Button( $"Spawn grid at cursor ({s_gridCount} x {s_amount})" ) )
+		{
 			SpawnGrid( selected, s_gridCount, s_amount, s_gridSpacing, (FillMode)s_fillMode );
+			DebugOverlay.SetLastAction( s_lastStatus );
+		}
 
-		GUILayout.Space( 6f );
 		if ( GUILayout.Button( "Stress 100 x 1000" ) )
+		{
 			SpawnStress( selected );
-
-		GUILayout.Space( 4f );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "Despawn nearest" ) )
-			DespawnNearest();
-		if ( GUILayout.Button( "Despawn all" ) )
-			DespawnAll();
-		GUILayout.EndHorizontal();
-
-		if ( !string.IsNullOrEmpty( s_lastStatus ) )
-			GUILayout.Label( s_lastStatus );
+			DebugOverlay.SetLastAction( s_lastStatus );
+		}
 	}
 
 	static void DrawFillMode()

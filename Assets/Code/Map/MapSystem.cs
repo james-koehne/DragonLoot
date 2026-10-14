@@ -272,6 +272,44 @@ public sealed class MapSystem : MonoBehaviour
 		FlushDisplayIfNeeded( def, forceUpload: true );
 	}
 
+	public bool TryCaptureDiscoveryForSave( out GameSaveMapFogEntry entry )
+	{
+		entry = null;
+		if ( _discovery == null || _resolution <= 0 )
+			return false;
+
+		entry = new GameSaveMapFogEntry
+		{
+			resolution = _resolution,
+			discoveryBase64 = GameSaveBinary.EncodeBytes( _discovery )
+		};
+		return true;
+	}
+
+	public void ApplyDiscoveryFromSave( GameSaveMapFogEntry entry )
+	{
+		if ( entry == null || string.IsNullOrEmpty( entry.discoveryBase64 ) )
+			return;
+
+		EnsureBuffers( entry.resolution > 0 ? entry.resolution : _resolution );
+		if ( _discovery == null )
+			return;
+
+		byte[] bytes = GameSaveBinary.DecodeBytes( entry.discoveryBase64 );
+		if ( bytes == null || bytes.Length != _discovery.Length )
+			return;
+
+		System.Array.Copy( bytes, _discovery, _discovery.Length );
+		_lastDiscoveryCx = int.MinValue;
+		_lastDiscoveryCy = int.MinValue;
+		_coverageDirty = true;
+
+		MapDefinition def = Definition;
+		if ( def != null )
+			RebuildFullDisplay( def );
+		FlushDisplayIfNeeded( def, forceUpload: true );
+	}
+
 	public void DebugSetIgnoreDiscovery( bool ignore )
 	{
 		if ( _debugIgnoreDiscovery == ignore )

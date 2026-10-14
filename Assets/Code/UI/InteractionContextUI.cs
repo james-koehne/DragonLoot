@@ -115,7 +115,9 @@ public class InteractionContextUI : MonoBehaviour
 			string coffeePrompt = coffeeFocus.HoldPromptLabel;
 			AppendBound( gameInput.ContextualInteract, string.IsNullOrEmpty( coffeePrompt ) ? "Hold to craft" : coffeePrompt );
 		}
-		else if ( focus != null && focus.CanInteract( player ) )
+		else if ( focus != null
+			&& focus.CanInteract( player )
+			&& !ShouldSuppressMinecartMotionPrompt( focus, wholeStack, placement ) )
 		{
 			string primary = FormatPrimaryPrompt( focus, player );
 			if ( !string.IsNullOrEmpty( primary ) )
@@ -196,6 +198,41 @@ public class InteractionContextUI : MonoBehaviour
 		if ( placement.IsJoiningStack )
 			return "Stack onto pile";
 		return "Place";
+	}
+
+	/// <summary>
+	/// While depositing into cargo, suppress shove/send/ride so Place / Hold to place stack win.
+	/// </summary>
+	static bool ShouldSuppressMinecartMotionPrompt(
+		IInteractable focus,
+		PlayerWholeStackInteraction wholeStack,
+		PlayerPlacement placement )
+	{
+		MinecartInteractable cart = focus as MinecartInteractable;
+		if ( cart == null || !cart.CargoEnabled )
+			return false;
+
+		if ( wholeStack != null && wholeStack.CanOfferWholeStackPlace )
+			return true;
+
+		if ( placement == null )
+			return false;
+
+		if ( placement.GetSecondaryContextAction() != SecondaryContextAction.Place )
+			return false;
+
+		ITreasurePlacementTarget target = placement.ActiveTarget;
+		if ( target is MinecartInteractable placeCart )
+			return placeCart == cart || placeCart.ConsistLead == cart.ConsistLead;
+
+		GroundCoinStack stack = target as GroundCoinStack;
+		if ( stack != null && stack.IsCartHosted )
+		{
+			MinecartInteractable host = stack.GetComponentInParent<MinecartInteractable>();
+			return host != null && ( host == cart || host.ConsistLead == cart.ConsistLead );
+		}
+
+		return false;
 	}
 
 	static string FormatPrimaryPrompt( IInteractable focus, PlayerController player )

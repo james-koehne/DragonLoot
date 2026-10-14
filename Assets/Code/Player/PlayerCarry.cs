@@ -2468,6 +2468,87 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	}
 
+	public void CaptureDefinitionIds(
+		List<string> coinIds,
+		List<string> gemIds,
+		List<string> artifactIds,
+		List<string> resourceIds,
+		List<string> generalIds,
+		List<string> junkIds )
+	{
+		EnsureBuckets();
+		CaptureBucketIds( CarryBucketKind.Coin, coinIds );
+		CaptureBucketIds( CarryBucketKind.Gem, gemIds );
+		CaptureBucketIds( CarryBucketKind.Artifact, artifactIds );
+		CaptureBucketIds( CarryBucketKind.Resource, resourceIds );
+		CaptureBucketIds( CarryBucketKind.General, generalIds );
+		CaptureBucketIds( CarryBucketKind.Junk, junkIds );
+	}
+
+	public void RestoreFromDefinitionIds(
+		int selectedBucket,
+		List<string> coinIds,
+		List<string> gemIds,
+		List<string> artifactIds,
+		List<string> resourceIds,
+		List<string> generalIds,
+		List<string> junkIds )
+	{
+		Clear();
+		RestoreBucketIds( coinIds );
+		RestoreBucketIds( gemIds );
+		RestoreBucketIds( artifactIds );
+		RestoreBucketIds( resourceIds );
+		RestoreBucketIds( generalIds );
+		RestoreBucketIds( junkIds );
+
+		CarryBucketKind kind = (CarryBucketKind)Mathf.Clamp( selectedBucket, 0, BucketCount - 1 );
+		TrySetSelectedBucket( kind );
+		RestackPoses();
+	}
+
+	void CaptureBucketIds( CarryBucketKind kind, List<string> into )
+	{
+		if ( into == null )
+			return;
+		into.Clear();
+
+		CategoryBucket bucket = GetBucket( kind );
+		if ( bucket.HasActive && bucket.Active.Definition != null )
+		{
+			string id = GameSaveTreasureIds.GetId( bucket.Active.Definition );
+			if ( !string.IsNullOrEmpty( id ) )
+				into.Add( id );
+		}
+
+		for ( int i = 0; i < bucket.Held.Count; i++ )
+		{
+			TreasureDefinition def = bucket.Held[ i ].Definition;
+			if ( def == null )
+				continue;
+			string id = GameSaveTreasureIds.GetId( def );
+			if ( !string.IsNullOrEmpty( id ) )
+				into.Add( id );
+		}
+	}
+
+	void RestoreBucketIds( List<string> ids )
+	{
+		if ( ids == null || ids.Count <= 0 )
+			return;
+
+		List<TreasureDefinition> defs = new List<TreasureDefinition>( ids.Count );
+		for ( int i = 0; i < ids.Count; i++ )
+		{
+			TreasureDefinition def = GameSaveTreasureIds.Resolve( ids[ i ] );
+			if ( def != null )
+				defs.Add( def );
+		}
+
+		if ( defs.Count > 0 )
+			TryAddMany( defs );
+	}
+
 	async void SpawnHeldItemAsync( TreasureDefinition treasure, int token )
 	{
 		Transform spawnParent = null;

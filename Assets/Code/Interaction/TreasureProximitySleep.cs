@@ -90,12 +90,6 @@ public class TreasureProximitySleep : MonoBehaviour
 			PhysicsItems.Add( item );
 	}
 
-	/// <summary>Deprecated alias.</summary>
-	public static void RegisterFree( TreasureItem item )
-	{
-		RegisterPhysics( item );
-	}
-
 	public static void Unregister( TreasureItem item )
 	{
 		if ( item == null )

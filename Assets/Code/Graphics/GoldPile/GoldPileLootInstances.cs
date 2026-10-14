@@ -2383,6 +2383,49 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		return _remaining.TryGetValue( definition, out int n ) ? n : 0;
 	}
 
+	public void CaptureRemainingForSave( List<GameSaveIdCount> into )
+	{
+		if ( into == null )
+			return;
+		into.Clear();
+		if ( _remaining == null )
+			return;
+
+		foreach ( KeyValuePair<TreasureDefinition, int> pair in _remaining )
+		{
+			if ( pair.Key == null || pair.Value <= 0 )
+				continue;
+			string id = GameSaveTreasureIds.GetId( pair.Key );
+			if ( string.IsNullOrEmpty( id ) )
+				continue;
+			into.Add( new GameSaveIdCount { definitionId = id, count = pair.Value } );
+		}
+	}
+
+	public void ApplyRemainingFromSave( List<GameSaveIdCount> entries )
+	{
+		if ( _remaining == null )
+			_remaining = new Dictionary<TreasureDefinition, int>();
+		else
+			_remaining.Clear();
+
+		if ( entries == null )
+			return;
+
+		for ( int i = 0; i < entries.Count; i++ )
+		{
+			GameSaveIdCount entry = entries[ i ];
+			if ( entry == null || entry.count <= 0 || string.IsNullOrEmpty( entry.definitionId ) )
+				continue;
+			TreasureDefinition def = GameSaveTreasureIds.Resolve( entry.definitionId );
+			if ( def == null )
+				continue;
+			_remaining[ def ] = entry.count;
+		}
+
+		RefreshAll();
+	}
+
 	/// <summary>
 	/// Returns a unit to pile inventory. Coins may stay hidden when local density is high;
 	/// gems/artifacts always try to become a visible instance (search nearby if needed).

@@ -205,10 +205,10 @@ public static class MinecartAudioPrefabBuilder
 		loop.FadeInSeconds = 0.12f;
 		loop.FadeOutSeconds = 0.28f;
 		loop.BrakeDuck = 0.55f;
-		loop.SpatialBlend = 1f;
-		loop.MinDistance = 2f;
-		loop.MaxDistance = 30f;
-		loop.DopplerLevel = 0.4f;
+		loop.Playback.SpatialBlend = 1f;
+		loop.Playback.MinDistance = 2f;
+		loop.Playback.MaxDistance = 30f;
+		loop.Playback.DopplerLevel = 0.4f;
 
 		EditorUtility.SetDirty( feedbacks );
 		return changed;
@@ -257,10 +257,10 @@ public static class MinecartAudioPrefabBuilder
 		loop.FadeInSeconds = 0.06f;
 		loop.FadeOutSeconds = 0.2f;
 		loop.BrakeDuck = 1f;
-		loop.SpatialBlend = 1f;
-		loop.MinDistance = 2f;
-		loop.MaxDistance = 30f;
-		loop.DopplerLevel = 0.25f;
+		loop.Playback.SpatialBlend = 1f;
+		loop.Playback.MinDistance = 2f;
+		loop.Playback.MaxDistance = 30f;
+		loop.Playback.DopplerLevel = 0.25f;
 		loop.AudioSource = null;
 
 		EditorUtility.SetDirty( feedbacks );

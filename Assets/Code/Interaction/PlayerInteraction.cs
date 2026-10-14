@@ -326,9 +326,6 @@ public class PlayerInteraction : MonoBehaviour
 		_nonCoinPickupHoldDelay = RuntimeDefinition.Get( Definition, d => d.nonCoinPickupHoldDelay, 0.5f );
 	}
 
-	/// <summary>Legacy alias used by placement targets.</summary>
-	public float interactRange => InteractRange;
-
 	public bool TryGetLastHit( out RaycastHit hit )
 	{
 		hit = _lastHit;
@@ -805,7 +802,7 @@ public class PlayerInteraction : MonoBehaviour
 			}
 		}
 
-		if ( carrying )
+		if ( carrying && !ShouldPreferMinecartCargoDeposit( cartFocus, bestOtherHit ) )
 			PreferMinecartPushOverCargo( ref bestItem, ref bestItemHit, ref bestItemDist, ref bestOther, ref bestOtherHit, ref bestOtherDist );
 
 		if ( hasSurface )
@@ -1272,7 +1269,10 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 
 		PlayerWholeStackInteraction wholeStack = _player != null ? _player.WholeStack : null;
-		if ( wholeStack != null && wholeStack.IsCharging )
+		if ( wholeStack != null
+			&& ( wholeStack.IsCharging
+				|| wholeStack.CanOfferWholeStackPlace
+				|| wholeStack.CanOfferWholeStackPickup ) )
 		{
 			ResetContextualRepeatState();
 			return;
@@ -1395,6 +1395,29 @@ public class PlayerInteraction : MonoBehaviour
 			return coinStack;
 
 		return interactable;
+	}
+
+	/// <summary>
+	/// When carrying treasure the aimed cargo cart can accept, keep cargo / stack focus for
+	/// place-join feedback instead of rewriting focus to push/send.
+	/// </summary>
+	bool ShouldPreferMinecartCargoDeposit( MinecartInteractable cart, RaycastHit cartHit )
+	{
+		if ( cart == null || !cart.CargoEnabled || _player == null )
+			return false;
+
+		PlayerCarry carry = _player.Carry;
+		if ( carry == null || !carry.TryPeekActive( out TreasureItem item ) || item == null )
+			return false;
+
+		PlacementQuery query = new PlacementQuery
+		{
+			Player = _player,
+			Hit = cartHit,
+			HasHit = true,
+			AutoFindValidSlot = true
+		};
+		return cart.CanPlace( item, in query );
 	}
 
 	static void PreferMinecartPushOverCargo(

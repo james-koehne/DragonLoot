@@ -372,11 +372,14 @@ public static class QuestObjectiveFeedbackPostprocessor
 			parallel.Feedbacks.Add( new PlaySFXFeedback
 			{
 				Clip = clip,
-				VolumeMin = 0.85f,
-				VolumeMax = 1f,
-				PitchMin = 0.98f,
-				PitchMax = 1.02f,
-				SpatialBlend = 0f
+				Playback = new FeedbackSfxSettings
+				{
+					VolumeMin = 0.85f,
+					VolumeMax = 1f,
+					PitchMin = 0.98f,
+					PitchMax = 1.02f,
+					SpatialBlend = 0f
+				}
 			} );
 		}
 
@@ -799,11 +802,14 @@ public static class QuestObjectiveFeedbackPostprocessor
 			PlaySFXFeedback sfx = new PlaySFXFeedback
 			{
 				Clip = clip,
-				VolumeMin = 0.85f,
-				VolumeMax = 1f,
-				PitchMin = 0.98f,
-				PitchMax = 1.02f,
-				SpatialBlend = 0f
+				Playback = new FeedbackSfxSettings
+				{
+					VolumeMin = 0.85f,
+					VolumeMax = 1f,
+					PitchMin = 0.98f,
+					PitchMax = 1.02f,
+					SpatialBlend = 0f
+				}
 			};
 			feedbacks.AddFeedback( sfx );
 			EditorUtility.SetDirty( feedbacks );

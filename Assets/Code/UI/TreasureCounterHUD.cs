@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+using FeedbackSystem;
+
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,7 +17,8 @@ public class TreasureCounterHUD : MonoBehaviour
 	Text _sectionTitle;
 	Text _sectionProgress;
 	Text _sectionPercent;
-	AudioSource _audio;
+	Feedbacks _categoryCompleteFeedbacks;
+	PlaySFXFeedback _categoryCompleteSfx;
 	bool _subscribed;
 
 	[SerializeField]
@@ -195,23 +198,21 @@ public class TreasureCounterHUD : MonoBehaviour
 
 	void PlayCompleteSound()
 	{
-		if ( _audio == null || categoryCompleteClip == null )
-			return;
-		if ( !AudioMaster.IsChannelEnabled( AudioChannel.Fx ) )
+		if ( categoryCompleteClip == null )
 			return;
 
-		_audio.PlayOneShot( categoryCompleteClip );
+		EnsureCategoryCompleteFeedbacks();
+		if ( _categoryCompleteFeedbacks == null || _categoryCompleteSfx == null )
+			return;
+
+		_categoryCompleteSfx.Clip = categoryCompleteClip;
+		_categoryCompleteFeedbacks.Play();
 	}
 
 	void EnsureUi()
 	{
 		if ( _panel != null )
 			return;
-
-		_audio = gameObject.GetComponent<AudioSource>();
-		if ( _audio == null )
-			_audio = gameObject.AddComponent<AudioSource>();
-		_audio.playOnAwake = false;
 
 		GameObject panelGo = new GameObject( "TreasureCounterPanel", typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ), typeof( VerticalLayoutGroup ), typeof( ContentSizeFitter ) );
 		panelGo.transform.SetParent( transform, false );
@@ -282,5 +283,33 @@ public class TreasureCounterHUD : MonoBehaviour
 		text.horizontalOverflow = HorizontalWrapMode.Overflow;
 		text.verticalOverflow = VerticalWrapMode.Overflow;
 		return text;
+	}
+
+	void EnsureCategoryCompleteFeedbacks()
+	{
+		if ( _categoryCompleteFeedbacks != null && _categoryCompleteSfx != null )
+			return;
+
+		_categoryCompleteFeedbacks = gameObject.GetComponent<Feedbacks>();
+		if ( _categoryCompleteFeedbacks == null )
+			_categoryCompleteFeedbacks = gameObject.AddComponent<Feedbacks>();
+		_categoryCompleteFeedbacks.Initialize();
+
+		if ( _categoryCompleteFeedbacks.FeedbackList != null )
+		{
+			for ( int i = 0; i < _categoryCompleteFeedbacks.FeedbackList.Count; i++ )
+			{
+				_categoryCompleteSfx = _categoryCompleteFeedbacks.FeedbackList[ i ] as PlaySFXFeedback;
+				if ( _categoryCompleteSfx != null )
+					return;
+			}
+		}
+
+		_categoryCompleteSfx = new PlaySFXFeedback
+		{
+			Clip = categoryCompleteClip,
+			Playback = new FeedbackSfxSettings { SpatialBlend = 0f }
+		};
+		_categoryCompleteFeedbacks.AddFeedback( _categoryCompleteSfx );
 	}
 }

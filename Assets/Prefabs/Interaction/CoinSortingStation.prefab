@@ -279,10 +279,33 @@ MonoBehaviour:
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
   _feedbacks:
   - rid: 9170125340285337729
+  - rid: 535442573642170488
   _useUnscaledTime: 0
   references:
     version: 2
     RefIds:
+    - rid: 535442573642170488
+      type: {class: StaggeredClipSfxFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Mode: 0
+        ClipsFrom: 1
+        Clips: []
+        PlayInterval: 0.05
+        OverlapFadeSeconds: 0.12
+        Playback:
+          VolumeMin: 1
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1.5
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
     - rid: 9170125340285337729
       type: {class: ShakeTransformFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
@@ -505,6 +528,7 @@ GameObject:
   - component: {fileID: 9111000000000207}
   - component: {fileID: 9111000000000208}
   - component: {fileID: 9111000000000209}
+  - component: {fileID: 7813765014350235110}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -573,6 +597,21 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 0.0s
+--- !u!114 &7813765014350235110
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9111000000000206}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Outline
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.85}
+  m_EffectDistance: {x: 1.2, y: -1.2}
+  m_UseGraphicAlpha: 1
 --- !u!1 &103810690908786708
 GameObject:
   m_ObjectHideFlags: 0
@@ -795,6 +834,78 @@ Transform:
   - {fileID: 4191230871457118498}
   m_Father: {fileID: 3464683518450801076}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2510681814588117689
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7849670651191781017}
+  - component: {fileID: 3426855171316365005}
+  m_Layer: 0
+  m_Name: OnSortingClipSfxFeedbacks
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7849670651191781017
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2510681814588117689}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3464683518450801076}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3426855171316365005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2510681814588117689}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
+  _feedbacks:
+  - rid: 535442573642170489
+  _useUnscaledTime: 0
+  references:
+    version: 2
+    RefIds:
+    - rid: 535442573642170489
+      type: {class: StaggeredClipSfxFeedback, ns: , asm: Assembly-CSharp}
+      data:
+        _enabled: 1
+        Mode: 1
+        ClipsFrom: 2
+        Clips: []
+        PlayInterval: 0.05
+        OverlapFadeSeconds: 0.12
+        Playback:
+          VolumeMin: 1
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1.5
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
 --- !u!1 &2699521786160366124
 GameObject:
   m_ObjectHideFlags: 0
@@ -1174,7 +1285,6 @@ GameObject:
   - component: {fileID: 8653976260256665846}
   - component: {fileID: 7743242534259797732}
   - component: {fileID: 703558330312438265}
-  - component: {fileID: 5012843002134193286}
   m_Layer: 0
   m_Name: CoinSortingStation
   m_TagString: Untagged
@@ -1204,6 +1314,7 @@ Transform:
   - {fileID: 9111000000000012}
   - {fileID: 9111000000000015}
   - {fileID: 9111000000000018}
+  - {fileID: 7849670651191781017}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8653976260256665846
@@ -1231,7 +1342,7 @@ MonoBehaviour:
   sortedOutput: {fileID: 9022767803186331563}
   definitionOverride: {fileID: 0}
   hopperStackOffset: {x: 0, y: 0.02, z: 0}
-  onPlacedFeedback: {fileID: 0}
+  onPlacedFeedback: {fileID: 703558330312438265}
   onSortedFeedback: {fileID: 4478309158458843406}
   energyGauge: {fileID: 2528055092448631669}
   worldTimer: {fileID: 9111000000000205}
@@ -1239,6 +1350,7 @@ MonoBehaviour:
   onCrankClickFeedback: {fileID: 9111000000000013}
   onGaugeFullFeedback: {fileID: 9111000000000016}
   onSortingShakeFeedback: {fileID: 9111000000000019}
+  onSortingClipSfxFeedback: {fileID: 3426855171316365005}
 --- !u!54 &7743242534259797732
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -1278,24 +1390,60 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
-  _feedbacks: []
+  _feedbacks:
+  - rid: 535442573642170479
+  - rid: 535442573642170480
   _useUnscaledTime: 0
   references:
     version: 2
-    RefIds: []
---- !u!114 &5012843002134193286
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3858640962312582024}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4c76d259f0fa53746a14365e6f56a6eb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CoinSortingCrankAudio
-  _station: {fileID: 0}
+    RefIds:
+    - rid: 535442573642170479
+      type: {class: PunchScaleFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 3464683518450801076}
+        Punch: {x: 0.06, y: -0.08, z: 0.06}
+        Duration: 0.22
+        Curve:
+          serializedVersion: 2
+          m_Curve:
+          - serializedVersion: 3
+            time: 0
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 0.5
+            value: 1
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          - serializedVersion: 3
+            time: 1
+            value: 0
+            inSlope: 0
+            outSlope: 0
+            tangentMode: 0
+            weightedMode: 0
+            inWeight: 0
+            outWeight: 0
+          m_PreInfinity: 2
+          m_PostInfinity: 2
+          m_RotationOrder: 4
+    - rid: 535442573642170480
+      type: {class: ShakeTransformFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Target: {fileID: 3464683518450801076}
+        Duration: 0.18
+        Strength: 0.035
 --- !u!1 &5761311447819771599
 GameObject:
   m_ObjectHideFlags: 0

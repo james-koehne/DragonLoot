@@ -109,6 +109,9 @@ public class GameMode : MonoBehaviour, IGameMode
 			WireGameController( Game );
 		}
 
+		// Progress must land before Player.Setup creates UpgradeSystem/AbilitySystem from profile.
+		GameSaveSystem.ApplyPendingProgress();
+
 		WireCameraAndPlayer();
 
 		if ( Game != null )
@@ -251,6 +254,9 @@ public class GameMode : MonoBehaviour, IGameMode
 
 		if ( GetComponent<DebugOverlay>() == null )
 			gameObject.AddComponent<DebugOverlay>();
+
+		GameSaveSystem.ApplyPendingWorldAndPlayer();
+		DoorInteractable.RefreshAllUnlockState();
 
 		loaded = true;
 	}

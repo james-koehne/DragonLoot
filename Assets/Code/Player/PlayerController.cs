@@ -1986,7 +1986,7 @@ public class PlayerController : MonoBehaviour
 		_cameraLook.SetMovementFovActive( boost );
 	}
 
-	public void ResetForNewRun()
+	public void ResetForNewRun( bool clearCarry = true )
 	{
 		_verticalVelocity = 0f;
 		WasLandingThisFrame = false;
@@ -2019,7 +2019,7 @@ public class PlayerController : MonoBehaviour
 		UpdateMovementState();
 		TickMovementFov();
 
-		if ( _carry != null )
+		if ( clearCarry && _carry != null )
 			_carry.Clear();
 
 		if ( _characterController != null )

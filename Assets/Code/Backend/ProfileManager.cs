@@ -4,6 +4,8 @@ using System.Globalization;
 
 using Nakama;
 
+using Newtonsoft.Json;
+
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -746,5 +748,25 @@ public class ProfileManager : MonoBehaviour
 		SaveProfileToDisk( profileSaveData );
 
 		SaveCurrentStatsToProfile( true );
+	}
+
+	/// <summary>
+	/// Replaces the live profile with a deep-cloned snapshot (game-save load). Persists locally.
+	/// </summary>
+	public void ReplaceProfileSaveData( ProfileSaveData snapshot )
+	{
+		if ( snapshot == null )
+			return;
+
+		string json = JsonConvert.SerializeObject( snapshot );
+		ProfileSaveData clone = JsonConvert.DeserializeObject<ProfileSaveData>( json );
+		if ( clone == null )
+			clone = CreateNewBaseProfileSaveData();
+
+		clone.EnsureProgressDictionaries();
+		StampCloudProfileOwnerIfOnline( clone );
+		profileSaveData = clone;
+		CheckForInvalidValues();
+		SaveProfileToDisk( profileSaveData );
 	}
 }

@@ -209,6 +209,12 @@ public class TreasureItem : MonoBehaviour
 	/// <summary>
 	/// Adds cleaning progress in 0–1 units (not seconds). Refreshes dirt MPB.
 	/// </summary>
+	public void SetCleanProgress( float progress )
+	{
+		_cleanProgress = Mathf.Clamp01( progress );
+		ApplyDirtVisual();
+	}
+
 	public void ApplyCleaning( float delta )
 	{
 		if ( !RequiresCleaning || delta <= 0f || _cleanProgress >= 1f )
@@ -637,18 +643,6 @@ public class TreasureItem : MonoBehaviour
 		SyncRigidbodyToTransform();
 		ForceSleep();
 		_distanceForcedSleep = false;
-	}
-
-	/// <summary>Deprecated alias for EnterPhysics.</summary>
-	public void ReleaseToWorld( Vector3 worldPosition, Quaternion worldRotation )
-	{
-		EnterPhysics( worldPosition, worldRotation, Vector3.zero );
-	}
-
-	/// <summary>Deprecated alias for EnterPhysics with release velocity.</summary>
-	public void ReleaseToWorld( Vector3 worldPosition, Quaternion worldRotation, Vector3 releaseVelocity )
-	{
-		EnterPhysics( worldPosition, worldRotation, releaseVelocity );
 	}
 
 	public void EnterDisplayed( ITreasureOwner displayOwner, Vector3 worldPosition, Quaternion worldRotation )

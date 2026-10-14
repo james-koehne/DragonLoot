@@ -43,6 +43,10 @@ public class BuildableObject : MonoBehaviour
 	BuildableDefinition _definition;
 
 	[SerializeField]
+	[Tooltip( "Stable save id. Falls back to definition id, then GameObject name." )]
+	string _persistenceId;
+
+	[SerializeField]
 	bool _startBuilt;
 
 	readonly List<MeshRenderer> _ghostRenderers = new List<MeshRenderer>( 8 );
@@ -70,6 +74,38 @@ public class BuildableObject : MonoBehaviour
 	public Transform GhostRoot => _ghostRoot;
 	public BuildableObject[] RequiredBuildables => _requiredBuildables;
 	public BuildableDefinition Definition => _definition;
+
+	public string ResolvePersistenceId()
+	{
+		if ( !string.IsNullOrEmpty( _persistenceId ) )
+			return _persistenceId;
+		if ( _definition != null && !string.IsNullOrEmpty( _definition.id ) )
+			return _definition.id;
+		return gameObject != null ? gameObject.name : string.Empty;
+	}
+
+	/// <summary>Applies built/unbuilt from a save without complete VFX or events.</summary>
+	public void ApplySavedBuiltState( bool built )
+	{
+		_completing = false;
+		_builtActivatedDuringReveal = false;
+		_completeT = 0f;
+		_completeGlow = 0f;
+		_completeAlphaMul = 1f;
+		_isBuilt = built;
+
+		if ( _isBuilt )
+		{
+			if ( _builtRoot != null )
+				_builtRoot.gameObject.SetActive( true );
+			SetGhostVisible( false );
+			return;
+		}
+
+		if ( _builtRoot != null )
+			_builtRoot.gameObject.SetActive( false );
+		SetGhostVisible( false );
+	}
 
 	public static IReadOnlyList<BuildableObject> Active => ActiveBuildables;
 

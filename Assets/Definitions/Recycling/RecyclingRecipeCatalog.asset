@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e6bb59e846575804d85170655ac639bc, type: 3}
+  m_Name: RecyclingRecipeCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::RecyclingRecipeCatalog
+  recipes:
+  - {fileID: 11400000, guid: 36b3c4a5ec302b04fae0245dc93689d1, type: 2}
+  - {fileID: 11400000, guid: 991fadce0088c3b42bdfbf8c932f09c0, type: 2}
+  - {fileID: 11400000, guid: df3066ce4bf4e974fa45a8accd64e0e8, type: 2}
+  - {fileID: 11400000, guid: ec1b009aab27c8a4a9a304fd993b8e39, type: 2}
+  - {fileID: 11400000, guid: 9d6dff9de01e1ea46b355e2a4d342475, type: 2}

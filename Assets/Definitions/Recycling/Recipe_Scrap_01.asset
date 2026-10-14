@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2266e3fd11b1ce479397f7c966a6d6b, type: 3}
+  m_Name: Recipe_Scrap_01
+  m_EditorClassIdentifier: Assembly-CSharp::RecyclingRecipeDefinition
+  input: {fileID: 11400000, guid: 937010e7ce7ac524c9c2ccb6511af524, type: 2}
+  outputs:
+  - resource: {fileID: 11400000, guid: a2c5860669fc0c74ebc10abe2aa963d1, type: 2}
+    count: 2
+  chewWood: 0
+  chewMetal: 1

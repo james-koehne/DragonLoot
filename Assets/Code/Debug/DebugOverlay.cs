@@ -10,11 +10,27 @@ using UnityEngine.InputSystem;
 [DisallowMultipleComponent]
 public class DebugOverlay : MonoBehaviour
 {
-	public const float PanelWidth = 300f;
+	public const float DefaultPanelWidth = 360f;
+	const float MinPanelWidth = 280f;
+	const float MaxPanelWidth = 480f;
+	const float WidthStep = 20f;
 
 	const float SensitivityStep = 0.1f;
 	const float OverlayDuration = 1.5f;
 	const float PanelPad = 8f;
+
+	const string FoldoutPrefsPrefix = "DragonLoot.Debug.Foldout.";
+	const string FavoritePrefsPrefix = "DragonLoot.Debug.Favorite.";
+	const string VSyncPrefsKey = "DragonLoot.Debug.VSync";
+	const string ShowFpsPrefsKey = "DragonLoot.Debug.ShowFps";
+	const string PanelWidthPrefsKey = "DragonLoot.Debug.PanelWidth";
+	const string FavoritesOnlyPrefsKey = "DragonLoot.Debug.FavoritesOnly";
+	const string RecentTeleportPrefsPrefix = "DragonLoot.Debug.RecentTeleport.";
+	const int RecentTeleportSlots = 3;
+	const float FpsSmooth = 0.15f;
+	const float FpsRedAt = 60f;
+	const float FpsGreenAt = 120f;
+	const int FpsHistorySize = 180;
 
 	static DebugOverlay s_instance;
 
@@ -30,22 +46,24 @@ public class DebugOverlay : MonoBehaviour
 	[SerializeField]
 	Key quitKey = Key.Escape;
 
-	const string FoldoutPrefsPrefix = "DragonLoot.Debug.Foldout.";
-	const string VSyncPrefsKey = "DragonLoot.Debug.VSync";
-	const string ShowFpsPrefsKey = "DragonLoot.Debug.ShowFps";
-	const float FpsSmooth = 0.15f;
-	const float FpsRedAt = 60f;
-	const float FpsGreenAt = 120f;
-	const int FpsHistorySize = 180;
+	[SerializeField]
+	Key quickSaveKey = Key.F5;
+
+	[SerializeField]
+	Key quickLoadKey = Key.F9;
 
 	readonly DebugSettingsSection _settings = new DebugSettingsSection();
 	readonly List<DebugOverlaySection> _sections = new List<DebugOverlaySection>();
 	readonly Dictionary<string, bool> _foldouts = new Dictionary<string, bool>();
+	readonly Dictionary<string, bool> _favorites = new Dictionary<string, bool>();
 
 	bool _open;
 	bool _restartInProgress;
 	bool _showFps;
+	bool _favoritesOnly;
+	bool _settingsOpen = true;
 	Vector2 _scroll;
+	float _panelWidth = DefaultPanelWidth;
 	float _overlayHideTime = -1f;
 	float _displayedSensitivity;
 	float _smoothedFps;
@@ -56,6 +74,10 @@ public class DebugOverlay : MonoBehaviour
 	readonly float[] _fpsHistory = new float[ FpsHistorySize ];
 	int _fpsHistoryCount;
 	int _fpsHistoryIndex;
+	string _sectionFilter = string.Empty;
+	string _lastAction = string.Empty;
+	string _lastExpandedSection = string.Empty;
+	bool _wasFiltering;
 	GUIStyle _fpsStyle;
 	GUIStyle _fpsUnitStyle;
 	GUIStyle _fpsStatStyle;
@@ -64,11 +86,57 @@ public class DebugOverlay : MonoBehaviour
 
 	public static bool ShowFps => s_instance != null && s_instance._showFps;
 
+	public static float PanelWidth => s_instance != null ? s_instance._panelWidth : DefaultPanelWidth;
+
+	public static void SetLastAction( string message )
+	{
+		if ( s_instance == null )
+			return;
+		s_instance._lastAction = message != null ? message : string.Empty;
+	}
+
+	public static void RecordRecentTeleport( string spawnId )
+	{
+		if ( string.IsNullOrEmpty( spawnId ) )
+			return;
+
+		string[] recent = LoadRecentTeleports();
+		List<string> next = new List<string>( RecentTeleportSlots );
+		next.Add( spawnId );
+		for ( int i = 0; i < recent.Length; i++ )
+		{
+			if ( string.IsNullOrEmpty( recent[ i ] ) || recent[ i ] == spawnId )
+				continue;
+			if ( next.Count >= RecentTeleportSlots )
+				break;
+			next.Add( recent[ i ] );
+		}
+
+		for ( int i = 0; i < RecentTeleportSlots; i++ )
+		{
+			string value = i < next.Count ? next[ i ] : string.Empty;
+			PlayerPrefs.SetString( RecentTeleportPrefsPrefix + i, value );
+		}
+
+		PlayerPrefs.Save();
+	}
+
+	static string[] LoadRecentTeleports()
+	{
+		string[] recent = new string[ RecentTeleportSlots ];
+		for ( int i = 0; i < RecentTeleportSlots; i++ )
+			recent[ i ] = PlayerPrefs.GetString( RecentTeleportPrefsPrefix + i, string.Empty );
+		return recent;
+	}
+
 	void Awake()
 	{
 		s_instance = this;
 		ApplyVSync( PlayerPrefs.GetInt( VSyncPrefsKey, 1 ) != 0, persist: false );
 		_showFps = PlayerPrefs.GetInt( ShowFpsPrefsKey, 0 ) != 0;
+		_panelWidth = Mathf.Clamp( PlayerPrefs.GetFloat( PanelWidthPrefsKey, DefaultPanelWidth ), MinPanelWidth, MaxPanelWidth );
+		_favoritesOnly = PlayerPrefs.GetInt( FavoritesOnlyPrefsKey, 0 ) != 0;
+		_settingsOpen = LoadFoldoutOpen( "Settings", defaultOpen: true );
 		BuildSections();
 	}
 
@@ -87,6 +155,7 @@ public class DebugOverlay : MonoBehaviour
 	{
 		_sections.Clear();
 		_sections.Add( new DebugSessionSection( this ) );
+		_sections.Add( new DebugSaveStatesSection( this ) );
 		_sections.Add( new DebugCameraSection() );
 		_sections.Add( new DebugPlayerSection() );
 		_sections.Add( new DebugAbilitiesSection() );
@@ -100,6 +169,7 @@ public class DebugOverlay : MonoBehaviour
 		_sections.Add( new DebugObjectivesSection() );
 		_sections.Add( new DebugToastsSection() );
 		_sections.Add( new DebugCoinSortingStationSection() );
+		_sections.Add( new DebugRecyclingSection() );
 		_sections.Add( new DebugCarrySection() );
 		_sections.Add( new DebugArtifactCleaningSection() );
 		_sections.Add( new DebugGroundCoinStackSection() );
@@ -114,13 +184,20 @@ public class DebugOverlay : MonoBehaviour
 		{
 			string title = _sections[ i ].Title;
 			if ( !_foldouts.ContainsKey( title ) )
-				_foldouts[ title ] = LoadFoldoutOpen( title, defaultOpen: true );
+				_foldouts[ title ] = LoadFoldoutOpen( title, defaultOpen: false );
+			if ( !_favorites.ContainsKey( title ) )
+				_favorites[ title ] = LoadFavorite( title );
 		}
 	}
 
 	static string FoldoutPrefsKey( string title )
 	{
 		return FoldoutPrefsPrefix + title;
+	}
+
+	static string FavoritePrefsKey( string title )
+	{
+		return FavoritePrefsPrefix + title;
 	}
 
 	static bool LoadFoldoutOpen( string title, bool defaultOpen )
@@ -131,6 +208,17 @@ public class DebugOverlay : MonoBehaviour
 	static void SaveFoldoutOpen( string title, bool open )
 	{
 		PlayerPrefs.SetInt( FoldoutPrefsKey( title ), open ? 1 : 0 );
+		PlayerPrefs.Save();
+	}
+
+	static bool LoadFavorite( string title )
+	{
+		return PlayerPrefs.GetInt( FavoritePrefsKey( title ), 0 ) != 0;
+	}
+
+	static void SaveFavorite( string title, bool favorite )
+	{
+		PlayerPrefs.SetInt( FavoritePrefsKey( title ), favorite ? 1 : 0 );
 		PlayerPrefs.Save();
 	}
 
@@ -158,6 +246,12 @@ public class DebugOverlay : MonoBehaviour
 			if ( _open )
 				SetOpen( false );
 		}
+
+		if ( keyboard[ quickSaveKey ].wasPressedThisFrame )
+			DebugSaveStatesSection.QuickSave();
+
+		if ( keyboard[ quickLoadKey ].wasPressedThisFrame )
+			_ = DebugSaveStatesSection.QuickLoadAsync();
 	}
 
 	void OnGUI()
@@ -281,35 +375,220 @@ public class DebugOverlay : MonoBehaviour
 
 	void DrawPanel()
 	{
-		Rect panel = new Rect( PanelPad, PanelPad, PanelWidth, Screen.height - PanelPad * 2f );
+		Rect panel = new Rect( PanelPad, PanelPad, _panelWidth, Screen.height - PanelPad * 2f );
 		GUI.Box( panel, GUIContent.none );
 
 		GUILayout.BeginArea( new Rect( panel.x + 6f, panel.y + 6f, panel.width - 12f, panel.height - 12f ) );
-		GUILayout.Label( "DragonLoot Debug" );
-		GUILayout.Label( "` to close" );
-		GUILayout.Space( 4f );
-
-		GUILayout.BeginVertical( GUI.skin.box );
-		GUILayout.Label( _settings.Title );
-		_settings.Draw();
-		GUILayout.EndVertical();
-		GUILayout.Space( 4f );
+		DrawHeader();
+		DrawQuickActions();
+		DrawNavToolbar();
 
 		_scroll = GUILayout.BeginScrollView( _scroll );
+		DrawSettingsFoldout();
+		DrawSections();
+		GUILayout.EndScrollView();
+		GUILayout.EndArea();
+	}
+
+	void DrawHeader()
+	{
+		GUILayout.BeginHorizontal();
+		GUILayout.Label( "DragonLoot Debug", GUILayout.ExpandWidth( true ) );
+		if ( GUILayout.Button( "-", GUILayout.Width( 24f ) ) )
+			SetPanelWidth( _panelWidth - WidthStep );
+		if ( GUILayout.Button( "+", GUILayout.Width( 24f ) ) )
+			SetPanelWidth( _panelWidth + WidthStep );
+		GUILayout.EndHorizontal();
+		GUILayout.Label( "` / Esc close  W:" + Mathf.RoundToInt( _panelWidth ) );
+	}
+
+	void DrawQuickActions()
+	{
+		GUILayout.BeginVertical( GUI.skin.box );
+		GUILayout.Label( "Quick Actions" );
+
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Playtest Ready" ) )
+			RunPlaytestReady();
+		if ( GUILayout.Button( "Fill Coins" ) )
+			RunFillCoins();
+		if ( GUILayout.Button( "Clear Hands" ) )
+			RunClearHands();
+		GUILayout.EndHorizontal();
+
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Workshop" ) )
+			RunTeleport( EventSceneAutoWire.IdVolumeWorkshop, "Workshop" );
+		if ( GUILayout.Button( "Main Cave" ) )
+			RunTeleport( EventSceneAutoWire.IdVolumeMainCave, "Main Cave" );
+		GUILayout.EndHorizontal();
+
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( DoorProgress.UnlockAllDoors ? "Doors: ALL" : "Unlock Doors" ) )
+		{
+			bool next = !DoorProgress.UnlockAllDoors;
+			DoorProgress.SetUnlockAllDoors( next );
+			SetLastAction( next ? "Unlock all doors ON" : "Unlock all doors OFF" );
+		}
+		if ( GUILayout.Button( IsTutorialsDisabled() ? "Tutorials: OFF" : "Skip Tutorials" ) )
+		{
+			bool next = !IsTutorialsDisabled();
+			SetTutorialsDisabled( next );
+			SetLastAction( next ? "Tutorials disabled" : "Tutorials enabled" );
+		}
+		GUILayout.EndHorizontal();
+
+		DrawRecentTeleports();
+
+		if ( !string.IsNullOrEmpty( _lastAction ) )
+			GUILayout.Label( _lastAction );
+
+		GUILayout.EndVertical();
+		GUILayout.Space( 4f );
+	}
+
+	void DrawRecentTeleports()
+	{
+		string[] recent = LoadRecentTeleports();
+		bool any = false;
+		for ( int i = 0; i < recent.Length; i++ )
+		{
+			if ( !string.IsNullOrEmpty( recent[ i ] ) )
+			{
+				any = true;
+				break;
+			}
+		}
+
+		if ( !any )
+			return;
+
+		GUILayout.Label( "Recent teleports" );
+		GUILayout.BeginHorizontal();
+		for ( int i = 0; i < recent.Length; i++ )
+		{
+			string id = recent[ i ];
+			if ( string.IsNullOrEmpty( id ) )
+				continue;
+			string label = ResolveTeleportLabel( id );
+			if ( GUILayout.Button( label ) )
+				RunTeleport( id, label );
+		}
+		GUILayout.EndHorizontal();
+	}
+
+	static string ResolveTeleportLabel( string spawnId )
+	{
+		if ( DebugSpawnRegistry.TryGet( spawnId, out DebugSpawnPoint point ) && point != null )
+			return point.DisplayName;
+
+		for ( int i = 0; i < DebugSpawnRegistry.FallbackVolumes.Length; i++ )
+		{
+			DebugSpawnRegistry.FallbackVolume fallback = DebugSpawnRegistry.FallbackVolumes[ i ];
+			if ( fallback.VolumeId == spawnId )
+				return fallback.DisplayName;
+		}
+
+		return spawnId;
+	}
+
+	void DrawNavToolbar()
+	{
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "Collapse" ) )
+			CollapseAll();
+		if ( GUILayout.Button( "Favs" ) )
+			ExpandFavorites();
+		bool nextFavOnly = GUILayout.Toggle( _favoritesOnly, "Fav only", GUI.skin.button );
+		if ( nextFavOnly != _favoritesOnly )
+		{
+			_favoritesOnly = nextFavOnly;
+			PlayerPrefs.SetInt( FavoritesOnlyPrefsKey, _favoritesOnly ? 1 : 0 );
+			PlayerPrefs.Save();
+		}
+		GUILayout.EndHorizontal();
+
+		DebugOverlayGui.DrawSearchField( ref _sectionFilter, "Section" );
+		GUILayout.Space( 4f );
+	}
+
+	void DrawSettingsFoldout()
+	{
+		string foldLabel = ( _settingsOpen ? "▼ " : "▶ " ) + _settings.Title;
+		bool nextOpen = GUILayout.Toggle( _settingsOpen, foldLabel );
+		if ( nextOpen != _settingsOpen )
+		{
+			_settingsOpen = nextOpen;
+			SaveFoldoutOpen( "Settings", _settingsOpen );
+		}
+
+		if ( _settingsOpen )
+		{
+			GUILayout.BeginVertical( GUI.skin.box );
+			_settings.Draw();
+			GUILayout.EndVertical();
+		}
+	}
+
+	void DrawSections()
+	{
+		string filter = _sectionFilter != null ? _sectionFilter.Trim() : string.Empty;
+		bool filtering = filter.Length > 0;
+
+		if ( _wasFiltering && !filtering && !string.IsNullOrEmpty( _lastExpandedSection ) )
+		{
+			_foldouts[ _lastExpandedSection ] = true;
+			SaveFoldoutOpen( _lastExpandedSection, true );
+		}
+
+		_wasFiltering = filtering;
+
 		for ( int i = 0; i < _sections.Count; i++ )
 		{
 			DebugOverlaySection section = _sections[ i ];
 			string title = section.Title;
-			bool open = true;
-			_foldouts.TryGetValue( title, out open );
+			bool favorite = false;
+			_favorites.TryGetValue( title, out favorite );
+
+			if ( filtering )
+			{
+				if ( title.IndexOf( filter, System.StringComparison.OrdinalIgnoreCase ) < 0 )
+					continue;
+			}
+			else if ( _favoritesOnly && !favorite )
+			{
+				continue;
+			}
+
+			bool open = filtering;
+			if ( !filtering )
+				_foldouts.TryGetValue( title, out open );
+
+			GUILayout.BeginHorizontal();
+			bool nextFavorite = GUILayout.Toggle( favorite, favorite ? "★" : "☆", GUILayout.Width( 22f ) );
+			if ( nextFavorite != favorite )
+			{
+				favorite = nextFavorite;
+				_favorites[ title ] = favorite;
+				SaveFavorite( title, favorite );
+			}
+
 			string foldLabel = ( open ? "▼ " : "▶ " ) + title;
 			bool nextOpen = GUILayout.Toggle( open, foldLabel );
-			if ( nextOpen != open )
+			GUILayout.EndHorizontal();
+
+			if ( !filtering && nextOpen != open )
 			{
 				open = nextOpen;
 				_foldouts[ title ] = open;
 				SaveFoldoutOpen( title, open );
+				if ( open )
+					_lastExpandedSection = title;
 			}
+
+			if ( filtering )
+				open = true;
+
 			if ( open )
 			{
 				GUILayout.BeginVertical( GUI.skin.box );
@@ -317,8 +596,107 @@ public class DebugOverlay : MonoBehaviour
 				GUILayout.EndVertical();
 			}
 		}
-		GUILayout.EndScrollView();
-		GUILayout.EndArea();
+	}
+
+	void CollapseAll()
+	{
+		_settingsOpen = false;
+		SaveFoldoutOpen( "Settings", false );
+		for ( int i = 0; i < _sections.Count; i++ )
+		{
+			string title = _sections[ i ].Title;
+			_foldouts[ title ] = false;
+			SaveFoldoutOpen( title, false );
+		}
+		SetLastAction( "Collapsed all sections" );
+	}
+
+	void ExpandFavorites()
+	{
+		_favoritesOnly = false;
+		PlayerPrefs.SetInt( FavoritesOnlyPrefsKey, 0 );
+		for ( int i = 0; i < _sections.Count; i++ )
+		{
+			string title = _sections[ i ].Title;
+			bool favorite = false;
+			_favorites.TryGetValue( title, out favorite );
+			_foldouts[ title ] = favorite;
+			SaveFoldoutOpen( title, favorite );
+		}
+		PlayerPrefs.Save();
+		SetLastAction( "Expanded favorites" );
+	}
+
+	void SetPanelWidth( float width )
+	{
+		_panelWidth = Mathf.Clamp( width, MinPanelWidth, MaxPanelWidth );
+		PlayerPrefs.SetFloat( PanelWidthPrefsKey, _panelWidth );
+		PlayerPrefs.Save();
+	}
+
+	void RunPlaytestReady()
+	{
+		Time.timeScale = 1f;
+		SetTutorialsDisabled( true );
+
+		PlayerController player = GetPlayer();
+		AbilitySystem abilities = player != null ? AbilitySystem.Ensure( player ) : AbilitySystem.Instance;
+		if ( abilities != null )
+			abilities.UnlockAll();
+
+		UpgradeSystem upgrades = player != null ? UpgradeSystem.Ensure( player ) : UpgradeSystem.Instance;
+		if ( upgrades != null )
+			upgrades.UnlockAll();
+
+		SetLastAction( "Playtest Ready: abilities+upgrades unlocked, tutorials off" );
+	}
+
+	void RunFillCoins()
+	{
+		int added = DebugCarrySection.DebugAddCoinAssortment( 25 );
+		SetLastAction( added > 0 ? "Filled " + added + " coins" : "Fill coins failed" );
+	}
+
+	void RunClearHands()
+	{
+		PlayerController player = GetPlayer();
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry == null )
+		{
+			SetLastAction( "No carry" );
+			return;
+		}
+
+		carry.Clear();
+		SetLastAction( "Cleared hands" );
+	}
+
+	void RunTeleport( string spawnId, string label )
+	{
+		bool ok = DebugSpawnRegistry.TryTeleportTo( spawnId );
+		if ( ok )
+		{
+			RecordRecentTeleport( spawnId );
+			SetLastAction( "Teleported: " + label );
+		}
+		else
+		{
+			SetLastAction( "Teleport failed: " + label );
+		}
+	}
+
+	static bool IsTutorialsDisabled()
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.DebugDefinition == null )
+			return false;
+		return GameMode.Instance.DebugDefinition.disableTutorials;
+	}
+
+	static void SetTutorialsDisabled( bool disabled )
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.DebugDefinition == null )
+			return;
+		GameMode.Instance.DebugDefinition.disableTutorials = disabled;
 	}
 
 	void DrawSensitivityFlash()
@@ -328,7 +706,7 @@ public class DebugOverlay : MonoBehaviour
 
 		float x = PanelPad;
 		if ( _open )
-			x = PanelWidth + PanelPad * 2f;
+			x = _panelWidth + PanelPad * 2f;
 
 		const float width = 220f;
 		const float height = 36f;
@@ -432,7 +810,25 @@ public class DebugOverlay : MonoBehaviour
 		{
 			if ( _open )
 				SetOpen( false );
-			await GameInstance.RestartGame();
+			await GameSaveSystem.RestartClean();
+		}
+		finally
+		{
+			_restartInProgress = false;
+		}
+	}
+
+	public async void LoadSaveSlot( string slotId )
+	{
+		if ( _restartInProgress )
+			return;
+
+		_restartInProgress = true;
+		try
+		{
+			if ( _open )
+				SetOpen( false );
+			await GameSaveSystem.RequestLoad( slotId );
 		}
 		finally
 		{

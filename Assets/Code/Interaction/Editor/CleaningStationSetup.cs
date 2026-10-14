@@ -7,9 +7,9 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Builds Cleaning Station prefab and places one in Level when that scene is open.
+/// Builds Cleaning Station prefab (if missing) and places it via menu.
+/// Does not auto-mutate Level on editor load.
 /// </summary>
-[InitializeOnLoad]
 static class CleaningStationSetup
 {
 	const string PrefabFolder = "Assets/Addressables/Tables";
@@ -17,11 +17,6 @@ static class CleaningStationSetup
 	const string LevelPath = "Assets/Scenes/Level.unity";
 
 	static readonly Vector3 LevelSpawnPosition = new Vector3( 6f, 0f, 4f );
-
-	static CleaningStationSetup()
-	{
-		EditorApplication.delayCall += EnsureInstalled;
-	}
 
 	[MenuItem( DragonLootMenus.StationsCleaningCreate )]
 	static void MenuCreate()
@@ -37,27 +32,6 @@ static class CleaningStationSetup
 		GameObject prefab = EnsurePrefab();
 		Scene levelScene = EditorSceneManager.OpenScene( LevelPath, OpenSceneMode.Single );
 		EnsureStationInScene( prefab, levelScene, save: true );
-	}
-
-	static void EnsureInstalled()
-	{
-		if ( EditorApplication.isPlayingOrWillChangePlaymode )
-			return;
-
-		ArtifactMaterialInstaller.TryInstall( forceAssignPrefabs: false );
-		GameObject prefab = EnsurePrefab();
-		if ( prefab == null )
-			return;
-
-		for ( int i = 0; i < SceneManager.sceneCount; i++ )
-		{
-			Scene open = SceneManager.GetSceneAt( i );
-			if ( open.path == LevelPath && open.isLoaded )
-			{
-				EnsureStationInScene( prefab, open, save: true );
-				return;
-			}
-		}
 	}
 
 	static GameObject EnsurePrefab()

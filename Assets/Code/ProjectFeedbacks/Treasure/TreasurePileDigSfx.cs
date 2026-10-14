@@ -30,13 +30,13 @@ public static class TreasurePileDigSfx
 
 		float volume = carryDef.ResolvePileDigPourVolume( amount );
 		_sfx.Clips = clips;
-		_sfx.VolumeMin = volume;
-		_sfx.VolumeMax = volume;
-		_sfx.PitchMin = carryDef.pileDigPourPitchMin;
-		_sfx.PitchMax = carryDef.pileDigPourPitchMax;
-		_sfx.SpatialBlend = 1f;
-		_sfx.MinDistance = PourMinDistance;
-		_sfx.MaxDistance = PourMaxDistance;
+		_sfx.Playback.VolumeMin = volume;
+		_sfx.Playback.VolumeMax = volume;
+		_sfx.Playback.PitchMin = carryDef.pileDigPourPitchMin;
+		_sfx.Playback.PitchMax = carryDef.pileDigPourPitchMax;
+		_sfx.Playback.SpatialBlend = 1f;
+		_sfx.Playback.MinDistance = PourMinDistance;
+		_sfx.Playback.MaxDistance = PourMaxDistance;
 
 		_host.transform.position = digPoint;
 

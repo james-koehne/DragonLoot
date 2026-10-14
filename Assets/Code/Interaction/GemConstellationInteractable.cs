@@ -442,6 +442,73 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		return true;
 	}
 
+	public string ResolvePersistenceId()
+	{
+		return GameSavePersistenceIds.Resolve( this );
+	}
+
+	public void CaptureSave( GameSaveConstellationEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		entry.persistenceId = ResolvePersistenceId();
+		entry.complete = _isComplete;
+		if ( entry.slotDefinitionIds == null )
+			entry.slotDefinitionIds = new List<string>();
+		else
+			entry.slotDefinitionIds.Clear();
+
+		int count = SlotCount;
+		for ( int i = 0; i < count; i++ )
+		{
+			TreasureItem item = _occupants != null && i < _occupants.Length ? _occupants[ i ] : null;
+			string id = item != null ? GameSaveTreasureIds.GetId( item.Definition ) : string.Empty;
+			entry.slotDefinitionIds.Add( id != null ? id : string.Empty );
+		}
+	}
+
+	public void ApplySave( GameSaveConstellationEntry entry )
+	{
+		if ( entry == null )
+			return;
+
+		ClearAllForSave();
+		if ( entry.slotDefinitionIds == null )
+			return;
+
+		for ( int i = 0; i < entry.slotDefinitionIds.Count && i < SlotCount; i++ )
+		{
+			string id = entry.slotDefinitionIds[ i ];
+			if ( string.IsNullOrEmpty( id ) )
+				continue;
+			TreasureDefinition def = GameSaveTreasureIds.Resolve( id );
+			if ( def != null )
+				TryPlaceStartFillGem( i, def );
+		}
+
+		_isComplete = entry.complete || EvaluateComplete();
+	}
+
+	void ClearAllForSave()
+	{
+		if ( _occupants == null )
+			return;
+
+		for ( int i = 0; i < _occupants.Length; i++ )
+		{
+			TreasureItem item = _occupants[ i ];
+			_occupants[ i ] = null;
+			if ( item == null )
+				continue;
+			_displayedItems.Remove( item );
+			TreasureItemFactory.Despawn( item );
+		}
+
+		_currentCount = 0;
+		_isComplete = false;
+	}
+
 	int ResolveStartFillCount( int eligibleCount, System.Random rng )
 	{
 		int minFill = Mathf.Max( 0, minFilledSlots );

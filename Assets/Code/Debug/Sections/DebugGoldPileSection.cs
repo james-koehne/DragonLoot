@@ -11,7 +11,9 @@ public class DebugGoldPileSection : DebugOverlaySection
 	static int s_gameplayPullOverride = 1;
 	static int s_selectedPile;
 	static string s_lastStatus = "";
+	static string s_pileSearch = string.Empty;
 	static List<TreasureDefinition> s_artifactGemCatalog;
+	static readonly List<GoldPileLootStreamDebug> s_pileList = new List<GoldPileLootStreamDebug>( 8 );
 
 	public string Title => "Gold Pile";
 
@@ -24,28 +26,35 @@ public class DebugGoldPileSection : DebugOverlaySection
 			return;
 		}
 
-		GUILayout.Label( $"Piles: {piles.Count}" );
-		GoldPileEditTiming.Enabled = GUILayout.Toggle( GoldPileEditTiming.Enabled, "Log edit timings" );
-		if ( GoldPileEditTiming.Enabled )
+		s_pileList.Clear();
+		for ( int i = 0; i < piles.Count; i++ )
 		{
-			GoldPileEditTiming.Verbose = GUILayout.Toggle( GoldPileEditTiming.Verbose, "Verbose phase logs" );
-			if ( !string.IsNullOrEmpty( GoldPileEditTiming.LastSummary ) )
-				GUILayout.Label( GoldPileEditTiming.LastSummary );
+			if ( piles[ i ] != null )
+				s_pileList.Add( piles[ i ] );
 		}
-		DrawStreamingControls( piles );
 
-		GUILayout.Space( 4f );
-		DrawGameplayPullControls();
-		DrawCarveAmountControls();
-		DrawTakeAmountControls();
+		if ( s_pileList.Count == 0 )
+		{
+			GUILayout.Label( "No gold piles registered" );
+			return;
+		}
 
-		if ( s_selectedPile >= piles.Count )
+		GUILayout.Label( $"Piles: {s_pileList.Count}" );
+
+		if ( s_selectedPile >= s_pileList.Count )
 			s_selectedPile = 0;
 
-		GUILayout.Label( $"Selected pile: {s_selectedPile}" );
-		s_selectedPile = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_selectedPile, 0, Mathf.Max( 0, piles.Count - 1 ) ) );
+		DebugOverlayGui.DrawFilteredPicker(
+			s_pileList,
+			pile => pile.gameObject.name,
+			ref s_selectedPile,
+			ref s_pileSearch,
+			"No piles" );
 
-		GoldPileLootStreamDebug selectedDebug = piles[ s_selectedPile ];
+		if ( s_selectedPile < 0 || s_selectedPile >= s_pileList.Count )
+			return;
+
+		GoldPileLootStreamDebug selectedDebug = s_pileList[ s_selectedPile ];
 		TreasurePileVisual visual = ResolveVisual( selectedDebug );
 		if ( visual == null )
 		{
@@ -57,37 +66,31 @@ public class DebugGoldPileSection : DebugOverlaySection
 		if ( interactable == null )
 			interactable = visual.GetComponentInParent<TreasurePileInteractable>();
 
-		GUILayout.Label( $"Name: {visual.gameObject.name}" );
 		GUILayout.Label( $"Remaining: {visual.TotalRemainingLoot}" );
-		GUILayout.Label( $"Carve R: {visual.CarveRadius:0.00}" );
-		if ( visual.Heightfield != null && visual.Heightfield.IsInitialized )
-		{
-			GUILayout.Label(
-				$"HF: {visual.Heightfield.WorldSizeX:0.##}×{visual.Heightfield.WorldSizeZ:0.##}m " +
-				$"res {visual.Heightfield.ResolutionX}×{visual.Heightfield.ResolutionZ}" );
-		}
+		if ( interactable != null )
+			GUILayout.Label( $"Interactable Remaining: {interactable.RemainingCount}" );
+
+		DebugOverlayGui.DrawAmountPresets( "Carve/deposit", ref s_carveAmount, 1, 500, 1, 10, 50, 100 );
+		DebugOverlayGui.DrawAmountPresets( "Take", ref s_takeAmount, 1, 500, 1, 10, 50, 100 );
+
+		Vector3 aim = ResolveAimPoint( visual );
 		GoldPileCarveSettings globalCarve = GoldPileCarveSettings.FromGlobalDefinition().ResolvedForPile(
 			visual.Heightfield != null && visual.Heightfield.IsInitialized
 				? visual.Heightfield.WorldSize
 				: 6f );
-		GUILayout.Label(
-			$"Global carve R:{globalCarve.radius:0.00} " +
-			$"Blur pad:{globalCarve.blurPadCells} x{globalCarve.blurPasses} str:{globalCarve.blurStrength:0.##} fall:{globalCarve.falloffSharpness:0.##}" );
-		if ( interactable != null )
-			GUILayout.Label( $"Interactable Remaining: {interactable.RemainingCount}" );
-
-		Vector3 aim = ResolveAimPoint( visual );
 
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( $"Carve {s_carveAmount}" ) )
 		{
 			bool ok = visual.TryDebugCarveAmount( aim, s_carveAmount, globalCarve );
 			s_lastStatus = ok ? $"Carved {s_carveAmount} at aim" : "Carve failed";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 		if ( GUILayout.Button( $"Deposit {s_carveAmount}" ) )
 		{
 			bool ok = visual.TryDebugDepositAmount( aim, s_carveAmount, globalCarve );
 			s_lastStatus = ok ? $"Deposited {s_carveAmount} at aim" : "Deposit failed";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 		GUILayout.EndHorizontal();
 
@@ -97,12 +100,14 @@ public class DebugGoldPileSection : DebugOverlaySection
 			PlayerController player = DebugOverlay.GetPlayer();
 			int taken = visual.DebugTakeUnits( s_takeAmount, aim, player, false );
 			s_lastStatus = $"Took {taken}/{s_takeAmount} (consume+carve)";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 		if ( GUILayout.Button( $"Take {s_takeAmount} into hands" ) )
 		{
 			PlayerController player = DebugOverlay.GetPlayer();
 			int taken = visual.DebugTakeUnits( s_takeAmount, aim, player, true );
 			s_lastStatus = $"Took {taken}/{s_takeAmount} into hands";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 		GUILayout.EndHorizontal();
 
@@ -117,13 +122,40 @@ public class DebugGoldPileSection : DebugOverlaySection
 			{
 				s_lastStatus = "No TreasurePileInteractable";
 			}
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 
-		GUILayout.Space( 4f );
-		DrawArtifactGemSpawnControls( visual );
+		DebugOverlayGui.DrawStatus( s_lastStatus );
 
-		if ( !string.IsNullOrEmpty( s_lastStatus ) )
-			GUILayout.Label( s_lastStatus );
+		if ( DebugOverlayGui.DrawAdvancedFoldout( "GoldPile.Advanced", "Advanced" ) )
+			DrawAdvanced( piles, visual, globalCarve );
+	}
+
+	static void DrawAdvanced( IReadOnlyList<GoldPileLootStreamDebug> piles, TreasurePileVisual visual, GoldPileCarveSettings globalCarve )
+	{
+		GoldPileEditTiming.Enabled = GUILayout.Toggle( GoldPileEditTiming.Enabled, "Log edit timings" );
+		if ( GoldPileEditTiming.Enabled )
+		{
+			GoldPileEditTiming.Verbose = GUILayout.Toggle( GoldPileEditTiming.Verbose, "Verbose phase logs" );
+			if ( !string.IsNullOrEmpty( GoldPileEditTiming.LastSummary ) )
+				GUILayout.Label( GoldPileEditTiming.LastSummary );
+		}
+
+		DrawStreamingControls( piles );
+		DrawGameplayPullControls();
+
+		GUILayout.Label( $"Carve R: {visual.CarveRadius:0.00}" );
+		if ( visual.Heightfield != null && visual.Heightfield.IsInitialized )
+		{
+			GUILayout.Label(
+				$"HF: {visual.Heightfield.WorldSizeX:0.##}×{visual.Heightfield.WorldSizeZ:0.##}m " +
+				$"res {visual.Heightfield.ResolutionX}×{visual.Heightfield.ResolutionZ}" );
+		}
+		GUILayout.Label(
+			$"Global carve R:{globalCarve.radius:0.00} " +
+			$"Blur pad:{globalCarve.blurPadCells} x{globalCarve.blurPasses} str:{globalCarve.blurStrength:0.##} fall:{globalCarve.falloffSharpness:0.##}" );
+
+		DrawArtifactGemSpawnControls( visual );
 
 		GUILayout.Space( 4f );
 		for ( int i = 0; i < piles.Count; i++ )
@@ -194,17 +226,7 @@ public class DebugGoldPileSection : DebugOverlaySection
 			s_overrideGameplayPull,
 			"Override gameplay pull amount" );
 		if ( s_overrideGameplayPull )
-		{
-			GUILayout.BeginHorizontal();
-			if ( GUILayout.Button( "1" ) )
-				s_gameplayPullOverride = 1;
-			if ( GUILayout.Button( "5" ) )
-				s_gameplayPullOverride = 5;
-			if ( GUILayout.Button( "10" ) )
-				s_gameplayPullOverride = 10;
-			GUILayout.EndHorizontal();
-			s_gameplayPullOverride = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_gameplayPullOverride, 1, 100 ) );
-		}
+			DebugOverlayGui.DrawAmountPresets( ref s_gameplayPullOverride, 1, 100, 1, 5, 10 );
 	}
 
 	public static bool TryGetGameplayPullOverride( out int units )
@@ -221,39 +243,6 @@ public class DebugGoldPileSection : DebugOverlaySection
 
 	/// <summary>Debug carve/deposit slider. Values above 1 also drive multi-unit pile grabs.</summary>
 	public static int CarveAmount => Mathf.Max( 1, s_carveAmount );
-
-	static void DrawCarveAmountControls()
-	{
-		GUILayout.Label( $"Debug carve/deposit count: {s_carveAmount}  (grab uses this when > 1)" );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "1" ) )
-			s_carveAmount = 1;
-		if ( GUILayout.Button( "10" ) )
-			s_carveAmount = 10;
-		if ( GUILayout.Button( "50" ) )
-			s_carveAmount = 50;
-		if ( GUILayout.Button( "100" ) )
-			s_carveAmount = 100;
-		GUILayout.EndHorizontal();
-		s_carveAmount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_carveAmount, 1, 500 ) );
-	}
-
-	static void DrawTakeAmountControls()
-	{
-		GUILayout.Space( 4f );
-		GUILayout.Label( $"Debug take count: {s_takeAmount}" );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "1" ) )
-			s_takeAmount = 1;
-		if ( GUILayout.Button( "10" ) )
-			s_takeAmount = 10;
-		if ( GUILayout.Button( "50" ) )
-			s_takeAmount = 50;
-		if ( GUILayout.Button( "100" ) )
-			s_takeAmount = 100;
-		GUILayout.EndHorizontal();
-		s_takeAmount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_takeAmount, 1, 500 ) );
-	}
 
 	static void DrawArtifactGemSpawnControls( TreasurePileVisual visual )
 	{
@@ -274,8 +263,10 @@ public class DebugGoldPileSection : DebugOverlaySection
 				visual.DebugForceSpawnExistingArtifactsAndGems( ( spawned, attempted ) =>
 				{
 					s_lastStatus = $"Spawned existing {spawned}/{attempted} artifacts/gems";
+					DebugOverlay.SetLastAction( s_lastStatus );
 				} );
 			}
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 
 		EnsureArtifactGemCatalog();
@@ -296,8 +287,10 @@ public class DebugGoldPileSection : DebugOverlaySection
 				visual.DebugSpawnArtifactsAndGemsInside( s_artifactGemCatalog, ( spawned, attempted ) =>
 				{
 					s_lastStatus = $"Spawned {spawned}/{attempted} artifacts/gems inside pile";
+					DebugOverlay.SetLastAction( s_lastStatus );
 				} );
 			}
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 	}
 

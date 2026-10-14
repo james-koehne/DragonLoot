@@ -20,6 +20,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 05132ce0300137b429b1196a77d58fab
+    m_Address: RecyclingMachineDefinition
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 06edff88c45ba794daed0970af205e82
     m_Address: Assets/Addressables/Treasure/Artifacts/RuneLedgerVisual.prefab
     m_ReadOnly: 0
@@ -66,6 +72,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Resources/wood_01Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 1abba6a4ca959b84b955608729371ab5
+    m_Address: RecyclingRecipeCatalog
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 1b45042b9e8c93a45aa79fa446b6c7cf
     m_Address: GoldKey
@@ -122,6 +134,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 29779fd0bc7be974a895a2063cd3e729
     m_Address: Tables/GoldBarDisplayTable
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 2a011c1435c23bb44a4ff130e22ea2c3
+    m_Address: Assets/Addressables/Treasure/Junk/Scrap_01Visual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
@@ -335,6 +352,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 937010e7ce7ac524c9c2ccb6511af524
+    m_Address: Scrap_01
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 968fd6fce3ac7014b84e09e5c4a36cf9
     m_Address: StylizedLightingDefinition
     m_ReadOnly: 0
@@ -518,6 +541,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ca67eada0758f544a8f94b4d31b24680
+    m_Address: Assets/Addressables/Treasure/Junk/Furniture_01Visual.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: ccd186d4657c21442bcfbee8f8ff7f6d
     m_Address: Assets/Addressables/Treasure/Artifacts/GildedGrimoireVisual.prefab
     m_ReadOnly: 0
@@ -538,6 +566,12 @@ MonoBehaviour:
     m_Address: Assets/Addressables/Treasure/Artifacts/GoldenCoronaVisual.prefab
     m_ReadOnly: 0
     m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d415192ed1d746b4d8f1d11aa3a17375
+    m_Address: Furniture_01
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: d41b6f371516c5447864fbeb53cac658
     m_Address: TreasureCleaningDefinition

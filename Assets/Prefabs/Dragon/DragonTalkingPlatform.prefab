@@ -263,7 +263,7 @@ MonoBehaviour:
   _cameraFrame: {fileID: 5311700894469080961}
   _standPose: {fileID: 8821331980234203492}
   _floatRoot: {fileID: 2705257229952535385}
-  _floatHeight: 0.85
+  _floatHeight: 8
   _floatDuration: 0.85
   _blendIn: 0.5
   _blendOut: 0.45
@@ -271,8 +271,8 @@ MonoBehaviour:
   _fovZoomDelta: -6
   _lookBlendDuration: 0.55
   _lookSmoothTime: 0.35
-  _idleSwayYawDegrees: 1.2
-  _idleSwayPitchDegrees: 0.7
+  _idleSwayYawDegrees: 0.6
+  _idleSwayPitchDegrees: 0.35
   _idleSwayFrequency: 0.35
 --- !u!1 &8196336707916715009
 GameObject:
@@ -332,10 +332,10 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8996089361605851807}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.099690564, y: 0.2990585, z: -0.031432316, w: 0.9484924}
-  m_LocalPosition: {x: -2.5, y: 1.6, z: -3.5}
+  m_LocalRotation: {x: 0.049913637, y: 0.30029365, z: -0.015737707, w: 0.95241}
+  m_LocalPosition: {x: -13.948, y: 16.002, z: -14.539}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 6066886212754112977}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 6, y: 35, z: 0}

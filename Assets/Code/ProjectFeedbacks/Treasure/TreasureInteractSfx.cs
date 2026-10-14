@@ -100,21 +100,21 @@ public static class TreasureInteractSfx
 		_sfx.Clips = clips;
 		if ( pickup )
 		{
-			_sfx.VolumeMin = definition.pickupVolumeMin * volumeScale;
-			_sfx.VolumeMax = definition.pickupVolumeMax * volumeScale;
-			_sfx.PitchMin = definition.pickupPitchMin;
-			_sfx.PitchMax = definition.pickupPitchMax;
-			_sfx.SpatialBlend = 0f;
+			_sfx.Playback.VolumeMin = definition.pickupVolumeMin * volumeScale;
+			_sfx.Playback.VolumeMax = definition.pickupVolumeMax * volumeScale;
+			_sfx.Playback.PitchMin = definition.pickupPitchMin;
+			_sfx.Playback.PitchMax = definition.pickupPitchMax;
+			_sfx.Playback.SpatialBlend = 0f;
 		}
 		else
 		{
-			_sfx.VolumeMin = definition.placeVolumeMin;
-			_sfx.VolumeMax = definition.placeVolumeMax;
-			_sfx.PitchMin = definition.placePitchMin * placeComboPitch;
-			_sfx.PitchMax = definition.placePitchMax * placeComboPitch;
-			_sfx.SpatialBlend = 1f;
-			_sfx.MinDistance = PlaceMinDistance;
-			_sfx.MaxDistance = PlaceMaxDistance;
+			_sfx.Playback.VolumeMin = definition.placeVolumeMin;
+			_sfx.Playback.VolumeMax = definition.placeVolumeMax;
+			_sfx.Playback.PitchMin = definition.placePitchMin * placeComboPitch;
+			_sfx.Playback.PitchMax = definition.placePitchMax * placeComboPitch;
+			_sfx.Playback.SpatialBlend = 1f;
+			_sfx.Playback.MinDistance = PlaceMinDistance;
+			_sfx.Playback.MaxDistance = PlaceMaxDistance;
 		}
 
 		_host.transform.position = position;

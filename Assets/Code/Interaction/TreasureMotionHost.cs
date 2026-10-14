@@ -28,4 +28,10 @@ public sealed class TreasureMotionHost : MonoBehaviour
 		Object.DontDestroyOnLoad( go );
 		_instance = go.AddComponent<TreasureMotionHost>();
 	}
+
+	void OnDestroy()
+	{
+		if ( _instance == this )
+			_instance = null;
+	}
 }

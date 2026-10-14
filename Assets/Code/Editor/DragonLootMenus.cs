@@ -65,7 +65,10 @@ public static class DragonLootMenus
 	public const string StationsCoinSortingCreate = Root + "/Stations/Coin Sorting/Create Setup";
 	public const string StationsCoinSortingPlace = Root + "/Stations/Coin Sorting/Place In Level";
 	public const string StationsCoffeeSetup = Root + "/Stations/Coffee/Setup Coffee Machine Prefab";
+	public const string StationsRecyclingCreate = Root + "/Stations/Recycling/Create Setup";
+	public const string StationsRecyclingPlace = Root + "/Stations/Recycling/Place In Level";
 	public const string DefinitionsEnsureCoffeeMachine = Root + "/Definitions/Ensure Coffee Machine Definition";
+	public const string DefinitionsEnsureRecyclingMachine = Root + "/Definitions/Ensure Recycling Machine";
 
 	// --- Treasure surface ---
 	public const string TreasureSurfaceEditor = Root + "/Treasure Surface/Open Editor";
@@ -104,6 +107,7 @@ public static class DragonLootMenus
 	// --- Tools ---
 	public const string ToolsMilanoteSettings = Root + "/Tools/Milanote Sync Settings";
 	public const string ToolsMilanoteTasks = Root + "/Tools/Milanote Sync Tasks";
+	public const string ToolsHeightmapToProBuilder = Root + "/Tools/Heightmap To ProBuilder";
 
 	// --- UI ---
 	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";

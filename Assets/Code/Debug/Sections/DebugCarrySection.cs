@@ -11,6 +11,7 @@ public class DebugCarrySection : DebugOverlaySection
 	static int s_selectedIndex;
 	static int s_categoryFilter = -1;
 	static string s_lastStatus = "";
+	static string s_pickerSearch = string.Empty;
 
 	static List<TreasureDefinition> s_catalog;
 	static readonly List<TreasureDefinition> s_filtered = new List<TreasureDefinition>();
@@ -55,7 +56,11 @@ public class DebugCarrySection : DebugOverlaySection
 
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Clear Hands" ) )
+		{
 			carry.Clear();
+			s_lastStatus = "Cleared hands";
+			DebugOverlay.SetLastAction( s_lastStatus );
+		}
 		if ( GUILayout.Button( "Cycle +" ) )
 			carry.CycleActive( 1 );
 		if ( GUILayout.Button( "Cycle -" ) )
@@ -64,11 +69,24 @@ public class DebugCarrySection : DebugOverlaySection
 
 		GUILayout.Space( 4f );
 		DrawGiveTreasure( carry );
-		GUILayout.Space( 4f );
-		DrawFillFromPile( player );
 
-		if ( !string.IsNullOrEmpty( s_lastStatus ) )
-			GUILayout.Label( s_lastStatus );
+		if ( DebugOverlayGui.DrawAdvancedFoldout( "Carry.FillPile", "Fill from pile / extras" ) )
+		{
+			GUILayout.Space( 4f );
+			DrawFillFromPile( player );
+		}
+
+		DebugOverlayGui.DrawStatus( s_lastStatus );
+	}
+
+	/// <summary>Quick Actions helper: add mixed coins to the player carry.</summary>
+	public static int DebugAddCoinAssortment( int amount )
+	{
+		PlayerController player = DebugOverlay.GetPlayer();
+		PlayerCarry carry = player != null ? player.Carry : null;
+		if ( carry == null )
+			return 0;
+		return TryAddAssortment( carry, TreasureCategory.Coin, amount );
 	}
 
 	void DrawGiveTreasure( PlayerCarry carry )
@@ -92,81 +110,60 @@ public class DebugCarrySection : DebugOverlaySection
 		if ( s_selectedIndex >= s_filtered.Count )
 			s_selectedIndex = 0;
 
+		DebugOverlayGui.DrawFilteredPicker(
+			s_filtered,
+			FormatLabel,
+			ref s_selectedIndex,
+			ref s_pickerSearch,
+			"No items in filter" );
+
+		if ( s_selectedIndex < 0 || s_selectedIndex >= s_filtered.Count )
+			return;
+
 		TreasureDefinition selected = s_filtered[ s_selectedIndex ];
 		string selectedLabel = FormatLabel( selected );
 
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "◀", GUILayout.Width( 28f ) ) )
-			s_selectedIndex = ( s_selectedIndex + s_filtered.Count - 1 ) % s_filtered.Count;
-		GUILayout.Label( selectedLabel, GUILayout.MinWidth( 80f ) );
-		if ( GUILayout.Button( "▶", GUILayout.Width( 28f ) ) )
-			s_selectedIndex = ( s_selectedIndex + 1 ) % s_filtered.Count;
-		GUILayout.EndHorizontal();
-
-		GUILayout.Label( $"Give Amount: {s_giveAmount}" );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "1" ) )
-			s_giveAmount = 1;
-		if ( GUILayout.Button( "5" ) )
-			s_giveAmount = 5;
-		if ( GUILayout.Button( "10" ) )
-			s_giveAmount = 10;
-		if ( GUILayout.Button( "50" ) )
-			s_giveAmount = 50;
-		GUILayout.EndHorizontal();
-		s_giveAmount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_giveAmount, 1, 100 ) );
+		DebugOverlayGui.DrawAmountPresets( "Give", ref s_giveAmount, 1, 100, 1, 5, 10, 50 );
 
 		if ( GUILayout.Button( $"Add {s_giveAmount}x {selectedLabel}" ) )
 		{
 			int added = TryAddMany( carry, selected, s_giveAmount );
 			s_lastStatus = $"Added {added}/{s_giveAmount} {selectedLabel}";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 
 		GUILayout.Space( 2f );
-		GUILayout.Label( $"Assortment Amount: {s_assortmentAmount}" );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "5" ) )
-			s_assortmentAmount = 5;
-		if ( GUILayout.Button( "10" ) )
-			s_assortmentAmount = 10;
-		if ( GUILayout.Button( "25" ) )
-			s_assortmentAmount = 25;
-		if ( GUILayout.Button( "50" ) )
-			s_assortmentAmount = 50;
-		GUILayout.EndHorizontal();
-		s_assortmentAmount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_assortmentAmount, 1, 100 ) );
-
+		DebugOverlayGui.DrawAmountPresets( "Assortment", ref s_assortmentAmount, 1, 100, 5, 10, 25, 50 );
 		GUILayout.BeginHorizontal();
 		if ( GUILayout.Button( $"Add {s_assortmentAmount} coins" ) )
 		{
 			int added = TryAddAssortment( carry, TreasureCategory.Coin, s_assortmentAmount );
 			s_lastStatus = $"Added {added}/{s_assortmentAmount} mixed coins";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 		if ( GUILayout.Button( $"Add {s_assortmentAmount} gems" ) )
 		{
 			int added = TryAddAssortment( carry, TreasureCategory.Gem, s_assortmentAmount );
 			s_lastStatus = $"Added {added}/{s_assortmentAmount} mixed gems";
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 		GUILayout.EndHorizontal();
 	}
 
 	void DrawFillFromPile( PlayerController player )
 	{
-		GUILayout.Label( $"Fill Amount: {s_fillAmount}" );
-		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "1" ) )
-			s_fillAmount = 1;
-		if ( GUILayout.Button( "5" ) )
-			s_fillAmount = 5;
-		if ( GUILayout.Button( "10" ) )
-			s_fillAmount = 10;
+		DebugOverlayGui.DrawAmountPresets( ref s_fillAmount, 1, 100, 1, 5, 10 );
 		if ( GUILayout.Button( "Use Pile Take" ) )
 			s_fillAmount = DebugGoldPileSection.FillAmount;
-		GUILayout.EndHorizontal();
-		s_fillAmount = Mathf.RoundToInt( GUILayout.HorizontalSlider( s_fillAmount, 1, 100 ) );
 
 		if ( GUILayout.Button( $"Fill {s_fillAmount} from nearest pile" ) )
 		{
+			if ( player == null )
+			{
+				s_lastStatus = "No player";
+				return;
+			}
+
 			TreasurePileVisual pile = DebugGoldPileSection.FindNearestPileVisual( player.transform.position );
 			if ( pile == null )
 			{
@@ -178,6 +175,8 @@ public class DebugCarrySection : DebugOverlaySection
 				int taken = pile.DebugTakeUnits( s_fillAmount, aim, player, true );
 				s_lastStatus = $"Filled {taken}/{s_fillAmount} from {pile.gameObject.name}";
 			}
+
+			DebugOverlay.SetLastAction( s_lastStatus );
 		}
 	}
 
@@ -190,18 +189,23 @@ public class DebugCarrySection : DebugOverlaySection
 		GUILayout.EndHorizontal();
 		GUILayout.BeginHorizontal();
 		DrawFilterButton( "Artifact", (int)TreasureCategory.Artifact );
-		DrawFilterButton( "Crown", (int)TreasureCategory.Crown );
-		DrawFilterButton( "Goblet", (int)TreasureCategory.Goblet );
-		DrawFilterButton( "Helmet", (int)TreasureCategory.Helmet );
-		GUILayout.EndHorizontal();
-		GUILayout.BeginHorizontal();
-		DrawFilterButton( "Key", (int)TreasureCategory.Key );
-		DrawFilterButton( "Chest", (int)TreasureCategory.Chest );
-		DrawFilterButton( "Container", (int)TreasureCategory.Container );
 		DrawFilterButton( "Resource", (int)TreasureCategory.Resource );
 		DrawFilterButton( "Junk", (int)TreasureCategory.Junk );
 		DrawFilterButton( "General", (int)TreasureCategory.General );
 		GUILayout.EndHorizontal();
+		if ( DebugOverlayGui.DrawAdvancedFoldout( "Carry.MoreCategories", "More categories" ) )
+		{
+			GUILayout.BeginHorizontal();
+			DrawFilterButton( "Crown", (int)TreasureCategory.Crown );
+			DrawFilterButton( "Goblet", (int)TreasureCategory.Goblet );
+			DrawFilterButton( "Helmet", (int)TreasureCategory.Helmet );
+			GUILayout.EndHorizontal();
+			GUILayout.BeginHorizontal();
+			DrawFilterButton( "Key", (int)TreasureCategory.Key );
+			DrawFilterButton( "Chest", (int)TreasureCategory.Chest );
+			DrawFilterButton( "Container", (int)TreasureCategory.Container );
+			GUILayout.EndHorizontal();
+		}
 	}
 
 	static string FormatBucketSlots( PlayerCarry carry, CarryBucketKind kind )
@@ -216,6 +220,7 @@ public class DebugCarrySection : DebugOverlaySection
 		{
 			s_categoryFilter = filter;
 			s_selectedIndex = 0;
+			s_pickerSearch = string.Empty;
 		}
 	}
 

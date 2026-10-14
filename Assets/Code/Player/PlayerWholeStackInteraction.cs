@@ -40,6 +40,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	GroundCoinStack _placeCoinTarget;
 	GroundGoldBarStack _placeGoldBarTarget;
 	CoinSortingHopper _placeHopper;
+	RecyclingHopper _placeRecyclingHopper;
 	MinecartInteractable _placeCart;
 	ITreasureDisplayStackOwner _placeDisplay;
 	int _placeDisplaySlot = -1;
@@ -67,7 +68,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				out int displaySlot ) )
 				return false;
 
-			// While carrying matching coins, prefer depositing onto a display over taking its stack.
+			// While carrying matching stackables, prefer depositing onto a display over taking its stack.
 			if ( display != null
 				&& displaySlot >= 0
 				&& ShouldPreferDisplayPlaceOverPickup() )
@@ -77,6 +78,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			if ( stack != null
 				&& stack.IsMachineBuffer
 				&& ShouldPreferHopperDumpOverPickup( stack ) )
+				return false;
+
+			// While carrying coins the cart bed can accept, prefer Hold-E dump over taking the cart pile.
+			if ( stack != null
+				&& stack.IsCartHosted
+				&& ShouldPreferCartPlaceOverPickup( stack ) )
 				return false;
 
 			return stack != null
@@ -91,15 +98,27 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		get
 		{
 			PlayerCarry carry = _player != null ? _player.Carry : null;
-			if ( carry == null || carry.SelectedBucket != CarryBucketKind.Coin )
-				return false;
-			if ( carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
+			if ( carry == null )
 				return false;
 
 			if ( CanOfferWholeStackPickup )
 				return false;
 
 			if ( HasBlockingContextualFocus() )
+				return false;
+
+			if ( carry.SelectedBucket == CarryBucketKind.Junk
+				&& carry.GetBucketCount( CarryBucketKind.Junk ) > 0 )
+			{
+				return TryResolveRecyclingDump( out _, out _, out bool junkValid ) && junkValid;
+			}
+
+			if ( carry.SelectedBucket == CarryBucketKind.Artifact && HasCarriedGoldBars( carry ) )
+				return TryResolveWholePlace( out _, out _, out bool barValid, out _, out _, out _, out _, out _, out _, out _ ) && barValid;
+
+			if ( carry.SelectedBucket != CarryBucketKind.Coin )
+				return false;
+			if ( carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
 				return false;
 
 			return TryResolveWholePlace( out _, out _, out bool valid, out _, out _, out _, out _, out _, out _, out _ ) && valid;
@@ -116,9 +135,12 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return false;
 
 		PlayerCarry carry = _player != null ? _player.Carry : null;
-		if ( carry == null || carry.SelectedBucket != CarryBucketKind.Coin )
+		if ( carry == null )
 			return false;
-		if ( carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
+
+		bool coinBucket = carry.SelectedBucket == CarryBucketKind.Coin && carry.GetBucketCount( CarryBucketKind.Coin ) > 0;
+		bool goldBarBucket = carry.SelectedBucket == CarryBucketKind.Artifact && HasCarriedGoldBars( carry );
+		if ( !coinBucket && !goldBarBucket )
 			return false;
 
 		if ( CanOfferWholeStackPickup || HasBlockingContextualFocus() )
@@ -204,8 +226,24 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		PlayerCarry carry = _player != null ? _player.Carry : null;
 		if ( carry != null
+			&& carry.SelectedBucket == CarryBucketKind.Junk
+			&& carry.GetBucketCount( CarryBucketKind.Junk ) > 0 )
+		{
+			TickRecyclingPlaceCharge();
+			return;
+		}
+
+		if ( carry != null
 			&& carry.SelectedBucket == CarryBucketKind.Coin
 			&& carry.GetBucketCount( CarryBucketKind.Coin ) > 0 )
+		{
+			TickPlaceCharge();
+			return;
+		}
+
+		if ( carry != null
+			&& carry.SelectedBucket == CarryBucketKind.Artifact
+			&& HasCarriedGoldBars( carry ) )
 		{
 			TickPlaceCharge();
 			return;
@@ -223,16 +261,63 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( focus == null || InteractableBase.IsPickupInteract( focus ) )
 			return false;
 
+		MinecartInteractable cart = focus as MinecartInteractable;
+		if ( cart != null && ShouldYieldMinecartFocusForWholePlace( cart ) )
+			return false;
+
 		return focus.CanInteract( _player );
 	}
 
 	/// <summary>
-	/// When aiming at a display stack while carrying depositable coins, charge place instead of pickup.
+	/// Cargo carts use ContextualInteract for push/send, but that must not block Hold-E dump
+	/// when the aimed bed can accept the carried stack.
+	/// </summary>
+	bool ShouldYieldMinecartFocusForWholePlace( MinecartInteractable cart )
+	{
+		if ( cart == null || !cart.CargoEnabled )
+			return false;
+
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || carry.Count <= 0 )
+			return false;
+
+		bool canCoinPlace = carry.SelectedBucket == CarryBucketKind.Coin
+			&& carry.GetBucketCount( CarryBucketKind.Coin ) > 0;
+		bool canBarPlace = carry.SelectedBucket == CarryBucketKind.Artifact
+			&& HasCarriedGoldBars( carry );
+		if ( !canCoinPlace && !canBarPlace )
+			return false;
+
+		if ( !TryResolveWholePlace(
+			out _,
+			out _,
+			out bool valid,
+			out _,
+			out _,
+			out _,
+			out _,
+			out _,
+			out MinecartInteractable cartPlace,
+			out _ )
+			|| !valid
+			|| cartPlace == null )
+			return false;
+
+		return cartPlace == cart || cartPlace.ConsistLead == cart.ConsistLead;
+	}
+
+	/// <summary>
+	/// When aiming at a display stack while carrying depositable coins/gold bars, charge place instead of pickup.
 	/// </summary>
 	bool ShouldPreferDisplayPlaceOverPickup()
 	{
 		PlayerCarry carry = _player != null ? _player.Carry : null;
-		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
+		if ( carry == null )
+			return false;
+
+		bool canCoinPlace = carry.GetBucketCount( CarryBucketKind.Coin ) > 0;
+		bool canBarPlace = HasCarriedGoldBars( carry );
+		if ( !canCoinPlace && !canBarPlace )
 			return false;
 
 		if ( HasBlockingContextualFocus() )
@@ -274,6 +359,39 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return false;
 
 		return true;
+	}
+
+	/// <summary>
+	/// While carrying coins and aiming a cart-hosted pile the bed can accept, dump instead of take-all.
+	/// </summary>
+	bool ShouldPreferCartPlaceOverPickup( GroundCoinStack cartStack )
+	{
+		if ( cartStack == null || !cartStack.IsCartHosted )
+			return false;
+
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Coin ) <= 0 )
+			return false;
+
+		MinecartInteractable cart = cartStack.GetComponentInParent<MinecartInteractable>();
+		if ( cart == null || !cart.CargoEnabled )
+			return false;
+
+		if ( !TryResolveWholePlace(
+			out _,
+			out _,
+			out bool valid,
+			out _,
+			out _,
+			out _,
+			out _,
+			out _,
+			out MinecartInteractable cartPlace,
+			out _ ) )
+			return false;
+
+		return valid && cartPlace != null
+			&& ( cartPlace == cart || cartPlace.ConsistLead == cart.ConsistLead );
 	}
 
 	int GetWholeStackPlaceQuantity( PlayerCarry carry )
@@ -425,6 +543,122 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		CompletePickup();
 		CancelCharge();
+	}
+
+	void TickRecyclingPlaceCharge()
+	{
+		if ( !TryResolveRecyclingDump( out Vector3 pos, out Quaternion rot, out bool valid ) )
+		{
+			CancelCharge();
+			return;
+		}
+
+		if ( _mode != ChargeMode.Place )
+		{
+			_mode = ChargeMode.Place;
+			_charge = 0f;
+			_pickupTargetKey = null;
+			_pickupCoinStack = null;
+			_pickupGoldBarStack = null;
+			_pickupPyramid = null;
+			_pickupDisplay = null;
+			_pickupDisplaySlot = -1;
+		}
+
+		_placePos = pos;
+		_placeRot = rot;
+		_placeValid = valid;
+		_placeCoinTarget = null;
+		_placeGoldBarTarget = null;
+		_placeHopper = null;
+		_placeCart = null;
+		_placeDisplay = null;
+		_placeDisplaySlot = -1;
+		_placeIndirectJoin = false;
+
+		if ( !valid )
+		{
+			_charge = 0f;
+			return;
+		}
+
+		_charge += Time.deltaTime;
+		if ( _charge < _holdSeconds )
+			return;
+
+		CompleteRecyclingPlace();
+		CancelCharge();
+	}
+
+	void CompleteRecyclingPlace()
+	{
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || !_placeValid || _placeRecyclingHopper == null )
+			return;
+
+		RecyclingMachine station = _placeRecyclingHopper.Station;
+		if ( station == null )
+			return;
+
+		if ( station.TryDumpCarryJunk( carry ) )
+			EventBus.Publish( new WholeStackPlaceCompletedEvent { Bucket = CarryBucketKind.Junk, IndirectJoin = false } );
+	}
+
+	bool TryResolveRecyclingDump( out Vector3 position, out Quaternion rotation, out bool valid )
+	{
+		position = Vector3.zero;
+		rotation = Quaternion.identity;
+		valid = false;
+		_placeRecyclingHopper = null;
+
+		PlayerCarry carry = _player != null ? _player.Carry : null;
+		if ( carry == null || carry.GetBucketCount( CarryBucketKind.Junk ) <= 0 || _interaction == null )
+			return false;
+
+		RecyclingHopper focusHopper = ResolveRecyclingHopperFromFocus();
+		if ( focusHopper != null
+			&& focusHopper.Station != null
+			&& focusHopper.Station.RemainingCapacity > 0 )
+		{
+			_placeRecyclingHopper = focusHopper;
+			position = focusHopper.transform.position;
+			rotation = TreasureOrientation.FlattenUpright( focusHopper.transform.rotation );
+			valid = true;
+			return true;
+		}
+
+		if ( !_interaction.TryGetLastHit( out RaycastHit hit ) )
+			return false;
+
+		RecyclingHopper hitHopper = RecyclingMachine.ResolveHopperPlacementFromCollider( hit.collider );
+		if ( hitHopper == null
+			|| hitHopper.Station == null
+			|| hitHopper.Station.RemainingCapacity <= 0 )
+			return false;
+
+		_placeRecyclingHopper = hitHopper;
+		position = hit.point;
+		rotation = TreasureOrientation.FlattenUpright( hitHopper.transform.rotation );
+		valid = true;
+		return true;
+	}
+
+	RecyclingHopper ResolveRecyclingHopperFromFocus()
+	{
+		if ( _interaction == null )
+			return null;
+
+		IInteractable focus = _interaction.Current;
+		RecyclingHopper hopper = focus as RecyclingHopper;
+		if ( hopper != null )
+			return hopper;
+
+		MonoBehaviour focusBehaviour = focus as MonoBehaviour;
+		if ( focusBehaviour != null )
+			return RecyclingMachine.ResolveHopperPlacementFromCollider(
+				focusBehaviour.GetComponentInChildren<Collider>() );
+
+		return null;
 	}
 
 	void TickPlaceCharge()
@@ -1183,37 +1417,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			} );
 	}
 
-	void PlaceCoinCollection(
-		List<TreasureItem> items,
-		Vector3 contact,
-		Quaternion rotation,
-		GroundCoinStack preferred )
-	{
-		// Legacy individual path kept for non-definition callers.
-		GroundCoinStack stack = preferred;
-		if ( stack == null || stack.IsFull )
-			stack = GroundCoinStack.CreateAt( contact, rotation );
-
-		for ( int i = 0; i < items.Count; i++ )
-		{
-			TreasureItem member = items[ i ];
-			if ( member == null )
-				continue;
-
-			if ( !stack.CanAccept( member.Definition ) )
-			{
-				member.EnterPhysics( member.transform.position, member.transform.rotation );
-				continue;
-			}
-
-			stack.BeginAppendFlight( member, stack.transform.rotation, playerDirected: true );
-		}
-
-		stack.AbsorbNearbyLooseCoins();
-		if ( !stack.HasInFlight )
-			stack.TryMergeNearby();
-	}
-
 	void PlaceGemCollection( List<TreasureItem> items, Vector3 contact )
 	{
 		TreasureItem firstPlaced = null;
@@ -1919,6 +2122,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		_placeCoinTarget = null;
 		_placeGoldBarTarget = null;
 		_placeHopper = null;
+		_placeRecyclingHopper = null;
 		_placeCart = null;
 		_placeDisplay = null;
 		_placeDisplaySlot = -1;

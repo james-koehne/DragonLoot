@@ -2000,4 +2000,332 @@ public class WorldTreasureStreamer : MonoBehaviour
 		if ( _instance == this )
 			_instance = null;
 	}
+
+	public static void ClearStaticInstance()
+	{
+		if ( _instance == null )
+			return;
+
+		WorldTreasureStreamer host = _instance;
+		_instance = null;
+		if ( host != null )
+			Object.Destroy( host.gameObject );
+	}
+
+	/// <summary>Copies streamer records into <paramref name="world"/> without mutating live residents.</summary>
+	public static void CaptureInto( GameSaveWorldData world )
+	{
+		if ( world == null )
+			return;
+
+		if ( world.coinStacks == null )
+			world.coinStacks = new List<GameSaveCoinStackEntry>();
+		else
+			world.coinStacks.Clear();
+
+		if ( world.barStacks == null )
+			world.barStacks = new List<GameSaveBarStackEntry>();
+		else
+			world.barStacks.Clear();
+
+		if ( world.loose == null )
+			world.loose = new List<GameSaveLooseTreasureEntry>();
+		else
+			world.loose.Clear();
+
+		if ( _instance == null )
+			return;
+
+		_instance.ExportRecords( world );
+	}
+
+	/// <summary>Clears streamer state and restores records from <paramref name="world"/>.</summary>
+	public static void ApplyFrom( GameSaveWorldData world )
+	{
+		EnsureExists();
+		if ( _instance == null || world == null )
+			return;
+
+		_instance.ClearAllRecords();
+		_instance.ImportRecords( world );
+	}
+
+	void ExportRecords( GameSaveWorldData world )
+	{
+		HashSet<TreasureItem> exportedLoose = new HashSet<TreasureItem>();
+
+		for ( int i = 0; i < _coinStacks.Count; i++ )
+		{
+			if ( _freeCoinRecords.Contains( i ) )
+				continue;
+
+			CoinStackRecord record = _coinStacks[ i ];
+			Vector3 position = record.Position;
+			Quaternion rotation = record.Rotation;
+			float seed = record.VariationSeed;
+			_slotScratch.Clear();
+
+			if ( record.Resident != null )
+			{
+				record.Resident.CaptureStreamingSlots( _slotScratch, out seed, out position, out rotation );
+			}
+			else if ( record.Slots != null )
+			{
+				for ( int s = 0; s < record.Slots.Count; s++ )
+					_slotScratch.Add( record.Slots[ s ] );
+			}
+
+			if ( _slotScratch.Count <= 0 )
+				continue;
+
+			GameSaveCoinStackEntry entry = new GameSaveCoinStackEntry
+			{
+				position = GameSaveVec3.From( position ),
+				rotation = GameSaveQuat.From( rotation ),
+				variationSeed = seed,
+				slotIds = new List<string>( _slotScratch.Count )
+			};
+			for ( int s = 0; s < _slotScratch.Count; s++ )
+			{
+				string id = GameSaveTreasureIds.GetId( _slotScratch[ s ] );
+				if ( !string.IsNullOrEmpty( id ) )
+					entry.slotIds.Add( id );
+			}
+
+			if ( entry.slotIds.Count > 0 )
+				world.coinStacks.Add( entry );
+		}
+
+		for ( int i = 0; i < _barStacks.Count; i++ )
+		{
+			if ( _freeBarRecords.Contains( i ) )
+				continue;
+
+			BarStackRecord record = _barStacks[ i ];
+			TreasureDefinition definition = record.Definition;
+			int count = record.Count;
+			Vector3 position = record.Position;
+			Quaternion rotation = record.Rotation;
+
+			if ( record.Resident != null )
+				record.Resident.CaptureStreamingBars( out definition, out count, out position, out rotation );
+
+			if ( definition == null || count <= 0 )
+				continue;
+
+			string defId = GameSaveTreasureIds.GetId( definition );
+			if ( string.IsNullOrEmpty( defId ) )
+				continue;
+
+			world.barStacks.Add( new GameSaveBarStackEntry
+			{
+				position = GameSaveVec3.From( position ),
+				rotation = GameSaveQuat.From( rotation ),
+				definitionId = defId,
+				count = count
+			} );
+		}
+
+		for ( int i = 0; i < _loose.Count; i++ )
+		{
+			if ( _freeLooseRecords.Contains( i ) )
+				continue;
+
+			LooseRecord record = _loose[ i ];
+			TreasureDefinition definition = record.Definition;
+			Vector3 position = record.Position;
+			Quaternion rotation = record.Rotation;
+			bool surfaceMode = record.SurfaceMode;
+
+			if ( record.Resident != null )
+			{
+				definition = record.Resident.Definition;
+				position = record.Resident.transform.position;
+				rotation = record.Resident.transform.rotation;
+				surfaceMode = record.Resident.State == TreasureItemState.SurfaceRolling;
+				exportedLoose.Add( record.Resident );
+			}
+
+			if ( definition == null )
+				continue;
+
+			string defId = GameSaveTreasureIds.GetId( definition );
+			if ( string.IsNullOrEmpty( defId ) )
+				continue;
+
+			world.loose.Add( new GameSaveLooseTreasureEntry
+			{
+				position = GameSaveVec3.From( position ),
+				rotation = GameSaveQuat.From( rotation ),
+				definitionId = defId,
+				surfaceMode = surfaceMode
+			} );
+		}
+
+		for ( int i = 0; i < _trackedLive.Count; i++ )
+		{
+			TreasureItem item = _trackedLive[ i ];
+			if ( item == null || item.Definition == null || exportedLoose.Contains( item ) )
+				continue;
+			if ( !CanParkLoose( item ) )
+				continue;
+
+			string defId = GameSaveTreasureIds.GetId( item.Definition );
+			if ( string.IsNullOrEmpty( defId ) )
+				continue;
+
+			world.loose.Add( new GameSaveLooseTreasureEntry
+			{
+				position = GameSaveVec3.From( item.transform.position ),
+				rotation = GameSaveQuat.From( item.transform.rotation ),
+				definitionId = defId,
+				surfaceMode = item.State == TreasureItemState.SurfaceRolling
+			} );
+		}
+	}
+
+	void ClearAllRecords()
+	{
+		for ( int i = _residentCoin.Count - 1; i >= 0; i-- )
+		{
+			int index = _residentCoin[ i ];
+			CoinStackRecord record = _coinStacks[ index ];
+			GroundCoinStack stack = record.Resident;
+			record.Resident = null;
+			_coinStacks[ index ] = record;
+			if ( stack != null )
+				ReturnCoinHost( stack );
+		}
+
+		for ( int i = _residentBar.Count - 1; i >= 0; i-- )
+		{
+			int index = _residentBar[ i ];
+			BarStackRecord record = _barStacks[ index ];
+			GroundGoldBarStack stack = record.Resident;
+			record.Resident = null;
+			_barStacks[ index ] = record;
+			if ( stack != null )
+				ReturnBarHost( stack );
+		}
+
+		for ( int i = _residentLoose.Count - 1; i >= 0; i-- )
+		{
+			int index = _residentLoose[ i ];
+			LooseRecord record = _loose[ index ];
+			TreasureItem item = record.Resident;
+			record.Resident = null;
+			_loose[ index ] = record;
+			if ( item != null )
+				TreasureItemFactory.Despawn( item );
+		}
+
+		_residentCoin.Clear();
+		_residentBar.Clear();
+		_residentLoose.Clear();
+		_trackedLive.Clear();
+		_trackedSet.Clear();
+		_cells.Clear();
+		_coinStacks.Clear();
+		_barStacks.Clear();
+		_loose.Clear();
+		_freeCoinRecords.Clear();
+		_freeBarRecords.Clear();
+		_freeLooseRecords.Clear();
+	}
+
+	void ImportRecords( GameSaveWorldData world )
+	{
+		if ( world.coinStacks != null )
+		{
+			List<TreasureDefinition> slots = new List<TreasureDefinition>( 32 );
+			for ( int i = 0; i < world.coinStacks.Count; i++ )
+			{
+				GameSaveCoinStackEntry entry = world.coinStacks[ i ];
+				if ( entry == null || entry.slotIds == null || entry.slotIds.Count <= 0 )
+					continue;
+
+				slots.Clear();
+				for ( int s = 0; s < entry.slotIds.Count; s++ )
+				{
+					TreasureDefinition def = GameSaveTreasureIds.Resolve( entry.slotIds[ s ] );
+					if ( def != null )
+						slots.Add( def );
+				}
+
+				if ( slots.Count <= 0 )
+					continue;
+
+				AddHiddenCoinStack( entry.position.ToVector3(), entry.rotation.ToQuaternion(), slots, entry.variationSeed );
+			}
+		}
+
+		if ( world.barStacks != null )
+		{
+			for ( int i = 0; i < world.barStacks.Count; i++ )
+			{
+				GameSaveBarStackEntry entry = world.barStacks[ i ];
+				if ( entry == null || entry.count <= 0 )
+					continue;
+
+				TreasureDefinition def = GameSaveTreasureIds.Resolve( entry.definitionId );
+				if ( def == null )
+					continue;
+
+				AddHiddenBarStack( entry.position.ToVector3(), entry.rotation.ToQuaternion(), def, entry.count );
+			}
+		}
+
+		if ( world.loose != null )
+		{
+			for ( int i = 0; i < world.loose.Count; i++ )
+			{
+				GameSaveLooseTreasureEntry entry = world.loose[ i ];
+				if ( entry == null )
+					continue;
+
+				TreasureDefinition def = GameSaveTreasureIds.Resolve( entry.definitionId );
+				if ( def == null )
+					continue;
+
+				AddHiddenLoose( entry.position.ToVector3(), entry.rotation.ToQuaternion(), def, entry.surfaceMode );
+			}
+		}
+	}
+
+	void AddHiddenBarStack( Vector3 position, Quaternion rotation, TreasureDefinition definition, int count )
+	{
+		if ( definition == null || count <= 0 )
+			return;
+
+		int index = AllocBarRecord();
+		BarStackRecord record = _barStacks[ index ];
+		record.Position = position;
+		record.Rotation = rotation;
+		record.Definition = definition;
+		record.Count = count;
+		record.Resident = null;
+		record.PendingExtract = false;
+		record.Cell = default;
+		_barStacks[ index ] = record;
+		InsertBarCell( index, position );
+	}
+
+	void AddHiddenLoose( Vector3 position, Quaternion rotation, TreasureDefinition definition, bool surfaceMode )
+	{
+		if ( definition == null )
+			return;
+
+		int index = AllocLooseRecord();
+		LooseRecord record = _loose[ index ];
+		record.Definition = definition;
+		record.Position = position;
+		record.Rotation = rotation;
+		record.OriginPile = null;
+		record.SurfaceMode = surfaceMode;
+		record.Resident = null;
+		record.PendingExtract = false;
+		record.Cell = default;
+		_loose[ index ] = record;
+		InsertLooseCell( index, position );
+	}
 }

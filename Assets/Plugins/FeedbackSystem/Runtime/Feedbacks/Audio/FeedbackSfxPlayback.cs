@@ -33,6 +33,41 @@ namespace FeedbackSystem
 			return pitch <= 0f ? 1f : pitch;
 		}
 
+		public static AudioSource Play(
+			AudioClip clip,
+			FeedbackSfxSettings settings,
+			Vector3 position,
+			Transform followTransform,
+			FeedbackOneShotVoice voiceTracker = null )
+		{
+			if ( !Enabled || clip == null || settings == null )
+				return null;
+
+			float volume = SampleVolume( settings.VolumeMin, settings.VolumeMax );
+			float pitch = SamplePitch( settings.PitchMin, settings.PitchMax );
+
+			if ( followTransform != null )
+				position = followTransform.position;
+
+			AudioSource audioSource = settings.AudioSource;
+			if ( audioSource != null )
+			{
+				audioSource.transform.position = position;
+				settings.ApplyToSource( audioSource );
+				audioSource.pitch = pitch;
+				ApplyVolumeAndPlay( audioSource, clip, volume );
+				FeedbackAudioFollower.Attach( audioSource, followTransform );
+				if ( voiceTracker != null )
+					voiceTracker.Register( audioSource );
+				return audioSource;
+			}
+
+			AudioSource pooled = FeedbackAudioPool.Play( clip, volume, pitch, position, settings, followTransform );
+			if ( voiceTracker != null && pooled != null )
+				voiceTracker.Register( pooled );
+			return pooled;
+		}
+
 		public static void Play(
 			AudioClip clip,
 			float volumeMin,
@@ -46,28 +81,18 @@ namespace FeedbackSystem
 			float maxDistance = 20f,
 			Transform followTransform = null )
 		{
-			if ( !Enabled || clip == null )
-				return;
-
-			float volume = SampleVolume( volumeMin, volumeMax );
-			float pitch = SamplePitch( pitchMin, pitchMax );
-
-			if ( followTransform != null )
-				position = followTransform.position;
-
-			if ( audioSource != null )
+			FeedbackSfxSettings settings = new FeedbackSfxSettings
 			{
-				audioSource.transform.position = position;
-				audioSource.spatialBlend = Mathf.Clamp01( spatialBlend );
-				audioSource.minDistance = Mathf.Max( 0.01f, minDistance );
-				audioSource.maxDistance = Mathf.Max( audioSource.minDistance, maxDistance );
-				audioSource.pitch = pitch;
-				ApplyVolumeAndPlay( audioSource, clip, volume );
-				FeedbackAudioFollower.Attach( audioSource, followTransform );
-				return;
-			}
-
-			FeedbackAudioPool.Play( clip, volume, pitch, position, spatialBlend, minDistance, maxDistance, followTransform );
+				VolumeMin = volumeMin,
+				VolumeMax = volumeMax,
+				PitchMin = pitchMin,
+				PitchMax = pitchMax,
+				SpatialBlend = spatialBlend,
+				MinDistance = minDistance,
+				MaxDistance = maxDistance,
+				AudioSource = audioSource
+			};
+			Play( clip, settings, position, followTransform );
 		}
 
 		/// <summary>
@@ -88,6 +113,12 @@ namespace FeedbackSystem
 
 			source.volume = Mathf.Min( gain, 4f );
 			source.PlayOneShot( clip, 1f );
+		}
+
+		/// <summary>Applies gain to AudioSource.volume (supports boost up to 4).</summary>
+		public static float ApplyGainToVolume( float gain )
+		{
+			return Mathf.Min( Mathf.Max( 0f, gain ), 4f );
 		}
 	}
 }

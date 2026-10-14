@@ -208,10 +208,13 @@ public class FeedbackDemoController : MonoBehaviour
 		sfx.AddFeedback( new PlaySFXFeedback
 		{
 			Clip = beepA,
-			VolumeMin = 0.75f,
-			VolumeMax = 0.85f,
-			PitchMin = 0.95f,
-			PitchMax = 1.05f
+			Playback = new FeedbackSfxSettings
+			{
+				VolumeMin = 0.75f,
+				VolumeMax = 0.85f,
+				PitchMin = 0.95f,
+				PitchMax = 1.05f
+			}
 		} );
 		AddButton( "Play SFX", sfx );
 
@@ -221,10 +224,13 @@ public class FeedbackDemoController : MonoBehaviour
 		randomSfx.AddFeedback( new PlayRandomSFXFeedback
 		{
 			Clips = new[] { beepA, beepB, beepC },
-			VolumeMin = 0.75f,
-			VolumeMax = 0.85f,
-			PitchMin = 0.95f,
-			PitchMax = 1.05f
+			Playback = new FeedbackSfxSettings
+			{
+				VolumeMin = 0.75f,
+				VolumeMax = 0.85f,
+				PitchMin = 0.95f,
+				PitchMax = 1.05f
+			}
 		} );
 		AddButton( "Play Random SFX", randomSfx );
 
@@ -235,10 +241,13 @@ public class FeedbackDemoController : MonoBehaviour
 		comboFeedbacks.AddFeedback( new PlayRandomSFXFeedback
 		{
 			Clips = new[] { beepA, beepB, beepC },
-			VolumeMin = 0.65f,
-			VolumeMax = 0.75f,
-			PitchMin = 0.95f,
-			PitchMax = 1.05f
+			Playback = new FeedbackSfxSettings
+			{
+				VolumeMin = 0.65f,
+				VolumeMax = 0.75f,
+				PitchMin = 0.95f,
+				PitchMax = 1.05f
+			}
 		} );
 		ParallelFeedback parallel = new ParallelFeedback();
 		parallel.Feedbacks.Add( new PlayParticlesFeedback { ParticleSystem = comboParticles } );

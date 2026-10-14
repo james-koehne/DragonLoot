@@ -188,10 +188,10 @@ public class PlayerFootsteps : MonoBehaviour
 			return;
 
 		sfx.Clips = clips;
-		sfx.VolumeMin = volumeMin;
-		sfx.VolumeMax = volumeMax;
-		sfx.PitchMin = pitchMin;
-		sfx.PitchMax = pitchMax;
+		sfx.Playback.VolumeMin = volumeMin;
+		sfx.Playback.VolumeMax = volumeMax;
+		sfx.Playback.PitchMin = pitchMin;
+		sfx.Playback.PitchMax = pitchMax;
 		feedbacks.Play();
 	}
 

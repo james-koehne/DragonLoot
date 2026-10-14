@@ -29,11 +29,11 @@ public static class DragonDialogueSfx
 
 		float vol = Mathf.Clamp01( volume );
 		_sfx.Clip = clip;
-		_sfx.VolumeMin = vol;
-		_sfx.VolumeMax = vol;
-		_sfx.PitchMin = 1f;
-		_sfx.PitchMax = 1f;
-		_sfx.SpatialBlend = 0f;
+		_sfx.Playback.VolumeMin = vol;
+		_sfx.Playback.VolumeMax = vol;
+		_sfx.Playback.PitchMin = 1f;
+		_sfx.Playback.PitchMax = 1f;
+		_sfx.Playback.SpatialBlend = 0f;
 
 		_host.Play();
 	}

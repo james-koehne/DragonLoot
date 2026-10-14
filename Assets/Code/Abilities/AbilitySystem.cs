@@ -44,6 +44,14 @@ public sealed class AbilitySystem
 		}
 	}
 
+	public static void ClearInstance()
+	{
+		if ( Instance == null )
+			return;
+		Instance._player = null;
+		Instance = null;
+	}
+
 	void BindPlayer( PlayerController player )
 	{
 		_player = player;
@@ -205,6 +213,34 @@ public sealed class AbilitySystem
 		if ( string.IsNullOrEmpty( id ) )
 			return 0f;
 		return _cooldownRemaining.TryGetValue( id, out float remaining ) ? Mathf.Max( 0f, remaining ) : 0f;
+	}
+
+	public void CaptureCooldownsForSave( List<GameSaveCooldownEntry> into )
+	{
+		if ( into == null )
+			return;
+		into.Clear();
+		foreach ( KeyValuePair<string, float> pair in _cooldownRemaining )
+		{
+			if ( string.IsNullOrEmpty( pair.Key ) || pair.Value <= 0f )
+				continue;
+			into.Add( new GameSaveCooldownEntry { abilityId = pair.Key, remaining = pair.Value } );
+		}
+	}
+
+	public void ApplyCooldownsFromSave( List<GameSaveCooldownEntry> entries )
+	{
+		_cooldownRemaining.Clear();
+		if ( entries == null )
+			return;
+
+		for ( int i = 0; i < entries.Count; i++ )
+		{
+			GameSaveCooldownEntry entry = entries[ i ];
+			if ( entry == null || string.IsNullOrEmpty( entry.abilityId ) || entry.remaining <= 0f )
+				continue;
+			_cooldownRemaining[ entry.abilityId ] = entry.remaining;
+		}
 	}
 
 	public int FindEquippedSlot( string id )

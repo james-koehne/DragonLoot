@@ -417,7 +417,8 @@ public class PlayerPlacement : MonoBehaviour
 			|| target is TypedDisplayTableInteractable
 			|| target is MixedDisplayTableInteractable
 			|| target is ArtifactPresentationTableInteractable
-			|| target is TableInteractable;
+			|| target is TableInteractable
+			|| target is MinecartInteractable;
 	}
 
 	bool ShouldSuppressPlacementForPickableFocus( TreasureItem heldItem )
@@ -508,6 +509,13 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
+		RecyclingHopper recyclingHopper = target as RecyclingHopper;
+		if ( recyclingHopper != null )
+		{
+			AppendBehaviourRenderers( recyclingHopper.Station != null ? recyclingHopper.Station : (MonoBehaviour)recyclingHopper, renderers );
+			return;
+		}
+
 		GroundTreasureStackTarget looseColumn = target as GroundTreasureStackTarget;
 		if ( looseColumn != null )
 		{
@@ -563,6 +571,13 @@ public class PlayerPlacement : MonoBehaviour
 		if ( mixedTable != null )
 		{
 			AppendBehaviourRenderers( mixedTable, renderers );
+			return;
+		}
+
+		MinecartInteractable minecart = target as MinecartInteractable;
+		if ( minecart != null )
+		{
+			minecart.AppendOutlineRenderers( renderers );
 			return;
 		}
 
@@ -980,14 +995,6 @@ public class PlayerPlacement : MonoBehaviour
 	public bool TryThrowActive()
 	{
 		return TryReleaseToSurface( useSoftVelocity: false );
-	}
-
-	/// <summary>
-	/// Soft-drop held treasure forward from the hand (legacy / sorting table).
-	/// </summary>
-	public bool TrySoftDrop()
-	{
-		return TryReleaseToSurface( useSoftVelocity: true );
 	}
 
 	bool TryReleaseToSurface( bool useSoftVelocity )
@@ -1533,6 +1540,11 @@ public class PlayerPlacement : MonoBehaviour
 			CoinSortingStation.ResolveHopperPlacementFromCollider( query.Hit.collider );
 		if ( sortingHopper != null )
 			return sortingHopper;
+
+		RecyclingHopper recyclingHopper =
+			RecyclingMachine.ResolveHopperPlacementFromCollider( query.Hit.collider );
+		if ( recyclingHopper != null )
+			return recyclingHopper;
 
 		// Never resolve floor placement onto coin piles — deposit uses ITreasurePlacementTarget above.
 		if ( !PlacementFloorSurface.IsFloorCollider( query.Hit.collider ) )
