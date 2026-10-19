@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
   authoredLayoutSeed: 117098
   effectivePileSeed: 1740091308
-  heightFingerprint: 1254647263
+  heightFingerprint: -712336570
   contentsFingerprint: 1208659330
   sourceDefinitionName: TreasurePile_Island3_Gems
   volumeMaxAttempts: 24

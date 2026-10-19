@@ -1,0 +1,82 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f99b73591a7b6c459e9c44d1b904580, type: 3}
+  m_Name: TreasurePileWorkshopDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileDefinition
+  displayName: Treasure Pile
+  coinContents:
+  - treasure: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    count: 200
+  - treasure: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    count: 200
+  - treasure: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    count: 200
+  treasureContents:
+  - treasure: {fileID: 11400000, guid: 7c4e9f2a1b835d64e0a9c6d5f8b3e1a0, type: 2}
+    count: 5
+  - treasure: {fileID: 11400000, guid: c50a8a103cbdb64489fc78228a4a907c, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: b6e1d4a8c2f53970e8a5b1d7c4f0e268, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: 708909205ca41f6458d828ac46dd70d6, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 9d83555ba26b5f34c91ce87d8bed7657, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: 23642d676ec0a1e4d91eb72e042eefcd, type: 2}
+    count: 3
+  - treasure: {fileID: 11400000, guid: b42e58a72036e8245a4a33f1fdeea89e, type: 2}
+    count: 1
+  - treasure: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
+    count: 6
+  - treasure: {fileID: 11400000, guid: acd587c172bbea34f8051248ca703cc7, type: 2}
+    count: 1
+  maxVisibleTotal: 32
+  coinVisibleBufferFraction: 0.1
+  cellSize: 0.125
+  minResolution: 32
+  maxResolution: 1024
+  groundLevelHeight: 0.05
+  lootFloorClearance: 0.05
+  heightSumPerCoin: 4.25
+  meshDeformNormalSoften: 0
+  meshDeformSampleBlur: 0
+  pickRadius: 0.45
+  buryDepth: 0.18
+  initialRevealDepth: 0.06
+  placementMinSpacing: 0.18
+  enforcePlacementSpacing: 1
+  placementJitter: 0.3
+  placementRadiusFraction: 0.78
+  placementScaleJitter: 0.1
+  coinSurfaceHeightFraction: 0.01
+  coinPullToCarveCount: 2
+  treasureRadialPower: 1
+  treasureHeightBias: 0
+  treasureXZSpread: 1
+  treasurePickupOutsideFraction: 0.3
+  treasureReleaseOutsideFraction: 0.9
+  columnNearEmptyReserve: 2
+  pileClearRemainingCoins: 10
+  preferBakedCoinSeats: 1
+  latentSurfaceNeighborhoodCells: 1
+  preferBakedLatents: 1
+  ignoreSpawnTreasureNearSurface: 0
+  latentVolumeMaxAttempts: 24
+  latentRetryNoOccupancyPasses: 1
+  latentRetrySaltPasses: 0
+  latentUseSpatialHash: 1
+  latentAvoidCoinSeats: 0
+  latentBuildBudgetMs: 12
+  latentBuildMaxAttemptsPerFrame: 64
+  pileMaterial: {fileID: 0}

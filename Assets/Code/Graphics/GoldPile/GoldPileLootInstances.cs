@@ -131,15 +131,16 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	{
 		get
 		{
-			if ( _definition == null || _definition.coinContents == null )
+			TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
+			if ( coinContents == null )
 				return "-";
 
 			int g = 0;
 			int s = 0;
 			int c = 0;
-			for ( int i = 0; i < _definition.coinContents.Length; i++ )
+			for ( int i = 0; i < coinContents.Length; i++ )
 			{
-				TreasurePileEntry entry = _definition.coinContents[ i ];
+				TreasurePileEntry entry = coinContents[ i ];
 				if ( entry.treasure == null || entry.count <= 0 )
 					continue;
 				if ( MatchesCoinVariant( entry.treasure, "Gold" ) )
@@ -155,6 +156,23 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				gcd = 1;
 			return $"{g / gcd}:{s / gcd}:{c / gcd}";
 		}
+	}
+
+	TreasurePileEntry[] ResolveEffectiveCoinContents( TreasurePileDefinition definition )
+	{
+		if ( _effectiveCoinContents != null )
+			return _effectiveCoinContents;
+		if ( _owner != null )
+			return _owner.GetEffectiveCoinContents( definition );
+		return definition != null ? definition.coinContents : null;
+	}
+
+	void CacheEffectiveCoinContents( TreasurePileDefinition definition )
+	{
+		if ( _owner != null )
+			_effectiveCoinContents = _owner.GetEffectiveCoinContents( definition );
+		else
+			_effectiveCoinContents = definition != null ? definition.coinContents : null;
 	}
 
 	static int MixGcd( int a, int b )
@@ -218,6 +236,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	GoldPileHeightfield _heightfield;
 	Transform _pileRoot;
 	TreasurePileDefinition _definition;
+	/// <summary>Coin contents used for inventory + mix (per-pile authored counts when present).</summary>
+	TreasurePileEntry[] _effectiveCoinContents;
 	Slot[] _slots;
 	/// <summary>Live seat count. <see cref="_slots"/> may be longer (geometric growth capacity).</summary>
 	int _slotCount;
@@ -278,9 +298,29 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	float _treasureRadialPower = 1.25f;
 	float _treasureHeightBias = 0.75f;
 	float _treasurePickupOutsideFraction = 0.4f;
-	float _columnNearEmptyReserve = 2f;
+	float _columnNearEmptyReserve = 1f;
 	int _pileClearRemainingCoins = 10;
+	/// <summary>Only truly tiny detached crumbs — dig-edge lobes stay attached to the main mound.</summary>
+	const int MinIslandCellsForFlush = 8;
+	/// <summary>Island flush runs every N densifies so dig edges are not constantly re-scanned.</summary>
+	const int IslandFlushEveryNDigs = 4;
+	/// <summary>
+	/// Hard safety cap. Soft dig falloff on huge piles can leave many ~1-coin cells; never
+	/// dump a whole rim of coins in one stroke.
+	/// </summary>
+	const int MaxColumnSpillPerDig = 6;
+	/// <summary>
+	/// Densify uses carveRadius×2.5; remnant flush must stay near the dig core so the soft
+	/// falloff ring is not wiped (looks like a chunk edge vanishing + coin burst).
+	/// </summary>
+	const float SpillRadiusVsDensify = 0.4f;
+	bool _clearedHeightfieldThisDensify;
+	int _islandFlushDigCounter;
+	int[] _spillClearScratch;
 	TreasurePileVisual _owner;
+
+	/// <summary>True when the last densify spill zeroed heightfield cells (mesh should refresh after loot).</summary>
+	public bool ClearedHeightfieldThisDensify => _clearedHeightfieldThisDensify;
 	readonly List<int> _pendingCoinWorldReleases = new List<int>( 32 );
 	bool _coinReleasePassRunning;
 	int _pileLootSeed = 1;
@@ -353,6 +393,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_heightfield = heightfield;
 		_pileRoot = pileRoot != null ? pileRoot : transform;
 		_owner = owner;
+		CacheEffectiveCoinContents( definition );
 		_ready = false;
 		_drawCacheDirty = true;
 		_pendingCoinWorldReleases.Clear();
@@ -378,7 +419,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_treasureRadialPower = Mathf.Clamp( definition.treasureRadialPower, 0.25f, 3f );
 		_treasureHeightBias = Mathf.Clamp( definition.treasureHeightBias, 0f, 3f );
 		_treasurePickupOutsideFraction = Mathf.Clamp( definition.treasurePickupOutsideFraction, 0.05f, 0.95f );
-		_columnNearEmptyReserve = Mathf.Max( 0.5f, definition.columnNearEmptyReserve );
+		_columnNearEmptyReserve = Mathf.Clamp( definition.columnNearEmptyReserve, 0.5f, 1f );
 		_pileClearRemainingCoins = Mathf.Max( 1, definition.pileClearRemainingCoins );
 		_pileLootSeed = WorldLootSeed.GetPileEffectiveSeed( _pileRoot, authoredLayoutSeed );
 		_hasLastDig = false;
@@ -538,6 +579,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_heightfield = heightfield;
 		_pileRoot = pileRoot != null ? pileRoot : transform;
 		_owner = owner;
+		CacheEffectiveCoinContents( definition );
 		_ready = false;
 		_drawCacheDirty = true;
 		_pendingCoinWorldReleases.Clear();
@@ -563,7 +605,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_treasureRadialPower = Mathf.Clamp( definition.treasureRadialPower, 0.25f, 3f );
 		_treasureHeightBias = Mathf.Clamp( definition.treasureHeightBias, 0f, 3f );
 		_treasurePickupOutsideFraction = Mathf.Clamp( definition.treasurePickupOutsideFraction, 0.05f, 0.95f );
-		_columnNearEmptyReserve = Mathf.Max( 0.5f, definition.columnNearEmptyReserve );
+		_columnNearEmptyReserve = Mathf.Clamp( definition.columnNearEmptyReserve, 0.5f, 1f );
 		_pileClearRemainingCoins = Mathf.Max( 1, definition.pileClearRemainingCoins );
 		_pileLootSeed = WorldLootSeed.GetPileEffectiveSeed( _pileRoot, authoredLayoutSeed );
 		_hasLastDig = false;
@@ -628,11 +670,11 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_cellLists = null;
 		_drawnCellLists = null;
 
-		TreasurePileEntry[] coinContents = definition.coinContents;
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( definition );
 		if ( coinContents == null || coinContents.Length == 0 )
 			return list;
 
-		int[] seatTargets = definition.ComputeCoinSeatTargets();
+		int[] seatTargets = definition.ComputeCoinSeatTargets( coinContents );
 		float buryBand = Mathf.Max( _buryDepth, _initialRevealDepth );
 		int drawCap = Mathf.Max( 1, definition.maxVisibleTotal );
 		int steadyBudget = definition.SteadyCoinVisibleBudget();
@@ -912,7 +954,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_batchKeyByDef = new Dictionary<TreasureDefinition, int>();
 		_coinUnitSerial = 0;
 
-		TreasurePileEntry[] coinContents = _definition.coinContents;
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
 		_visibleCountByEntry = coinContents != null ? new int[ coinContents.Length ] : null;
 
 		for ( int i = 0; i < bake.seats.Length; i++ )
@@ -1062,12 +1104,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 		}
 
-		if ( _definition != null && _definition.coinContents != null && _visibleCountByEntry != null )
+		TreasurePileEntry[] logCoins = ResolveEffectiveCoinContents( _definition );
+		if ( _definition != null && logCoins != null && _visibleCountByEntry != null )
 		{
 			sb.Append( "\n  By treasure type:" );
-			for ( int e = 0; e < _definition.coinContents.Length && e < _visibleCountByEntry.Length; e++ )
+			for ( int e = 0; e < logCoins.Length && e < _visibleCountByEntry.Length; e++ )
 			{
-				TreasurePileEntry entry = _definition.coinContents[ e ];
+				TreasurePileEntry entry = logCoins[ e ];
 				if ( entry.treasure == null )
 					continue;
 				string typeName = !string.IsNullOrEmpty( entry.treasure.displayName )
@@ -1455,73 +1498,192 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	}
 
 	/// <summary>
-	/// Spawns physical coins only when a dig leaves a column with 1–2 coins of reserve
-	/// (<see cref="_columnNearEmptyReserve"/>) at the loot floor. Mid-column capacity overflow
-	/// no longer spills — that was ejecting coins on every dig and hitching densify.
+	/// When a dig leaves a column with ~1 coin of reserve at the loot floor, emit it and clear
+	/// the cell. Soft dig falloff on large piles leaves many mid-slope ~1-coin cells — those
+	/// must NOT flush (near-ground gate + tight radius + low spawn cap).
 	/// </summary>
 	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius, int carveUnits = 1 )
 	{
+		_clearedHeightfieldThisDensify = false;
 		if ( _heightfield == null || _pileRoot == null || _remaining == null || _columnCoinReserve == null )
 			return 0;
 
-		if ( CountRemainingCoinInventory() <= 0 )
+		int remainingCoins = CountRemainingCoinInventory();
+		if ( remainingCoins <= 0 )
 			return 0;
 
 		int spawned = 0;
-		int spillCapTotal = Mathf.Min( 2, Mathf.Max( 1, Mathf.CeilToInt( _columnNearEmptyReserve ) ) );
-		float radiusSq = radius * radius;
+		// Hard cap: only the last coin in a column — never 2+.
+		float nearEmpty = Mathf.Min( 1f, _columnNearEmptyReserve );
 		float halfX = _heightfield.WorldSizeX * 0.5f;
 		float halfZ = _heightfield.WorldSizeZ * 0.5f;
-		float cellX = _heightfield.LocalCellSizeX;
-		float cellZ = _heightfield.LocalCellSizeZ;
-		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - radius + halfX ) / cellX ), 0, _heightfield.ResolutionX - 1 );
-		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + radius + halfX ) / cellX ), 0, _heightfield.ResolutionX - 1 );
-		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - radius + halfZ ) / cellZ ), 0, _heightfield.ResolutionZ - 1 );
-		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + radius + halfZ ) / cellZ ), 0, _heightfield.ResolutionZ - 1 );
+		float cellSizeX = _heightfield.LocalCellSizeX;
+		float cellSizeZ = _heightfield.LocalCellSizeZ;
+		int resX = _heightfield.ResolutionX;
+		int resZ = _heightfield.ResolutionZ;
 
+		// Densify radius is expanded (carve×2.5). Remnant flush stays near the dig core.
+		float spillRadius = Mathf.Max( Mathf.Max( cellSizeX, cellSizeZ ) * 2f, radius * SpillRadiusVsDensify );
+		float spillRadiusSq = spillRadius * spillRadius;
+		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - spillRadius + halfX ) / cellSizeX ), 0, resX - 1 );
+		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + spillRadius + halfX ) / cellSizeX ), 0, resX - 1 );
+		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - spillRadius + halfZ ) / cellSizeZ ), 0, resZ - 1 );
+		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + spillRadius + halfZ ) / cellSizeZ ), 0, resZ - 1 );
+
+		// Allow ~half a coin of height above the floor so true stubs clear, but not soft-falloff rims.
+		float groundMargin = Mathf.Max( 0.02f, _heightfield.VolumePerCoin( Mathf.Max( 1, remainingCoins ) ) * 0.5f );
+
+		float[] reserves = _columnCoinReserve;
+		int reserveLen = reserves.Length;
+		int clearCount = 0;
+		EnsureSpillClearScratch( ( maxX - minX + 1 ) * ( maxZ - minZ + 1 ) );
+
+		// Pass 1: last-coin columns that are actually at the floor — O(dig-core cells).
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
+			int row = z * resX;
+			float lz = -halfZ + z * cellSizeZ;
+			float dz = lz - localCenter.z;
 			for ( int x = minX; x <= maxX; x++ )
 			{
-				_heightfield.CellCenterLocal( x, z, out float lx, out float lz );
-				float dx = lx - localCenter.x;
-				float dz = lz - localCenter.z;
-				if ( dx * dx + dz * dz > radiusSq )
-					continue;
-
-				int idx = _heightfield.CellIndex( x, z );
-				if ( idx < 0 || idx >= _columnCoinReserve.Length )
-					continue;
-
-				float reserved = _columnCoinReserve[ idx ];
-				// Only flush nearly empty columns (1–2 coins). Leave thicker columns alone.
-				if ( reserved < 0.5f || reserved > _columnNearEmptyReserve )
-					continue;
-				if ( !_heightfield.IsColumnNearLootGround( lx, lz ) )
-					continue;
-
-				int spillCap = spillCapTotal - spawned;
-				if ( spillCap <= 0 )
+				if ( spawned >= MaxColumnSpillPerDig || remainingCoins <= 0 )
 					break;
 
-				int toSpill = Mathf.Min( Mathf.CeilToInt( reserved ), spillCap, CountRemainingCoinInventory() );
-				for ( int i = 0; i < toSpill; i++ )
-				{
-					if ( !TrySpawnColumnSpillCoin( lx, lz, idx, out _ ) )
-						break;
+				float lx = -halfX + x * cellSizeX;
+				float dx = lx - localCenter.x;
+				if ( dx * dx + dz * dz > spillRadiusSq )
+					continue;
 
-					spawned++;
-				}
+				int idx = row + x;
+				if ( ( uint )idx >= ( uint )reserveLen )
+					continue;
 
-				_columnCoinReserve[ idx ] = 0f;
+				float reserved = reserves[ idx ];
+				if ( reserved < 0.5f || reserved > nearEmpty )
+					continue;
+				// Soft falloff rings on huge piles sit at ~1 coin height but are not at the floor.
+				if ( !_heightfield.IsCellNearLootGround( x, z, groundMargin ) )
+					continue;
+
+				if ( !TrySpawnColumnSpillCoin( lx, lz, idx, out _ ) )
+					continue;
+
+				spawned++;
+				remainingCoins--;
+				reserves[ idx ] = 0f;
+				_spillClearScratch[ clearCount++ ] = idx;
 			}
 
-			if ( spawned >= spillCapTotal )
+			if ( spawned >= MaxColumnSpillPerDig || remainingCoins <= 0 )
 				break;
 		}
 
-		// One spatial pass — never O(slots) per heightfield cell (that hitching digs on large piles).
-		HideNearGroundCoinVisualsNear( localCenter, radius );
+		if ( clearCount > 0 )
+		{
+			if ( _heightfield.ClearCells( _spillClearScratch, clearCount ) > 0f )
+				_clearedHeightfieldThisDensify = true;
+		}
+
+		// Pass 2: tiny islands only, throttled — dig edges used to trigger this every stroke.
+		_islandFlushDigCounter++;
+		if ( spawned < MaxColumnSpillPerDig
+			&& ( _islandFlushDigCounter % IslandFlushEveryNDigs ) == 0 )
+		{
+			spawned += FlushSmallIslandsNear( minX, maxX, minZ, maxZ, spawned, ref remainingCoins );
+		}
+
+		HideNearGroundCoinVisualsNear( localCenter, spillRadius );
+		return spawned;
+	}
+
+	void EnsureSpillClearScratch( int needed )
+	{
+		if ( _spillClearScratch == null || _spillClearScratch.Length < needed )
+			_spillClearScratch = new int[ Mathf.Max( needed, 64 ) ];
+	}
+
+	/// <summary>
+	/// Clears tiny detached heightfield crumbs (&lt; <see cref="MinIslandCellsForFlush"/> cells,
+	/// &lt;= 1 coin total) infrequently so dig-edge falloff is not constantly wiped.
+	/// </summary>
+	int FlushSmallIslandsNear(
+		int minX,
+		int maxX,
+		int minZ,
+		int maxZ,
+		int alreadySpawned,
+		ref int remainingCoins )
+	{
+		// Only flush islands that are literally ~1 coin of volume total.
+		float islandCoinBudget = Mathf.Min( 1f, _columnNearEmptyReserve );
+		float halfX = _heightfield.WorldSizeX * 0.5f;
+		float halfZ = _heightfield.WorldSizeZ * 0.5f;
+		float cellSizeX = _heightfield.LocalCellSizeX;
+		float cellSizeZ = _heightfield.LocalCellSizeZ;
+		float[] reserves = _columnCoinReserve;
+		int reserveLen = reserves.Length;
+		int spawned = 0;
+		int resX = _heightfield.ResolutionX;
+
+		_heightfield.BeginSmallIslandScan( minX, maxX, minZ, maxZ, MinIslandCellsForFlush );
+		// Seed only from sub-coin / last-coin cells — never BFS from thick pile.
+		while ( _heightfield.TryFindNextSmallIsland( reserves, islandCoinBudget ) )
+		{
+			if ( alreadySpawned + spawned >= MaxColumnSpillPerDig || remainingCoins <= 0 )
+				break;
+
+			int[] cells = _heightfield.SmallIslandCells;
+			int size = _heightfield.SmallIslandSize;
+			if ( cells == null || size <= 0 )
+				continue;
+
+			float islandReserve = 0f;
+			for ( int i = 0; i < size; i++ )
+			{
+				int idx = cells[ i ];
+				if ( ( uint )idx < ( uint )reserveLen )
+					islandReserve += reserves[ idx ];
+			}
+
+			if ( islandReserve > islandCoinBudget )
+				continue;
+
+			int seedIdx = cells[ 0 ];
+			int seedX = seedIdx % resX;
+			int seedZ = seedIdx / resX;
+			// Skip soft-falloff blobs that are still above the floor.
+			if ( !_heightfield.IsCellNearLootGround( seedX, seedZ, 0.05f ) )
+				continue;
+
+			int toSpill = Mathf.Min(
+				islandReserve > 0.05f ? Mathf.Max( 1, Mathf.CeilToInt( islandReserve ) ) : 0,
+				remainingCoins,
+				MaxColumnSpillPerDig - alreadySpawned - spawned );
+
+			float lx = -halfX + seedX * cellSizeX;
+			float lz = -halfZ + seedZ * cellSizeZ;
+
+			for ( int i = 0; i < toSpill; i++ )
+			{
+				// Loose spawn: island cells often hold fractional reserve (< 0.5) that
+				// TrySpawnColumnSpillCoin would reject.
+				if ( !TrySpawnLooseInventoryCoin( lx, lz, out _ ) )
+					break;
+				spawned++;
+				remainingCoins--;
+			}
+
+			for ( int i = 0; i < size; i++ )
+			{
+				int idx = cells[ i ];
+				if ( ( uint )idx < ( uint )reserveLen )
+					reserves[ idx ] = 0f;
+			}
+
+			if ( _heightfield.ClearCells( cells, size ) > 0f )
+				_clearedHeightfieldThisDensify = true;
+		}
+
 		return spawned;
 	}
 
@@ -1868,7 +2030,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	{
 		if ( streamSettings == null || !streamSettings.spawnPhysicalCoinsOnDig )
 			return 0;
-		if ( _definition == null || _definition.coinContents == null || _pileRoot == null )
+		if ( _definition == null || ResolveEffectiveCoinContents( _definition ) == null || _pileRoot == null )
 			return 0;
 		if ( CountRemainingCoinInventory() <= 0 )
 			return 0;
@@ -2932,9 +3094,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		EnsureMixQuotaArray( ref _lod1MixQuotas, entryCount );
 		EnsureMixQuotaArray( ref _lod2MixQuotas, entryCount );
 
-		_definition.ComputeMixQuotasInto( Mathf.Max( 1, _budgetLod0 ), _lod0MixQuotas, _mixRemaindersScratch );
-		_definition.ComputeMixQuotasInto( Mathf.Max( 0, _budgetLod1 ), _lod1MixQuotas, _mixRemaindersScratch );
-		_definition.ComputeMixQuotasInto( Mathf.Max( 0, _budgetLod2 ), _lod2MixQuotas, _mixRemaindersScratch );
+		TreasurePileEntry[] mixEntries = ResolveEffectiveCoinContents( _definition );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 1, _budgetLod0 ), _lod0MixQuotas, _mixRemaindersScratch, mixEntries );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 0, _budgetLod1 ), _lod1MixQuotas, _mixRemaindersScratch, mixEntries );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 0, _budgetLod2 ), _lod2MixQuotas, _mixRemaindersScratch, mixEntries );
 	}
 
 	static void EnsureMixQuotaArray( ref int[] array, int entryCount )
@@ -2974,7 +3137,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return _lod2MixQuotas;
 
 		EnsureMixQuotaScratch( entryCount );
-		_definition.ComputeMixQuotasInto( Mathf.Max( 0, budget ), _mixQuotaTargetsScratch, _mixRemaindersScratch );
+		_definition.ComputeMixQuotasInto( Mathf.Max( 0, budget ), _mixQuotaTargetsScratch, _mixRemaindersScratch, ResolveEffectiveCoinContents( _definition ) );
 		return _mixQuotaTargetsScratch;
 	}
 
@@ -4245,7 +4408,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	void BuildRemaining( TreasurePileDefinition definition )
 	{
 		_remaining = new Dictionary<TreasureDefinition, int>();
-		AddRemainingFromEntries( definition.coinContents );
+		AddRemainingFromEntries( ResolveEffectiveCoinContents( definition ) );
 		AddRemainingFromEntries( definition.treasureContents );
 		AddRemainingFromAuthoredExtras();
 		_initialTotal = TotalRemaining;
@@ -4455,7 +4618,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	async Task<Dictionary<TreasureDefinition, VisualAssets>> ResolveVisualsAsync( TreasurePileDefinition definition )
 	{
 		Dictionary<TreasureDefinition, VisualAssets> map = new Dictionary<TreasureDefinition, VisualAssets>();
-		await ResolveVisualsFromEntriesAsync( definition.coinContents, map );
+		await ResolveVisualsFromEntriesAsync( ResolveEffectiveCoinContents( definition ), map );
 		return map;
 	}
 
@@ -4717,7 +4880,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		_batchKeyByDef = new Dictionary<TreasureDefinition, int>();
 		_coinUnitSerial = 0;
 
-		TreasurePileEntry[] coinContents = definition.coinContents;
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( definition );
 		if ( coinContents == null || coinContents.Length == 0 )
 		{
 			_slots = new Slot[ 0 ];
@@ -4728,7 +4891,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 
 		_visibleCountByEntry = new int[ coinContents.Length ];
-		int[] seatTargets = definition.ComputeCoinSeatTargets();
+		int[] seatTargets = definition.ComputeCoinSeatTargets( coinContents );
 		float buryBand = Mathf.Max( _buryDepth, _initialRevealDepth );
 		int drawCap = Mathf.Max( 1, definition.maxVisibleTotal );
 		int steadyBudget = definition.SteadyCoinVisibleBudget();
@@ -5707,7 +5870,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		System.Diagnostics.Stopwatch workSw = null,
 		float budgetMs = 0f )
 	{
-		if ( _definition == null || _definition.coinContents == null || _batchKeyByDef == null )
+		if ( _definition == null || ResolveEffectiveCoinContents( _definition ) == null || _batchKeyByDef == null )
 			return 0;
 
 		if ( !bindSeed )
@@ -5735,7 +5898,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int untaken = bindSeed ? _slotCount : CountUntakenCoinSlots();
 		int spawned = 0;
 
-		TreasurePileEntry[] coinContents = _definition.coinContents;
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
 		int mixWeight = ComputeGpuCoinMixWeight( coinContents );
 		for ( int n = 0; n < need; n++ )
 		{
@@ -6023,16 +6186,17 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	bool TryPickAuthoredMixCoinDef( int serial, out TreasureDefinition definition )
 	{
 		definition = null;
-		if ( _definition == null || _definition.coinContents == null || _remaining == null )
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
+		if ( _definition == null || coinContents == null || _remaining == null )
 			return false;
 
 		const int maxTries = 8;
 		for ( int attempt = 0; attempt < maxTries; attempt++ )
 		{
 			int totalWeight = 0;
-			for ( int e = 0; e < _definition.coinContents.Length; e++ )
+			for ( int e = 0; e < coinContents.Length; e++ )
 			{
-				TreasurePileEntry entry = _definition.coinContents[ e ];
+				TreasurePileEntry entry = coinContents[ e ];
 				if ( entry.treasure == null || entry.count <= 0 || !UsesGpuInstances( entry.treasure ) )
 					continue;
 				if ( !_remaining.TryGetValue( entry.treasure, out int left ) || left <= 0 )
@@ -6046,9 +6210,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			float pick = GoldPileTreasurePlacement.Hash01( _pileLootSeed, serial * 31 + attempt * 7 )
 				* totalWeight;
 			float acc = 0f;
-			for ( int e = 0; e < _definition.coinContents.Length; e++ )
+			for ( int e = 0; e < coinContents.Length; e++ )
 			{
-				TreasurePileEntry entry = _definition.coinContents[ e ];
+				TreasurePileEntry entry = coinContents[ e ];
 				if ( entry.treasure == null || entry.count <= 0 || !UsesGpuInstances( entry.treasure ) )
 					continue;
 				if ( !_remaining.TryGetValue( entry.treasure, out int left ) || left <= 0 )
@@ -6588,7 +6752,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 		// Reactivate / reseat free coin seats toward the dig (may use dig buffer seats).
 		int digCeiling = GetDrawnCeiling( allowDigBuffer: true );
-		TreasurePileEntry[] coinContents = _definition.coinContents;
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
 		if ( coinContents != null )
 		{
 			for ( int e = 0; e < coinContents.Length; e++ )
@@ -6805,7 +6969,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				_eligibleByChunkScratch[ chunkIndex ].Add( idx );
 			}
 
-			int[] mixQuotas = _definition != null ? _definition.ComputeMixQuotas( perChunkCap ) : null;
+			int[] mixQuotas = _definition != null
+				? _definition.ComputeMixQuotas( perChunkCap, ResolveEffectiveCoinContents( _definition ) )
+				: null;
 			for ( int c = 0; c < chunkCount; c++ )
 			{
 				List<int> bucket = _eligibleByChunkScratch[ c ];
@@ -6888,9 +7054,10 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	int MixEntryCount()
 	{
-		if ( _definition == null || _definition.coinContents == null )
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
+		if ( coinContents == null )
 			return 0;
-		return _definition.coinContents.Length;
+		return coinContents.Length;
 	}
 
 	void EnsureMixScratch( int entryCount )
@@ -6944,7 +7111,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 
 		if ( quotas == null || quotas.Length != entryCount )
-			quotas = _definition.ComputeMixQuotas( cap );
+			quotas = _definition.ComputeMixQuotas( cap, ResolveEffectiveCoinContents( _definition ) );
 		int marked = 0;
 		int leftover = cap;
 
@@ -7018,15 +7185,16 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 
 	float MixShare( int entryIndex )
 	{
-		if ( _definition == null || _definition.coinContents == null )
+		TreasurePileEntry[] coinContents = ResolveEffectiveCoinContents( _definition );
+		if ( _definition == null || coinContents == null )
 			return 0f;
-		if ( entryIndex < 0 || entryIndex >= _definition.coinContents.Length )
+		if ( entryIndex < 0 || entryIndex >= coinContents.Length )
 			return 0f;
 
 		int total = 0;
-		for ( int i = 0; i < _definition.coinContents.Length; i++ )
+		for ( int i = 0; i < coinContents.Length; i++ )
 		{
-			TreasurePileEntry entry = _definition.coinContents[ i ];
+			TreasurePileEntry entry = coinContents[ i ];
 			if ( entry.treasure != null && entry.count > 0 )
 				total += entry.count;
 		}
@@ -7034,7 +7202,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( total <= 0 )
 			return 0f;
 
-		TreasurePileEntry self = _definition.coinContents[ entryIndex ];
+		TreasurePileEntry self = coinContents[ entryIndex ];
 		if ( self.treasure == null || self.count <= 0 )
 			return 0f;
 		return self.count / ( float )total;

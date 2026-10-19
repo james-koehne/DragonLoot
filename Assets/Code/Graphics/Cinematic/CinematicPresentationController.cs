@@ -1263,6 +1263,9 @@ public class CinematicPresentationController : MonoBehaviour
 
 	static void SetTutorialObjectiveHudHidden( bool hidden )
 	{
+		if ( CrosshairUI.Instance != null )
+			CrosshairUI.Instance.SetCinematicHidden( hidden );
+
 		if ( GameMode.Instance == null || GameMode.Instance.InterfaceController == null )
 			return;
 

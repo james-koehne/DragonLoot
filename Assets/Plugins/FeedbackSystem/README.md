@@ -86,7 +86,7 @@ Lifecycle you may override: `Initialize()`, `Play()`, `Stop()`, `Reset()`, `GetH
 
 ## Built-in feedbacks
 
-- **Audio:** Play SFX, Play Random SFX — shared **`Playback`** (`FeedbackSfxSettings`): volume/pitch ranges (boost >1 supported), spatial blend, min/max distance, doppler, rolloff, optional mixer group, follow caller transform, optional assigned `AudioSource` (otherwise pooled one-shots). **`Stop()` / `Reset()`** stop voices this feedback started (pool or assigned source). FX mute still uses `FeedbackSfxPlayback.Enabled` and `FeedbackAudioPool.StopAll()`.
+- **Audio:** Play SFX, Play Random SFX — shared **`Playback`** (`FeedbackSfxSettings`): volume/pitch ranges (boost >1 supported), spatial blend, min/max distance, doppler, rolloff, optional mixer group, follow caller transform, optional assigned `AudioSource` (otherwise pooled one-shots). One-shots are **fire-and-forget**: `Stop()` does not cut them (so `Feedbacks.Play()` can re-trigger rapidly, e.g. placement spam). Use `Reset()` / `ResetFeedbacks()` to cut tracked voices. FX mute still uses `FeedbackSfxPlayback.Enabled` and `FeedbackAudioPool.StopAll()`.
 - **Project audio (Dragon Loot, not in this package):** Loop SFX, Ambient Loop SFX, Staggered Clip SFX — same `FeedbackSfxSettings` for spatial/mixer; loop types add fade/intensity behaviour in `Assets/Code/ProjectFeedbacks/Audio/`.
 - **Particles:** Play Particles, Particle Burst (`Emit`)
 - **GameObjects:** Set Active, Instantiate, Destroy

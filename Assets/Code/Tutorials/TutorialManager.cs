@@ -226,6 +226,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<CoinStackChangedEvent>( OnCoinStackChanged );
 		EventBus.Subscribe<CoinTakenFromStackEvent>( OnCoinTakenFromStack );
 		EventBus.Subscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
+		EventBus.Subscribe<MixedDisplayTableChangedEvent>( OnMixedDisplayChanged );
 		EventBus.Subscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Subscribe<ArtifactPresentationTableChangedEvent>( OnArtifactChanged );
 		EventBus.Subscribe<WholeStackPickupCompletedEvent>( OnWholeStackPickup );
@@ -263,6 +264,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<CoinStackChangedEvent>( OnCoinStackChanged );
 		EventBus.Unsubscribe<CoinTakenFromStackEvent>( OnCoinTakenFromStack );
 		EventBus.Unsubscribe<CoinDisplayTableChangedEvent>( OnCoinDisplayChanged );
+		EventBus.Unsubscribe<MixedDisplayTableChangedEvent>( OnMixedDisplayChanged );
 		EventBus.Unsubscribe<GemConstellationChangedEvent>( OnConstellationChanged );
 		EventBus.Unsubscribe<ArtifactPresentationTableChangedEvent>( OnArtifactChanged );
 		EventBus.Unsubscribe<WholeStackPickupCompletedEvent>( OnWholeStackPickup );
@@ -1044,6 +1046,19 @@ public class TutorialManager : MonoBehaviour
 		TryCompleteTask( TutorialTaskCompleteType.PlaceCoinDisplay );
 		NoteActivationForManyCoinsIfReady();
 		EvaluateContext( force: true );
+	}
+
+	void OnMixedDisplayChanged( MixedDisplayTableChangedEvent evt )
+	{
+		if ( !evt.PlayerDirected )
+			return;
+
+		int added = evt.ItemCount - evt.PreviousItemCount;
+		if ( added <= 0 )
+			return;
+
+		for ( int i = 0; i < added; i++ )
+			TryCompleteTask( TutorialTaskCompleteType.PlaceMixedStorage );
 	}
 
 	void OnConstellationChanged( GemConstellationChangedEvent evt )

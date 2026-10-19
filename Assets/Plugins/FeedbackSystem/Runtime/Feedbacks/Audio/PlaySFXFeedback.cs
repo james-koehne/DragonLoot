@@ -55,7 +55,7 @@ namespace FeedbackSystem
 		bool _serializedPlaybackMerged;
 
 		[NonSerialized]
-		FeedbackOneShotVoice _voice = new FeedbackOneShotVoice();
+		FeedbackOneShotVoice _voice;
 
 		public override void Play()
 		{
@@ -65,17 +65,25 @@ namespace FeedbackSystem
 				Playback,
 				FeedbackSfxResolve.ResolvePosition( Context, ownerGo ),
 				FeedbackSfxResolve.ResolveFollowTransform( Playback.FollowCallerTransform, Context, ownerGo ),
-				_voice );
+				EnsureVoice() );
 		}
 
 		public override void Stop()
 		{
-			_voice.StopAll();
+			// Fire-and-forget: Feedbacks.Play() calls Stop before every replay.
+			// Cutting PlayOneShot voices here silences rapid re-triggers (placement spam).
 		}
 
 		public override void Reset()
 		{
-			_voice.StopAll();
+			EnsureVoice().StopAll();
+		}
+
+		FeedbackOneShotVoice EnsureVoice()
+		{
+			if ( _voice == null )
+				_voice = new FeedbackOneShotVoice();
+			return _voice;
 		}
 
 		public void OnBeforeSerialize()

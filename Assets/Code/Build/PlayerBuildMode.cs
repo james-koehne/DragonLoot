@@ -169,14 +169,15 @@ public class PlayerBuildMode : MonoBehaviour
 	void OnDestroy()
 	{
 		ClearBuildOutline();
-		RestoreTakenWorldHammer();
+		ConsumeTakenWorldHammer();
 		ReleaseHammer();
 		HideAllGhosts();
 	}
 
 	/// <summary>
 	/// Takes the world hammer prop into the hand and enters build mode, using a fly-in that
-	/// overrides the default draw toss/spin.
+	/// overrides the default draw toss/spin. The world prop is consumed permanently — exit
+	/// build mode does not put it back in the world.
 	/// </summary>
 	public bool TryTakeWorldHammer( WorldHammerInteractable worldHammer )
 	{
@@ -219,7 +220,7 @@ public class PlayerBuildMode : MonoBehaviour
 		_jumpReactionT = 0f;
 		if ( !fromWorld )
 		{
-			_takenWorldHammer = null;
+			ConsumeTakenWorldHammer();
 			_worldPickupLocalReady = false;
 		}
 
@@ -259,7 +260,7 @@ public class PlayerBuildMode : MonoBehaviour
 		_equipPhase = EquipPhase.None;
 		_equipT = 0f;
 		ReleaseHammer();
-		RestoreTakenWorldHammer();
+		ConsumeTakenWorldHammer();
 
 		PlayerCarry carry = _player != null ? _player.Carry : null;
 		if ( carry != null )
@@ -268,14 +269,24 @@ public class PlayerBuildMode : MonoBehaviour
 		EventBus.Publish( new BuildModeExitedEvent() );
 	}
 
-	void RestoreTakenWorldHammer()
+	/// <summary>
+	/// Permanently removes the world hammer prop after pickup. Unlock persists via
+	/// <see cref="_worldHammerUnlocked"/>; F re-enters with the held viewmodel only.
+	/// </summary>
+	void ConsumeTakenWorldHammer()
 	{
 		if ( _takenWorldHammer == null )
 			return;
 
-		_takenWorldHammer.RestoreToWorld();
+		GameObject go = _takenWorldHammer.gameObject;
 		_takenWorldHammer = null;
 		_worldPickupLocalReady = false;
+
+		if ( go == null )
+			return;
+
+		if ( !Addressables.ReleaseInstance( go ) )
+			Destroy( go );
 	}
 
 	void TickEquip()

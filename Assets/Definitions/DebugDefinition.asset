@@ -15,6 +15,11 @@ MonoBehaviour:
   debugLogging: 0
   debugBackend: 0
   spawnAtSceneCamera: 0
-  debugSpawnId: 
+  debugSpawnId: ledge
   disableTreasureSpawning: 0
-  disableTutorials: 1
+  disableTutorials: 0
+  abilityInitialUnlockOverrides:
+  - abilityId: jump
+    overrideState: 2
+  - abilityId: glide
+    overrideState: 2

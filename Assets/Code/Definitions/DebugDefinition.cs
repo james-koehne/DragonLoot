@@ -1,4 +1,21 @@
+using System;
+using System.Collections.Generic;
+
 using UnityEngine;
+
+public enum AbilityInitialUnlockOverride
+{
+	Unset = 0,
+	ForceLocked = 1,
+	ForceUnlocked = 2
+}
+
+[Serializable]
+public class AbilityInitialUnlockOverrideEntry
+{
+	public string abilityId;
+	public AbilityInitialUnlockOverride overrideState = AbilityInitialUnlockOverride.Unset;
+}
 
 [CreateAssetMenu( fileName = "DebugDefinition", menuName = "Definitions/DebugDefinition" )]
 public class DebugDefinition : ScriptableObject
@@ -17,6 +34,9 @@ public class DebugDefinition : ScriptableObject
 
 	[Tooltip( "Skip contextual tutorial popups from gameplay triggers. Debug overlay force-show and pause replay still work. Honored in player builds." )]
 	public bool disableTutorials = false;
+
+	[Tooltip( "Per-ability bootstrap unlock overrides. When set, replaces AbilityDefinition.startsUnlocked if the profile has no entry." )]
+	public List<AbilityInitialUnlockOverrideEntry> abilityInitialUnlockOverrides = new List<AbilityInitialUnlockOverrideEntry>();
 
 	public static bool TreasureSpawningDisabled
 	{
@@ -41,6 +61,121 @@ public class DebugDefinition : ScriptableObject
 			if ( def == null )
 				return false;
 			return def.disableTutorials;
+		}
+	}
+
+	public static DebugDefinition GetRuntime()
+	{
+		if ( GameMode.Instance == null )
+			return null;
+		return GameMode.Instance.DebugDefinition;
+	}
+
+	/// <summary>
+	/// Returns true when a non-Unset override is configured for <paramref name="abilityId"/>.
+	/// <paramref name="unlocked"/> is true for ForceUnlocked, false for ForceLocked.
+	/// </summary>
+	public static bool TryGetAbilityInitialUnlockOverride( string abilityId, out bool unlocked )
+	{
+		unlocked = false;
+		DebugDefinition def = GetRuntime();
+		if ( def == null )
+			return false;
+		return def.TryGetAbilityInitialUnlockOverrideInstance( abilityId, out unlocked );
+	}
+
+	public bool TryGetAbilityInitialUnlockOverrideInstance( string abilityId, out bool unlocked )
+	{
+		unlocked = false;
+		if ( string.IsNullOrEmpty( abilityId ) || abilityInitialUnlockOverrides == null )
+			return false;
+
+		for ( int i = 0; i < abilityInitialUnlockOverrides.Count; i++ )
+		{
+			AbilityInitialUnlockOverrideEntry entry = abilityInitialUnlockOverrides[ i ];
+			if ( entry == null || entry.abilityId != abilityId )
+				continue;
+			if ( entry.overrideState == AbilityInitialUnlockOverride.Unset )
+				return false;
+			unlocked = entry.overrideState == AbilityInitialUnlockOverride.ForceUnlocked;
+			return true;
+		}
+
+		return false;
+	}
+
+	public AbilityInitialUnlockOverride GetAbilityInitialUnlockOverride( string abilityId )
+	{
+		if ( string.IsNullOrEmpty( abilityId ) || abilityInitialUnlockOverrides == null )
+			return AbilityInitialUnlockOverride.Unset;
+
+		for ( int i = 0; i < abilityInitialUnlockOverrides.Count; i++ )
+		{
+			AbilityInitialUnlockOverrideEntry entry = abilityInitialUnlockOverrides[ i ];
+			if ( entry == null || entry.abilityId != abilityId )
+				continue;
+			return entry.overrideState;
+		}
+
+		return AbilityInitialUnlockOverride.Unset;
+	}
+
+	public void SetAbilityInitialUnlockOverride( string abilityId, AbilityInitialUnlockOverride state )
+	{
+		if ( string.IsNullOrEmpty( abilityId ) )
+			return;
+
+		if ( abilityInitialUnlockOverrides == null )
+			abilityInitialUnlockOverrides = new List<AbilityInitialUnlockOverrideEntry>();
+
+		for ( int i = 0; i < abilityInitialUnlockOverrides.Count; i++ )
+		{
+			AbilityInitialUnlockOverrideEntry entry = abilityInitialUnlockOverrides[ i ];
+			if ( entry == null || entry.abilityId != abilityId )
+				continue;
+
+			if ( state == AbilityInitialUnlockOverride.Unset )
+			{
+				abilityInitialUnlockOverrides.RemoveAt( i );
+				return;
+			}
+
+			entry.overrideState = state;
+			return;
+		}
+
+		if ( state == AbilityInitialUnlockOverride.Unset )
+			return;
+
+		abilityInitialUnlockOverrides.Add( new AbilityInitialUnlockOverrideEntry
+		{
+			abilityId = abilityId,
+			overrideState = state
+		} );
+	}
+
+	public void CopyAbilityInitialUnlockOverridesFrom( DebugDefinition source )
+	{
+		if ( abilityInitialUnlockOverrides == null )
+			abilityInitialUnlockOverrides = new List<AbilityInitialUnlockOverrideEntry>();
+		else
+			abilityInitialUnlockOverrides.Clear();
+
+		if ( source == null || source.abilityInitialUnlockOverrides == null )
+			return;
+
+		for ( int i = 0; i < source.abilityInitialUnlockOverrides.Count; i++ )
+		{
+			AbilityInitialUnlockOverrideEntry entry = source.abilityInitialUnlockOverrides[ i ];
+			if ( entry == null || string.IsNullOrEmpty( entry.abilityId ) )
+				continue;
+			if ( entry.overrideState == AbilityInitialUnlockOverride.Unset )
+				continue;
+			abilityInitialUnlockOverrides.Add( new AbilityInitialUnlockOverrideEntry
+			{
+				abilityId = entry.abilityId,
+				overrideState = entry.overrideState
+			} );
 		}
 	}
 }

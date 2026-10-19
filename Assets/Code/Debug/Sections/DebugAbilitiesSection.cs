@@ -118,6 +118,20 @@ public class DebugAbilitiesSection : DebugOverlaySection
 		if ( cooldown > 0f )
 			GUILayout.Label( $"Cooldown: {cooldown:0.00}s" );
 
+		GUILayout.Label( $"Initial source: {DescribeInitialSource( id, def )}" );
+
+		GUILayout.BeginHorizontal();
+		AbilityInitialUnlockOverride current = GetOverride( id );
+		string overrideLabel = OverrideButtonLabel( current );
+		if ( GUILayout.Button( overrideLabel ) )
+		{
+			AbilityInitialUnlockOverride next = CycleOverride( current );
+			SetOverride( id, next );
+			system.ReloadFromProfile();
+			DebugOverlay.SetLastAction( $"Ability '{id}' initial override → {next}" );
+		}
+		GUILayout.EndHorizontal();
+
 		GUILayout.BeginHorizontal();
 		GUI.enabled = !system.IsUnlocked( id );
 		if ( GUILayout.Button( "Unlock" ) )
@@ -129,5 +143,70 @@ public class DebugAbilitiesSection : DebugOverlaySection
 		GUILayout.EndHorizontal();
 
 		GUILayout.EndVertical();
+	}
+
+	static string DescribeInitialSource( string id, AbilityDefinition def )
+	{
+		if ( HasProfileEntry( id ) )
+			return "Profile";
+		if ( DebugDefinition.TryGetAbilityInitialUnlockOverride( id, out _ ) )
+			return "Override";
+		return def.startsUnlocked ? "Catalog (unlocked)" : "Catalog (locked)";
+	}
+
+	static bool HasProfileEntry( string id )
+	{
+		if ( string.IsNullOrEmpty( id ) )
+			return false;
+		ProfileManager profileManager = ProfileManager.Instance;
+		if ( profileManager == null || profileManager.ProfileSaveData == null )
+			return false;
+		ProfileSaveData save = profileManager.ProfileSaveData;
+		save.EnsureProgressDictionaries();
+		return save.unlockedAbilities != null
+			&& save.unlockedAbilities.TryGetValue( id, out bool unlocked )
+			&& unlocked;
+	}
+
+	static AbilityInitialUnlockOverride GetOverride( string id )
+	{
+		DebugDefinition def = DebugDefinition.GetRuntime();
+		if ( def == null )
+			return AbilityInitialUnlockOverride.Unset;
+		return def.GetAbilityInitialUnlockOverride( id );
+	}
+
+	static void SetOverride( string id, AbilityInitialUnlockOverride state )
+	{
+		DebugDefinition def = DebugDefinition.GetRuntime();
+		if ( def == null )
+			return;
+		def.SetAbilityInitialUnlockOverride( id, state );
+	}
+
+	static AbilityInitialUnlockOverride CycleOverride( AbilityInitialUnlockOverride current )
+	{
+		switch ( current )
+		{
+			case AbilityInitialUnlockOverride.Unset:
+				return AbilityInitialUnlockOverride.ForceLocked;
+			case AbilityInitialUnlockOverride.ForceLocked:
+				return AbilityInitialUnlockOverride.ForceUnlocked;
+			default:
+				return AbilityInitialUnlockOverride.Unset;
+		}
+	}
+
+	static string OverrideButtonLabel( AbilityInitialUnlockOverride state )
+	{
+		switch ( state )
+		{
+			case AbilityInitialUnlockOverride.ForceLocked:
+				return "Initial: Force Locked";
+			case AbilityInitialUnlockOverride.ForceUnlocked:
+				return "Initial: Force Unlocked";
+			default:
+				return "Initial: Default";
+		}
 	}
 }

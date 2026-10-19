@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_ARTIFACT_LIGHTING_INCLUDED
 #define DRAGONLOOT_ARTIFACT_LIGHTING_INCLUDED
 
-#include "../Stylized/StylizedLightingCommon.hlsl"
+#include "Packages/com.dragonloot.stylized-rendering/Runtime/Shaders/Stylized/StylizedLightingCommon.hlsl"
 #include "ArtifactInput.hlsl"
 
 struct Attributes

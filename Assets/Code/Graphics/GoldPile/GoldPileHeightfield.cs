@@ -103,6 +103,19 @@ public sealed class GoldPileHeightfield
 	Func<float, float, float> _lootFloorResolver;
 	float _cachedHeightSum;
 	bool _heightSumValid;
+	int[] _islandQueue;
+	int[] _islandComp;
+	int[] _islandVisitSerial;
+	int _islandVisitStamp;
+	int _islandScanMinX;
+	int _islandScanMaxX;
+	int _islandScanMinZ;
+	int _islandScanMaxZ;
+	int _islandScanX;
+	int _islandScanZ;
+	int _islandScanMaxCells;
+	int _islandScanSize;
+	bool _islandScanActive;
 
 	public int ResolutionX => _resolutionX;
 	public int ResolutionZ => _resolutionZ;
@@ -339,6 +352,256 @@ public sealed class GoldPileHeightfield
 			return true;
 
 		return surface <= GetLootFloorLocal( localX, localZ ) + Mathf.Max( 0f, margin );
+	}
+
+	/// <summary>
+	/// Fast cell-center near-floor test for dig spill (avoids bilinear sample in hot loops).
+	/// </summary>
+	public bool IsCellNearLootGround( int cellX, int cellZ, float margin = 0.02f )
+	{
+		if ( _heights == null )
+			return false;
+
+		cellX = Mathf.Clamp( cellX, 0, _resolutionX - 1 );
+		cellZ = Mathf.Clamp( cellZ, 0, _resolutionZ - 1 );
+		float h = _heights[ Index( cellX, cellZ ) ];
+		if ( h < _groundLevel )
+			return true;
+
+		CellCenterLocal( cellX, cellZ, out float lx, out float lz );
+		return h <= GetLootFloorLocal( lx, lz ) + Mathf.Max( 0f, margin );
+	}
+
+	/// <summary>
+	/// Zeros each linear cell index in <paramref name="cellIndices"/> (one dirty-rect expand).
+	/// Returns total height removed.
+	/// </summary>
+	public float ClearCells( int[] cellIndices, int count )
+	{
+		if ( _heights == null || cellIndices == null || count <= 0 )
+			return 0f;
+
+		float removed = 0f;
+		int minX = _resolutionX;
+		int maxX = -1;
+		int minZ = _resolutionZ;
+		int maxZ = -1;
+		int heightLen = _heights.Length;
+		int resX = _resolutionX;
+		for ( int i = 0; i < count; i++ )
+		{
+			int idx = cellIndices[ i ];
+			if ( ( uint )idx >= ( uint )heightLen )
+				continue;
+
+			float h = _heights[ idx ];
+			if ( h <= 0f )
+				continue;
+
+			_heights[ idx ] = 0f;
+			removed += h;
+			int x = idx % resX;
+			int z = idx / resX;
+			if ( x < minX )
+				minX = x;
+			if ( x > maxX )
+				maxX = x;
+			if ( z < minZ )
+				minZ = z;
+			if ( z > maxZ )
+				maxZ = z;
+		}
+
+		if ( removed <= 0f )
+			return 0f;
+
+		if ( _heightSumValid )
+			_cachedHeightSum = Mathf.Max( 0f, _cachedHeightSum - removed );
+		ExpandDirtyRect( minX, maxX, minZ, maxZ );
+		return removed;
+	}
+
+	/// <summary>Cell indices of the island found by the last successful <see cref="TryFindNextSmallIsland"/>.</summary>
+	public int[] SmallIslandCells => _islandComp;
+
+	/// <summary>Size of the island found by the last successful <see cref="TryFindNextSmallIsland"/>.</summary>
+	public int SmallIslandSize => _islandScanSize;
+
+	/// <summary>
+	/// Starts a small-island scan over the search rect. Call <see cref="TryFindNextSmallIsland"/> until false.
+	/// No allocations after the first call for a given resolution (scratch reused).
+	/// </summary>
+	public void BeginSmallIslandScan(
+		int searchMinX,
+		int searchMaxX,
+		int searchMinZ,
+		int searchMaxZ,
+		int maxIslandCells )
+	{
+		_islandScanActive = false;
+		_islandScanSize = 0;
+		if ( _heights == null || maxIslandCells <= 1 )
+			return;
+
+		int cellCount = _resolutionX * _resolutionZ;
+		EnsureIslandScratch( cellCount, maxIslandCells );
+
+		_islandScanMinX = Mathf.Clamp( searchMinX, 0, _resolutionX - 1 );
+		_islandScanMaxX = Mathf.Clamp( searchMaxX, 0, _resolutionX - 1 );
+		_islandScanMinZ = Mathf.Clamp( searchMinZ, 0, _resolutionZ - 1 );
+		_islandScanMaxZ = Mathf.Clamp( searchMaxZ, 0, _resolutionZ - 1 );
+		_islandScanX = _islandScanMinX;
+		_islandScanZ = _islandScanMinZ;
+		_islandScanMaxCells = maxIslandCells;
+		_islandScanActive = true;
+
+		_islandVisitStamp++;
+		if ( _islandVisitStamp == int.MaxValue )
+		{
+			Array.Clear( _islandVisitSerial, 0, _islandVisitSerial.Length );
+			_islandVisitStamp = 1;
+		}
+	}
+
+	/// <summary>
+	/// Finds the next above-ground 4-connected component that touches the scan rect and has
+	/// fewer than maxIslandCells cells. BFS early-aborts at that size so the main mound is
+	/// never fully flooded. When <paramref name="seedReserve"/> is set, only cells with
+	/// reserve &lt;= <paramref name="maxSeedReserve"/> may start a flood (skips thick columns).
+	/// </summary>
+	public bool TryFindNextSmallIsland( float[] seedReserve, float maxSeedReserve )
+	{
+		if ( !_islandScanActive || _heights == null )
+			return false;
+
+		int stamp = _islandVisitStamp;
+		int[] queue = _islandQueue;
+		int[] comp = _islandComp;
+		int[] visit = _islandVisitSerial;
+		float[] heights = _heights;
+		float ground = _groundLevel;
+		int resX = _resolutionX;
+		int resZ = _resolutionZ;
+		int maxCells = _islandScanMaxCells;
+		int maxX = _islandScanMaxX;
+		int maxZ = _islandScanMaxZ;
+		int reserveLen = seedReserve != null ? seedReserve.Length : 0;
+		bool filterSeeds = seedReserve != null;
+
+		while ( _islandScanZ <= maxZ )
+		{
+			while ( _islandScanX <= maxX )
+			{
+				int x = _islandScanX++;
+				int start = _islandScanZ * resX + x;
+				if ( heights[ start ] < ground || visit[ start ] == stamp )
+					continue;
+				if ( filterSeeds
+					&& ( ( uint )start >= ( uint )reserveLen || seedReserve[ start ] > maxSeedReserve ) )
+					continue;
+
+				int qHead = 0;
+				int qTail = 0;
+				queue[ qTail++ ] = start;
+				visit[ start ] = stamp;
+				comp[ 0 ] = start;
+				int size = 1;
+				bool tooLarge = false;
+
+				while ( qHead < qTail )
+				{
+					int i = queue[ qHead++ ];
+					int cx = i % resX;
+					int cz = i / resX;
+
+					if ( TryEnqueueIslandNeighborEarlyAbort(
+						heights, queue, visit, stamp, ground, resX, resZ, maxCells,
+						ref qTail, comp, ref size, cx - 1, cz )
+						|| TryEnqueueIslandNeighborEarlyAbort(
+							heights, queue, visit, stamp, ground, resX, resZ, maxCells,
+							ref qTail, comp, ref size, cx + 1, cz )
+						|| TryEnqueueIslandNeighborEarlyAbort(
+							heights, queue, visit, stamp, ground, resX, resZ, maxCells,
+							ref qTail, comp, ref size, cx, cz - 1 )
+						|| TryEnqueueIslandNeighborEarlyAbort(
+							heights, queue, visit, stamp, ground, resX, resZ, maxCells,
+							ref qTail, comp, ref size, cx, cz + 1 ) )
+					{
+						tooLarge = true;
+						break;
+					}
+				}
+
+				if ( tooLarge || size >= maxCells )
+					continue;
+
+				_islandScanSize = size;
+				return true;
+			}
+
+			_islandScanX = _islandScanMinX;
+			_islandScanZ++;
+		}
+
+		_islandScanActive = false;
+		_islandScanSize = 0;
+		return false;
+	}
+
+	void EnsureIslandScratch( int cellCount, int maxIslandCells )
+	{
+		// Visit stamp is full-grid; queue/comp only need the early-abort window.
+		int bfsCap = Mathf.Max( 8, maxIslandCells + 4 );
+		if ( _islandQueue == null || _islandQueue.Length < bfsCap )
+			_islandQueue = new int[ bfsCap ];
+		if ( _islandComp == null || _islandComp.Length < bfsCap )
+			_islandComp = new int[ bfsCap ];
+		if ( _islandVisitSerial == null || _islandVisitSerial.Length != cellCount )
+			_islandVisitSerial = new int[ cellCount ];
+	}
+
+	static bool TryEnqueueIslandNeighborEarlyAbort(
+		float[] heights,
+		int[] queue,
+		int[] visit,
+		int stamp,
+		float ground,
+		int resX,
+		int resZ,
+		int maxCells,
+		ref int qTail,
+		int[] comp,
+		ref int size,
+		int x,
+		int z )
+	{
+		if ( ( uint )x >= ( uint )resX || ( uint )z >= ( uint )resZ )
+			return false;
+
+		int i = z * resX + x;
+		if ( heights[ i ] < ground || visit[ i ] == stamp )
+			return false;
+
+		if ( size + 1 >= maxCells )
+			return true;
+
+		visit[ i ] = stamp;
+		queue[ qTail++ ] = i;
+		comp[ size++ ] = i;
+		return false;
+	}
+
+	/// <summary>Converts a linear cell index to X/Z. Returns false when out of range.</summary>
+	public bool TryCellIndexToXZ( int cellIndex, out int cellX, out int cellZ )
+	{
+		cellX = 0;
+		cellZ = 0;
+		if ( _heights == null || ( uint )cellIndex >= ( uint )_heights.Length )
+			return false;
+
+		cellX = cellIndex % _resolutionX;
+		cellZ = cellIndex / _resolutionX;
+		return true;
 	}
 
 	/// <summary>True when the heightfield surface under this world point is at or above ground level.</summary>
@@ -1177,6 +1440,67 @@ public sealed class GoldPileHeightfield
 
 		if ( settleAfter )
 			SettleAtLocal( localX, localZ, radius, 4, 35f );
+	}
+
+	/// <summary>
+	/// Elliptical peak stamp. When <paramref name="useMax"/> is true, height is max-composited
+	/// (overlapping heaps keep the taller silhouette); otherwise additive like <see cref="PeakAtLocal"/>.
+	/// </summary>
+	public void PeakEllipseAtLocal(
+		float localX,
+		float localZ,
+		float radiusX,
+		float radiusZ,
+		float rotationRadians,
+		float peakHeight,
+		float profileFalloff,
+		bool useMax )
+	{
+		if ( _heights == null || Mathf.Abs( peakHeight ) < 1e-8f )
+			return;
+
+		radiusX = Mathf.Max( 0.05f, radiusX );
+		radiusZ = Mathf.Max( 0.05f, radiusZ );
+		profileFalloff = Mathf.Clamp( profileFalloff, 0.1f, 0.99f );
+		float coverRadius = Mathf.Max( radiusX, radiusZ );
+		if ( !TryGetBrushBounds( localX, localZ, coverRadius, out int minX, out int maxX, out int minZ, out int maxZ,
+			out float halfX, out float halfZ, out float cellX, out float cellZ, out _ ) )
+			return;
+
+		float cos = Mathf.Cos( rotationRadians );
+		float sin = Mathf.Sin( rotationRadians );
+		float invRx = 1f / radiusX;
+		float invRz = 1f / radiusZ;
+
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				float wx = -halfX + x * cellX;
+				float wz = -halfZ + z * cellZ;
+				float dx = wx - localX;
+				float dz = wz - localZ;
+				float lx = dx * cos + dz * sin;
+				float lz = -dx * sin + dz * cos;
+				float nx = lx * invRx;
+				float nz = lz * invRz;
+				float dist = Mathf.Sqrt( nx * nx + nz * nz );
+				if ( dist > 1f )
+					continue;
+
+				float t = 1f - dist;
+				t = Mathf.Clamp01( t / profileFalloff );
+				t = t * t * ( 3f - 2f * t );
+				float sample = peakHeight * t;
+				int idx = Index( x, z );
+				if ( useMax )
+					_heights[ idx ] = ClampHeight( Mathf.Max( _heights[ idx ], sample ) );
+				else
+					_heights[ idx ] = ClampHeight( _heights[ idx ] + sample );
+			}
+		}
+
+		ExpandDirtyRect( minX, maxX, minZ, maxZ );
 	}
 
 	/// <summary>

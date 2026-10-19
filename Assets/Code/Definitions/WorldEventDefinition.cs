@@ -11,7 +11,8 @@ public enum WorldEventConditionType
 	ElapsedUnscaledSeconds = 4,
 	TutorialCompleted = 5,
 	WorldEventCompleted = 6,
-	ObjectiveCompleted = 7
+	ObjectiveCompleted = 7,
+	BuildableCompleted = 8
 }
 
 public enum WorldEventActionType
@@ -24,7 +25,9 @@ public enum WorldEventActionType
 	CinematicPresentation = 5,
 	BrakePlayerMovement = 6,
 	IgniteLanterns = 7,
-	CinematicCallout = 8
+	CinematicCallout = 8,
+	StartFairyGuide = 9,
+	StartFairyDelivery = 10
 }
 
 [Serializable]
@@ -51,7 +54,7 @@ public class WorldEventCondition
 {
 	public WorldEventConditionType type;
 
-	[Tooltip( "EventVolume id for EnterVolume, tutorial id for TutorialCompleted (e.g. tut_movement), world event id for WorldEventCompleted, or objective id for ObjectiveCompleted. Ignored by other types." )]
+	[Tooltip( "EventVolume id for EnterVolume, tutorial id for TutorialCompleted (e.g. tut_movement), world event id for WorldEventCompleted, objective id for ObjectiveCompleted, or BuildableObject persistence id for BuildableCompleted. Ignored by other types." )]
 	public string targetId;
 
 	[Tooltip( "Optional treasure filter for PickupTreasure. Null = any treasure." )]
@@ -111,7 +114,7 @@ public class WorldEventAction
 	[Tooltip( "One objective row per line when type is SetTutorialHud." )]
 	public string tutorialObjectiveText;
 
-	[Tooltip( "Marker / outline target id for SetTutorialHud. Empty = no marker." )]
+	[Tooltip( "Marker / outline / volume id for SetTutorialHud or StartFairyGuide destination. Empty = no marker." )]
 	public string markerTargetId;
 
 	[Tooltip( "Clip when type is PlayAudio." )]

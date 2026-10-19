@@ -83,7 +83,9 @@ public enum TutorialTaskCompleteType
 	/// <summary>Player entered build mode (F).</summary>
 	EnterBuildMode = 33,
 	/// <summary>Player completed any buildable structure.</summary>
-	CompleteBuildable = 34
+	CompleteBuildable = 34,
+	/// <summary>Player placed treasure onto a mixed display / workshop storage table.</summary>
+	PlaceMixedStorage = 35
 }
 
 [Serializable]

@@ -19,4 +19,5 @@ MonoBehaviour:
   cooldown: 0
   enabled: 1
   isPassive: 1
+  startsUnlocked: 0
   behaviour: {fileID: 0}

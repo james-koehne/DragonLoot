@@ -32,8 +32,9 @@ MonoBehaviour:
   cellSize: 0.125
   minResolution: 32
   maxResolution: 1024
-  groundLevelHeight: 0.01
+  groundLevelHeight: 0.05
   lootFloorClearance: 0.05
+  heightSumPerCoin: 4.25
   meshDeformNormalSoften: 0
   meshDeformSampleBlur: 0
   pickRadius: 0.45

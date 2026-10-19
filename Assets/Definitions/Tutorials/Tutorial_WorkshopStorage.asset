@@ -1,0 +1,54 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_WorkshopStorage
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_workshop_storage
+  title: Workshop Storage
+  tags:
+  - workshop
+  - storage
+  - mixed
+  disabled: 0
+  trigger: 1
+  holdingCategory: 0
+  volumeId: volume_workshop
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: volume_workshop
+  prerequisiteTutorialIds: []
+  highlightMapLabel: 
+  mapMarkerId: 
+  outlineTargetIds:
+  - workshop_mixed_storage_1
+  - workshop_mixed_storage_2
+  - workshop_mixed_storage_3
+  completeAllTasksOnVolumeEnter: 0
+  body: These tables are a good place to store treasure before sorting it.
+  keybindHint: 
+  tasks:
+  - id: store_treasure
+    label: Store 50 treasure items
+    keybindHint: '[{SecondaryInteract}] or [{WholeStackPlace}]'
+    completeTrigger: 35
+    completeVolumeId: 
+    requiredCount: 50

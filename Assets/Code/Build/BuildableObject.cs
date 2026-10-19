@@ -47,6 +47,10 @@ public class BuildableObject : MonoBehaviour
 	string _persistenceId;
 
 	[SerializeField]
+	[Tooltip( "Catalog world event ids fired once when this placement is built (live Complete only)." )]
+	string[] _onCompleteWorldEventIds;
+
+	[SerializeField]
 	bool _startBuilt;
 
 	readonly List<MeshRenderer> _ghostRenderers = new List<MeshRenderer>( 8 );
@@ -348,6 +352,25 @@ public class BuildableObject : MonoBehaviour
 
 		ApplyGhostMaterialParams( _completeDef, ResolvePlayerPos(), completeGlow: 0f, alphaMul: 1f, fadeStart: 9999f, fadeEnd: 10000f );
 		EventBus.Publish( new BuildableCompletedEvent { Buildable = this } );
+		FireOnCompleteWorldEvents();
+	}
+
+	void FireOnCompleteWorldEvents()
+	{
+		if ( _onCompleteWorldEventIds == null || _onCompleteWorldEventIds.Length == 0 )
+			return;
+
+		WorldEventSystem worldEvents = WorldEventSystem.Instance;
+		if ( worldEvents == null )
+			return;
+
+		for ( int i = 0; i < _onCompleteWorldEventIds.Length; i++ )
+		{
+			string eventId = _onCompleteWorldEventIds[ i ];
+			if ( string.IsNullOrEmpty( eventId ) )
+				continue;
+			worldEvents.TryFireIfUnfired( eventId );
+		}
 	}
 
 	void Update()

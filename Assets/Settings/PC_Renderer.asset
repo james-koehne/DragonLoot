@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d9a0da393e89168449281e40b9dab3ac, type: 3}
   m_Name: AreaLighting
-  m_EditorClassIdentifier: Assembly-CSharp::AreaLightingRendererFeature
+  m_EditorClassIdentifier: DragonLoot.StylizedRendering::AreaLightingRendererFeature
   m_Active: 1
   definition: {fileID: 11400000, guid: 338eed198e501bc4dbf3db8bba3f4e79, type: 2}
   fillCompute: {fileID: 7200000, guid: 97c2ab9cf8086b248880bd5e4bbadba4, type: 3}

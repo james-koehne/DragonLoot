@@ -429,6 +429,20 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	[HideInInspector]
 	int authoredHeightFormat;
 
+	[Header( "Authored Coin Inventory (from heightmap)" )]
+	[Tooltip( "Committed when sculpt stroke ends. Dig economy uses these instead of TreasurePileDefinition.coinContents counts." )]
+	[SerializeField]
+	bool hasAuthoredCoinCounts;
+
+	[SerializeField]
+	int authoredGoldCoins;
+
+	[SerializeField]
+	int authoredSilverCoins;
+
+	[SerializeField]
+	int authoredCopperCoins;
+
 	GoldPileHeightfield _heightfield;
 	TreasurePileInteractable _pile;
 	TreasurePileDefinition _definition;
@@ -455,6 +469,11 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			|| ( authoredRes >= 8 && authoredHeights.Length == authoredRes * authoredRes ) );
 	public int AuthoredRevision => authoredRevision;
 	public TreasurePileDefinition Definition => ResolveDefinition();
+	public bool HasAuthoredCoinCounts => hasAuthoredCoinCounts;
+	public int AuthoredGoldCoins => Mathf.Max( 0, authoredGoldCoins );
+	public int AuthoredSilverCoins => Mathf.Max( 0, authoredSilverCoins );
+	public int AuthoredCopperCoins => Mathf.Max( 0, authoredCopperCoins );
+	public int AuthoredTotalCoins => AuthoredGoldCoins + AuthoredSilverCoins + AuthoredCopperCoins;
 	public int AuthoredResolution => Mathf.Max( authoredResX, authoredResZ, authoredRes );
 	public int AuthoredResolutionX => authoredResX > 0 ? authoredResX : authoredRes;
 	public int AuthoredResolutionZ => authoredResZ > 0 ? authoredResZ : authoredRes;
@@ -1228,10 +1247,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		if ( lootInstances != null )
 			return lootInstances.TotalRemainingCoins;
-		TreasurePileDefinition def = ResolveDefinition();
-		if ( def != null )
-			return Mathf.Max( 0, def.TotalCoinUnits() );
-		return 0;
+		return Mathf.Max( 0, ResolveAuthoredOrDefinitionCoinTotal() );
 	}
 
 	int ResolveCoinCountForCarveVolume( int unitsBeingCarved )
@@ -1763,6 +1779,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		authoredMaxHeight = 0f;
 		authoredHeightFormat = AuthoredFormatLegacy;
 		authoredRevision++;
+		ClearAuthoredCoinCounts();
 	}
 
 	public void ResetAuthoredToEmpty()
@@ -1776,6 +1793,139 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		authoredMaxHeight = 0.01f;
 		authoredHeightFormat = AuthoredFormatWorldMeters;
 		authoredRevision++;
+		ClearAuthoredCoinCounts();
+	}
+
+	void ClearAuthoredCoinCounts()
+	{
+		hasAuthoredCoinCounts = false;
+		authoredGoldCoins = 0;
+		authoredSilverCoins = 0;
+		authoredCopperCoins = 0;
+	}
+
+	/// <summary>
+	/// Live heightfield SumHeights when initialized; otherwise reconstruct from authored U16 pack.
+	/// </summary>
+	public float ResolveHeightSumForCoinEstimate()
+	{
+		if ( _heightfield != null && _heightfield.IsInitialized )
+			return _heightfield.SumHeights();
+
+		if ( !HasAuthoredHeight )
+			return 0f;
+
+		float pack = authoredMaxHeight > 0.01f ? authoredMaxHeight : 1f;
+		float sum = 0f;
+		for ( int i = 0; i < authoredHeights.Length; i++ )
+			sum += authoredHeights[ i ] * ( 1f / 65535f ) * pack;
+		return sum;
+	}
+
+	/// <summary>
+	/// Estimate G/S/C from current height sum without writing. Used by editor while painting.
+	/// </summary>
+	public void EstimateAuthoredCoinCountsFromHeight(
+		out int total,
+		out int gold,
+		out int silver,
+		out int copper )
+	{
+		TreasurePileDefinition def = ResolveDefinitionForEditor();
+		float sum = ResolveHeightSumForCoinEstimate();
+		total = def != null ? def.EstimateCoinTotalFromHeightSum( sum ) : 0;
+		TreasurePileDefinition.SplitEqualMetalThirds( total, out gold, out silver, out copper );
+	}
+
+	/// <summary>
+	/// Writes equal-third coin inventory from the current heightfield volume onto this pile.
+	/// </summary>
+	public void SyncAuthoredCoinCountsFromHeightfield()
+	{
+		EstimateAuthoredCoinCountsFromHeight( out int total, out int gold, out int silver, out int copper );
+		hasAuthoredCoinCounts = total > 0;
+		authoredGoldCoins = gold;
+		authoredSilverCoins = silver;
+		authoredCopperCoins = copper;
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying && total > 0 )
+		{
+			TreasurePileDefinition def = ResolveDefinitionForEditor();
+			if ( def != null )
+			{
+				if ( def.FindCoinByVariant( "Gold" ) == null
+					|| def.FindCoinByVariant( "Silver" ) == null
+					|| def.FindCoinByVariant( "Copper" ) == null )
+				{
+					Debug.LogWarning(
+						$"TreasurePileVisual '{name}': definition '{def.name}' is missing Gold/Silver/Copper "
+						+ "coinContents entries; authored counts were stored but runtime seed may skip missing metals.",
+						this );
+				}
+			}
+		}
+#endif
+	}
+
+	/// <summary>
+	/// Coin inventory for dig economy: authored heightmap counts when present, else definition totals.
+	/// </summary>
+	public int ResolveAuthoredOrDefinitionCoinTotal()
+	{
+		if ( hasAuthoredCoinCounts )
+			return AuthoredTotalCoins;
+
+		TreasurePileDefinition def = ResolveDefinition();
+		if ( def != null )
+			return def.TotalCoinUnits();
+		return 0;
+	}
+
+	/// <summary>
+	/// Effective coin contents for inventory + GPU mix. Authored heightmap counts override definition counts.
+	/// </summary>
+	public TreasurePileEntry[] GetEffectiveCoinContents( TreasurePileDefinition def )
+	{
+		if ( def == null )
+			return null;
+
+		if ( !hasAuthoredCoinCounts )
+			return def.coinContents;
+
+		TreasureDefinition gold = def.FindCoinByVariant( "Gold" );
+		TreasureDefinition silver = def.FindCoinByVariant( "Silver" );
+		TreasureDefinition copper = def.FindCoinByVariant( "Copper" );
+		int n = 0;
+		if ( gold != null && authoredGoldCoins > 0 ) n++;
+		if ( silver != null && authoredSilverCoins > 0 ) n++;
+		if ( copper != null && authoredCopperCoins > 0 ) n++;
+		if ( n == 0 )
+			return def.coinContents;
+
+		TreasurePileEntry[] entries = new TreasurePileEntry[ n ];
+		int i = 0;
+		if ( gold != null && authoredGoldCoins > 0 )
+		{
+			entries[ i ].treasure = gold;
+			entries[ i ].count = authoredGoldCoins;
+			i++;
+		}
+
+		if ( silver != null && authoredSilverCoins > 0 )
+		{
+			entries[ i ].treasure = silver;
+			entries[ i ].count = authoredSilverCoins;
+			i++;
+		}
+
+		if ( copper != null && authoredCopperCoins > 0 )
+		{
+			entries[ i ].treasure = copper;
+			entries[ i ].count = authoredCopperCoins;
+		}
+
+		return entries;
 	}
 
 	/// <summary>
@@ -1881,6 +2031,45 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		return true;
 	}
 
+	/// <summary>
+	/// Editor: allocate an empty authored heightfield covering the requested world footprint.
+	/// Resolution snaps to power-of-two via definition cell size; returned sizes are the actual meters used.
+	/// </summary>
+	public void ResizeAuthoredToWorldSize( float worldSizeX, float worldSizeZ, out float actualSizeX, out float actualSizeZ )
+	{
+		actualSizeX = 0f;
+		actualSizeZ = 0f;
+		if ( Application.isPlaying )
+			return;
+
+		TreasurePileDefinition def = ResolveDefinition();
+		float cell = def != null ? def.ResolveCellSize() : DefaultCellSize;
+		int minRes = def != null ? def.ResolveMinResolution() : DefaultMinResolution;
+		int maxRes = def != null ? def.ResolveMaxResolution() : 256;
+		float ground = def != null ? def.groundLevelHeight : 0.01f;
+
+		int resX = def != null
+			? def.ResolveResolutionForExtent( worldSizeX )
+			: Mathf.Clamp( Mathf.NextPowerOfTwo( Mathf.Max( minRes, Mathf.RoundToInt( Mathf.Max( 0.01f, worldSizeX ) / cell ) ) ), minRes, maxRes );
+		int resZ = def != null
+			? def.ResolveResolutionForExtent( worldSizeZ )
+			: Mathf.Clamp( Mathf.NextPowerOfTwo( Mathf.Max( minRes, Mathf.RoundToInt( Mathf.Max( 0.01f, worldSizeZ ) / cell ) ) ), minRes, maxRes );
+
+		actualSizeX = cell * ( resX - 1 );
+		actualSizeZ = cell * ( resZ - 1 );
+
+		if ( _heightfield != null )
+			_heightfield.Release();
+		_heightfield = new GoldPileHeightfield();
+		_heightfield.Initialize( resX, resZ, actualSizeX, actualSizeZ, ground );
+		_heightfield.SetLootFloorResolver( ResolveLootFloorLocal );
+		_heightfield.SetMaxHeightLocked( false );
+		_heightfield.FillZeros();
+		WriteAuthoredFromHeightfield();
+		ClearAuthoredCoinCounts();
+		EnsureEditorPreview();
+	}
+
 	/// <summary>Crop to occupied power-of-two rectangle and recenter transform (editor only).</summary>
 	public void FitBounds()
 	{
@@ -1917,6 +2106,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			ResampleHeightfieldTo( minRes, minRes, shiftOrigin: false );
 			_heightfield.FillZeros();
 			WriteAuthoredFromHeightfield();
+			SyncAuthoredCoinCountsFromHeightfield();
 			EnsureEditorPreview();
 			return;
 		}
@@ -2006,6 +2196,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			packed[ i ] = ( ushort )Mathf.Clamp( Mathf.RoundToInt( ( dst[ i ] / pack ) * 65535f ), 0, 65535 );
 		_heightfield.CopyFromPackedU16( packed, pack );
 		WriteAuthoredFromHeightfield();
+		SyncAuthoredCoinCountsFromHeightfield();
 		EnsureEditorPreview();
 	}
 
@@ -2075,6 +2266,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			packed[ i ] = ( ushort )Mathf.Clamp( Mathf.RoundToInt( ( dst[ i ] / pack ) * 65535f ), 0, 65535 );
 		_heightfield.CopyFromPackedU16( packed, pack );
 		WriteAuthoredFromHeightfield();
+		SyncAuthoredCoinCountsFromHeightfield();
 		EnsureEditorPreview();
 	}
 
@@ -2093,6 +2285,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		_heightfield.RecomputeMaxHeight();
 		WriteAuthoredFromHeightfield();
+		SyncAuthoredCoinCountsFromHeightfield();
 		RefreshEditorPreviewFromHeightfield();
 	}
 
@@ -2310,17 +2503,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		GoldPileEditTiming.Begin( "GoldPile.RefreshVisuals" );
 		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
 
-		if ( terrainMesh != null )
-		{
-			terrainMesh.RefreshFromHeightfield();
-			if ( phaseSw != null )
-			{
-				phaseSw.Stop();
-				GoldPileEditTiming.Record( "refresh.queueTerrain", phaseSw.Elapsed.TotalMilliseconds );
-				phaseSw.Restart();
-			}
-		}
-
+		// Loot densify first: near-empty column / island spill may zero heightfield cells.
+		// Terrain refresh must run after that so the mesh matches the cleared remnant columns.
 		float lootRadius = _carveSettings.radius * 2.5f;
 		if ( lootInstances != null )
 			lootInstances.RefreshAfterCarve( worldCenter, lootRadius, _lastCarveUnits );
@@ -2330,6 +2514,20 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			phaseSw.Stop();
 			GoldPileEditTiming.Record( "refresh.queueLoot", phaseSw.Elapsed.TotalMilliseconds );
 			phaseSw.Restart();
+		}
+
+		if ( lootInstances != null && lootInstances.ClearedHeightfieldThisDensify )
+			NotifySurfaceHeightChanged( worldCenter, lootRadius );
+
+		if ( terrainMesh != null )
+		{
+			terrainMesh.RefreshFromHeightfield();
+			if ( phaseSw != null )
+			{
+				phaseSw.Stop();
+				GoldPileEditTiming.Record( "refresh.queueTerrain", phaseSw.Elapsed.TotalMilliseconds );
+				phaseSw.Restart();
+			}
 		}
 
 		bool artifacts = false;

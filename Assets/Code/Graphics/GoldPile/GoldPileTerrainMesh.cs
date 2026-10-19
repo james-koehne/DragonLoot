@@ -28,6 +28,10 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	/// <summary>Max tiles to schedule async PhysX bakes per LateUpdate.</summary>
 	const int MaxAsyncCooksPerFrame = 8;
 	const HideFlags RuntimeMeshHideFlags = HideFlags.HideAndDontSave;
+	/// <summary>Emit a visual triangle only when all three corners are above ground (no ~0-height faces).</summary>
+	const int MinAboveCornersPerTriangle = 3;
+	/// <summary>Drop 4-connected above-ground components smaller than this many verts (stray islands).</summary>
+	const int MinIslandCells = 24;
 
 	[SerializeField]
 	[Min( 8 )]
@@ -46,16 +50,22 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	Vector3[] _normals;
 	Vector2[] _uvs;
 	int[] _tris;
+	/// <summary>Raw above-ground from the heightfield (before island cull).</summary>
 	bool[] _vertAboveGround;
+	/// <summary>Emit occupancy after small-island cull; drives triangle keep.</summary>
+	bool[] _vertEmitAboveGround;
 	int _visualTriCount;
 	bool _visualTrisDirty;
 	bool _visualIndicesBuilt;
 	bool _visualOccupancyDirtyFull;
 	bool _hasVisualOccupancyDirty;
+	bool _lastOccupancyRefreshWasFull;
 	int _visualOccupancyDirtyMinX;
 	int _visualOccupancyDirtyMaxX;
 	int _visualOccupancyDirtyMinZ;
 	int _visualOccupancyDirtyMaxZ;
+	int[] _islandQueue;
+	int[] _islandComponentScratch;
 	MaterialPropertyBlock _mpb;
 	GoldPileHeightfield _heightfield;
 	readonly GoldPileColliderTiles _colliderTiles = new GoldPileColliderTiles();
@@ -110,6 +120,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_visualTrisDirty = false;
 		_visualIndicesBuilt = false;
 		_vertAboveGround = null;
+		_vertEmitAboveGround = null;
 		_built = false;
 
 		if ( _filter != null )
@@ -611,6 +622,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		_visualTriCount = 0;
 		_visualIndicesBuilt = false;
 		_vertAboveGround = null;
+		_vertEmitAboveGround = null;
 
 		if ( _visualMesh == null )
 			_visualMesh = new Mesh { name = "GoldPileVisual" };
@@ -636,9 +648,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	}
 
 	/// <summary>
-	/// Rebuilds visual indices, dropping quads whose four corners are all below ground so
-	/// carved-out areas render nothing. Rim quads with any corner above ground are kept and
-	/// clipped per-pixel by the shader.
+	/// Rebuilds visual indices. Emits only triangles with all three corners above ground,
+	/// and drops small disconnected islands. Shader clips any remaining at/below-ground pixels.
 	/// </summary>
 	void RebuildVisualTriangles()
 	{
@@ -651,30 +662,162 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		if ( !RefreshVertexOccupancy() && _visualIndicesBuilt )
 			return;
 
+		if ( _vertAboveGround != null )
+		{
+			// Island connectivity needs the full grid after a partial dirty update.
+			if ( !_lastOccupancyRefreshWasFull )
+			{
+				_visualOccupancyDirtyFull = true;
+				_hasVisualOccupancyDirty = true;
+				RefreshVertexOccupancy();
+			}
+
+			RebuildEmitOccupancyWithIslandCull();
+		}
+
 		int resX = _visualResolutionX;
 		int resZ = _visualResolutionZ;
-		bool[] above = _vertAboveGround;
+		bool[] above = _vertEmitAboveGround != null ? _vertEmitAboveGround : _vertAboveGround;
 		int t = 0;
 
 		for ( int z = 0; z < resZ - 1; z++ )
 		{
 			for ( int x = 0; x < resX - 1; x++ )
 			{
-				int i = z * resX + x;
-				if ( above != null
-					&& !above[ i ]
-					&& !above[ i + 1 ]
-					&& !above[ i + resX ]
-					&& !above[ i + resX + 1 ] )
-					continue;
+				int i00 = z * resX + x;
+				int i10 = i00 + 1;
+				int i01 = i00 + resX;
+				int i11 = i01 + 1;
 
-				t = AppendQuad( t, i, resX );
+				// Two triangles of the quad — keep only when every corner is above ground.
+				if ( CountAboveCorners( above, i00, i01, i10 ) >= MinAboveCornersPerTriangle )
+				{
+					_tris[ t++ ] = i00;
+					_tris[ t++ ] = i01;
+					_tris[ t++ ] = i10;
+				}
+
+				if ( CountAboveCorners( above, i10, i01, i11 ) >= MinAboveCornersPerTriangle )
+				{
+					_tris[ t++ ] = i10;
+					_tris[ t++ ] = i01;
+					_tris[ t++ ] = i11;
+				}
 			}
 		}
 
 		_visualTriCount = t;
 		_visualMesh.SetTriangles( _tris, 0, _visualTriCount, 0, false, 0 );
 		_visualIndicesBuilt = true;
+	}
+
+	static int CountAboveCorners( bool[] above, int a, int b, int c )
+	{
+		if ( above == null )
+			return 3;
+
+		int n = 0;
+		if ( above[ a ] ) n++;
+		if ( above[ b ] ) n++;
+		if ( above[ c ] ) n++;
+		return n;
+	}
+
+	/// <summary>
+	/// Copies raw occupancy into emit flags, then clears small 4-connected components so
+	/// sparse height samples do not leave detached mesh islands. Raw occupancy is unchanged
+	/// so the next refresh can early-out correctly.
+	/// </summary>
+	void RebuildEmitOccupancyWithIslandCull()
+	{
+		bool[] raw = _vertAboveGround;
+		if ( raw == null )
+		{
+			_vertEmitAboveGround = null;
+			return;
+		}
+
+		int vertCount = raw.Length;
+		if ( _vertEmitAboveGround == null || _vertEmitAboveGround.Length != vertCount )
+			_vertEmitAboveGround = new bool[ vertCount ];
+
+		bool[] emit = _vertEmitAboveGround;
+		for ( int i = 0; i < vertCount; i++ )
+			emit[ i ] = raw[ i ];
+
+		if ( MinIslandCells <= 1 )
+			return;
+
+		int resX = _visualResolutionX;
+		int resZ = _visualResolutionZ;
+		if ( vertCount != resX * resZ )
+			return;
+
+		if ( _islandComponentScratch == null || _islandComponentScratch.Length != vertCount )
+			_islandComponentScratch = new int[ vertCount ];
+		if ( _islandQueue == null || _islandQueue.Length != vertCount )
+			_islandQueue = new int[ vertCount ];
+
+		int[] comp = _islandComponentScratch;
+		for ( int i = 0; i < vertCount; i++ )
+			comp[ i ] = -1;
+
+		int[] queue = _islandQueue;
+		for ( int start = 0; start < vertCount; start++ )
+		{
+			if ( !emit[ start ] || comp[ start ] >= 0 )
+				continue;
+
+			int qHead = 0;
+			int qTail = 0;
+			queue[ qTail++ ] = start;
+			comp[ start ] = start;
+			int size = 0;
+
+			while ( qHead < qTail )
+			{
+				int i = queue[ qHead++ ];
+				size++;
+				int x = i % resX;
+				int z = i / resX;
+
+				TryEnqueueIslandNeighbor( emit, comp, queue, ref qTail, start, x - 1, z, resX, resZ );
+				TryEnqueueIslandNeighbor( emit, comp, queue, ref qTail, start, x + 1, z, resX, resZ );
+				TryEnqueueIslandNeighbor( emit, comp, queue, ref qTail, start, x, z - 1, resX, resZ );
+				TryEnqueueIslandNeighbor( emit, comp, queue, ref qTail, start, x, z + 1, resX, resZ );
+			}
+
+			if ( size >= MinIslandCells )
+				continue;
+
+			for ( int i = 0; i < vertCount; i++ )
+			{
+				if ( comp[ i ] == start )
+					emit[ i ] = false;
+			}
+		}
+	}
+
+	static void TryEnqueueIslandNeighbor(
+		bool[] above,
+		int[] comp,
+		int[] queue,
+		ref int qTail,
+		int root,
+		int x,
+		int z,
+		int resX,
+		int resZ )
+	{
+		if ( x < 0 || z < 0 || x >= resX || z >= resZ )
+			return;
+
+		int i = z * resX + x;
+		if ( !above[ i ] || comp[ i ] >= 0 )
+			return;
+
+		comp[ i ] = root;
+		queue[ qTail++ ] = i;
 	}
 
 	/// <summary>
@@ -688,7 +831,9 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		{
 			bool changed = _vertAboveGround != null;
 			_vertAboveGround = null;
+			_vertEmitAboveGround = null;
 			_hasVisualOccupancyDirty = false;
+			_lastOccupancyRefreshWasFull = true;
 			return changed;
 		}
 
@@ -709,7 +854,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		int maxX = resX - 1;
 		int minZ = 0;
 		int maxZ = resZ - 1;
-		if ( _hasVisualOccupancyDirty && !_visualOccupancyDirtyFull )
+		bool full = !_hasVisualOccupancyDirty || _visualOccupancyDirtyFull;
+		if ( !full )
 		{
 			// Visual verts share heightfield resolution; pad 1 so rim quads update with neighbors.
 			minX = Mathf.Clamp( _visualOccupancyDirtyMinX - 1, 0, resX - 1 );
@@ -720,6 +866,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 
 		_hasVisualOccupancyDirty = false;
 		_visualOccupancyDirtyFull = false;
+		_lastOccupancyRefreshWasFull = full;
 
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
@@ -728,7 +875,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 			{
 				int i = row + x;
 				Vector3 v = _baseVerts[ i ];
-				bool above = _heightfield.SampleSurfaceHeight( v.x, v.z ) >= ground;
+				// Strictly above ground so flat / ~0 height cells never emit mesh.
+				bool above = _heightfield.SampleSurfaceHeight( v.x, v.z ) > ground;
 				if ( above == _vertAboveGround[ i ] )
 					continue;
 
@@ -738,17 +886,6 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		}
 
 		return occupancyChanged;
-	}
-
-	int AppendQuad( int t, int i, int resX )
-	{
-		_tris[ t++ ] = i;
-		_tris[ t++ ] = i + resX;
-		_tris[ t++ ] = i + 1;
-		_tris[ t++ ] = i + 1;
-		_tris[ t++ ] = i + resX;
-		_tris[ t++ ] = i + resX + 1;
-		return t;
 	}
 
 	void BuildColliderTiles( float sizeX, float sizeZ )

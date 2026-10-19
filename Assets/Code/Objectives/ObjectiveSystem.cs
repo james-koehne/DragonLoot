@@ -13,6 +13,12 @@ public class ObjectiveSystem : MonoBehaviour
 	const float DefaultShowRadius = 40f;
 	const float LastTaskToCompleteDelay = 1.75f;
 
+	const string LegacyWorkshopObjectiveId = "obj_workshop";
+	const string WorkshopAccessObjectiveId = "obj_workshop_access";
+	const string WorkshopClearObjectiveId = "obj_workshop_clear";
+	const string WorkshopAccessSubId = "clear_entrance";
+	const string WorkshopClearSubId = "clear_interior";
+
 	static ObjectiveSystem _instance;
 
 	struct NearbyCandidate
@@ -103,6 +109,7 @@ public class ObjectiveSystem : MonoBehaviour
 		_nextNearbyRefreshUnscaled = 0f;
 		_lastHudFingerprint = null;
 		TryCompleteCountSubs();
+		CatchUpWorldEventSubs();
 		CompleteObjectivesWithAllSubsDone();
 		FireCompletedObjectiveWorldEvents();
 		RefreshNearbyHud( force: true );
@@ -171,6 +178,53 @@ public class ObjectiveSystem : MonoBehaviour
 					_completedSubs.Add( key );
 			}
 		}
+
+		MigrateLegacyWorkshopProgress( save );
+	}
+
+	void MigrateLegacyWorkshopProgress( ProfileSaveData save )
+	{
+		if ( save == null || !_completedObjectives.Contains( LegacyWorkshopObjectiveId ) )
+			return;
+
+		bool changed = false;
+		changed |= EnsureCompletedObjective( save, WorkshopAccessObjectiveId );
+		changed |= EnsureCompletedObjective( save, WorkshopClearObjectiveId );
+		changed |= EnsureCompletedSub( save, WorkshopAccessObjectiveId, WorkshopAccessSubId );
+		changed |= EnsureCompletedSub( save, WorkshopClearObjectiveId, WorkshopClearSubId );
+
+		if ( changed && ProfileManager.Instance != null )
+			ProfileManager.Instance.SaveCurrentStatsToProfile();
+	}
+
+	bool EnsureCompletedObjective( ProfileSaveData save, string objectiveId )
+	{
+		if ( string.IsNullOrEmpty( objectiveId ) )
+			return false;
+		if ( _completedObjectives.Contains( objectiveId ) )
+			return false;
+
+		_completedObjectives.Add( objectiveId );
+		save.EnsureObjectiveProgress();
+		if ( !save.completedObjectiveIds.Contains( objectiveId ) )
+			save.completedObjectiveIds.Add( objectiveId );
+		return true;
+	}
+
+	bool EnsureCompletedSub( ProfileSaveData save, string objectiveId, string subId )
+	{
+		if ( string.IsNullOrEmpty( objectiveId ) || string.IsNullOrEmpty( subId ) )
+			return false;
+
+		string key = SubKey( objectiveId, subId );
+		if ( _completedSubs.Contains( key ) )
+			return false;
+
+		_completedSubs.Add( key );
+		save.EnsureObjectiveProgress();
+		if ( !save.completedObjectiveSubIds.Contains( key ) )
+			save.completedObjectiveSubIds.Add( key );
+		return true;
 	}
 
 	public bool IsCompleted( string objectiveId )
@@ -499,7 +553,50 @@ public class ObjectiveSystem : MonoBehaviour
 
 	void OnWorldEventCompleted( WorldEventCompletedEvent evt )
 	{
+		TryMatchTargetId( ObjectiveSubCompleteType.WorldEventCompleted, evt.Id );
 		RefreshNearbyHud( force: true );
+	}
+
+	void CatchUpWorldEventSubs()
+	{
+		if ( _catalog == null || _catalog.objectives == null )
+			return;
+
+		WorldEventSystem worldEvents = WorldEventSystem.Instance;
+		if ( worldEvents == null )
+			return;
+
+		for ( int i = 0; i < _catalog.objectives.Count; i++ )
+		{
+			ObjectiveDefinition definition = _catalog.objectives[ i ];
+			if ( definition == null || IsCompleted( definition.id ) )
+				continue;
+			if ( !ArePrerequisitesMet( definition ) )
+				continue;
+			if ( definition.subs == null )
+				continue;
+
+			for ( int s = 0; s < definition.subs.Length; s++ )
+			{
+				ObjectiveSubDefinition sub = definition.subs[ s ];
+				if ( sub == null || string.IsNullOrEmpty( sub.id ) || string.IsNullOrEmpty( sub.targetId ) )
+					continue;
+				if ( IsSubCompleted( definition.id, sub.id ) )
+					continue;
+
+				if ( sub.completeType == ObjectiveSubCompleteType.WorldEventCompleted )
+				{
+					if ( worldEvents.IsWorldEventCompleted( sub.targetId ) )
+						TryCompleteSub( definition, sub.id );
+				}
+				else if ( sub.completeType == ObjectiveSubCompleteType.WorldEventFired )
+				{
+					// Completed implies fired; covers save/load catch-up after the sequence finished.
+					if ( worldEvents.IsWorldEventCompleted( sub.targetId ) )
+						TryCompleteSub( definition, sub.id );
+				}
+			}
+		}
 	}
 
 	void TryMatchComponent( ObjectiveSubCompleteType type, Component component )
@@ -867,10 +964,12 @@ public class ObjectiveSystem : MonoBehaviour
 				float distance = 0f;
 				if ( !TryResolveNearbyAnchor( definition, out markerId, out markerPos, out distance ) )
 				{
-					// Volume-gated objectives can still list with no marker if subs have no QuestTarget yet.
-					if ( string.IsNullOrEmpty( definition.showVolumeId ) )
+					// Volume-gated / always-show objectives can still list with no marker if subs have no QuestTarget yet.
+					if ( !definition.alwaysShow && string.IsNullOrEmpty( definition.showVolumeId ) )
 						continue;
-					if ( EventTargetRegistry.TryGetMarkerTransform( definition.showVolumeId, out Transform volumeMarker ) && volumeMarker != null )
+					if ( !string.IsNullOrEmpty( definition.showVolumeId ) &&
+					     EventTargetRegistry.TryGetMarkerTransform( definition.showVolumeId, out Transform volumeMarker ) &&
+					     volumeMarker != null )
 					{
 						markerId = definition.showVolumeId;
 						markerPos = volumeMarker.position;
@@ -1022,6 +1121,9 @@ public class ObjectiveSystem : MonoBehaviour
 	{
 		if ( definition == null )
 			return false;
+
+		if ( definition.alwaysShow )
+			return true;
 
 		if ( !string.IsNullOrEmpty( definition.showVolumeId ) )
 			return _enteredVolumes.Contains( definition.showVolumeId );

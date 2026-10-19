@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05c4da76aeca66445817545844fe0270, type: 3}
+  m_Name: CoinPile (8)_CoinSeatBake 1
+  m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
+  authoredLayoutSeed: 118919
+  effectivePileSeed: 519395716
+  heightFingerprint: 1720456786
+  contentsFingerprint: -1170682062
+  placementFingerprint: 244014156
+  maxVisibleTotal: 32
+  steadyVisibleBudget: 28
+  sourceDefinitionName: TreasurePileWorkshopEntranceDefinition
+  seats:
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: 2.8118608, y: 1.2164887, z: 0.14215685}
+    localRot: {x: -0.17170118, y: 0.30464807, z: 0.0049507236, w: -0.9368478}
+    scale: 0.26291645
+    embedDepth: 0.042066574
+    placeSurfaceHeight: 1.2585553
+    probeRadius: 0.13321185
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
+    localPos: {x: 2.8948092, y: 1.2011744, z: -1.0697725}
+    localRot: {x: 0.08903787, y: 0.19612578, z: 0.30745155, w: -0.9268659}
+    scale: 0.23372817
+    embedDepth: 0.03739655
+    placeSurfaceHeight: 1.2385709
+    probeRadius: 0.11842302
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 1.9806962, y: 0.9444534, z: -3.3590024}
+    localRot: {x: 0.15874933, y: 0.7382714, z: -0.17128477, w: -0.6327839}
+    scale: 0.2540134
+    embedDepth: 0.040642142
+    placeSurfaceHeight: 0.98509556
+    probeRadius: 0.12870093
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 2.1601846, y: 1.333167, z: -1.1470225}
+    localRot: {x: -0.071633235, y: 0.96451354, z: -0.06681946, w: 0.2451885}
+    scale: 0.24274059
+    embedDepth: 0.038838506
+    placeSurfaceHeight: 1.3720055
+    probeRadius: 0.12298934
+    fixedVolumePose: 0
+    coinVisual: 1

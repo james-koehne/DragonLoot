@@ -9,7 +9,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Open display table: accepts any <see cref="TreasureItem"/>.
 /// Slots sit on a horizontal XZ plane. Items claim a rectangular footprint via
-/// <see cref="TreasureDefinition.cartGridSize"/> (coins forced to 1×1).
+/// <see cref="TreasureDefinition.storageGridSize"/> (coins forced to 1×1).
 /// Stackable treasure (<see cref="TreasureDefinition.canStack"/>) can pile vertically
 /// on a matching footprint; non-stackable treasure (gems) uses one item per footprint.
 /// </summary>
@@ -88,6 +88,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	readonly List<SlotStack> _stacks = new List<SlotStack>( 16 );
 	readonly List<TreasureItem> _allItems = new List<TreasureItem>();
 	int _itemCount;
+	int _publishedItemCount;
 	int _previewOutlineSlot = -1;
 	Feedbacks _placeFeedbacks;
 	bool _burnLocked;
@@ -485,6 +486,11 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions )
 	{
+		return TryAppendSlotDefinitions( slotIndex, definitions, playerDirected: false );
+	}
+
+	public int TryAppendSlotDefinitions( int slotIndex, IReadOnlyList<TreasureDefinition> definitions, bool playerDirected )
+	{
 		if ( definitions == null || definitions.Count == 0 || _cellStacks == null )
 			return 0;
 
@@ -520,7 +526,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			return 0;
 
 		RefreshCountLabel();
-		PublishChanged();
+		PublishChanged( playerDirected );
 		return added;
 	}
 
@@ -793,7 +799,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		}
 
 		RefreshCountLabel();
-		PublishChanged();
+		PublishChanged( playerDirected: true );
 		return true;
 	}
 
@@ -1209,7 +1215,7 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 			return Vector2Int.one;
 		if ( definition.category == TreasureCategory.Coin )
 			return Vector2Int.one;
-		return definition.GetCartGridSize();
+		return definition.GetStorageGridSize();
 	}
 
 	bool IsRectangleFree( int ox, int oy, Vector2Int footprint )
@@ -1682,14 +1688,18 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		countLabel.text = _itemCount.ToString();
 	}
 
-	void PublishChanged()
+	void PublishChanged( bool playerDirected = false )
 	{
+		int previous = _publishedItemCount;
 		EventBus.Publish( new MixedDisplayTableChangedEvent
 		{
 			Table = this,
 			ItemCount = _itemCount,
-			SlotCount = SlotCount
+			PreviousItemCount = previous,
+			SlotCount = SlotCount,
+			PlayerDirected = playerDirected
 		} );
+		_publishedItemCount = _itemCount;
 	}
 
 	static void NotifySortedDelta( TreasureDefinition definition, int delta )

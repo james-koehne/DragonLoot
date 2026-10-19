@@ -290,14 +290,15 @@ MonoBehaviour:
         _enabled: 1
         Mode: 0
         ClipsFrom: 1
-        Clips: []
+        Clips:
+        - {fileID: 8300000, guid: 7fb515207cd60a14d9e09fd130384510, type: 3}
         PlayInterval: 0.05
         OverlapFadeSeconds: 0.12
         Playback:
-          VolumeMin: 1
-          VolumeMax: 1
-          PitchMin: 1
-          PitchMax: 1
+          VolumeMin: 0.8
+          VolumeMax: 0.8
+          PitchMin: 0.85
+          PitchMax: 1.25
           SpatialBlend: 1
           MinDistance: 1.5
           MaxDistance: 18
@@ -890,14 +891,15 @@ MonoBehaviour:
         _enabled: 1
         Mode: 1
         ClipsFrom: 2
-        Clips: []
-        PlayInterval: 0.05
+        Clips:
+        - {fileID: 8300000, guid: ed50aad8c656ef6498801d925258a525, type: 3}
+        PlayInterval: 1
         OverlapFadeSeconds: 0.12
         Playback:
-          VolumeMin: 1
-          VolumeMax: 1
-          PitchMin: 1
-          PitchMax: 1
+          VolumeMin: 0.5
+          VolumeMax: 0.5
+          PitchMin: 0.95
+          PitchMax: 1.05
           SpatialBlend: 1
           MinDistance: 1.5
           MaxDistance: 18
@@ -1076,10 +1078,39 @@ MonoBehaviour:
   - rid: 9170125181045440643
   - rid: 9170125181045440644
   - rid: 9170125181045440645
+  - rid: 535442709607612732
   _useUnscaledTime: 0
   references:
     version: 2
     RefIds:
+    - rid: 535442709607612732
+      type: {class: PlayRandomSFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clips:
+        - {fileID: 8300000, guid: 643f5073cf7ed3c42a684a8d8ab2398b, type: 3}
+        Playback:
+          VolumeMin: 0.6
+          VolumeMax: 0.7
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 1
+        _migrateVolumeMax: 1
+        _migratePitchMin: 1
+        _migratePitchMax: 1
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
     - rid: 9170125181045440643
       type: {class: PunchRotationFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
@@ -1285,6 +1316,7 @@ GameObject:
   - component: {fileID: 8653976260256665846}
   - component: {fileID: 7743242534259797732}
   - component: {fileID: 703558330312438265}
+  - component: {fileID: 9112000000000001}
   m_Layer: 0
   m_Name: CoinSortingStation
   m_TagString: Untagged
@@ -1444,6 +1476,21 @@ MonoBehaviour:
         Target: {fileID: 3464683518450801076}
         Duration: 0.18
         Strength: 0.035
+--- !u!114 &9112000000000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3858640962312582024}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96d1526b02f3ee54c887ca480d089e4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectiveUnlockGate
+  requiredObjectiveIds:
+  - obj_workshop_access
+  - obj_workshop_clear
 --- !u!1 &5761311447819771599
 GameObject:
   m_ObjectHideFlags: 0

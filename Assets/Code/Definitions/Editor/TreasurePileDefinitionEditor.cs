@@ -2,20 +2,32 @@
 using UnityEditor;
 using UnityEngine;
 
+[CanEditMultipleObjects]
 [CustomEditor( typeof( TreasurePileDefinition ) )]
 public class TreasurePileDefinitionEditor : Editor
 {
 	public override void OnInspectorGUI()
 	{
-		TreasurePileDefinition definition = (TreasurePileDefinition)target;
+		if ( targets.Length == 1 )
+		{
+			TreasurePileDefinition definition = (TreasurePileDefinition)target;
 
-		EditorGUILayout.LabelField( "Contents", EditorStyles.boldLabel );
-		DrawContentsSummary( definition );
+			EditorGUILayout.LabelField( "Contents", EditorStyles.boldLabel );
+			DrawContentsSummary( definition );
 
-		if ( GUILayout.Button( "Open Contents Editor" ) )
-			TreasurePileContentsWindow.Open( definition );
+			if ( GUILayout.Button( "Open Contents Editor" ) )
+				TreasurePileContentsWindow.Open( definition );
 
-		EditorGUILayout.Space( 8f );
+			EditorGUILayout.Space( 8f );
+		}
+		else
+		{
+			EditorGUILayout.HelpBox(
+				$"Editing {targets.Length} TreasurePileDefinitions. Shared fields below apply to all selected assets.",
+				MessageType.Info );
+			EditorGUILayout.Space( 4f );
+		}
+
 		DrawDefaultInspector();
 	}
 

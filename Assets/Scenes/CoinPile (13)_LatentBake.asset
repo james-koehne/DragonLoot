@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
   authoredLayoutSeed: 128375
   effectivePileSeed: 285811098
-  heightFingerprint: 693762485
-  contentsFingerprint: 1717855197
+  heightFingerprint: -1864762955
+  contentsFingerprint: -256690305
   sourceDefinitionName: TreasurePileWideDefinition
   volumeMaxAttempts: 24
   usedSpatialHash: 1
@@ -2220,11 +2220,11 @@ MonoBehaviour:
     boundsCenter: {x: 3.5974889, y: 0.6568589, z: 36.283623}
     boundsSize: {x: 0.8515522, y: 0.78691477, z: 0.8354341}
   - definition: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
-    localPos: {x: -0.13266374, y: 1.7516443, z: -20.846867}
-    localRot: {x: 0.22129291, y: 0.6120641, z: -0.061138876, w: -0.7567489}
+    localPos: {x: 15.245885, y: 1.4906529, z: 33.848778}
+    localRot: {x: -0.04793202, y: 0.5121736, z: 0.22201633, w: -0.8283052}
     scale: 2
-    boundsCenter: {x: -0.13266374, y: 1.7516443, z: -20.846867}
-    boundsSize: {x: 0.79502136, y: 0.8522368, z: 0.82975227}
+    boundsCenter: {x: 15.245885, y: 1.4906529, z: 33.848778}
+    boundsSize: {x: 0.87108994, y: 0.8296933, z: 0.8869107}
   - definition: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
     localPos: {x: 8.220266, y: 4.452309, z: 34.025463}
     localRot: {x: 0.057364576, y: 0.65964997, z: -0.10625997, w: -0.7418086}
@@ -2328,11 +2328,11 @@ MonoBehaviour:
     boundsCenter: {x: 8.291753, y: 0.8966026, z: -25.593523}
     boundsSize: {x: 0.89332616, y: 0.8925798, z: 0.8482268}
   - definition: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
-    localPos: {x: 14.885992, y: 1.589139, z: 33.51467}
-    localRot: {x: 0.12939063, y: 0.1819541, z: 0.09575111, w: -0.9700425}
+    localPos: {x: -1.5891334, y: 2.3089283, z: -16.853136}
+    localRot: {x: 0.020398906, y: 0.49408168, z: -0.08404672, w: 0.865103}
     scale: 2
-    boundsCenter: {x: 14.885992, y: 1.589139, z: 33.51467}
-    boundsSize: {x: 0.83561134, y: 0.79409283, z: 0.84270835}
+    boundsCenter: {x: -1.5891334, y: 2.3089283, z: -16.853136}
+    boundsSize: {x: 0.85085946, y: 0.7364588, z: 0.8117936}
   - definition: {fileID: 11400000, guid: d5f9ecb0b116e5745b3959de1182f62b, type: 2}
     localPos: {x: -1.2513288, y: 3.163075, z: 17.525127}
     localRot: {x: 0.0077942535, y: 0.9869629, z: 0.03514374, w: 0.15687045}

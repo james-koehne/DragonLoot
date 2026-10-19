@@ -34,7 +34,9 @@ public abstract class InteractableBase : MonoBehaviour, IInteractable
 
 	public virtual bool CanInteract( PlayerController player )
 	{
-		return IsAvailable && player != null;
+		if ( !IsAvailable || player == null )
+			return false;
+		return ObjectiveUnlockGate.IsUnlockedFor( this );
 	}
 
 	public abstract void Interact( PlayerController player );

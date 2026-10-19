@@ -47,6 +47,8 @@ public class CoinSortingHopper : MonoBehaviour, ITreasureOwner, ITreasurePlaceme
 	{
 		if ( station == null || item == null )
 			return false;
+		if ( !ObjectiveUnlockGate.IsUnlockedFor( this ) )
+			return false;
 		if ( station.IsRepositioning )
 			return false;
 		if ( !GroundCoinStack.IsGroundStackableCoin( item ) )

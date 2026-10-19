@@ -140,6 +140,7 @@ public class WorldEventSystem : MonoBehaviour
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Subscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
+		EventBus.Subscribe<BuildableCompletedEvent>( OnBuildableCompleted );
 		_subscribed = true;
 	}
 
@@ -150,7 +151,13 @@ public class WorldEventSystem : MonoBehaviour
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
 		EventBus.Unsubscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
+		EventBus.Unsubscribe<BuildableCompletedEvent>( OnBuildableCompleted );
 		_subscribed = false;
+	}
+
+	void OnBuildableCompleted( BuildableCompletedEvent evt )
+	{
+		EvaluateAll();
 	}
 
 	void OnVolumeEntered( VolumeEnteredEvent evt )
@@ -246,6 +253,8 @@ public class WorldEventSystem : MonoBehaviour
 				return IsWorldEventCompleted( condition.targetId );
 			case WorldEventConditionType.ObjectiveCompleted:
 				return IsRequiredObjectiveCompleted( condition.targetId );
+			case WorldEventConditionType.BuildableCompleted:
+				return IsRequiredBuildableCompleted( condition.targetId );
 			default:
 				return false;
 		}
@@ -258,6 +267,30 @@ public class WorldEventSystem : MonoBehaviour
 
 		ObjectiveSystem objectives = ObjectiveSystem.Instance;
 		return objectives != null && objectives.IsCompleted( objectiveId );
+	}
+
+	static bool IsRequiredBuildableCompleted( string buildablePersistenceId )
+	{
+		if ( string.IsNullOrEmpty( buildablePersistenceId ) )
+			return false;
+
+		IReadOnlyList<BuildableObject> active = BuildableObject.Active;
+		for ( int i = 0; i < active.Count; i++ )
+		{
+			BuildableObject buildable = active[ i ];
+			if ( buildable == null || !buildable.IsBuilt )
+				continue;
+			if ( buildable.ResolvePersistenceId() == buildablePersistenceId )
+				return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>True when the event has already fired this session or in save progress.</summary>
+	public bool HasEventFired( string eventId )
+	{
+		return HasFired( eventId );
 	}
 
 	/// <summary>True when the event has fired and its action sequence is no longer running.</summary>
@@ -541,7 +574,35 @@ public class WorldEventSystem : MonoBehaviour
 				BrakePlayerMovement( action );
 				BeginDurationWait( sequence, action, Mathf.Max( 0f, action.playerBrakeDuration ) );
 				break;
+			case WorldEventActionType.StartFairyGuide:
+				StartFairyGuide( action );
+				break;
+			case WorldEventActionType.StartFairyDelivery:
+				StartFairyDelivery( action );
+				break;
 		}
+	}
+
+	static void StartFairyGuide( WorldEventAction action )
+	{
+		if ( action == null || string.IsNullOrEmpty( action.markerTargetId ) )
+		{
+			Debug.LogWarning( "WorldEventSystem: StartFairyGuide missing markerTargetId." );
+			return;
+		}
+
+		FairyHelper.StartGuideToMarker( action.markerTargetId );
+	}
+
+	static void StartFairyDelivery( WorldEventAction action )
+	{
+		if ( action == null || string.IsNullOrEmpty( action.addressableKey ) )
+		{
+			Debug.LogWarning( "WorldEventSystem: StartFairyDelivery missing addressableKey (item payload)." );
+			return;
+		}
+
+		FairyHelper.StartDelivery( action.addressableKey );
 	}
 
 	void StartDialogueAction( WorldEventAction action, RunningActionSequence sequence )

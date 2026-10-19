@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_COIN_PILE_LIGHTING_INCLUDED
 #define DRAGONLOOT_COIN_PILE_LIGHTING_INCLUDED
 
-#include "../Stylized/StylizedLightingCommon.hlsl"
+#include "Packages/com.dragonloot.stylized-rendering/Runtime/Shaders/Stylized/StylizedLightingCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 #define COIN_PILE_FORCE_LOD_DITHER
 #include "CoinPileLodDither.hlsl"

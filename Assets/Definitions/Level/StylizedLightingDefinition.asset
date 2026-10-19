@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c48e51e92be38b940a96cd4667bbe7d0, type: 3}
   m_Name: StylizedLightingDefinition
-  m_EditorClassIdentifier: Assembly-CSharp::StylizedLightingDefinition
+  m_EditorClassIdentifier: DragonLoot.StylizedRendering::StylizedLightingDefinition
   falloffExponent: 3
   falloffEdgeSoftness: 0.25
   diffuseWrap: 0.4

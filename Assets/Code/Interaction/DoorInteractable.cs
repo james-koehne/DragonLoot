@@ -45,6 +45,7 @@ public class DoorInteractable : InteractableBase
 	bool startsUnlocked;
 
 	[SerializeField]
+	[Tooltip( "Objective id that must be completed before this door unlocks (e.g. obj_workshop_access). While locked, interact still plays locked shake/SFX. Do not use ObjectiveUnlockGate on doors — that blocks interaction entirely." )]
 	string unlockQuestId;
 
 	[SerializeField]
@@ -92,6 +93,7 @@ public class DoorInteractable : InteractableBase
 	void OnEnable()
 	{
 		EventBus.Subscribe<DoorUnlockedEvent>( OnDoorUnlocked );
+		EventBus.Subscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		RestoreFromSave();
 		EvaluateUnlockState();
 		RefreshInteractionName();
@@ -100,6 +102,7 @@ public class DoorInteractable : InteractableBase
 	void OnDisable()
 	{
 		EventBus.Unsubscribe<DoorUnlockedEvent>( OnDoorUnlocked );
+		EventBus.Unsubscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		StopActiveTransitionFeedback();
 		StopLockedFeedback();
 	}
@@ -127,7 +130,8 @@ public class DoorInteractable : InteractableBase
 
 	public override bool CanInteract( PlayerController player )
 	{
-		if ( !base.CanInteract( player ) || player == null || IsTransitioning )
+		// Skip ObjectiveUnlockGate: doors stay interactable while Locked so locked shake/SFX can play.
+		if ( !IsAvailable || player == null || IsTransitioning )
 			return false;
 
 		return state == DoorState.Locked || state == DoorState.UnlockedClosed || state == DoorState.Open;
@@ -181,6 +185,16 @@ public class DoorInteractable : InteractableBase
 			return;
 
 		UnlockFromEvent();
+	}
+
+	void OnObjectiveCompleted( ObjectiveCompletedEvent evt )
+	{
+		if ( string.IsNullOrEmpty( unlockQuestId ) )
+			return;
+		if ( evt.ObjectiveId != unlockQuestId )
+			return;
+
+		EvaluateUnlockState();
 	}
 
 	bool MatchesUnlockEvent( string eventDoorId )
@@ -275,8 +289,11 @@ public class DoorInteractable : InteractableBase
 
 	bool IsQuestUnlocked()
 	{
-		// Quest gates removed; previously quest-gated doors stay unlocked.
-		return !string.IsNullOrEmpty( unlockQuestId );
+		if ( string.IsNullOrEmpty( unlockQuestId ) )
+			return false;
+
+		ObjectiveSystem objectives = ObjectiveSystem.Instance;
+		return objectives != null && objectives.IsCompleted( unlockQuestId );
 	}
 
 	void BeginOpen()

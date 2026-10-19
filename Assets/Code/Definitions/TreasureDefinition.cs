@@ -132,8 +132,9 @@ public class TreasureDefinition : ScriptableObject
 	[Min( 0f )]
 	public float coinThickness = 0.04f;
 
-	[Tooltip( "Cells this treasure occupies on a minecart cargo grid or mixed display table (X = columns, Y = rows). Minimum 1×1. Coins are always treated as 1×1 on mixed tables." )]
-	public Vector2Int cartGridSize = Vector2Int.one;
+	[Tooltip( "Cells this treasure occupies on storage grids (mixed display tables, minecart cargo, and similar). X = columns, Y = rows. Minimum 1×1. Coins are always treated as 1×1 on mixed tables." )]
+	[FormerlySerializedAs( "cartGridSize" )]
+	public Vector2Int storageGridSize = Vector2Int.one;
 	[Header( "Audio" )]
 	[Tooltip( "Random one-shots when this treasure is picked up into the hand." )]
 	public AudioClip[] pickupClips;
@@ -227,9 +228,9 @@ public class TreasureDefinition : ScriptableObject
 		return Mathf.Max( 0f, globalDefault );
 	}
 
-	public Vector2Int GetCartGridSize()
+	public Vector2Int GetStorageGridSize()
 	{
-		return new Vector2Int( Mathf.Max( 1, cartGridSize.x ), Mathf.Max( 1, cartGridSize.y ) );
+		return new Vector2Int( Mathf.Max( 1, storageGridSize.x ), Mathf.Max( 1, storageGridSize.y ) );
 	}
 
 	/// <summary>
@@ -329,7 +330,7 @@ public class TreasureDefinition : ScriptableObject
 		physicsStabilizationDelay = Mathf.Max( 0f, physicsStabilizationDelay );
 		pickupRadius = Mathf.Max( 0.01f, pickupRadius );
 		coinThickness = Mathf.Max( 0f, coinThickness );
-		cartGridSize = new Vector2Int( Mathf.Max( 1, cartGridSize.x ), Mathf.Max( 1, cartGridSize.y ) );
+		storageGridSize = new Vector2Int( Mathf.Max( 1, storageGridSize.x ), Mathf.Max( 1, storageGridSize.y ) );
 	}
 
 	Vector3 GetCategoryWorldScale()

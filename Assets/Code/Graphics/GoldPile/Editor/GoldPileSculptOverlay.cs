@@ -9,6 +9,8 @@ using UnityEngine;
 [Overlay( defaultDisplay = true )]
 sealed class GoldPileSculptOverlay : IMGUIOverlay, ITransientOverlay
 {
+	Vector2 _scroll;
+
 	public bool visible => GoldPileSculptToolContext.IsActive && !Application.isPlaying;
 
 	public GoldPileSculptOverlay()
@@ -27,6 +29,11 @@ sealed class GoldPileSculptOverlay : IMGUIOverlay, ITransientOverlay
 		TreasurePileVisual visual = GoldPileSculptToolContext.ResolveVisual();
 		GoldPileEditorBrushMode mode = GoldPileSculptSettings.BrushMode;
 
+		_scroll = EditorGUILayout.BeginScrollView( _scroll, GUILayout.Width( 320f ), GUILayout.Height( 420f ) );
+
+		GoldPileProceduralGenerator.DrawControls( visual );
+
+		EditorGUILayout.Space( 8f );
 		EditorGUILayout.LabelField( "Brush", EditorStyles.boldLabel );
 		EditorGUILayout.LabelField( "Mode", mode.ToString() );
 		GoldPileSculptSettings.DrawModeControls( mode );
@@ -48,9 +55,9 @@ sealed class GoldPileSculptOverlay : IMGUIOverlay, ITransientOverlay
 				EditorUtility.SetDirty( visual );
 			}
 
-			if ( GUILayout.Button( "Reset To Mound" ) )
+			if ( GUILayout.Button( "Reset To Empty" ) )
 			{
-				Undo.RecordObject( visual, "Reset Gold Pile Mound" );
+				Undo.RecordObject( visual, "Reset Gold Pile Empty" );
 				visual.ResetAuthoredToEmpty();
 				GoldPileSculptToolContext.Painter.RebuildPreview( visual );
 				EditorUtility.SetDirty( visual );
@@ -82,8 +89,11 @@ sealed class GoldPileSculptOverlay : IMGUIOverlay, ITransientOverlay
 					visual.HasAuthoredHeight
 						? $"Authored: {visual.AuthoredResolution}²  rev {visual.AuthoredRevision}"
 						: "Authored: (none — preview seeds a mound)" );
+				TreasurePileVisualEditor.DrawCoinInventoryStats( visual );
 			}
 		}
+
+		EditorGUILayout.EndScrollView();
 	}
 }
 #endif

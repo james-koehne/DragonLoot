@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
   authoredLayoutSeed: 165665
   effectivePileSeed: 1891572984
-  heightFingerprint: -662228639
-  contentsFingerprint: -2014535068
+  heightFingerprint: 956772705
+  contentsFingerprint: -2125260622
   sourceDefinitionName: TreasurePileGiganticDefinition
   volumeMaxAttempts: 24
   usedSpatialHash: 1

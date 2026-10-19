@@ -22,7 +22,7 @@ MonoBehaviour:
   wheelRadius: 0.21
   blockingHalfLength: 1.2
   trackSnapRadius: 4
-  junctionApproachRadius: 2.5
+  junctionApproachRadius: 5
   junctionLookMinAlign: 0.15
   attachPlayerWhenStanding: 1
   riderSpeedMultiplier: 2

@@ -52,6 +52,9 @@ public class HoverOutlineVisualSettings
 	[Range( 0f, 1f )]
 	public float pulseAmount = 0.1f;
 
+	[Tooltip( "When enabled, outline mask is depth-tested against scene geometry (no through-wall outline)." )]
+	public bool respectSceneDepth = false;
+
 	public static HoverOutlineVisualSettings DefaultPickable()
 	{
 		HoverOutlineVisualSettings settings = new HoverOutlineVisualSettings();
@@ -68,6 +71,7 @@ public class HoverOutlineVisualSettings
 		settings.normalEdgeWeight = 1f;
 		settings.pulseSpeed = 1.1f;
 		settings.pulseAmount = 0.1f;
+		settings.respectSceneDepth = false;
 		return settings;
 	}
 
@@ -87,6 +91,7 @@ public class HoverOutlineVisualSettings
 		settings.normalEdgeWeight = 1f;
 		settings.pulseSpeed = 0.85f;
 		settings.pulseAmount = 0.12f;
+		settings.respectSceneDepth = false;
 		return settings;
 	}
 
@@ -106,6 +111,7 @@ public class HoverOutlineVisualSettings
 		settings.normalEdgeWeight = 1f;
 		settings.pulseSpeed = 1.35f;
 		settings.pulseAmount = 0.14f;
+		settings.respectSceneDepth = true;
 		return settings;
 	}
 
@@ -125,6 +131,7 @@ public class HoverOutlineVisualSettings
 		settings.normalEdgeWeight = 1f;
 		settings.pulseSpeed = 1.2f;
 		settings.pulseAmount = 0.16f;
+		settings.respectSceneDepth = true;
 		return settings;
 	}
 
@@ -169,7 +176,8 @@ public class HoverOutlineVisualSettings
 			depthNormalThresholdScale = depthNormalThresholdScale,
 			normalEdgeWeight = normalEdgeWeight,
 			pulseSpeed = pulseSpeed,
-			pulseAmount = pulseAmount
+			pulseAmount = pulseAmount,
+			respectSceneDepth = respectSceneDepth
 		};
 	}
 

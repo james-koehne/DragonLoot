@@ -262,7 +262,7 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		EnsureDefaultUpgradeLevel();
 		SyncHopperStackCapacity();
-		if ( !_isRepositioning )
+		if ( !_isRepositioning && ObjectiveUnlockGate.IsUnlockedFor( this ) )
 		{
 			TickReserve( Time.deltaTime );
 			TickProcess( Time.deltaTime );
@@ -1265,6 +1265,8 @@ public class CoinSortingStation : MonoBehaviour
 	public bool TryAbsorbStackIfFits( GroundCoinStack stack )
 	{
 		if ( stack == null || stack.Count <= 0 || IsHopperStack( stack ) )
+			return false;
+		if ( !ObjectiveUnlockGate.IsUnlockedFor( this ) )
 			return false;
 		if ( !HasRoomFor( stack.Count ) )
 			return false;

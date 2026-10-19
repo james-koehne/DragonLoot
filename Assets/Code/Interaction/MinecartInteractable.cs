@@ -272,7 +272,18 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 	public float TrackSnapRadius => definition != null ? definition.trackSnapRadius : 4f;
 
-	public float JunctionApproachRadius => definition != null ? Mathf.Max( 0.1f, definition.junctionApproachRadius ) : 2.5f;
+	public float JunctionApproachRadius
+	{
+		get
+		{
+			float configured = definition != null ? Mathf.Max( 0.1f, definition.junctionApproachRadius ) : 2.5f;
+			// Approach must start before the mesh cut so A/D can commit and board the ride.
+			MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+			if ( graph != null )
+				configured = Mathf.Max( configured, graph.JunctionEntryOffset + 1.5f );
+			return configured;
+		}
+	}
 
 	public float JunctionSteerMinAlign => definition != null ? Mathf.Clamp01( definition.junctionLookMinAlign ) : 0.15f;
 
@@ -890,7 +901,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			return false;
 
 		TreasureDefinition def = item.Definition;
-		Vector2Int footprint = def.GetCartGridSize();
+		Vector2Int footprint = def.GetStorageGridSize();
 		CargoStack stack = _cellStacks[ ox, oy ];
 		if ( stack == null )
 		{
@@ -2031,32 +2042,33 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 		graph.BuildExits( junctionIndex, track, _distanceAlongTrack, sign, JunctionExitBuffer );
 
-		// Auto routes may need opposite-approach exits when bake intoTravelSign is skewed.
-		// Player steer must not — those exits resolve to ride paths whose fromDistance is
-		// behind travel, so TryPrepareJunctionTransfer never transfers.
-		if ( _autoMoving )
+		// Opposite-approach exits cover bake intoTravelSign skew. Auto always merges them;
+		// player only keeps ones whose ride entry is still reachable (ahead / near-cut snap).
+		graph.BuildExits( junctionIndex, track, _distanceAlongTrack, -sign, JunctionExitExtraBuffer );
+		for ( int i = 0; i < JunctionExitExtraBuffer.Count; i++ )
 		{
-			graph.BuildExits( junctionIndex, track, _distanceAlongTrack, -sign, JunctionExitExtraBuffer );
-			for ( int i = 0; i < JunctionExitExtraBuffer.Count; i++ )
+			MinecartJunctionExit exit = JunctionExitExtraBuffer[ i ];
+			bool exists = false;
+			for ( int j = 0; j < JunctionExitBuffer.Count; j++ )
 			{
-				MinecartJunctionExit exit = JunctionExitExtraBuffer[ i ];
-				bool exists = false;
-				for ( int j = 0; j < JunctionExitBuffer.Count; j++ )
-				{
-					MinecartJunctionExit existing = JunctionExitBuffer[ j ];
-					if ( existing.track != exit.track )
-						continue;
-					if ( Mathf.Abs( existing.distance - exit.distance ) > 0.05f )
-						continue;
-					if ( existing.travelSign != exit.travelSign )
-						continue;
-					exists = true;
-					break;
-				}
-
-				if ( !exists )
-					JunctionExitBuffer.Add( exit );
+				MinecartJunctionExit existing = JunctionExitBuffer[ j ];
+				if ( existing.track != exit.track )
+					continue;
+				if ( Mathf.Abs( existing.distance - exit.distance ) > 0.05f )
+					continue;
+				if ( existing.travelSign != exit.travelSign )
+					continue;
+				exists = true;
+				break;
 			}
+
+			if ( exists )
+				continue;
+
+			if ( !_autoMoving && !IsOppositeApproachExitReachable( graph, junctionIndex, sign, exit ) )
+				continue;
+
+			JunctionExitBuffer.Add( exit );
 		}
 
 		if ( JunctionExitBuffer.Count == 0 )
@@ -2358,6 +2370,43 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		return true;
 	}
 
+	bool IsOppositeApproachExitReachable( MinecartJunctionGraph graph, int junctionIndex, int travelSign, MinecartJunctionExit exit )
+	{
+		if ( graph == null || track == null || exit.track == null )
+			return false;
+
+		float arrivalPortDistance;
+		if ( !graph.TryGetPortDistance( track, junctionIndex, _distanceAlongTrack, out arrivalPortDistance ) )
+			arrivalPortDistance = _distanceAlongTrack;
+
+		MinecartJunctionRidePath ridePath;
+		if ( !graph.TryFindRidePath( junctionIndex, track, arrivalPortDistance, travelSign, exit.track, exit.distance, exit.travelSign, out ridePath )
+		     && !graph.TryFindRidePath( junctionIndex, track, arrivalPortDistance, -travelSign, exit.track, exit.distance, exit.travelSign, out ridePath ) )
+			return false;
+
+		return IsRideEntryReachable( ridePath.fromDistance, travelSign );
+	}
+
+	bool IsRideEntryReachable( float rideEntryDistance, int travelSign )
+	{
+		if ( track == null )
+			return false;
+
+		float toEntry = track.SignedAlong( _distanceAlongTrack, rideEntryDistance );
+		float absToEntry = Mathf.Abs( toEntry );
+		if ( absToEntry <= 0.05f )
+			return true;
+
+		bool ahead = toEntry * travelSign > 0.00001f;
+		if ( ahead )
+			return true;
+
+		// Past the cut toward the port center — still board while within the mesh gap.
+		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
+		float snapPast = graph != null ? Mathf.Max( 1.25f, graph.JunctionEntryOffset ) : 1.25f;
+		return absToEntry <= snapPast;
+	}
+
 	bool TryPrepareJunctionTransfer( int travelSign, ref float step, out bool transferred, out float leftoverAfterTransfer, out float junctionDistance )
 	{
 		transferred = false;
@@ -2370,27 +2419,31 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( graph == null )
 			return false;
 
-		// Same-port through continue stays on the spline — no ride transfer.
-		if ( _committedExitTrack == track
-		     && graph.IsSamePortExit( track, _committedJunctionId, _distanceAlongTrack, _committedExitDistance ) )
-			return false;
-
 		float arrivalPortDistance;
 		if ( !graph.TryGetPortDistance( track, _committedJunctionId, _distanceAlongTrack, out arrivalPortDistance ) )
 			arrivalPortDistance = _distanceAlongTrack;
 
 		MinecartJunctionRidePath ridePath;
-		if ( !graph.TryFindRidePath( _committedJunctionId, track, arrivalPortDistance, travelSign, _committedExitTrack, _committedExitDistance, _committedExitTravelSign, out ridePath )
-		     && !graph.TryFindRidePath( _committedJunctionId, track, arrivalPortDistance, -travelSign, _committedExitTrack, _committedExitDistance, _committedExitTravelSign, out ridePath ) )
+		bool hasRide = graph.TryFindRidePath( _committedJunctionId, track, arrivalPortDistance, travelSign, _committedExitTrack, _committedExitDistance, _committedExitTravelSign, out ridePath )
+			|| graph.TryFindRidePath( _committedJunctionId, track, arrivalPortDistance, -travelSign, _committedExitTrack, _committedExitDistance, _committedExitTravelSign, out ridePath );
+
+		// Same-port through with no baked ride stays on the spline. When a through ride exists
+		// (cut→cut across the mesh gap), board it like auto carts / the network pathfinder.
+		if ( !hasRide )
+		{
+			if ( _committedExitTrack == track
+			     && graph.IsSamePortExit( track, _committedJunctionId, _distanceAlongTrack, _committedExitDistance ) )
+				return false;
+
 			return false;
+		}
 
 		junctionDistance = ridePath.fromDistance;
 
 		float toJunction = track.SignedAlong( _distanceAlongTrack, junctionDistance );
 		float absToJunction = Mathf.Abs( toJunction );
-		// Auto carts often arrive exactly on the leg target (sep≈0). Still allow the transfer
-		// when we are on top of the ride entry instead of requiring a remaining approach delta.
-		if ( _autoMoving && _autoForcedExitValid && absToJunction <= 0.05f )
+		// On top of the ride entry (auto leg targets and player cut approach both hit this).
+		if ( absToJunction <= 0.05f )
 		{
 			step = 0f;
 			leftoverAfterTransfer = 0f;
@@ -2398,11 +2451,11 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			return true;
 		}
 
-		// Approach is measured to the port center, but ride entry is the bake cut (~2.5m
-		// out). Carts often enter the approach zone already slightly past the cut — snap on.
-		const float SnapPastEpsilon = 1.25f;
+		// Approach is measured to the port center, but ride entry is the bake cut.
+		// Carts often enter the approach zone already slightly past the cut — snap on.
+		float snapPastEpsilon = Mathf.Max( 1.25f, graph.JunctionEntryOffset );
 		bool ahead = toJunction * travelSign > 0.00001f;
-		bool snapPast = !ahead && absToJunction <= SnapPastEpsilon;
+		bool snapPast = !ahead && absToJunction <= snapPastEpsilon;
 		if ( !ahead && !snapPast )
 			return false;
 
@@ -3713,7 +3766,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( def == null || _cellStacks == null )
 			return false;
 
-		Vector2Int footprint = def.GetCartGridSize();
+		Vector2Int footprint = def.GetStorageGridSize();
 		int cols = GridColumns;
 		int rowCount = GridRows;
 
@@ -3859,7 +3912,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( def == null && item != null )
 			def = item.Definition;
 
-		Vector2Int footprint = def != null ? def.GetCartGridSize() : Vector2Int.one;
+		Vector2Int footprint = def != null ? def.GetStorageGridSize() : Vector2Int.one;
 		Vector3 local = DisplayTableSlotLayout.GetSlotLocalPosition( SlotIndex( ox, oy ), GridRows, GridColumns, CellSpacing, margin );
 		if ( footprint.x > 1 || footprint.y > 1 )
 		{
@@ -4325,7 +4378,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		EnsureCargoRoot();
 		Vector3 local = cargoRoot.InverseTransformPoint( worldPoint );
 		local.y = 0f;
-		Vector2Int footprint = def.GetCartGridSize();
+		Vector2Int footprint = def.GetStorageGridSize();
 		int cols = GridColumns;
 		int rowCount = GridRows;
 		float best = float.MaxValue;
@@ -4383,7 +4436,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			return true;
 		}
 
-		if ( !IsRectangleFree( originX, originY, def.GetCartGridSize() ) )
+		if ( !IsRectangleFree( originX, originY, def.GetStorageGridSize() ) )
 			return false;
 
 		stackIndex = 0;

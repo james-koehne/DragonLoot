@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
   authoredLayoutSeed: 128375
   effectivePileSeed: 285811098
-  heightFingerprint: 693762485
-  contentsFingerprint: -1190981249
+  heightFingerprint: -1864762955
+  contentsFingerprint: 1445925330
   placementFingerprint: 244014156
   maxVisibleTotal: 32768
   steadyVisibleBudget: 26214
@@ -2133,6 +2133,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
+    localPos: {x: 5.0660663, y: 0.05, z: 38.62238}
+    localRot: {x: 0.1047172, y: 0.49549693, z: 0.043509725, w: 0.86117595}
+    scale: 0.23874311
+    embedDepth: 0.025144856
+    placeSurfaceHeight: 0.07514486
+    probeRadius: 0.120963946
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
     localPos: {x: -0.60255355, y: 1.4490151, z: -13.498465}
     localRot: {x: 0.30113524, y: 0.6508202, z: -0.18601787, w: 0.67167556}
     scale: 0.2594512
@@ -2659,6 +2669,16 @@ MonoBehaviour:
     embedDepth: 0.041386247
     placeSurfaceHeight: 1.0714982
     probeRadius: 0.13105725
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: 17.295252, y: 0.05, z: 40.777622}
+    localRot: {x: 0.055026863, y: 0.97288203, z: 0.22344424, w: -0.023349188}
+    scale: 0.24115473
+    embedDepth: 0.03687721
+    placeSurfaceHeight: 0.08687721
+    probeRadius: 0.12218584
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
@@ -3293,10 +3313,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 16.969255, y: 0.1, z: 40.845665}
+    localPos: {x: 16.969255, y: 0.06881639, z: 40.845665}
     localRot: {x: 0.25332135, y: 0.2763127, z: 0.016310481, w: 0.9269378}
     scale: 0.23497522
-    embedDepth: 0.006412424
+    embedDepth: 0.037596032
     placeSurfaceHeight: 0.106412426
     probeRadius: 0.11905487
     fixedVolumePose: 0
@@ -5523,10 +5543,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 7.4246, y: 0.1, z: 39.84507}
+    localPos: {x: 7.4246, y: 0.060023516, z: 39.84507}
     localRot: {x: -0.14130372, y: 0.7525336, z: 0.11248461, w: -0.6333037}
     scale: 0.2513258
-    embedDepth: 0.001
+    embedDepth: 0.040212125
     placeSurfaceHeight: 0.10023564
     probeRadius: 0.1273392
     fixedVolumePose: 0
@@ -6893,6 +6913,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
+    localPos: {x: 14.693524, y: 0.051255584, z: 41.02077}
+    localRot: {x: 0.12483489, y: 0.22636753, z: 0.090134494, w: 0.9617951}
+    scale: 0.23161593
+    embedDepth: 0.037058547
+    placeSurfaceHeight: 0.08831413
+    probeRadius: 0.11735281
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
     localPos: {x: -2.3223505, y: 2.3977838, z: 6.3085337}
     localRot: {x: 0.27406445, y: 0.9346167, z: 0.1651857, w: -0.15522264}
     scale: 0.25803605
@@ -7003,11 +7033,11 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 3.1804607, y: 0.23658991, z: -25.109005}
-    localRot: {x: 0.08403162, y: 0.40850735, z: 0.250834, w: 0.8735804}
+    localPos: {x: 10.132319, y: 0.05, z: -40.233055}
+    localRot: {x: -0.19069302, y: 0.40836027, z: -0.072184615, w: 0.8897569}
     scale: 0.24338286
-    embedDepth: 0.038941264
-    placeSurfaceHeight: 0.27553117
+    embedDepth: 0.013588514
+    placeSurfaceHeight: 0.063588515
     probeRadius: 0.12331476
     fixedVolumePose: 0
     coinVisual: 1
@@ -7973,10 +8003,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 1.5268706, y: 0.1, z: -29.196384}
+    localPos: {x: 1.5268706, y: 0.093540356, z: -29.196384}
     localRot: {x: -0.23214711, y: 0.9402309, z: 0.027151918, w: 0.2476618}
     scale: 0.26806307
-    embedDepth: 0.03643044
+    embedDepth: 0.042890087
     placeSurfaceHeight: 0.13643044
     probeRadius: 0.13581948
     fixedVolumePose: 0
@@ -9703,10 +9733,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 1.4554619, y: 0.1, z: -29.77455}
+    localPos: {x: 1.4554619, y: 0.08629656, z: -29.77455}
     localRot: {x: -0.012645868, y: 0.025628174, z: -0.17942755, w: -0.98335594}
     scale: 0.25820613
-    embedDepth: 0.027609535
+    embedDepth: 0.041312978
     placeSurfaceHeight: 0.12760954
     probeRadius: 0.13082527
     fixedVolumePose: 0
@@ -10019,6 +10049,16 @@ MonoBehaviour:
     embedDepth: 0.03822601
     placeSurfaceHeight: 1.5001444
     probeRadius: 0.12104975
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: 12.321482, y: 0.05, z: 40.153145}
+    localRot: {x: 0.016702741, y: 0.8467999, z: 0.10562265, w: 0.5210517}
+    scale: 0.24239068
+    embedDepth: 0.01396561
+    placeSurfaceHeight: 0.06396561
+    probeRadius: 0.122812055
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
@@ -11943,6 +11983,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
+    localPos: {x: 3.3475232, y: 0.38360184, z: -25.212013}
+    localRot: {x: -0.37329435, y: 0.8557663, z: 0.100063235, w: -0.34395164}
+    scale: 0.2639954
+    embedDepth: 0.04223928
+    placeSurfaceHeight: 0.42584112
+    probeRadius: 0.13375852
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
     localPos: {x: 12.835963, y: 3.4733245, z: 34.362114}
     localRot: {x: 0.18648422, y: 0.61463565, z: -0.1247998, w: 0.756222}
     scale: 0.24300805
@@ -12453,6 +12503,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
+    localPos: {x: 13.129976, y: 0.05, z: -40.717133}
+    localRot: {x: -0.11621229, y: 0.71665657, z: -0.10748748, w: 0.6792235}
+    scale: 0.26720592
+    embedDepth: 0.0047070086
+    placeSurfaceHeight: 0.05470701
+    probeRadius: 0.1353852
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
     localPos: {x: 12.248778, y: 3.6492214, z: 32.301147}
     localRot: {x: 0.1106826, y: 0.056748923, z: 0.25382674, w: -0.959219}
     scale: 0.23321007
@@ -12559,16 +12619,6 @@ MonoBehaviour:
     embedDepth: 0.037449658
     placeSurfaceHeight: 0.64327073
     probeRadius: 0.11859136
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
-    entryIndex: 0
-    localPos: {x: 17.308867, y: 0.1, z: 40.657528}
-    localRot: {x: -0.06852673, y: 0.7312559, z: 0.22543782, w: -0.6401146}
-    scale: 0.26500073
-    embedDepth: 0.040717326
-    placeSurfaceHeight: 0.14071733
-    probeRadius: 0.13426788
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
@@ -13323,6 +13373,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
+    localPos: {x: 8.133143, y: 0.05, z: -39.68658}
+    localRot: {x: -0.060647655, y: 0.9864077, z: -0.13715495, w: 0.06715792}
+    scale: 0.22513203
+    embedDepth: 0.010420959
+    placeSurfaceHeight: 0.06042096
+    probeRadius: 0.11406762
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
     localPos: {x: 1.2217835, y: 3.2846496, z: 13.726784}
     localRot: {x: 0.06236606, y: 0.60541886, z: -0.1525606, w: 0.77865505}
     scale: 0.27422142
@@ -13793,10 +13853,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 12.758439, y: 0.1, z: -40.57485}
+    localPos: {x: 12.758439, y: 0.08060044, z: -40.57485}
     localRot: {x: 0.11389459, y: 0.81202203, z: -0.12395102, w: -0.5588241}
     scale: 0.24271025
-    embedDepth: 0.01943408
+    embedDepth: 0.03883364
     placeSurfaceHeight: 0.11943408
     probeRadius: 0.12297397
     fixedVolumePose: 0
@@ -13849,6 +13909,16 @@ MonoBehaviour:
     embedDepth: 0.043812037
     placeSurfaceHeight: 2.4703336
     probeRadius: 0.13873902
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: 14.258599, y: 0.05, z: 41.093975}
+    localRot: {x: -0.014567187, y: 0.9521884, z: 0.09694071, w: 0.28935736}
+    scale: 0.2476888
+    embedDepth: 0.0034584142
+    placeSurfaceHeight: 0.053458415
+    probeRadius: 0.12549645
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
@@ -13963,6 +14033,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
+    localPos: {x: 12.221428, y: 0.0583911, z: -40.654343}
+    localRot: {x: -0.13064584, y: 0.7786919, z: -0.16316688, w: 0.59156346}
+    scale: 0.25638306
+    embedDepth: 0.041021287
+    placeSurfaceHeight: 0.09941239
+    probeRadius: 0.12990157
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
     localPos: {x: 13.719926, y: 0.53430516, z: 28.55896}
     localRot: {x: -0.13591892, y: 0.53085625, z: -0.32344833, w: 0.7714266}
     scale: 0.27249074
@@ -14009,6 +14089,16 @@ MonoBehaviour:
     embedDepth: 0.038216114
     placeSurfaceHeight: 2.0372696
     probeRadius: 0.12101849
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: 17.579931, y: 0.09436616, z: 40.557392}
+    localRot: {x: 0.15703103, y: 0.8861945, z: 0.18513367, w: 0.39462125}
+    scale: 0.23452015
+    embedDepth: 0.037523225
+    placeSurfaceHeight: 0.13188939
+    probeRadius: 0.118824296
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
@@ -14373,11 +14463,11 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 8.011943, y: 2.7663703, z: -28.77789}
-    localRot: {x: 0.2788499, y: 0.4990683, z: -0.30239317, w: 0.7627135}
+    localPos: {x: 7.064431, y: 0.05, z: -38.79825}
+    localRot: {x: -0.098126, y: 0.56653124, z: 0.07468561, w: 0.81476116}
     scale: 0.26495934
-    embedDepth: 0.042393446
-    placeSurfaceHeight: 2.8087637
+    embedDepth: 0.012364909
+    placeSurfaceHeight: 0.06236491
     probeRadius: 0.13424692
     fixedVolumePose: 0
     coinVisual: 1
@@ -14589,6 +14679,16 @@ MonoBehaviour:
     embedDepth: 0.040097713
     placeSurfaceHeight: 2.0150325
     probeRadius: 0.12697709
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+    entryIndex: 0
+    localPos: {x: 9.353108, y: 0.05, z: 40.559357}
+    localRot: {x: 0.02340887, y: 0.8107092, z: 0.0008258345, w: 0.58498037}
+    scale: 0.26202857
+    embedDepth: 0.0020233616
+    placeSurfaceHeight: 0.052023362
+    probeRadius: 0.13276199
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
@@ -17053,10 +17153,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
     entryIndex: 0
-    localPos: {x: 8.578117, y: 0.1, z: -39.73222}
+    localPos: {x: 8.578117, y: 0.06787625, z: -39.73222}
     localRot: {x: -0.011103802, y: 0.96675193, z: -0.17780381, w: -0.18344837}
     scale: 0.2575902
-    embedDepth: 0.009090684
+    embedDepth: 0.041214436
     placeSurfaceHeight: 0.109090686
     probeRadius: 0.13051319
     fixedVolumePose: 0
@@ -17523,10 +17623,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
-    localPos: {x: 9.186299, y: 0.1, z: 40.22543}
+    localPos: {x: 9.186299, y: 0.08121687, z: 40.22543}
     localRot: {x: -0.053073656, y: 0.89146465, z: 0.07906157, w: -0.44297102}
     scale: 0.25118914
-    embedDepth: 0.021407135
+    embedDepth: 0.040190265
     placeSurfaceHeight: 0.12140714
     probeRadius: 0.12726997
     fixedVolumePose: 0
@@ -17653,10 +17753,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
-    localPos: {x: 15.513545, y: 0.1, z: 40.97637}
+    localPos: {x: 15.513545, y: 0.08651804, z: 40.97637}
     localRot: {x: 0.18690588, y: 0.009871216, z: 0.024800114, w: 0.98201513}
     scale: 0.24934341
-    embedDepth: 0.026412986
+    embedDepth: 0.039894946
     placeSurfaceHeight: 0.12641299
     probeRadius: 0.1263348
     fixedVolumePose: 0
@@ -17833,10 +17933,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
-    localPos: {x: 6.6640797, y: 0.1, z: 39.318085}
+    localPos: {x: 6.6640797, y: 0.067368016, z: 39.318085}
     localRot: {x: -0.07866131, y: 0.984616, z: 0.13322437, w: -0.08121051}
     scale: 0.22519295
-    embedDepth: 0.0033988878
+    embedDepth: 0.036030874
     placeSurfaceHeight: 0.10339889
     probeRadius: 0.11409848
     fixedVolumePose: 0
@@ -18363,6 +18463,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
+    localPos: {x: 3.3305423, y: 0.19599453, z: -24.876171}
+    localRot: {x: 0.22176549, y: 0.07823056, z: 0.24696118, w: 0.9400585}
+    scale: 0.24381731
+    embedDepth: 0.039010763
+    placeSurfaceHeight: 0.23500529
+    probeRadius: 0.12353489
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
     localPos: {x: 7.5487704, y: 0.8256133, z: -36.843735}
     localRot: {x: -0.22997412, y: 0.09035639, z: 0.2404828, w: 0.9386777}
     scale: 0.25254285
@@ -18883,6 +18993,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
+    localPos: {x: 10.138558, y: 0.05165233, z: 40.21138}
+    localRot: {x: -0.041391812, y: 0.94460404, z: 0.083698586, w: -0.3146494}
+    scale: 0.24349222
+    embedDepth: 0.038958754
+    placeSurfaceHeight: 0.090611085
+    probeRadius: 0.12337017
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
     localPos: {x: -0.8334806, y: 1.5527446, z: -13.082537}
     localRot: {x: 0.2573329, y: 0.90412587, z: -0.05290108, w: 0.33695358}
     scale: 0.27005902
@@ -19213,6 +19333,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
+    localPos: {x: 13.354469, y: 0.05, z: 40.815834}
+    localRot: {x: -0.025277872, y: 0.9721807, z: 0.078190014, w: 0.21934466}
+    scale: 0.25186226
+    embedDepth: 0.0019743182
+    placeSurfaceHeight: 0.05197432
+    probeRadius: 0.12761103
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
     localPos: {x: -0.50149643, y: 3.3660614, z: 12.62963}
     localRot: {x: -0.052926894, y: 0.7842344, z: -0.115834266, w: 0.6072543}
     scale: 0.2436823
@@ -19409,6 +19539,16 @@ MonoBehaviour:
     embedDepth: 0.042378902
     placeSurfaceHeight: 2.8288279
     probeRadius: 0.13420083
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
+    localPos: {x: 9.690772, y: 0.05, z: 40.490208}
+    localRot: {x: 0.014234509, y: 0.80247736, z: 0.053088497, w: 0.5941458}
+    scale: 0.23390704
+    embedDepth: 0.009073332
+    placeSurfaceHeight: 0.059073333
+    probeRadius: 0.11851365
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
@@ -20009,16 +20149,6 @@ MonoBehaviour:
     embedDepth: 0.040076315
     placeSurfaceHeight: 0.68490976
     probeRadius: 0.12690908
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
-    entryIndex: 1
-    localPos: {x: 8.096417, y: 0.1, z: -39.418106}
-    localRot: {x: -0.047286306, y: 0.9274395, z: -0.19462135, w: -0.31582037}
-    scale: 0.2601439
-    embedDepth: 0.030762367
-    placeSurfaceHeight: 0.13076237
-    probeRadius: 0.13180707
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
@@ -20903,10 +21033,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
-    localPos: {x: 11.095006, y: 0.1, z: 39.735783}
+    localPos: {x: 11.095006, y: 0.062695995, z: 39.735783}
     localRot: {x: 0.17179008, y: 0.37291586, z: 0.02287965, w: 0.9115364}
     scale: 0.27435595
-    embedDepth: 0.0065929443
+    embedDepth: 0.04389695
     placeSurfaceHeight: 0.106592946
     probeRadius: 0.1390079
     fixedVolumePose: 0
@@ -23483,6 +23613,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
+    localPos: {x: 7.8438635, y: 0.051625185, z: -39.378494}
+    localRot: {x: 0.028419223, y: 0.8210265, z: -0.11865524, w: -0.5576995}
+    scale: 0.27026013
+    embedDepth: 0.04324162
+    placeSurfaceHeight: 0.094866805
+    probeRadius: 0.13693267
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
     localPos: {x: 0.5340116, y: 0.8831188, z: 19.700977}
     localRot: {x: 0.18921134, y: 0.9049962, z: 0.37841308, w: -0.044547863}
     scale: 0.24998032
@@ -24483,16 +24623,6 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
-    localPos: {x: 14.70496, y: 0.1, z: 40.980495}
-    localRot: {x: -0.09968558, y: 0.34294495, z: 0.0037412052, w: -0.93404365}
-    scale: 0.26137367
-    embedDepth: 0.001
-    placeSurfaceHeight: 0.100299224
-    probeRadius: 0.13243017
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
-    entryIndex: 1
     localPos: {x: -4.718056, y: 2.7110116, z: 4.049141}
     localRot: {x: 0.1534659, y: 0.86051047, z: -0.2645863, w: -0.40738687}
     scale: 0.23708892
@@ -24529,6 +24659,16 @@ MonoBehaviour:
     embedDepth: 0.040008545
     placeSurfaceHeight: 3.0985775
     probeRadius: 0.12669438
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
+    localPos: {x: 11.92112, y: 0.05, z: 39.997604}
+    localRot: {x: 0.023173433, y: 0.86298025, z: 0.066371866, w: 0.5003229}
+    scale: 0.24943487
+    embedDepth: 0.0026432872
+    placeSurfaceHeight: 0.052643288
+    probeRadius: 0.12638114
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
@@ -24763,10 +24903,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
-    localPos: {x: 1.7341752, y: 0.1, z: -31.637547}
+    localPos: {x: 1.7341752, y: 0.09780793, z: -31.637547}
     localRot: {x: -0.17745902, y: 0.576804, z: 0.14595321, w: 0.78390247}
     scale: 0.26211292
-    embedDepth: 0.039745994
+    embedDepth: 0.041938066
     placeSurfaceHeight: 0.139746
     probeRadius: 0.13280472
     fixedVolumePose: 0
@@ -25293,6 +25433,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 1
+    localPos: {x: 9.183122, y: 0.05, z: -40.04669}
+    localRot: {x: -0.0849252, y: 0.9351263, z: -0.16395247, w: 0.3024008}
+    scale: 0.26771623
+    embedDepth: 0.019535352
+    placeSurfaceHeight: 0.06953535
+    probeRadius: 0.13564375
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
     localPos: {x: 8.749629, y: 0.7556397, z: 27.614393}
     localRot: {x: 0.026898481, y: 0.91630864, z: -0.399408, w: -0.011325125}
     scale: 0.23195161
@@ -25319,6 +25469,16 @@ MonoBehaviour:
     embedDepth: 0.041889787
     placeSurfaceHeight: 1.1900725
     probeRadius: 0.13265188
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
+    localPos: {x: 15.004486, y: 0.0700304, z: 40.993988}
+    localRot: {x: -0.12971592, y: 0.29508755, z: 0.027055852, w: -0.94623744}
+    scale: 0.2331522
+    embedDepth: 0.03730435
+    placeSurfaceHeight: 0.10733475
+    probeRadius: 0.1181312
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
@@ -25589,6 +25749,16 @@ MonoBehaviour:
     embedDepth: 0.04029821
     placeSurfaceHeight: 0.2640798
     probeRadius: 0.12761182
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
+    entryIndex: 1
+    localPos: {x: 11.447666, y: 0.05, z: 39.89611}
+    localRot: {x: -0.057641145, y: 0.299143, z: 0.073045336, w: -0.94966066}
+    scale: 0.22630261
+    embedDepth: 0.0073293485
+    placeSurfaceHeight: 0.05732935
+    probeRadius: 0.11466072
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
@@ -25883,22 +26053,22 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
-    localPos: {x: 10.338895, y: 0.12847655, z: -40.077724}
-    localRot: {x: -0.2805236, y: 0.5056613, z: -0.10450872, w: 0.80912995}
-    scale: 0.23013374
-    embedDepth: 0.036821395
-    placeSurfaceHeight: 0.16529794
-    probeRadius: 0.11660183
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    entryIndex: 2
     localPos: {x: 2.1308916, y: 0.22481005, z: 4.512698}
     localRot: {x: -0.09893755, y: 0.12020695, z: 0.15861624, w: -0.97498846}
     scale: 0.23763579
     embedDepth: 0.03802173
     placeSurfaceHeight: 0.26283178
     probeRadius: 0.120402895
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 7.714724, y: 0.05499251, z: 39.993607}
+    localRot: {x: 0.118883, y: 0.67601424, z: 0.13221952, w: 0.7151151}
+    scale: 0.25816447
+    embedDepth: 0.041306313
+    placeSurfaceHeight: 0.09629882
+    probeRadius: 0.13080415
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -25973,10 +26143,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
-    localPos: {x: 7.4284205, y: 0.1, z: -38.981716}
+    localPos: {x: 7.4284205, y: 0.06962899, z: -38.981716}
     localRot: {x: -0.19888793, y: 0.8395169, z: -0.07056277, w: 0.50067544}
     scale: 0.23335908
-    embedDepth: 0.006966442
+    embedDepth: 0.037337452
     placeSurfaceHeight: 0.10696644
     probeRadius: 0.11823602
     fixedVolumePose: 0
@@ -26293,10 +26463,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
-    localPos: {x: 11.931, y: 0.1, z: 39.69623}
+    localPos: {x: 11.931, y: 0.07899508, z: 39.69623}
     localRot: {x: -0.165053, y: 0.5674309, z: 0.041710727, w: -0.8056301}
     scale: 0.23901843
-    embedDepth: 0.017238028
+    embedDepth: 0.03824295
     placeSurfaceHeight: 0.11723803
     probeRadius: 0.121103436
     fixedVolumePose: 0
@@ -28313,16 +28483,6 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
-    localPos: {x: 12.284361, y: 0.1, z: 39.94494}
-    localRot: {x: 0.0029296319, y: 0.8317977, z: 0.14719449, w: 0.5351988}
-    scale: 0.24598235
-    embedDepth: 0.0032349005
-    placeSurfaceHeight: 0.1032349
-    probeRadius: 0.124631844
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    entryIndex: 2
     localPos: {x: 11.38131, y: 1.9974656, z: -37.461735}
     localRot: {x: -0.08609019, y: 0.7641787, z: -0.23828475, w: 0.59316075}
     scale: 0.24447559
@@ -28389,16 +28549,6 @@ MonoBehaviour:
     embedDepth: 0.039801
     placeSurfaceHeight: 1.6093944
     probeRadius: 0.12603712
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    entryIndex: 2
-    localPos: {x: 5.214097, y: 0.1, z: 38.573795}
-    localRot: {x: -0.05548529, y: 0.9534604, z: 0.19283894, w: 0.22505109}
-    scale: 0.2520189
-    embedDepth: 0.0043155774
-    placeSurfaceHeight: 0.10431558
-    probeRadius: 0.12769039
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -28789,6 +28939,16 @@ MonoBehaviour:
     embedDepth: 0.04170966
     placeSurfaceHeight: 0.56085575
     probeRadius: 0.1320814
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 6.397539, y: 0.05470192, z: 39.143703}
+    localRot: {x: -0.030252803, y: 0.94083333, z: 0.1524739, w: 0.30111298}
+    scale: 0.22717936
+    embedDepth: 0.036348697
+    placeSurfaceHeight: 0.09105062
+    probeRadius: 0.11510494
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -29503,6 +29663,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
+    localPos: {x: 13.865028, y: 0.05, z: 40.92852}
+    localRot: {x: 0.0006027617, y: 0.91275024, z: 0.05110191, w: 0.40530875}
+    scale: 0.24265331
+    embedDepth: 0.0153901465
+    placeSurfaceHeight: 0.06539015
+    probeRadius: 0.12294512
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
     localPos: {x: -6.541198, y: 3.9648306, z: 1.5248541}
     localRot: {x: 0.20934503, y: 0.29053444, z: -0.4175798, w: 0.8350998}
     scale: 0.23038551
@@ -29679,6 +29849,16 @@ MonoBehaviour:
     embedDepth: 0.037050486
     placeSurfaceHeight: 1.0270816
     probeRadius: 0.1173273
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 7.108987, y: 0.05, z: 39.796745}
+    localRot: {x: 0.00038103425, y: 0.6510036, z: 0.14892313, w: 0.7443226}
+    scale: 0.26702747
+    embedDepth: 0.016067173
+    placeSurfaceHeight: 0.066067174
+    probeRadius: 0.13529478
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -30763,6 +30943,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
+    localPos: {x: 10.499252, y: 0.075453565, z: -40.199432}
+    localRot: {x: 0.07197749, y: 0.9026992, z: -0.21123163, w: -0.3678787}
+    scale: 0.26830885
+    embedDepth: 0.04292942
+    placeSurfaceHeight: 0.11838298
+    probeRadius: 0.13594401
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
     localPos: {x: 15.727708, y: 2.4491854, z: 34.8868}
     localRot: {x: 0.33552164, y: 0.739734, z: -0.22423123, w: -0.5384599}
     scale: 0.22771972
@@ -31239,6 +31429,16 @@ MonoBehaviour:
     embedDepth: 0.03970623
     placeSurfaceHeight: 4.076078
     probeRadius: 0.1257368
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 11.154882, y: 0.05, z: -40.5968}
+    localRot: {x: -0.004034136, y: 0.9703192, z: -0.12035466, w: -0.20971204}
+    scale: 0.26949733
+    embedDepth: 0.009279512
+    placeSurfaceHeight: 0.059279513
+    probeRadius: 0.13654618
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -32413,11 +32613,11 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
-    localPos: {x: 7.754382, y: 0.1, z: -39.286922}
-    localRot: {x: -0.17364652, y: 0.8313283, z: -0.07746703, w: 0.5222443}
+    localPos: {x: -13.188638, y: 5.163158, z: -2.1467037}
+    localRot: {x: 0.11997646, y: 0.821452, z: 0.20824355, w: 0.5171624}
     scale: 0.25223696
-    embedDepth: 0.0020861775
-    placeSurfaceHeight: 0.10208618
+    embedDepth: 0.040358067
+    placeSurfaceHeight: 5.203516
     probeRadius: 0.12780087
     fixedVolumePose: 0
     coinVisual: 1
@@ -32493,10 +32693,10 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
-    localPos: {x: 10.81876, y: 0.1, z: 39.88155}
+    localPos: {x: 10.81876, y: 0.06563446, z: 39.88155}
     localRot: {x: -0.09851124, y: 0.60760087, z: 0.08575667, w: -0.78343004}
     scale: 0.22819705
-    embedDepth: 0.0021459833
+    embedDepth: 0.036511526
     placeSurfaceHeight: 0.102145985
     probeRadius: 0.115620576
     fixedVolumePose: 0
@@ -32519,6 +32719,16 @@ MonoBehaviour:
     embedDepth: 0.04340172
     placeSurfaceHeight: 3.0357757
     probeRadius: 0.13743974
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 12.805809, y: 0.05, z: 40.540405}
+    localRot: {x: 0.0800225, y: 0.28285608, z: 0.03891517, w: 0.9550259}
+    scale: 0.2743516
+    embedDepth: 0.001
+    placeSurfaceHeight: 0.050821334
+    probeRadius: 0.13900569
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -33029,6 +33239,16 @@ MonoBehaviour:
     embedDepth: 0.037389994
     placeSurfaceHeight: 1.8051294
     probeRadius: 0.11840236
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
+    localPos: {x: 7.986288, y: 0.05, z: 40.26493}
+    localRot: {x: -0.11533447, y: 0.19768053, z: -0.022258595, w: -0.97320336}
+    scale: 0.2502114
+    embedDepth: 0.005316958
+    placeSurfaceHeight: 0.05531696
+    probeRadius: 0.12677458
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
@@ -33613,6 +33833,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
+    localPos: {x: 11.864049, y: 0.05, z: -40.757225}
+    localRot: {x: 0.060606696, y: 0.89456314, z: -0.19392088, w: -0.3980932}
+    scale: 0.26949447
+    embedDepth: 0.010296248
+    placeSurfaceHeight: 0.06029625
+    probeRadius: 0.13654473
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
     localPos: {x: 4.8157644, y: 1.0355669, z: 25.463316}
     localRot: {x: -0.060100958, y: 0.834209, z: -0.31559244, w: 0.44820154}
     scale: 0.23932137
@@ -33953,6 +34183,16 @@ MonoBehaviour:
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
     entryIndex: 2
+    localPos: {x: 6.9747396, y: 0.058194146, z: -38.489014}
+    localRot: {x: -0.003068066, y: 0.48101398, z: -0.16747247, w: -0.8605633}
+    scale: 0.24227254
+    embedDepth: 0.038763605
+    placeSurfaceHeight: 0.09695775
+    probeRadius: 0.1227522
+    fixedVolumePose: 0
+    coinVisual: 1
+  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
+    entryIndex: 2
     localPos: {x: -11.072751, y: 5.631806, z: -2.165782}
     localRot: {x: 0.07275576, y: 0.0067335423, z: 0.09928097, w: 0.99237317}
     scale: 0.2548669
@@ -34129,16 +34369,6 @@ MonoBehaviour:
     embedDepth: 0.039036214
     placeSurfaceHeight: 0.6625179
     probeRadius: 0.12361548
-    fixedVolumePose: 0
-    coinVisual: 1
-  - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}
-    entryIndex: 2
-    localPos: {x: 14.258497, y: 0.1, z: 40.865093}
-    localRot: {x: -0.09971057, y: 0.5871349, z: 0.079457425, w: -0.7993853}
-    scale: 0.26336652
-    embedDepth: 0.012834251
-    placeSurfaceHeight: 0.11283425
-    probeRadius: 0.13343988
     fixedVolumePose: 0
     coinVisual: 1
   - definition: {fileID: 11400000, guid: 816d93a2988dee245b0d8271f84658de, type: 2}

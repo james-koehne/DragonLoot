@@ -1,3 +1,5 @@
+using FeedbackSystem;
+
 using UnityEngine;
 
 /// <summary>
@@ -6,6 +8,9 @@ using UnityEngine;
 /// </summary>
 public class WorldHammerInteractable : InteractableBase
 {
+	[SerializeField]
+	Feedbacks onWorldGlowFeedback;
+
 	bool _taken;
 
 	void Reset()
@@ -17,6 +22,24 @@ public class WorldHammerInteractable : InteractableBase
 	{
 		if ( string.IsNullOrEmpty( InteractionName ) || InteractionName == "Interactable" )
 			SetInteractionName( "Hammer" );
+		if ( onWorldGlowFeedback == null )
+		{
+			Transform glow = transform.Find( "WorldGlowFeedbacks" );
+			if ( glow != null )
+				onWorldGlowFeedback = glow.GetComponent<Feedbacks>();
+		}
+	}
+
+	void OnEnable()
+	{
+		if ( onWorldGlowFeedback != null && !onWorldGlowFeedback.IsPlaying )
+			onWorldGlowFeedback.Play();
+	}
+
+	void OnDisable()
+	{
+		if ( onWorldGlowFeedback != null )
+			onWorldGlowFeedback.Stop();
 	}
 
 	public override bool CanInteract( PlayerController player )
@@ -40,13 +63,5 @@ public class WorldHammerInteractable : InteractableBase
 
 		if ( buildMode.TryTakeWorldHammer( this ) )
 			_taken = true;
-	}
-
-	/// <summary>Called by build mode when the hammer is returned (exit build mode).</summary>
-	public void RestoreToWorld()
-	{
-		_taken = false;
-		if ( !gameObject.activeSelf )
-			gameObject.SetActive( true );
 	}
 }

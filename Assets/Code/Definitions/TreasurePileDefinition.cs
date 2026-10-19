@@ -18,7 +18,7 @@ public class TreasurePileDefinition : ScriptableObject
 	public string displayName = "Treasure Pile";
 
 	[Header( "Coin Contents" )]
-	[Tooltip( "Coin types + inventory counts for dig/pick economy. GPU coin visuals are a separate densify budget (maxVisibleTotal / steady fill), not 1:1 with count." )]
+	[Tooltip( "Coin type refs (Gold/Silver/Copper). Counts are fallback inventory when a pile has no heightmap-authored totals; sculpted piles store counts on TreasurePileVisual. GPU densify budget is maxVisibleTotal." )]
 	public TreasurePileEntry[] coinContents;
 
 	[Header( "Treasure Contents" )]
@@ -53,6 +53,10 @@ public class TreasurePileDefinition : ScriptableObject
 	[Tooltip( "Extra local height above the authored treasure-surface floor used as the loot seating floor." )]
 	[Min( 0f )]
 	public float lootFloorClearance = 0.05f;
+
+	[Tooltip( "Heightfield SumHeights units per authored coin. totalCoins = round(SumHeights / this). Tune so sculpted volume matches dig economy." )]
+	[Min( 0.0001f )]
+	public float heightSumPerCoin = 0.02f;
 
 	[Header( "Mesh" )]
 	[Tooltip( "Softens heightfield-derived normals toward the flat mesh normal. Higher = smoother lighting, less carved detail." )]
@@ -124,9 +128,9 @@ public class TreasurePileDefinition : ScriptableObject
 	public float treasureReleaseOutsideFraction = 0.9f;
 
 	[Header( "Column / Pile Clear" )]
-	[Tooltip( "Column spill only when reserve is at most this many coins (1–2) and the column is at the loot floor. Thicker columns never spill mid-dig." )]
+	[Tooltip( "When a column has at most this many coins of reserve left after a dig (typically 1), emit them as loose coins and clear that heightfield cell." )]
 	[Min( 0.5f )]
-	public float columnNearEmptyReserve = 2f;
+	public float columnNearEmptyReserve = 1f;
 
 	[Tooltip( "When remaining coin inventory drops below this after a dig/spill, clear the pile and drop all leftover loot as loose world items." )]
 	[Min( 1 )]
@@ -264,6 +268,85 @@ public class TreasurePileDefinition : ScriptableObject
 		return TotalCoinUnits() + TotalTreasureUnits();
 	}
 
+	/// <summary>
+	/// Authored coin inventory from heightfield volume: round(SumHeights / heightSumPerCoin).
+	/// </summary>
+	public int EstimateCoinTotalFromHeightSum( float sumHeights )
+	{
+		float density = Mathf.Max( 0.0001f, heightSumPerCoin );
+		if ( sumHeights <= 0f )
+			return 0;
+		return Mathf.Max( 0, Mathf.RoundToInt( sumHeights / density ) );
+	}
+
+	/// <summary>
+	/// Split <paramref name="totalCoins"/> into gold/silver/copper with largest-remainder (sums exactly).
+	/// </summary>
+	public static void SplitEqualMetalThirds( int totalCoins, out int gold, out int silver, out int copper )
+	{
+		totalCoins = Mathf.Max( 0, totalCoins );
+		int baseEach = totalCoins / 3;
+		int remainder = totalCoins - baseEach * 3;
+		gold = baseEach + ( remainder > 0 ? 1 : 0 );
+		silver = baseEach + ( remainder > 1 ? 1 : 0 );
+		copper = baseEach;
+	}
+
+	/// <summary>First coinContents entry whose treasure variant matches (case-insensitive).</summary>
+	public TreasureDefinition FindCoinByVariant( string variant )
+	{
+		if ( coinContents == null || string.IsNullOrEmpty( variant ) )
+			return null;
+
+		for ( int i = 0; i < coinContents.Length; i++ )
+		{
+			TreasureDefinition def = coinContents[ i ].treasure;
+			if ( def == null || def.category != TreasureCategory.Coin )
+				continue;
+			if ( string.Equals( def.variant, variant, StringComparison.OrdinalIgnoreCase ) )
+				return def;
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Hash for coin-seat bake: type identity + equal mix weights (not absolute inventory counts).
+	/// Absolute inventory lives per-pile on TreasurePileVisual and must not invalidate seat bakes.
+	/// </summary>
+	public int HashCoinContentsMixIdentity()
+	{
+		unchecked
+		{
+			uint h = 2166136261u;
+			h = ( h ^ ( uint )Mathf.Max( 1, maxVisibleTotal ) ) * 16777619u;
+			h = ( h ^ ( uint )AuthoredFloatToBits( coinVisibleBufferFraction ) ) * 16777619u;
+
+			TreasureDefinition gold = FindCoinByVariant( "Gold" );
+			TreasureDefinition silver = FindCoinByVariant( "Silver" );
+			TreasureDefinition copper = FindCoinByVariant( "Copper" );
+			if ( gold != null )
+			{
+				h = MixStableString( h, gold.name );
+				h = ( h ^ 1u ) * 16777619u;
+			}
+
+			if ( silver != null )
+			{
+				h = MixStableString( h, silver.name );
+				h = ( h ^ 1u ) * 16777619u;
+			}
+
+			if ( copper != null )
+			{
+				h = MixStableString( h, copper.name );
+				h = ( h ^ 1u ) * 16777619u;
+			}
+
+			return ( int )h;
+		}
+	}
+
 	static int SumUnits( TreasurePileEntry[] entries )
 	{
 		if ( entries == null )
@@ -285,13 +368,25 @@ public class TreasurePileDefinition : ScriptableObject
 	/// </summary>
 	public int[] ComputeCoinSeatTargets()
 	{
-		return ComputeMixQuotas( Mathf.Max( 1, maxVisibleTotal ) );
+		return ComputeCoinSeatTargets( coinContents );
+	}
+
+	/// <summary>Seat targets using <paramref name="entries"/> as mix weights (e.g. per-pile authored counts).</summary>
+	public int[] ComputeCoinSeatTargets( TreasurePileEntry[] entries )
+	{
+		return ComputeMixQuotas( Mathf.Max( 1, maxVisibleTotal ), entries );
 	}
 
 	/// <summary>Largest-remainder mix quotas for <paramref name="budget"/> from authored coinContents counts.</summary>
 	public int[] ComputeMixQuotas( int budget )
 	{
-		return ComputeLargestRemainderQuotas( coinContents, budget );
+		return ComputeMixQuotas( budget, coinContents );
+	}
+
+	/// <summary>Largest-remainder mix quotas from <paramref name="entries"/> weights.</summary>
+	public int[] ComputeMixQuotas( int budget, TreasurePileEntry[] entries )
+	{
+		return ComputeLargestRemainderQuotas( entries != null ? entries : coinContents, budget );
 	}
 
 	/// <summary>
@@ -300,7 +395,21 @@ public class TreasurePileDefinition : ScriptableObject
 	/// </summary>
 	public void ComputeMixQuotasInto( int budget, int[] targets, float[] remaindersScratch = null )
 	{
-		ComputeLargestRemainderQuotasInto( coinContents, budget, targets, remaindersScratch );
+		ComputeMixQuotasInto( budget, targets, remaindersScratch, coinContents );
+	}
+
+	/// <summary>Non-allocating mix quotas from <paramref name="entries"/> weights.</summary>
+	public void ComputeMixQuotasInto(
+		int budget,
+		int[] targets,
+		float[] remaindersScratch,
+		TreasurePileEntry[] entries )
+	{
+		ComputeLargestRemainderQuotasInto(
+			entries != null ? entries : coinContents,
+			budget,
+			targets,
+			remaindersScratch );
 	}
 
 	public static int[] ComputeLargestRemainderQuotas( TreasurePileEntry[] entries, int budget )
@@ -433,32 +542,12 @@ public class TreasurePileDefinition : ScriptableObject
 	}
 
 	/// <summary>
-	/// Deterministic hash of GPU coin contents + densify budget for coin-seat bake keys.
+	/// Deterministic hash of GPU coin type identity + equal mix + densify budget for coin-seat bake keys.
+	/// Does not include absolute inventory counts (those are per-pile on TreasurePileVisual).
 	/// </summary>
 	public int HashCoinContents()
 	{
-		unchecked
-		{
-			uint h = 2166136261u;
-			h = ( h ^ ( uint )Mathf.Max( 1, maxVisibleTotal ) ) * 16777619u;
-			h = ( h ^ ( uint )AuthoredFloatToBits( coinVisibleBufferFraction ) ) * 16777619u;
-			if ( coinContents == null )
-				return ( int )h;
-
-			for ( int i = 0; i < coinContents.Length; i++ )
-			{
-				TreasurePileEntry entry = coinContents[ i ];
-				TreasureDefinition def = entry.treasure;
-				if ( def == null || entry.count <= 0 )
-					continue;
-
-				h = MixStableString( h, def.name );
-				h = ( h ^ ( uint )( int )def.category ) * 16777619u;
-				h = ( h ^ ( uint )entry.count ) * 16777619u;
-			}
-
-			return ( int )h;
-		}
+		return HashCoinContentsMixIdentity();
 	}
 
 	/// <summary>

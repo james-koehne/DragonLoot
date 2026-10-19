@@ -8,6 +8,7 @@ public class ObjectiveDefinitionEditor : Editor
 {
 	SerializedProperty _id;
 	SerializedProperty _title;
+	SerializedProperty _alwaysShow;
 	SerializedProperty _showVolumeId;
 	SerializedProperty _showRadius;
 	SerializedProperty _prerequisiteObjectiveIds;
@@ -23,6 +24,7 @@ public class ObjectiveDefinitionEditor : Editor
 	{
 		_id = serializedObject.FindProperty( "id" );
 		_title = serializedObject.FindProperty( "title" );
+		_alwaysShow = serializedObject.FindProperty( "alwaysShow" );
 		_showVolumeId = serializedObject.FindProperty( "showVolumeId" );
 		_showRadius = serializedObject.FindProperty( "showRadius" );
 		_prerequisiteObjectiveIds = serializedObject.FindProperty( "prerequisiteObjectiveIds" );
@@ -41,8 +43,12 @@ public class ObjectiveDefinitionEditor : Editor
 
 		EditorGUILayout.PropertyField( _id );
 		EditorGUILayout.PropertyField( _title );
-		EditorGUILayout.PropertyField( _showVolumeId );
-		EditorGUILayout.PropertyField( _showRadius );
+		EditorGUILayout.PropertyField( _alwaysShow );
+		using ( new EditorGUI.DisabledScope( _alwaysShow != null && _alwaysShow.boolValue ) )
+		{
+			EditorGUILayout.PropertyField( _showVolumeId );
+			EditorGUILayout.PropertyField( _showRadius );
+		}
 		EditorGUILayout.PropertyField( _prerequisiteObjectiveIds, includeChildren: true );
 		EditorGUILayout.PropertyField( _prerequisiteWorldEventIds, includeChildren: true );
 		EditorGUILayout.PropertyField( _subs, includeChildren: true );

@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3454bda4ebe9284399c0e855eee818f, type: 3}
+  m_Name: Objective_WorkshopClear
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
+  id: obj_workshop_clear
+  title: Clear the Workshop
+  alwaysShow: 1
+  showVolumeId: volume_workshop
+  showRadius: 40
+  prerequisiteObjectiveIds:
+  - obj_workshop_access
+  prerequisiteWorldEventIds: []
+  subs:
+  - id: clear_interior
+    label: Clear piles
+    completeType: 2
+    targetId: workshop_pile
+    requiredCount: 0
+  rewards: []
+  rewardLabel: Workshop Machines
+  showReward: 1
+  completionToast: Workshop machines activated
+  onCompleteWorldEventIds:
+  - workshop_clear_hammer_delivery

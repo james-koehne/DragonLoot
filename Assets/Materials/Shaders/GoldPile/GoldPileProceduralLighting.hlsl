@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_GOLDPILE_PROCEDURAL_LIGHTING_INCLUDED
 #define DRAGONLOOT_GOLDPILE_PROCEDURAL_LIGHTING_INCLUDED
 
-#include "../Stylized/StylizedLightingCommon.hlsl"
+#include "Packages/com.dragonloot.stylized-rendering/Runtime/Shaders/Stylized/StylizedLightingCommon.hlsl"
 #include "GoldPileProceduralCommon.hlsl"
 
 struct Attributes

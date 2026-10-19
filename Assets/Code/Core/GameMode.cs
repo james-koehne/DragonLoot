@@ -39,6 +39,7 @@ public class GameMode : MonoBehaviour, IGameMode
 					{
 						_debugDefinition.disableTutorials = authored.disableTutorials;
 						_debugDefinition.debugSpawnId = authored.debugSpawnId;
+						_debugDefinition.CopyAbilityInitialUnlockOverridesFrom( authored );
 					}
 				}
 				else

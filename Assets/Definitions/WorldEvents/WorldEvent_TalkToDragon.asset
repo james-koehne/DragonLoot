@@ -116,5 +116,33 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: talk_to_dragon_callout
     playerBrakeDuration: 1
+  - type: 9
+    delayBefore: 0.5
+    onlyDelayThisAction: 0
+    waitUntilFinished: 0
+    dialogue: []
+    addressableKey: 
+    spawnPointId: 
+    spawnWorldPosition: {x: 0, y: 0, z: 0}
+    useWorldPosition: 0
+    spawnAtPlayer: 0
+    tutorialTitle: 
+    tutorialObjectiveText: 
+    markerTargetId: workshop_entrance_pile
+    audioClip: {fileID: 0}
+    audioVolumeMin: 1
+    audioVolumeMax: 1
+    audioPitchMin: 1
+    audioPitchMax: 1
+    audioSpatialBlend: 0
+    audioMinDistance: 1
+    audioMaxDistance: 20
+    audioAtPlayer: 0
+    audioUseWorldPosition: 0
+    lanternRevealId: 
+    lanternGroupId: 
+    lanternIgniteFadeDuration: 0
+    cinematicPresentationId: 
+    playerBrakeDuration: 1
   sessionOnly: 0
   manualOnly: 0

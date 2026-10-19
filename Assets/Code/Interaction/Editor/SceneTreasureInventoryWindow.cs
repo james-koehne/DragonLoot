@@ -521,15 +521,18 @@ public class SceneTreasureInventoryWindow : EditorWindow
 
 		_pileCount++;
 		TreasurePileDefinition def = pile.PileDefinition;
-		if ( def != null )
-		{
-			AddEntries( def.coinContents, SourceKind.Pile, pile.name, pile );
-			AddEntries( def.treasureContents, SourceKind.Pile, pile.name, pile );
-		}
-
 		TreasurePileVisual visual = pile.PileVisual;
 		if ( visual == null )
 			visual = pile.GetComponent<TreasurePileVisual>();
+		if ( def != null )
+		{
+			TreasurePileEntry[] coinContents = visual != null
+				? visual.GetEffectiveCoinContents( def )
+				: def.coinContents;
+			AddEntries( coinContents, SourceKind.Pile, pile.name, pile );
+			AddEntries( def.treasureContents, SourceKind.Pile, pile.name, pile );
+		}
+
 		if ( visual == null )
 			return;
 
@@ -817,7 +820,7 @@ public class SceneTreasureInventoryWindow : EditorWindow
 		if ( table == null )
 			return;
 
-		// Cell-based upper bound for 1×1 items. Large cartGridSize footprints reduce real item capacity.
+		// Cell-based upper bound for 1×1 items. Large storageGridSize footprints reduce real item capacity.
 		SerializedObject so = new SerializedObject( table );
 		SerializedProperty maxStackProp = so.FindProperty( "maxStackPerSlot" );
 		int maxStack = maxStackProp != null ? maxStackProp.intValue : 0;

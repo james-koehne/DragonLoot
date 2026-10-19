@@ -48,9 +48,9 @@ public class MinecartDefinition : ScriptableObject
 	public float trackSnapRadius = 4f;
 
 	[Header( "Junctions" )]
-	[Tooltip( "Along-track distance from a baked junction where A/D steer is read and the exit is committed." )]
+	[Tooltip( "Along-track distance from a baked junction where A/D steer is read and the exit is committed. Runtime also expands this past the junction mesh cut." )]
 	[Min( 0.1f )]
-	public float junctionApproachRadius = 2.5f;
+	public float junctionApproachRadius = 5f;
 
 	[Tooltip( "Minimum side-align score for A/D to pick a branch. Below this, prefer continuing on the current track." )]
 	[Range( 0f, 1f )]

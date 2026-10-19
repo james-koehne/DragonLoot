@@ -629,6 +629,7 @@ GameObject:
   m_Component:
   - component: {fileID: 787893147209508613}
   - component: {fileID: 4038479417403168604}
+  - component: {fileID: 9112000000000002}
   m_Layer: 0
   m_Name: RecyclingMachine
   m_TagString: Untagged
@@ -713,6 +714,21 @@ MonoBehaviour:
   onHopperFull: {fileID: 2461381026438127710}
   onHopperAccept: {fileID: 8267305138923763314}
   rollerSpinDegreesPerSecond: 420
+--- !u!114 &9112000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1537614065901737402}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 96d1526b02f3ee54c887ca480d089e4b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ObjectiveUnlockGate
+  requiredObjectiveIds:
+  - obj_workshop_access
+  - obj_workshop_clear
 --- !u!1 &1878463249127234542
 GameObject:
   m_ObjectHideFlags: 0

@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
   authoredLayoutSeed: 165665
   effectivePileSeed: 1891572984
-  heightFingerprint: -662228639
-  contentsFingerprint: -781263543
+  heightFingerprint: 956772705
+  contentsFingerprint: 1445925330
   placementFingerprint: 244014156
   maxVisibleTotal: 32768
   steadyVisibleBudget: 26214

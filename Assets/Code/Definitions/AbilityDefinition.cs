@@ -23,6 +23,9 @@ public class AbilityDefinition : ScriptableObject
 	[Tooltip( "Passive abilities are unlock flags only — never equipped or activated." )]
 	public bool isPassive;
 
+	[Tooltip( "Initial unlock when the profile has no entry for this ability. Debug overrides can replace this." )]
+	public bool startsUnlocked;
+
 	[Header( "Behaviour" )]
 	public AbilityBehaviour behaviour;
 

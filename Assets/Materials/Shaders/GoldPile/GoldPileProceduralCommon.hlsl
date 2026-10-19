@@ -57,10 +57,9 @@ float3 ApplyProcRuntimeDeform(float3 positionOS, float2 uv)
     {
         float h = SampleProcDeformHeight(uv);
         float worldH = h * _DeformScale;
-        if (worldH < _GroundLevelHeight)
-            positionOS.y = -1000.0;
-        else
-            positionOS.y += worldH;
+        // Use real height (no floor skirt). Below-ground fragments are discarded in
+        // ProcClipBelowGround — avoid y=-1000 which stretched rim tris into islands.
+        positionOS.y += worldH;
     }
     return positionOS;
 }
@@ -71,7 +70,8 @@ void ProcClipBelowGround(float2 deformUV)
         return;
 
     float h = SampleProcDeformHeight(deformUV) * _DeformScale;
-    clip(h - _GroundLevelHeight);
+    // Strictly above ground — nothing at ~0 height (matches CPU triangle occupancy).
+    clip(h - (float)_GroundLevelHeight - 1e-4);
 }
 
 half ProcLodFactor(float dist)

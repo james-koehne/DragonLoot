@@ -13,7 +13,8 @@ MonoBehaviour:
   m_Name: Objective_TalkToDragon
   m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
   id: obj_talk_to_dragon
-  title: Talk to the Dragon
+  title: Dragon Introduction
+  alwaysShow: 1
   showVolumeId: volume_main_cave
   showRadius: 40
   prerequisiteObjectiveIds: []
@@ -21,8 +22,8 @@ MonoBehaviour:
   - main_cave_entrance
   subs:
   - id: talk
-    label: Talk to the Dragon
-    completeType: 5
+    label: Stand on the platform
+    completeType: 6
     targetId: talk_to_dragon
     requiredCount: 0
   rewards: []

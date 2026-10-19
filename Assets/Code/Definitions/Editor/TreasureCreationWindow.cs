@@ -441,7 +441,7 @@ public class TreasureCreationWindow : EditorWindow
 		EditorGUI.indentLevel++;
 		_request.CanStack = EditorGUILayout.Toggle( "Can Stack", _request.CanStack );
 		_request.CoinThickness = EditorGUILayout.FloatField( "Coin Thickness", _request.CoinThickness );
-		_request.CartGridSize = EditorGUILayout.Vector2IntField( "Cart Grid Size", _request.CartGridSize );
+		_request.StorageGridSize = EditorGUILayout.Vector2IntField( "Storage Grid Size", _request.StorageGridSize );
 		EditorGUI.indentLevel--;
 	}
 

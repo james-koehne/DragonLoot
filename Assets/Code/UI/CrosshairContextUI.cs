@@ -25,19 +25,32 @@ public class CrosshairContextUI : MonoBehaviour
 	readonly StringBuilder _builder = new StringBuilder( 256 );
 	readonly DisplayRequirementUI _displayRequirements = new DisplayRequirementUI();
 	bool _ready;
+	bool _cinematicHidden;
 
 	public void Setup()
 	{
 		EnsureUi();
 		ApplyLookLabelStyle();
 		_ready = true;
+		_cinematicHidden = false;
+		SetLookVisible( false );
+		SetMovementVisible( false, null );
+	}
+
+	/// <summary>Hides look-at / movement icons while a cinematic owns the HUD.</summary>
+	public void SetCinematicHidden( bool hidden )
+	{
+		_cinematicHidden = hidden;
+		if ( !hidden )
+			return;
+
 		SetLookVisible( false );
 		SetMovementVisible( false, null );
 	}
 
 	void Update()
 	{
-		if ( !_ready )
+		if ( !_ready || _cinematicHidden )
 			return;
 
 		Refresh();

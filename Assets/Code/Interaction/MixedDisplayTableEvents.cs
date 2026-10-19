@@ -5,5 +5,7 @@ public struct MixedDisplayTableChangedEvent
 {
 	public MixedDisplayTableInteractable Table;
 	public int ItemCount;
+	public int PreviousItemCount;
 	public int SlotCount;
+	public bool PlayerDirected;
 }

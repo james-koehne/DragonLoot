@@ -59,14 +59,14 @@ public sealed class AbilitySystem
 
 	void Initialize()
 	{
+		if ( _catalog == null )
+			_catalog = GameInstance.GetDefinition<AbilityCatalogDefinition>();
+
 		if ( !_initialized )
 		{
 			LoadFromProfile();
 			_initialized = true;
 		}
-
-		if ( _catalog == null )
-			_catalog = GameInstance.GetDefinition<AbilityCatalogDefinition>();
 	}
 
 	public void Tick( float deltaTime )
@@ -168,6 +168,23 @@ public sealed class AbilitySystem
 		for ( int i = 0; i < SlotCount; i++ )
 			_equippedSlots[ i ] = null;
 		PersistProgress();
+
+		ProfileManager profileManager = ProfileManager.Instance;
+		ProfileSaveData save = profileManager != null ? profileManager.ProfileSaveData : null;
+		if ( ApplyBootstrapUnlocks( save ) )
+			PersistProgress();
+	}
+
+	/// <summary>
+	/// Re-reads profile unlock/equip state and re-applies catalog/debug bootstrap defaults.
+	/// Used by debug overlay when initial unlock overrides change mid-session.
+	/// </summary>
+	public void ReloadFromProfile()
+	{
+		if ( _catalog == null )
+			_catalog = GameInstance.GetDefinition<AbilityCatalogDefinition>();
+		LoadFromProfile();
+		_initialized = true;
 	}
 
 	public string GetEquippedAbilityId( int slot )
@@ -334,40 +351,90 @@ public sealed class AbilitySystem
 		for ( int i = 0; i < SlotCount; i++ )
 			_equippedSlots[ i ] = null;
 
+		ProfileSaveData save = null;
 		ProfileManager profileManager = ProfileManager.Instance;
-		if ( profileManager == null || profileManager.ProfileSaveData == null )
+		if ( profileManager != null )
+			save = profileManager.ProfileSaveData;
+
+		if ( save != null )
+		{
+			save.EnsureProgressDictionaries();
+
+			if ( save.unlockedAbilities != null )
+			{
+				foreach ( KeyValuePair<string, bool> pair in save.unlockedAbilities )
+				{
+					if ( pair.Value )
+						_unlocked[ pair.Key ] = true;
+				}
+			}
+		}
+
+		// Catalog / debug defaults apply even when profile is missing or not ready yet.
+		// ForceUnlocked bootstraps are baked into the profile so they survive reloads.
+		if ( ApplyBootstrapUnlocks( save ) )
+			PersistProgress();
+
+		if ( save == null || save.equippedAbilityIds == null )
 			return;
 
-		ProfileSaveData save = profileManager.ProfileSaveData;
-		save.EnsureProgressDictionaries();
-
-		if ( save.unlockedAbilities != null )
+		int count = Mathf.Min( SlotCount, save.equippedAbilityIds.Length );
+		for ( int i = 0; i < count; i++ )
 		{
-			foreach ( KeyValuePair<string, bool> pair in save.unlockedAbilities )
+			string id = save.equippedAbilityIds[ i ];
+			if ( string.IsNullOrEmpty( id ) )
+				continue;
+			if ( !IsUnlocked( id ) )
+				continue;
+			if ( !TryGetDefinition( id, out AbilityDefinition equippedDef ) )
+				continue;
+			if ( equippedDef.isPassive )
+				continue;
+			UnequipAbilityEverywhere( id );
+			_equippedSlots[ i ] = id;
+		}
+	}
+
+	/// <returns>True when at least one ForceUnlocked override newly unlocked an ability (caller should persist).</returns>
+	bool ApplyBootstrapUnlocks( ProfileSaveData save )
+	{
+		if ( save != null )
+			save.EnsureProgressDictionaries();
+
+		bool forceUnlockedPersisted = false;
+		IReadOnlyList<AbilityDefinition> abilities = GetCatalogAbilities();
+		for ( int i = 0; i < abilities.Count; i++ )
+		{
+			AbilityDefinition def = abilities[ i ];
+			if ( def == null || string.IsNullOrEmpty( def.id ) )
+				continue;
+			// Only an explicit saved unlock blocks bootstrap. Missing profile / missing key uses defaults.
+			if ( save != null && save.unlockedAbilities != null
+				&& save.unlockedAbilities.TryGetValue( def.id, out bool profileUnlocked ) && profileUnlocked )
+				continue;
+
+			bool fromForceUnlocked = false;
+			bool shouldUnlock;
+			if ( DebugDefinition.TryGetAbilityInitialUnlockOverride( def.id, out bool overrideUnlocked ) )
 			{
-				if ( pair.Value )
-					_unlocked[ pair.Key ] = true;
+				shouldUnlock = overrideUnlocked;
+				fromForceUnlocked = overrideUnlocked;
 			}
+			else
+				shouldUnlock = def.startsUnlocked;
+
+			if ( shouldUnlock )
+			{
+				bool wasUnlocked = _unlocked.TryGetValue( def.id, out bool existing ) && existing;
+				_unlocked[ def.id ] = true;
+				if ( fromForceUnlocked && !wasUnlocked )
+					forceUnlockedPersisted = true;
+			}
+			else
+				_unlocked.Remove( def.id );
 		}
 
-		if ( save.equippedAbilityIds != null )
-		{
-			int count = Mathf.Min( SlotCount, save.equippedAbilityIds.Length );
-			for ( int i = 0; i < count; i++ )
-			{
-				string id = save.equippedAbilityIds[ i ];
-				if ( string.IsNullOrEmpty( id ) )
-					continue;
-				if ( !IsUnlocked( id ) )
-					continue;
-				if ( !TryGetDefinition( id, out AbilityDefinition equippedDef ) )
-					continue;
-				if ( equippedDef.isPassive )
-					continue;
-				UnequipAbilityEverywhere( id );
-				_equippedSlots[ i ] = id;
-			}
-		}
+		return forceUnlockedPersisted;
 	}
 
 	void PersistProgress()

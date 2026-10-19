@@ -116,6 +116,7 @@ public class TreasurePileVisualEditor : Editor
 			GoldPileSculptToolContext.ActivateAndRestoreBrush();
 
 		DrawDerivedLayoutStats( visual );
+		DrawCoinInventoryStats( visual );
 
 		EditorGUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Rebuild Preview" ) )
@@ -167,6 +168,9 @@ public class TreasurePileVisualEditor : Editor
 					+ $"{visual.AuthoredWorldSizeX:0.###}m×{visual.AuthoredWorldSizeZ:0.###}m  rev {visual.AuthoredRevision}"
 				: "Authored: (none — preview starts empty)" );
 
+		EditorGUILayout.Space( 6f );
+		GoldPileProceduralGenerator.DrawControls( visual );
+
 		serializedObject.ApplyModifiedProperties();
 	}
 
@@ -188,6 +192,51 @@ public class TreasurePileVisualEditor : Editor
 				$"Layout (authored): {visual.AuthoredResolutionX}×{visual.AuthoredResolutionZ}  "
 					+ $"{visual.AuthoredWorldSizeX:0.###}m×{visual.AuthoredWorldSizeZ:0.###}m  "
 					+ $"maxH {visual.AuthoredMaxHeight:0.###}m" );
+		}
+	}
+
+	/// <summary>Live heightmap estimate + committed authored G/S/C inventory (shared with sculpt overlay).</summary>
+	public static void DrawCoinInventoryStats( TreasurePileVisual visual )
+	{
+		if ( visual == null )
+			return;
+
+		EditorGUILayout.Space( 4f );
+		EditorGUILayout.LabelField( "Coin Inventory (from heightmap)", EditorStyles.boldLabel );
+
+		TreasurePileDefinition def = visual.ResolveDefinitionForEditor();
+		float sumHeights = visual.ResolveHeightSumForCoinEstimate();
+		float density = def != null ? Mathf.Max( 0.0001f, def.heightSumPerCoin ) : 0.02f;
+		visual.EstimateAuthoredCoinCountsFromHeight( out int liveTotal, out int liveGold, out int liveSilver, out int liveCopper );
+
+		EditorGUILayout.LabelField( "Total coins (live)", liveTotal.ToString( "N0" ) );
+		EditorGUILayout.LabelField(
+			"Gold / Silver / Copper",
+			$"{liveGold:N0} / {liveSilver:N0} / {liveCopper:N0}" );
+		EditorGUILayout.LabelField(
+			"SumHeights / per coin",
+			$"{sumHeights:0.####} / {density:0.####}" );
+
+		if ( visual.HasAuthoredCoinCounts )
+		{
+			EditorGUILayout.LabelField(
+				"Committed (stroke end)",
+				$"{visual.AuthoredTotalCoins:N0}  "
+					+ $"({visual.AuthoredGoldCoins:N0} / {visual.AuthoredSilverCoins:N0} / {visual.AuthoredCopperCoins:N0})" );
+		}
+		else
+		{
+			EditorGUILayout.LabelField( "Committed (stroke end)", "(none — sculpt once to write)" );
+		}
+
+		if ( def != null
+			&& ( def.FindCoinByVariant( "Gold" ) == null
+				|| def.FindCoinByVariant( "Silver" ) == null
+				|| def.FindCoinByVariant( "Copper" ) == null ) )
+		{
+			EditorGUILayout.HelpBox(
+				"Definition is missing Gold, Silver, or Copper in coinContents — add those type refs so runtime can seed metals.",
+				MessageType.Warning );
 		}
 	}
 

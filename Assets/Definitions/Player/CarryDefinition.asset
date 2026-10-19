@@ -168,7 +168,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 58792f3caa7a6ec46a24f0b1aac8ce51, type: 3}
   pileDigPourVolumeAtOne: 0.25
   pileDigPourVolumeAtBatch: 0.85
-  pileDigPourAmountForMaxVolume: 8
+  pileDigPourAmountForMaxVolume: 4
   pileDigPourPitchMin: 0.95
   pileDigPourPitchMax: 1.05
   pileStealExtraClinkVolumeScale: 0.4

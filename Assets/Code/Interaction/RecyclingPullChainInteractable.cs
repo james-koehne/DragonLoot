@@ -26,7 +26,7 @@ public class RecyclingPullChainInteractable : InteractableBase
 
 	public override bool CanInteract( PlayerController player )
 	{
-		if ( !IsAvailable || player == null || station == null )
+		if ( !base.CanInteract( player ) || station == null )
 			return false;
 		return station.CanAcceptPull;
 	}

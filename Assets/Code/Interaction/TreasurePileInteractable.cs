@@ -21,11 +21,15 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 	public TreasurePileVisual PileVisual => pileVisual;
 	public static IReadOnlyList<TreasurePileInteractable> ActivePiles => All;
 
-	/// <summary>Authored coin units in <see cref="pileDefinition"/> (0 when not coin-driven).</summary>
+	/// <summary>Authored coin units (heightmap on visual when present, else definition).</summary>
 	public int ExpectedCoinCount
 	{
 		get
 		{
+			if ( pileVisual == null )
+				pileVisual = GetComponent<TreasurePileVisual>();
+			if ( pileVisual != null && pileVisual.HasAuthoredCoinCounts )
+				return pileVisual.AuthoredTotalCoins;
 			if ( pileDefinition != null )
 				return pileDefinition.TotalCoinUnits();
 			if ( Treasure != null && Treasure.category == TreasureCategory.Coin )
@@ -46,6 +50,8 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		if ( loot != null )
 			return loot.TotalRemainingCoins;
 
+		if ( pileVisual != null )
+			return pileVisual.ResolveAuthoredOrDefinitionCoinTotal();
 		TreasurePileDefinition def = pileDefinition;
 		if ( def != null && def.TotalCoinUnits() > 0 )
 			return def.TotalCoinUnits();
@@ -125,7 +131,10 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 		if ( pileVisual != null )
 			authoredExtras = pileVisual.CountAuthoredItems();
 
-		int total = pileDefinition.TotalUnits() + authoredExtras;
+		int coinUnits = pileVisual != null && pileVisual.HasAuthoredCoinCounts
+			? pileVisual.AuthoredTotalCoins
+			: pileDefinition.TotalCoinUnits();
+		int total = coinUnits + pileDefinition.TotalTreasureUnits() + authoredExtras;
 		InitializeCount( total );
 		TreasureDefinition primary = pileDefinition.GetPrimaryTreasure();
 		if ( primary != null )

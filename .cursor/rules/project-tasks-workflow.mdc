@@ -1,0 +1,91 @@
+---
+description: Markdown Project Tasks workflow — Inbox/Features/Archive via Unity capture and Cursor sort/plan/archive
+alwaysApply: true
+---
+
+# Markdown Project Tasks Workflow
+
+Markdown under the configured **Project Tasks** workspace root is the single source of truth for outstanding work. Unity captures tasks; Cursor sorts, plans, and archives; humans confirm gameplay logic and review quality.
+
+The Unity Editor window is **DragonLoot → Tools → Project Tasks**. It stores an absolute root path (may be outside the Unity project / inside an Obsidian vault).
+
+Workspace layout:
+
+```text
+ProjectTasks/
+  AI_INSTRUCTIONS.md
+  PROJECT.md
+  Inbox/
+  Features/
+  Archive/
+```
+
+`.cursor/milanote/` is **historical only**. Do not treat it as an active task source.
+
+## Before sorting, planning, or archiving
+
+1. Read `AI_INSTRUCTIONS.md` and `PROJECT.md` from the Project Tasks root.
+2. Follow those files for formats, safety rules, and workflow boundaries.
+
+## Sorting (Inbox → Features)
+
+- Organisation only — do **not** implement tasks or write detailed implementation plans.
+- Respect explicit `Feature:` on inbox tasks; infer only when Feature is `Auto`.
+- Preserve stable task IDs (`TASK-…`) and original intent.
+- Move sorted tasks into the feature's `## Outstanding Tasks`, then remove the inbox file.
+- Never discard existing Markdown content; never silently overwrite unrelated sections.
+- Flag duplicates, ambiguities, and conflicting requirements for human input.
+- Summarise changes and decisions needing humans.
+
+## Feature discovery
+
+- Lightweight structure-first scan of the Unity project (dirs, names, docs, scenes/prefabs, asmdefs).
+- Exclude Library/, Temp/, Obj/, Logs/, Builds/, generated noise, and third-party packages where appropriate.
+- Create concise `Features/*.md` with Summary + References — no task lists or implementation plans.
+- Preserve existing feature files; distinguish confirmed vs uncertain inferences.
+
+## Planning a feature
+
+When asked to work on a feature (e.g. `Work on this feature: Player.md`):
+
+1. Read AI instructions, project context, and the feature file; identify all outstanding tasks.
+2. Consult related features/docs as needed; inspect implementation files selectively.
+3. Plan all outstanding tasks for that feature, practically scoped; mark human vs AI work.
+4. Explain intended behaviour, assumptions, and important decisions.
+5. **Always stop and obtain explicit human confirmation** of the proposed logic and approach before finalising the plan for implementation.
+6. Resolve routine technical details independently; do not silently make significant gameplay or architectural decisions.
+7. Do not include `Archive/` tasks in active planning.
+
+## After implementing
+
+Keep feature documentation concise. Prefer updating the feature file / archive entries over parallel docs.
+
+When a task is completed:
+
+1. Mark complete with a concise summary of work performed.
+2. Move it to `Archive/<TASK-ID>.md`, preserving ID, original description, and completion notes.
+3. Remove it from the feature's `## Outstanding Tasks`.
+
+## Verification (human playtest)
+
+Each feature file has `## Verification` — a checklist the developer ticks in Unity (**Project Tasks** window).
+
+```markdown
+## Verification
+
+- [ ] Concise playable confirmation step
+- [x] Already confirmed
+```
+
+1. **When starting work on a feature:** remove all completed (`- [x]`) verification items for that feature. Leave pending (`- [ ]`) items.
+2. **After implementing:** append new unchecked (`- [ ]`) verification steps. Create `## Verification` if missing.
+3. Never tick verification items yourself — only the human confirms in Unity.
+4. Keep steps concise, observable, and specific to what changed.
+
+## Hard rules
+
+- Never silently overwrite existing Markdown content.
+- Preserve task IDs across Inbox → Feature → Archive.
+- Avoid unnecessary documentation and duplicated information.
+- Ambiguity → ask or flag; do not invent requirements.
+- Do not use `.cursor/milanote/` for active task tracking.

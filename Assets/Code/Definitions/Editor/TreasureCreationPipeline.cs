@@ -69,7 +69,7 @@ public static class TreasureCreationPipeline
 		public TreasureCleaningRequirement CleaningRequirement = TreasureCleaningRequirement.Auto;
 		public bool CanStack = true;
 		public float CoinThickness = 0.04f;
-		public Vector2Int CartGridSize = Vector2Int.one;
+		public Vector2Int StorageGridSize = Vector2Int.one;
 
 		public AudioClip[] PickupClips;
 		public float PickupVolumeMin = 1f;
@@ -188,7 +188,7 @@ public static class TreasureCreationPipeline
 				request.WorldScale = Vector3.one * 0.3f;
 				request.HeldScale = Vector3.one * 0.2f;
 				request.CoinThickness = 0.04f;
-				request.CartGridSize = Vector2Int.one;
+				request.StorageGridSize = Vector2Int.one;
 				request.CleaningRequirement = TreasureCleaningRequirement.Auto;
 				if ( string.IsNullOrEmpty( request.Variant ) )
 					request.Variant = "Gold";
@@ -207,7 +207,7 @@ public static class TreasureCreationPipeline
 				request.WorldScale = new Vector3( 0.25f, 0.2f, 0.25f );
 				request.HeldScale = new Vector3( 0.08f, 0.06f, 0.08f );
 				request.CoinThickness = 0.06f;
-				request.CartGridSize = Vector2Int.one;
+				request.StorageGridSize = Vector2Int.one;
 				request.CleaningRequirement = TreasureCleaningRequirement.Auto;
 				break;
 
@@ -224,7 +224,7 @@ public static class TreasureCreationPipeline
 				request.WorldScale = Vector3.one * 0.22f;
 				request.HeldScale = Vector3.one * 0.18f;
 				request.CoinThickness = 0.08f;
-				request.CartGridSize = Vector2Int.one;
+				request.StorageGridSize = Vector2Int.one;
 				request.Value = request.IsSkeletonKey ? 200 : 40;
 				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 				if ( string.IsNullOrEmpty( request.Variant ) )
@@ -262,7 +262,7 @@ public static class TreasureCreationPipeline
 				request.WorldScale = Vector3.one * 0.24f;
 				request.HeldScale = Vector3.one * 0.2f;
 				request.CoinThickness = 0.1f;
-				request.CartGridSize = Vector2Int.one;
+				request.StorageGridSize = Vector2Int.one;
 				request.Value = 1;
 				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 				request.ConvertArtifactMaterials = false;
@@ -281,7 +281,7 @@ public static class TreasureCreationPipeline
 				request.WorldScale = Vector3.one * 0.5f;
 				request.HeldScale = Vector3.one * 0.85f;
 				request.CoinThickness = 0.1f;
-				request.CartGridSize = Vector2Int.one;
+				request.StorageGridSize = Vector2Int.one;
 				request.Value = 1;
 				request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 				request.ConvertArtifactMaterials = false;
@@ -300,7 +300,7 @@ public static class TreasureCreationPipeline
 				request.WorldScale = Vector3.one * 0.26f;
 				request.HeldScale = Vector3.one * 0.26f;
 				request.CoinThickness = 0.156f;
-				request.CartGridSize = new Vector2Int( 2, 2 );
+				request.StorageGridSize = new Vector2Int( 2, 2 );
 				request.CleaningRequirement = TreasureCleaningRequirement.Auto;
 				request.ConvertArtifactMaterials = true;
 				break;
@@ -320,7 +320,7 @@ public static class TreasureCreationPipeline
 		request.WorldScale = Vector3.one * 0.55f;
 		request.HeldScale = Vector3.one * 0.35f;
 		request.CoinThickness = 0.4f;
-		request.CartGridSize = new Vector2Int( 2, 2 );
+		request.StorageGridSize = new Vector2Int( 2, 2 );
 		request.Value = 150;
 		request.CleaningRequirement = TreasureCleaningRequirement.NotRequired;
 	}
@@ -367,7 +367,7 @@ public static class TreasureCreationPipeline
 		request.CleaningRequirement = source.cleaningRequirement;
 		request.CanStack = source.canStack;
 		request.CoinThickness = source.coinThickness;
-		request.CartGridSize = source.cartGridSize;
+		request.StorageGridSize = source.storageGridSize;
 		request.PickupClips = source.pickupClips;
 		request.PickupVolumeMin = source.pickupVolumeMin;
 		request.PickupVolumeMax = source.pickupVolumeMax;
@@ -585,7 +585,7 @@ public static class TreasureCreationPipeline
 		def.cleaningRequirement = request.CleaningRequirement;
 		def.canStack = request.CanStack;
 		def.coinThickness = request.CoinThickness;
-		def.cartGridSize = request.CartGridSize;
+		def.storageGridSize = request.StorageGridSize;
 		def.pickupClips = request.PickupClips;
 		def.pickupVolumeMin = request.PickupVolumeMin;
 		def.pickupVolumeMax = request.PickupVolumeMax;

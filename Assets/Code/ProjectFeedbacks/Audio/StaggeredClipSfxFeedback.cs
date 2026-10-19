@@ -27,9 +27,10 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 
 	public AdvanceMode Mode = AdvanceMode.EachPlay;
 
-	[Tooltip( "When not Serialized, clips and timing are read from the station definition on the Feedbacks owner." )]
+	[Tooltip( "CoinSorting* reads clips/timing from CoinSortingStationDefinition at runtime. Clips below are kept as an authored mirror / fallback." )]
 	public ClipSource ClipsFrom = ClipSource.Serialized;
 
+	[Tooltip( "Used when ClipsFrom is Serialized, or as fallback when the station definition is missing." )]
 	public AudioClip[] Clips;
 
 	[Min( 0.05f )]
@@ -71,6 +72,11 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 
 	public override void Stop()
 	{
+		// EachPlay lives on Feedbacks that re-Play every pulse; hard-stopping here
+		// kills the A/B crossfade. Only WhileActive (sort loop) needs a real stop.
+		if ( Mode == AdvanceMode.EachPlay )
+			return;
+
 		_active = false;
 		StopSources();
 		UnregisterFadeTick();
@@ -78,12 +84,19 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 
 	public void Cancel()
 	{
-		Stop();
+		HardStop();
 	}
 
 	public override void Reset()
 	{
-		Stop();
+		HardStop();
+	}
+
+	void HardStop()
+	{
+		_active = false;
+		StopSources();
+		UnregisterFadeTick();
 	}
 
 	public override float GetHoldDuration()
@@ -104,13 +117,11 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 		if ( Mode != AdvanceMode.WhileActive || !_active )
 			return _fadeRemaining > 0f;
 
-		if ( Owner != null && Owner.GetComponent<CoinSortingStation>() is CoinSortingStation station )
+		CoinSortingStation station = ResolveStation();
+		if ( station != null && ( station.IsRepositioning || !station.IsProcessing ) )
 		{
-			if ( station.IsRepositioning || !station.IsProcessing )
-			{
-				BeginFadePrevious( ResolveOverlapFade( null ) );
-				return true;
-			}
+			BeginFadePrevious( ResolveOverlapFade( station.Definition ) );
+			return true;
 		}
 
 		if ( Time.time < _nextPlayTime )
@@ -134,7 +145,7 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 
 		if ( Mode == AdvanceMode.EachPlay && ClipsFrom == ClipSource.CoinSortingCrank )
 		{
-			CoinSortingStation station = Owner != null ? Owner.GetComponent<CoinSortingStation>() : null;
+			CoinSortingStation station = ResolveStation();
 			if ( station == null || station.IsRepositioning )
 				return;
 			CoinSortingStationDefinition def = station.Definition;
@@ -142,7 +153,7 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 				return;
 			if ( Time.time < _nextPlayTime )
 				return;
-			float interval = def != null ? def.crankPlayInterval : PlayInterval;
+			float interval = def.crankPlayInterval;
 			_nextPlayTime = Time.time + Mathf.Max( 0.05f, interval );
 		}
 
@@ -294,12 +305,18 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 		return OverlapFadeSeconds;
 	}
 
-	CoinSortingStationDefinition ResolveCoinSortingDefinition()
+	CoinSortingStation ResolveStation()
 	{
 		if ( Owner == null )
 			return null;
 
-		CoinSortingStation station = Owner.GetComponent<CoinSortingStation>();
+		// Feedbacks hosts are children (OnCrankClickFeedbacks / OnSortingClipSfxFeedbacks).
+		return Owner.GetComponentInParent<CoinSortingStation>();
+	}
+
+	CoinSortingStationDefinition ResolveCoinSortingDefinition()
+	{
+		CoinSortingStation station = ResolveStation();
 		if ( station == null )
 			return null;
 
@@ -313,7 +330,7 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 
 		if ( ClipsFrom == ClipSource.CoinSortingCrank )
 		{
-			CoinSortingStation station = Owner != null ? Owner.GetComponent<CoinSortingStation>() : null;
+			CoinSortingStation station = ResolveStation();
 			float lo = def != null ? def.crankPitchMin : 0.85f;
 			float hi = def != null ? def.crankPitchMax : 1.25f;
 			float t = station != null ? station.ReserveNormalized : 0f;
@@ -336,7 +353,7 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 
 		if ( ClipsFrom == ClipSource.CoinSortingCrank )
 		{
-			CoinSortingStation station = Owner != null ? Owner.GetComponent<CoinSortingStation>() : null;
+			CoinSortingStation station = ResolveStation();
 			float volume = def != null ? def.crankVolume : 0.7f;
 			float warning = def != null ? def.gaugeEmptyWarningNormalized : 0.15f;
 			if ( station != null && station.ReserveNormalized <= warning )

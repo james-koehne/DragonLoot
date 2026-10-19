@@ -11,7 +11,8 @@ public enum FairyMode
 {
 	Idle = 0,
 	Guide = 1,
-	World = 2
+	World = 2,
+	Delivery = 3
 }
 
 enum FairyGuidePhase
@@ -24,20 +25,24 @@ enum FairyGuidePhase
 }
 
 /// <summary>
-/// Mode-driven fairy: Idle bob, Guide (lead player to a destination), or World (loop a spline).
+/// Mode-driven fairy: Idle bob, Guide (lead player to a destination), World (loop a spline),
+/// or Delivery (hover with an Addressable takeable item underneath).
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent( typeof( FairyInteractable ) )]
 public class FairyHelper : MonoBehaviour
 {
 	public const string AddressableKey = "Companions/FairyHelper";
+	public const string WorldHammerAddressableKey = "Assets/Prefabs/Build/WorldHammer.prefab";
 
 	static readonly int IsMovingHash = Animator.StringToHash( "IsMoving" );
 	static readonly int TalkHash = Animator.StringToHash( "Talk" );
 
 	public static FairyHelper ActiveGuide { get; private set; }
+	public static FairyHelper ActiveDelivery { get; private set; }
 
 	static int _guideSpawnGeneration;
+	static int _deliverySpawnGeneration;
 
 	[Header( "Mode" )]
 	[SerializeField]
@@ -55,6 +60,11 @@ public class FairyHelper : MonoBehaviour
 	[SerializeField]
 	[Min( 1f )]
 	float turnSpeed = 10f;
+
+	[SerializeField]
+	[Min( 0.1f )]
+	[Tooltip( "Logical hover height above walkable ground under the fairy." )]
+	float hoverHeight = 1f;
 
 	[Header( "Motion polish" )]
 	[SerializeField]
@@ -92,12 +102,13 @@ public class FairyHelper : MonoBehaviour
 
 	[Header( "Guide" )]
 	[SerializeField]
-	Vector3 guideSpawnOffsetLocal = new Vector3( 1.1f, 1.0f, 0.85f );
+	[Tooltip( "Player-local planar spawn offset. Y is ignored; hoverHeight is used instead." )]
+	Vector3 guideSpawnOffsetLocal = new Vector3( 1.1f, 0f, 0.85f );
 
 	[SerializeField]
 	[Min( 0.1f )]
-	[Tooltip( "Guide flight speed. Should exceed typical player walk speed (~6)." )]
-	float guideMoveSpeed = 8.5f;
+	[Tooltip( "Guide flight speed. Must exceed player sprint (~9) so the lead never feels sluggish." )]
+	float guideMoveSpeed = 11.5f;
 
 	[SerializeField]
 	[Min( 0.5f )]
@@ -135,6 +146,30 @@ public class FairyHelper : MonoBehaviour
 	[Min( 0.5f )]
 	float guideFarewellHoldSeconds = 2.5f;
 
+	[Header( "Delivery" )]
+	[SerializeField]
+	[Tooltip( "Player-local planar follow offset while offering cargo. Y is ignored; hoverHeight is used instead." )]
+	Vector3 deliveryFollowOffsetLocal = new Vector3( 0f, 0f, 1.35f );
+
+	[SerializeField]
+	[Min( 0.1f )]
+	float deliveryFollowSpeed = 7f;
+
+	[SerializeField]
+	Vector3 deliveryCargoOffsetLocal = new Vector3( 0f, -0.45f, 0f );
+
+	[SerializeField]
+	[TextArea( 1, 2 )]
+	string deliveryOfferLine = "A gift for you!";
+
+	[SerializeField]
+	[TextArea( 1, 2 )]
+	string deliveryTakenLine = "You're welcome!";
+
+	[SerializeField]
+	[Min( 0.5f )]
+	float deliveryFarewellHoldSeconds = 2.5f;
+
 	[Header( "World" )]
 	[SerializeField]
 	SplineContainer worldSpline;
@@ -168,10 +203,16 @@ public class FairyHelper : MonoBehaviour
 	[SerializeField]
 	Feedbacks onLoopFeedback;
 
+	[SerializeField]
+	Feedbacks onGuideTrailFeedback;
+
 	const float MoveEnterPlanarSpeed = 0.12f;
 	const float MoveExitPlanarSpeed = 0.035f;
+	const float GroundProbeUp = 6f;
+	const float GroundProbeDown = 24f;
 
 	FairyInteractable _interactable;
+	readonly RaycastHit[] _groundHits = new RaycastHit[ 16 ];
 	Vector3 _logicalPosition;
 	Vector3 _planarVelocity;
 	Vector3 _frameMoveDelta;
@@ -180,6 +221,7 @@ public class FairyHelper : MonoBehaviour
 	float _curveSide = 1f;
 	bool _isMoving;
 	bool _farGlowPlaying;
+	bool _guideTrailPlaying;
 	bool _talking;
 	bool _addressableOwned;
 	bool _worldPathPaused;
@@ -192,6 +234,12 @@ public class FairyHelper : MonoBehaviour
 	bool _farewellBubbleSeen;
 	float _farewellEndsAt = -1f;
 	float _flightSpeed;
+	GameObject _deliveryCargo;
+	bool _deliveryCargoAddressableOwned;
+	bool _deliveryCargoAttached;
+	bool _deliveryCargoTaken;
+	bool _deliveryFarewell;
+	Action _deliveryOnFinished;
 
 	public FairyMode Mode => mode;
 	public bool IsTalking => _talking;
@@ -216,11 +264,30 @@ public class FairyHelper : MonoBehaviour
 		StartGuideInternal( destination.position, destination, onFinished );
 	}
 
+	public static void StartGuideToMarker( string markerId, Action onFinished = null )
+	{
+		if ( string.IsNullOrEmpty( markerId ) )
+		{
+			Debug.LogWarning( "FairyHelper.StartGuideToMarker: marker id is empty." );
+			return;
+		}
+
+		if ( !EventTargetRegistry.TryGetMarkerTransform( markerId, out Transform marker ) || marker == null )
+		{
+			Debug.LogWarning( "FairyHelper.StartGuideToMarker: no marker/volume for id '" + markerId + "'." );
+			return;
+		}
+
+		StartGuide( marker, onFinished );
+	}
+
 	static void StartGuideInternal( Vector3 destination, Transform destinationTransform, Action onFinished )
 	{
 		int generation = ++_guideSpawnGeneration;
 		if ( ActiveGuide != null )
 			ActiveGuide.CancelGuide( invokeFinished: false );
+		if ( ActiveDelivery != null )
+			ActiveDelivery.CancelDelivery( invokeFinished: false );
 
 		PlayerController player = ResolvePlayer();
 		if ( player == null )
@@ -261,18 +328,104 @@ public class FairyHelper : MonoBehaviour
 		};
 	}
 
+	/// <summary>
+	/// Spawns a fairy near the player that hovers with an Addressable takeable item underneath.
+	/// Farewells and despawns once the cargo is taken (deactivated).
+	/// </summary>
+	public static void StartDelivery( string itemAddressableKey, Action onFinished = null )
+	{
+		if ( string.IsNullOrEmpty( itemAddressableKey ) )
+		{
+			Debug.LogWarning( "FairyHelper.StartDelivery: item addressable key is empty." );
+			return;
+		}
+
+		if ( itemAddressableKey == WorldHammerAddressableKey && IsWorldHammerAlreadyUnlocked() )
+		{
+			if ( onFinished != null )
+				onFinished();
+			return;
+		}
+
+		int generation = ++_deliverySpawnGeneration;
+		if ( ActiveGuide != null )
+			ActiveGuide.CancelGuide( invokeFinished: false );
+		if ( ActiveDelivery != null )
+			ActiveDelivery.CancelDelivery( invokeFinished: false );
+
+		PlayerController player = ResolvePlayer();
+		if ( player == null )
+		{
+			Debug.LogWarning( "FairyHelper.StartDelivery: no player available." );
+			return;
+		}
+
+		Vector3 spawnPos = player.transform.position;
+		Quaternion spawnRot = Quaternion.LookRotation( FlatForward( player.transform ), Vector3.up );
+		AsyncOperationHandle<GameObject> handle = Addressables.InstantiateAsync( AddressableKey, spawnPos, spawnRot );
+		handle.Completed += op =>
+		{
+			if ( generation != _deliverySpawnGeneration )
+			{
+				if ( op.Result != null )
+					Addressables.ReleaseInstance( op.Result );
+				return;
+			}
+
+			if ( op.Status != AsyncOperationStatus.Succeeded || op.Result == null )
+			{
+				Debug.LogWarning( "FairyHelper.StartDelivery: failed to spawn '" + AddressableKey + "'." );
+				return;
+			}
+
+			FairyHelper fairy = op.Result.GetComponent<FairyHelper>();
+			if ( fairy == null )
+			{
+				Addressables.ReleaseInstance( op.Result );
+				Debug.LogWarning( "FairyHelper.StartDelivery: spawned prefab missing FairyHelper." );
+				return;
+			}
+
+			fairy._addressableOwned = true;
+			fairy.ApplyDeliverySpawnOffset( player );
+			fairy.BeginDelivery( itemAddressableKey, onFinished );
+		};
+	}
+
+	static bool IsWorldHammerAlreadyUnlocked()
+	{
+		PlayerController player = ResolvePlayer();
+		if ( player == null || player.BuildMode == null )
+			return false;
+		return player.BuildMode.HasUnlockedWorldHammer;
+	}
+
 	void ApplyGuideSpawnOffset( PlayerController player )
 	{
 		if ( player == null )
 			return;
 
-		Vector3 spawnPos = BuildSpawnOffset( player, guideSpawnOffsetLocal );
+		Vector3 spawnPos = SnapToHoverHeight( BuildSpawnOffset( player, guideSpawnOffsetLocal ) );
 		_logicalPosition = spawnPos;
 		transform.position = spawnPos;
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
 		_isMoving = false;
 		FaceToward( FlatForward( player.transform ), instant: true );
+	}
+
+	void ApplyDeliverySpawnOffset( PlayerController player )
+	{
+		if ( player == null )
+			return;
+
+		Vector3 spawnPos = SnapToHoverHeight( BuildSpawnOffset( player, deliveryFollowOffsetLocal ) );
+		_logicalPosition = spawnPos;
+		transform.position = spawnPos;
+		_planarVelocity = Vector3.zero;
+		_frameMoveDelta = Vector3.zero;
+		_isMoving = false;
+		FaceToward( player.transform.position - spawnPos, instant: true );
 	}
 
 	public void BeginGuide( Vector3 destination, Action onFinished = null )
@@ -309,12 +462,84 @@ public class FairyHelper : MonoBehaviour
 	public void CancelGuide( bool invokeFinished )
 	{
 		CancelInvoke( nameof( EndGuideIntroTalk ) );
+		StopGuideTrail();
 		Action finished = _guideOnFinished;
 		_guideOnFinished = null;
 		_guidePhase = FairyGuidePhase.None;
 		_guideDestinationTransform = null;
 		if ( ActiveGuide == this )
 			ActiveGuide = null;
+		if ( invokeFinished && finished != null )
+			finished();
+		DespawnSelf();
+	}
+
+	void BeginDelivery( string itemAddressableKey, Action onFinished )
+	{
+		mode = FairyMode.Delivery;
+		_deliveryOnFinished = onFinished;
+		_deliveryCargoAttached = false;
+		_deliveryCargoTaken = false;
+		_deliveryFarewell = false;
+		_farewellBubbleSeen = false;
+		_farewellEndsAt = -1f;
+		_flightSpeed = moveSpeed;
+		_logicalPosition = transform.position;
+		ActiveDelivery = this;
+
+		PlayInteractFeedback();
+		NotifyTalkStarted();
+		Say( string.IsNullOrEmpty( deliveryOfferLine ) ? "A gift for you!" : deliveryOfferLine );
+		CancelInvoke( nameof( EndDeliveryIntroTalk ) );
+		Invoke( nameof( EndDeliveryIntroTalk ), 1.6f );
+
+		AsyncOperationHandle<GameObject> cargoHandle = Addressables.InstantiateAsync( itemAddressableKey );
+		cargoHandle.Completed += op =>
+		{
+			if ( this == null || mode != FairyMode.Delivery || _deliveryFarewell )
+			{
+				if ( op.Result != null )
+					Addressables.ReleaseInstance( op.Result );
+				return;
+			}
+
+			if ( op.Status != AsyncOperationStatus.Succeeded || op.Result == null )
+			{
+				Debug.LogWarning( "FairyHelper.BeginDelivery: failed to spawn cargo '" + itemAddressableKey + "'." );
+				CancelDelivery( invokeFinished: true );
+				return;
+			}
+
+			AttachDeliveryCargo( op.Result );
+		};
+	}
+
+	void AttachDeliveryCargo( GameObject cargo )
+	{
+		_deliveryCargo = cargo;
+		_deliveryCargoAddressableOwned = true;
+		_deliveryCargoAttached = true;
+		Transform cargoTransform = cargo.transform;
+		cargoTransform.SetParent( transform, false );
+		cargoTransform.localPosition = deliveryCargoOffsetLocal;
+		cargoTransform.localRotation = Quaternion.identity;
+	}
+
+	void EndDeliveryIntroTalk()
+	{
+		if ( mode == FairyMode.Delivery && !_deliveryFarewell )
+			NotifyTalkEnded();
+	}
+
+	public void CancelDelivery( bool invokeFinished )
+	{
+		CancelInvoke( nameof( EndDeliveryIntroTalk ) );
+		Action finished = _deliveryOnFinished;
+		_deliveryOnFinished = null;
+		_deliveryFarewell = false;
+		if ( ActiveDelivery == this )
+			ActiveDelivery = null;
+		ReleaseOrDetachDeliveryCargo( releaseIfUntaken: true );
 		if ( invokeFinished && finished != null )
 			finished();
 		DespawnSelf();
@@ -354,13 +579,20 @@ public class FairyHelper : MonoBehaviour
 			if ( loop != null )
 				onLoopFeedback = loop.GetComponent<Feedbacks>();
 		}
+		if ( onGuideTrailFeedback == null )
+		{
+			Transform trail = transform.Find( "GuideTrailFeedbacks" );
+			if ( trail != null )
+				onGuideTrailFeedback = trail.GetComponent<Feedbacks>();
+		}
 		if ( speechBubble != null )
 			speechBubble.BindFollow( transform );
 	}
 
 	void Start()
 	{
-		_logicalPosition = transform.position;
+		_logicalPosition = SnapToHoverHeight( transform.position );
+		transform.position = _logicalPosition;
 		_flightSpeed = moveSpeed;
 		StartLoopAudio();
 
@@ -373,6 +605,9 @@ public class FairyHelper : MonoBehaviour
 		StopLoopAudio();
 		if ( ActiveGuide == this )
 			ActiveGuide = null;
+		if ( ActiveDelivery == this )
+			ActiveDelivery = null;
+		ReleaseOrDetachDeliveryCargo( releaseIfUntaken: true );
 	}
 
 	void ClampTunables()
@@ -436,6 +671,9 @@ public class FairyHelper : MonoBehaviour
 			case FairyMode.World:
 				TickWorld( player );
 				break;
+			case FairyMode.Delivery:
+				TickDelivery( player );
+				break;
 			default:
 				TickIdle( player );
 				break;
@@ -444,6 +682,7 @@ public class FairyHelper : MonoBehaviour
 		UpdateAnimator();
 		if ( mode == FairyMode.Guide && player != null )
 			UpdateFarGlow( player );
+		UpdateGuideTrail();
 	}
 
 	void TickIdle( PlayerController player )
@@ -454,6 +693,101 @@ public class FairyHelper : MonoBehaviour
 		ApplyIdleBob( _logicalPosition );
 		if ( player != null && ( _talking || IsHovered ) )
 			FaceToward( player.transform.position - transform.position, instant: false );
+	}
+
+	void TickDelivery( PlayerController player )
+	{
+		if ( _deliveryFarewell )
+		{
+			HoldInPlace();
+			if ( player != null )
+				FaceToward( player.transform.position - transform.position, instant: false );
+			TickDeliveryFarewell();
+			return;
+		}
+
+		if ( player == null )
+		{
+			HoldInPlace();
+		}
+		else
+		{
+			Vector3 followTarget = SnapToHoverHeight( BuildSpawnOffset( player, deliveryFollowOffsetLocal ) );
+			_flightSpeed = deliveryFollowSpeed > 0.01f ? deliveryFollowSpeed : moveSpeed;
+			StepMove( followTarget );
+			FaceToward( player.transform.position - transform.position, instant: false );
+		}
+
+		// Taken = deactivated or destroyed (build mode consumes the world prop permanently).
+		if ( !_deliveryCargoTaken && _deliveryCargoAttached && ( _deliveryCargo == null || !_deliveryCargo.activeSelf ) )
+			OnDeliveryCargoTaken();
+	}
+
+	void OnDeliveryCargoTaken()
+	{
+		_deliveryCargoTaken = true;
+		ReleaseOrDetachDeliveryCargo( releaseIfUntaken: false );
+		BeginDeliveryFarewell();
+	}
+
+	void BeginDeliveryFarewell()
+	{
+		if ( _deliveryFarewell )
+			return;
+
+		_deliveryFarewell = true;
+		_farewellBubbleSeen = false;
+		_farewellEndsAt = Time.unscaledTime + deliveryFarewellHoldSeconds;
+		CancelInvoke( nameof( EndDeliveryIntroTalk ) );
+		PlayInteractFeedback();
+		NotifyTalkStarted();
+		Say( string.IsNullOrEmpty( deliveryTakenLine ) ? "You're welcome!" : deliveryTakenLine );
+	}
+
+	void TickDeliveryFarewell()
+	{
+		if ( speechBubble != null && speechBubble.IsShowing )
+		{
+			_farewellBubbleSeen = true;
+			return;
+		}
+
+		if ( !_farewellBubbleSeen && Time.unscaledTime < _farewellEndsAt )
+			return;
+
+		NotifyTalkEnded();
+		Action finished = _deliveryOnFinished;
+		_deliveryOnFinished = null;
+		_deliveryFarewell = false;
+		if ( ActiveDelivery == this )
+			ActiveDelivery = null;
+		if ( finished != null )
+			finished();
+		DespawnSelf();
+	}
+
+	/// <summary>
+	/// Unparents cargo before fairy despawn. Releases Addressable cargo only when still untaken.
+	/// </summary>
+	void ReleaseOrDetachDeliveryCargo( bool releaseIfUntaken )
+	{
+		GameObject cargo = _deliveryCargo;
+		bool owned = _deliveryCargoAddressableOwned;
+		bool attached = _deliveryCargoAttached;
+		_deliveryCargo = null;
+		_deliveryCargoAddressableOwned = false;
+		_deliveryCargoAttached = false;
+
+		if ( cargo == null )
+			return;
+
+		bool taken = _deliveryCargoTaken || !cargo.activeSelf;
+		if ( cargo.transform.parent == transform )
+			cargo.transform.SetParent( null, true );
+
+		// Only release untaken cargo we still own. Taken cargo is consumed by PlayerBuildMode.
+		if ( releaseIfUntaken && owned && attached && !taken )
+			Addressables.ReleaseInstance( cargo );
 	}
 
 	void TickGuide( PlayerController player )
@@ -515,7 +849,7 @@ public class FairyHelper : MonoBehaviour
 
 		_guidePhase = FairyGuidePhase.Guiding;
 		_flightSpeed = guideMoveSpeed;
-		StepMove( _guideDestination );
+		StepMove( SnapToHoverHeight( _guideDestination ) );
 		UpdateFacingWhileMoving( player );
 	}
 
@@ -524,6 +858,7 @@ public class FairyHelper : MonoBehaviour
 		_guidePhase = FairyGuidePhase.Farewell;
 		_farewellBubbleSeen = false;
 		_farewellEndsAt = Time.unscaledTime + guideFarewellHoldSeconds;
+		StopGuideTrail();
 		PlayInteractFeedback();
 		NotifyTalkStarted();
 		Say( string.IsNullOrEmpty( guideArriveLine ) ? "Here it is, good luck." : guideArriveLine );
@@ -573,13 +908,13 @@ public class FairyHelper : MonoBehaviour
 				if ( CinematicSplineLook.TryEvaluate( worldSpline, t, out pos, out tangent, out up ) )
 				{
 					Vector3 previous = _logicalPosition;
-					_logicalPosition = pos;
-					_frameMoveDelta = pos - previous;
+					_logicalPosition = SnapToHoverHeight( pos );
+					_frameMoveDelta = _logicalPosition - previous;
 					float dt = Mathf.Max( Time.deltaTime, 0.0001f );
 					_planarVelocity = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ) / dt;
 					UpdateMoveState( dt );
 
-					Vector3 display = pos;
+					Vector3 display = _logicalPosition;
 					if ( !_isMoving && idleBobAmplitude > 0f )
 					{
 						_bobPhase += Time.deltaTime * idleBobSpeed;
@@ -630,8 +965,8 @@ public class FairyHelper : MonoBehaviour
 		if ( !CinematicSplineLook.TryEvaluate( worldSpline, 0f, out pos, out tangent, out up ) )
 			return;
 
-		_logicalPosition = pos;
-		transform.position = pos;
+		_logicalPosition = SnapToHoverHeight( pos );
+		transform.position = _logicalPosition;
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
 		_isMoving = false;
@@ -692,19 +1027,22 @@ public class FairyHelper : MonoBehaviour
 
 	void StepMove( Vector3 desired )
 	{
-		Vector3 current = _logicalPosition;
+		desired = SnapToHoverHeight( desired );
+		Vector3 current = SnapToHoverHeight( _logicalPosition );
+		_logicalPosition = current;
 		float dt = Mathf.Max( Time.deltaTime, 0.0001f );
 
 		Vector3 to = desired - current;
 		Vector3 planar = new Vector3( to.x, 0f, to.z );
 		float planarDist = planar.magnitude;
 
-		if ( planarDist <= arriveDistance && Mathf.Abs( to.y ) <= arriveDistance )
+		// Arrive on planar distance only — hover Y is applied separately and must not gate movement.
+		if ( planarDist <= arriveDistance )
 		{
 			_frameMoveDelta = Vector3.zero;
 			_planarVelocity = Vector3.zero;
 			UpdateMoveState( dt );
-			ApplyIdleBob( current );
+			ApplyIdleBob( desired );
 			return;
 		}
 
@@ -713,7 +1051,11 @@ public class FairyHelper : MonoBehaviour
 
 		Vector3 seek = BuildCurvedSeekPoint( current, desired, planar, planarDist );
 		float speed = _flightSpeed > 0.01f ? _flightSpeed : moveSpeed;
-		Vector3 nextFree = Vector3.MoveTowards( current, seek, speed * dt );
+		// Keep MoveTowards planar so ground-hover Y never steals flight speed.
+		Vector3 seekPlanar = new Vector3( seek.x, current.y, seek.z );
+		Vector3 nextFree = Vector3.MoveTowards( current, seekPlanar, speed * dt );
+		float travelLift = BuildTravelLift( planarDist );
+		nextFree = SnapToHoverHeight( nextFree, travelLift );
 
 		_frameMoveDelta = nextFree - current;
 		_planarVelocity = new Vector3( _frameMoveDelta.x, 0f, _frameMoveDelta.z ) / dt;
@@ -739,6 +1081,8 @@ public class FairyHelper : MonoBehaviour
 
 	void ApplyIdleBob( Vector3 logical )
 	{
+		logical = SnapToHoverHeight( logical );
+		_logicalPosition = logical;
 		Vector3 display = logical;
 		if ( !_isMoving && idleBobAmplitude > 0f )
 		{
@@ -794,8 +1138,15 @@ public class FairyHelper : MonoBehaviour
 		float pathT = lookAhead / planarDist;
 		Vector3 along = Vector3.Lerp( current, desired, pathT );
 		along += lateral * lateralOffset;
-		along.y += Mathf.Abs( Mathf.Sin( _curvePhase * 0.5f ) ) * travelLiftAmplitude * Mathf.Clamp01( planarDist / closeArcDistance );
+		along.y = desired.y + BuildTravelLift( planarDist );
 		return along;
+	}
+
+	float BuildTravelLift( float planarDist )
+	{
+		if ( travelLiftAmplitude <= 0f || planarDist <= 0.0001f )
+			return 0f;
+		return Mathf.Abs( Mathf.Sin( _curvePhase * 0.5f ) ) * travelLiftAmplitude * Mathf.Clamp01( planarDist / closeArcDistance );
 	}
 
 	void UpdateMoveState( float dt )
@@ -879,14 +1230,49 @@ public class FairyHelper : MonoBehaviour
 		}
 	}
 
+	void UpdateGuideTrail()
+	{
+		bool wantTrail = mode == FairyMode.Guide && _guidePhase == FairyGuidePhase.Guiding && _isMoving;
+		if ( wantTrail )
+			PlayGuideTrail();
+		else
+			StopGuideTrail();
+	}
+
+	void PlayGuideTrail()
+	{
+		if ( _guideTrailPlaying || onGuideTrailFeedback == null )
+			return;
+
+		onGuideTrailFeedback.Play();
+		_guideTrailPlaying = true;
+	}
+
+	void StopGuideTrail()
+	{
+		if ( !_guideTrailPlaying )
+			return;
+
+		if ( onGuideTrailFeedback != null )
+			onGuideTrailFeedback.Stop();
+		_guideTrailPlaying = false;
+	}
+
 	void DespawnSelf()
 	{
+		ReleaseOrDetachDeliveryCargo( releaseIfUntaken: true );
 		StopLoopAudio();
+		StopGuideTrail();
 		if ( _farGlowPlaying && onFarGlowFeedback != null )
 		{
 			onFarGlowFeedback.Stop();
 			_farGlowPlaying = false;
 		}
+
+		if ( ActiveDelivery == this )
+			ActiveDelivery = null;
+		if ( ActiveGuide == this )
+			ActiveGuide = null;
 
 		if ( _addressableOwned )
 		{
@@ -912,12 +1298,69 @@ public class FairyHelper : MonoBehaviour
 		return GameMode.Instance.Player;
 	}
 
-	static Vector3 BuildSpawnOffset( PlayerController player, Vector3 localOffset )
+	Vector3 SnapToHoverHeight( Vector3 pos, float extraLift = 0f )
+	{
+		float groundY;
+		if ( !TrySampleGroundY( pos, out groundY ) )
+			return pos;
+
+		pos.y = groundY + hoverHeight + extraLift;
+		return pos;
+	}
+
+	bool TrySampleGroundY( Vector3 pos, out float groundY )
+	{
+		groundY = pos.y;
+		Vector3 origin = new Vector3( pos.x, pos.y + GroundProbeUp, pos.z );
+		int hitCount = Physics.RaycastNonAlloc(
+			origin,
+			Vector3.down,
+			_groundHits,
+			GroundProbeUp + GroundProbeDown,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Ignore );
+		if ( hitCount <= 0 )
+			return false;
+
+		float bestDistance = float.MaxValue;
+		bool found = false;
+		for ( int i = 0; i < hitCount; i++ )
+		{
+			RaycastHit hit = _groundHits[ i ];
+			if ( hit.collider == null )
+				continue;
+			if ( IsOwnCollider( hit.collider ) )
+				continue;
+			if ( !PlacementFloorSurface.IsWalkableFloorHit( in hit ) )
+				continue;
+			if ( hit.distance >= bestDistance )
+				continue;
+
+			bestDistance = hit.distance;
+			groundY = hit.point.y;
+			found = true;
+		}
+
+		return found;
+	}
+
+	bool IsOwnCollider( Collider collider )
+	{
+		Transform t = collider.transform;
+		return t == transform || t.IsChildOf( transform );
+	}
+
+	Vector3 BuildSpawnOffset( PlayerController player, Vector3 localOffset )
 	{
 		float yaw = player.transform.eulerAngles.y;
 		Quaternion rot = Quaternion.Euler( 0f, yaw, 0f );
-		Vector3 offset = rot * localOffset;
-		return player.transform.position + offset;
+		Vector3 planarOffset = localOffset;
+		planarOffset.y = 0f;
+		Vector3 offset = rot * planarOffset;
+		Vector3 pos = player.transform.position + offset;
+		// Seed Y near the player so the ground probe starts from a sensible height.
+		pos.y = player.transform.position.y + hoverHeight;
+		return pos;
 	}
 
 	static Vector3 FlatForward( Transform t )

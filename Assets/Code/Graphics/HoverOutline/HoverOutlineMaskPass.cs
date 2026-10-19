@@ -9,6 +9,7 @@ using UnityEngine.Rendering.Universal;
 public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 {
 	static readonly int MaskTextureId = Shader.PropertyToID( "_HoverOutlineMask" );
+	static readonly int ZTestId = Shader.PropertyToID( "_ZTest" );
 
 	readonly ProfilingSampler _profilingSampler;
 	readonly Material _maskMaterial;
@@ -45,6 +46,27 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 	IReadOnlyList<Renderer> ActiveRenderers =>
 		_questChannel ? QuestOutlineRegistrar.Renderers : HoverOutlineRegistrar.Renderers;
 
+	HoverOutlineVisualSettings ActiveSettings =>
+		_questChannel ? QuestOutlineRegistrar.Settings : HoverOutlineRegistrar.Settings;
+
+	bool RespectSceneDepth
+	{
+		get
+		{
+			HoverOutlineVisualSettings settings = ActiveSettings;
+			return settings != null && settings.respectSceneDepth;
+		}
+	}
+
+	void ApplyMaskZTest()
+	{
+		if ( _maskMaterial == null )
+			return;
+
+		CompareFunction zTest = RespectSceneDepth ? CompareFunction.LessEqual : CompareFunction.Always;
+		_maskMaterial.SetFloat( ZTestId, (float)zTest );
+	}
+
 #if URP_COMPATIBILITY_MODE
 #pragma warning disable 618, 672
 
@@ -56,7 +78,17 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 		desc.graphicsFormat = GraphicsFormat.R8_UNorm;
 		string name = _questChannel ? "_QuestOutlineMask" : "_HoverOutlineMask";
 		RenderingUtils.ReAllocateIfNeeded( ref _maskHandle, desc, FilterMode.Point, TextureWrapMode.Clamp, name: name );
-		ConfigureTarget( _maskHandle );
+
+		if ( RespectSceneDepth )
+		{
+			RTHandle depth = renderingData.cameraData.renderer.cameraDepthTargetHandle;
+			ConfigureTarget( _maskHandle, depth );
+		}
+		else
+		{
+			ConfigureTarget( _maskHandle );
+		}
+
 		ConfigureClear( ClearFlag.Color, Color.black );
 	}
 
@@ -65,6 +97,7 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 		if ( !HasTarget || _maskMaterial == null )
 			return;
 
+		ApplyMaskZTest();
 		BuildDrawList( ActiveRenderers, _drawScratch );
 
 		CommandBuffer cmd = CommandBufferPool.Get();
@@ -115,6 +148,7 @@ public sealed class HoverOutlineMaskPass : ScriptableRenderPass
 		else
 			outlineData.maskTexture = _maskTextureHandle;
 
+		ApplyMaskZTest();
 		BuildDrawList( ActiveRenderers, _drawScratch );
 
 		using ( var builder = renderGraph.AddRasterRenderPass<PassData>( _profilingSampler.name, out PassData passData, _profilingSampler ) )

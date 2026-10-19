@@ -10,7 +10,8 @@ public enum ObjectiveSubCompleteType
 	PileEmptied = 2,
 	ConstellationComplete = 3,
 	EnterVolume = 4,
-	WorldEventFired = 5
+	WorldEventFired = 5,
+	WorldEventCompleted = 6
 }
 
 public enum ObjectiveRewardType
@@ -29,7 +30,7 @@ public class ObjectiveSubDefinition
 
 	public ObjectiveSubCompleteType completeType;
 
-	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired. Empty DisplayComplete / PileEmptied = all matching targets inside showVolumeId. Empty for other types = any matching event." )]
+	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired / WorldEventCompleted. Empty DisplayComplete / PileEmptied = all matching targets inside showVolumeId. Empty for other types = any matching event." )]
 	public string targetId;
 
 	[Tooltip( "Count shown as label: current/required. 0 = use the target's capacity or pile size." )]
@@ -63,6 +64,9 @@ public class ObjectiveDefinition : ScriptableObject
 	public string id;
 
 	public string title;
+
+	[Tooltip( "When true, the HUD shows this objective whenever prerequisites are met — ignores showVolumeId / showRadius. Use for main story objectives." )]
+	public bool alwaysShow;
 
 	[Tooltip( "QuestVolume id for the island / area. When set, the nearby HUD shows this objective while the player is inside that volume." )]
 	public string showVolumeId;

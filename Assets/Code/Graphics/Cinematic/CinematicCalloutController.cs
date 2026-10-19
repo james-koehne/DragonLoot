@@ -70,7 +70,12 @@ public class CinematicCalloutController : MonoBehaviour
 	[SerializeField]
 	[Min( 0f )]
 	[Tooltip( "Seconds to ease the camera toward the look target / frame when the callout starts." )]
-	float _lookBlendDuration = 0.5f;
+	float _lookBlendDuration = 0.85f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Seconds to ease the third-person camera back to the first-person mount when the callout ends." )]
+	float _cameraBlendOutDuration = 0.85f;
 
 	[Header( "Look Motion" )]
 	[SerializeField]
@@ -97,9 +102,11 @@ public class CinematicCalloutController : MonoBehaviour
 	bool _cameraDetached;
 	bool _detachedLookActive;
 	bool _floatActive;
+	bool _returningToMount;
 	float _envelope;
 	float _targetEnvelope;
 	float _lookBlend;
+	float _returnBlend;
 	float _floatWeight;
 	float _currentBodyYaw;
 	float _currentPitch;
@@ -111,6 +118,8 @@ public class CinematicCalloutController : MonoBehaviour
 	Vector3 _floatGroundPos;
 	Vector3 _frameBlendStartPos;
 	Quaternion _frameBlendStartRot;
+	Vector3 _returnBlendStartPos;
+	Quaternion _returnBlendStartRot;
 	FirstPersonCameraController _camera;
 	CameraController _cameraRig;
 	PlayerController _player;
@@ -202,6 +211,8 @@ public class CinematicCalloutController : MonoBehaviour
 		_onEnded = null;
 		_targetEnvelope = 1f;
 		_lookBlend = 0f;
+		_returnBlend = 0f;
+		_returningToMount = false;
 		_floatWeight = 0f;
 		_swayTime = 0f;
 		_yawVelocity = 0f;
@@ -213,6 +224,7 @@ public class CinematicCalloutController : MonoBehaviour
 		_baseFov = _camera.Camera != null ? _camera.Camera.fieldOfView : 60f;
 		_camera.SetFieldOfViewOverride( true );
 		_player.SetCinematicInputLock( true );
+		SetCrosshairHidden( true );
 
 		BeginPlatformFloat();
 
@@ -237,8 +249,11 @@ public class CinematicCalloutController : MonoBehaviour
 		_ending = true;
 		_targetEnvelope = 0f;
 		_onEnded = onEnded;
+		BeginReturnToMount();
+
 		bool floatWillLower = _floatRoot != null && _floatHeight > 0f && _floatDuration > 0f && _floatWeight > 0f;
-		if ( _blendOut <= 0f && !floatWillLower )
+		bool cameraWillReturn = _returningToMount && _cameraBlendOutDuration > 0f;
+		if ( _blendOut <= 0f && !floatWillLower && !cameraWillReturn )
 			FinishEnd();
 	}
 
@@ -252,10 +267,20 @@ public class CinematicCalloutController : MonoBehaviour
 		float step = blendTime > 0.0001f ? dt / blendTime : 1f;
 		_envelope = Mathf.MoveTowards( _envelope, _targetEnvelope, step );
 
-		if ( !_ending && _lookBlendDuration > 0.0001f )
-			_lookBlend = Mathf.MoveTowards( _lookBlend, 1f, dt / _lookBlendDuration );
-		else if ( !_ending )
-			_lookBlend = 1f;
+		if ( !_ending )
+		{
+			if ( _lookBlendDuration > 0.0001f )
+				_lookBlend = Mathf.MoveTowards( _lookBlend, 1f, dt / _lookBlendDuration );
+			else
+				_lookBlend = 1f;
+		}
+		else if ( _returningToMount )
+		{
+			if ( _cameraBlendOutDuration > 0.0001f )
+				_returnBlend = Mathf.MoveTowards( _returnBlend, 1f, dt / _cameraBlendOutDuration );
+			else
+				_returnBlend = 1f;
+		}
 
 		_swayTime += dt;
 		ApplyEnvelope( _envelope );
@@ -267,8 +292,36 @@ public class CinematicCalloutController : MonoBehaviour
 		else
 			ApplyLook( dt );
 
-		if ( _ending && _envelope <= 0.0001f && !_floatActive )
+		if ( _ending && _envelope <= 0.0001f && !_floatActive && IsCameraReturnComplete() )
 			FinishEnd();
+	}
+
+	void BeginReturnToMount()
+	{
+		_returningToMount = false;
+		_returnBlend = 0f;
+		if ( !IsThirdPersonFrame || !_cameraDetached || _cameraRig == null )
+			return;
+
+		if ( _camera != null && _camera.Camera != null )
+		{
+			_returnBlendStartPos = _camera.Camera.transform.position;
+			_returnBlendStartRot = _camera.Camera.transform.rotation;
+		}
+		else
+		{
+			_returnBlendStartPos = _cameraRig.transform.position;
+			_returnBlendStartRot = _cameraRig.transform.rotation;
+		}
+
+		_returningToMount = true;
+	}
+
+	bool IsCameraReturnComplete()
+	{
+		if ( !_returningToMount )
+			return true;
+		return _returnBlend >= 0.999f;
 	}
 
 	void BeginPlatformFloat()
@@ -377,21 +430,31 @@ public class CinematicCalloutController : MonoBehaviour
 		if ( _cameraRig == null || _cameraFrame == null )
 			return;
 
-		// Hold the authored frame through letterbox fade-out; ForceRestore reparents to FP.
-		float blend = _ending ? 1f : Mathf.Clamp01( _lookBlend );
+		Vector3 pos;
+		Quaternion rot;
+		if ( _returningToMount )
+		{
+			ResolveMountWorldPose( out Vector3 mountPos, out Quaternion mountRot );
+			float returnT = EaseInOut( _returnBlend );
+			pos = Vector3.Lerp( _returnBlendStartPos, mountPos, returnT );
+			rot = Quaternion.Slerp( _returnBlendStartRot, mountRot, returnT );
+		}
+		else
+		{
+			float blend = EaseInOut( Mathf.Clamp01( _lookBlend ) );
+			Vector3 targetPos = _cameraFrame.position;
+			Quaternion targetRot = _cameraFrame.rotation;
 
-		Vector3 targetPos = _cameraFrame.position;
-		Quaternion targetRot = _cameraFrame.rotation;
+			float swayWeight = blend;
+			float swayYaw = Mathf.Sin( _swayTime * _idleSwayFrequency * Mathf.PI * 2f ) * _idleSwayYawDegrees * swayWeight;
+			float swayPitch = Mathf.Sin( _swayTime * _idleSwayFrequency * 0.73f * Mathf.PI * 2f + 1.1f ) *
+			                  _idleSwayPitchDegrees *
+			                  swayWeight;
+			targetRot = targetRot * Quaternion.Euler( swayPitch, swayYaw, 0f );
 
-		float swayWeight = blend * ( _ending ? _envelope : 1f );
-		float swayYaw = Mathf.Sin( _swayTime * _idleSwayFrequency * Mathf.PI * 2f ) * _idleSwayYawDegrees * swayWeight;
-		float swayPitch = Mathf.Sin( _swayTime * _idleSwayFrequency * 0.73f * Mathf.PI * 2f + 1.1f ) *
-		                  _idleSwayPitchDegrees *
-		                  swayWeight;
-		targetRot = targetRot * Quaternion.Euler( swayPitch, swayYaw, 0f );
-
-		Vector3 pos = Vector3.Lerp( _frameBlendStartPos, targetPos, blend );
-		Quaternion rot = Quaternion.Slerp( _frameBlendStartRot, targetRot, blend );
+			pos = Vector3.Lerp( _frameBlendStartPos, targetPos, blend );
+			rot = Quaternion.Slerp( _frameBlendStartRot, targetRot, blend );
+		}
 
 		if ( _camera != null )
 		{
@@ -400,6 +463,22 @@ public class CinematicCalloutController : MonoBehaviour
 		}
 
 		_cameraRig.SetWorldPose( pos, rot );
+	}
+
+	void ResolveMountWorldPose( out Vector3 position, out Quaternion rotation )
+	{
+		position = _cameraRig != null ? _cameraRig.transform.position : Vector3.zero;
+		rotation = _cameraRig != null ? _cameraRig.transform.rotation : Quaternion.identity;
+
+		if ( _player == null || _player.CameraMount == null )
+			return;
+
+		Transform mount = _player.CameraMount;
+		position = mount.position;
+
+		// Match FP mount: body yaw + stored pitch so reattach lands without a pop.
+		float yaw = _player.transform.eulerAngles.y;
+		rotation = Quaternion.Euler( _restorePitch, yaw, 0f );
 	}
 
 	void ResolveRefs()
@@ -468,7 +547,7 @@ public class CinematicCalloutController : MonoBehaviour
 		desiredYaw += swayYaw;
 		desiredPitch = Mathf.Clamp( desiredPitch + swayPitch, -85f, 85f );
 
-		float blend = Mathf.Clamp01( _lookBlend );
+		float blend = EaseInOut( Mathf.Clamp01( _lookBlend ) );
 		float blendedYaw = Mathf.LerpAngle( _currentBodyYaw, desiredYaw, blend );
 		float blendedPitch = Mathf.Lerp( _currentPitch, desiredPitch, blend );
 
@@ -536,15 +615,25 @@ public class CinematicCalloutController : MonoBehaviour
 			_player.SetCinematicInputLock( false );
 		}
 
+		SetCrosshairHidden( false );
+
 		_active = false;
 		_ending = false;
 		_cameraDetached = false;
 		_envelope = 0f;
 		_targetEnvelope = 0f;
 		_lookBlend = 0f;
+		_returnBlend = 0f;
+		_returningToMount = false;
 		_floatWeight = 0f;
 		_yawVelocity = 0f;
 		_pitchVelocity = 0f;
+	}
+
+	static void SetCrosshairHidden( bool hidden )
+	{
+		if ( CrosshairUI.Instance != null )
+			CrosshairUI.Instance.SetCinematicHidden( hidden );
 	}
 
 	static float NormalizePitch( float eulerX )

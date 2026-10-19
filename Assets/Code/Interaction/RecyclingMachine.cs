@@ -155,7 +155,9 @@ public class RecyclingMachine : MonoBehaviour, ITreasureOwner
 	public int StationLevel => ResolveStationLevel();
 
 	public bool CanAcceptPull =>
-		_state != MachineState.Shredding && _state != MachineState.Output;
+		ObjectiveUnlockGate.IsUnlockedFor( this )
+		&& _state != MachineState.Shredding
+		&& _state != MachineState.Output;
 
 	public bool IsPulling => Time.time <= _pullActiveUntil;
 
@@ -261,6 +263,8 @@ public class RecyclingMachine : MonoBehaviour, ITreasureOwner
 	public bool CanAcceptJunk( TreasureItem item )
 	{
 		if ( item == null || item.Definition == null )
+			return false;
+		if ( !ObjectiveUnlockGate.IsUnlockedFor( this ) )
 			return false;
 		if ( _state == MachineState.Shredding || _state == MachineState.Output )
 			return false;

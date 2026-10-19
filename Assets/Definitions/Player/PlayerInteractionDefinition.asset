@@ -45,6 +45,7 @@ MonoBehaviour:
     normalEdgeWeight: 0
     pulseSpeed: 1.1
     pulseAmount: 0.1
+    respectSceneDepth: 1
   questOutline:
     outlineColor: {r: 0.23, g: 1.14, b: 1.25, a: 1}
     outlineIntensity: 1
@@ -58,16 +59,18 @@ MonoBehaviour:
     normalEdgeWeight: 0
     pulseSpeed: 1.1
     pulseAmount: 0.1
+    respectSceneDepth: 1
   tutorialOutline:
-    outlineColor: {r: 0.9, g: 0.46, b: 1.2, a: 1}
+    outlineColor: {r: 0.3184941, g: 0.84705883, b: 0.3184941, a: 1}
     outlineIntensity: 1.1
     hdrBoost: 1.55
-    scalePixels: 3.5
-    maskDilatePixels: 2.5
-    depthThreshold: 1.5
+    scalePixels: 2
+    maskDilatePixels: 2
+    depthThreshold: 10
     normalThreshold: 0.4
     depthNormalThreshold: 0.5
     depthNormalThresholdScale: 7
-    normalEdgeWeight: 1
-    pulseSpeed: 1.2
+    normalEdgeWeight: 0
+    pulseSpeed: 1.1
     pulseAmount: 0.16
+    respectSceneDepth: 1

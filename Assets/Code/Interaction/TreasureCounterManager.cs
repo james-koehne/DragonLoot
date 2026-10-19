@@ -154,12 +154,18 @@ public class TreasureCounterManager : MonoBehaviour
 		TreasurePileDefinition def = pile.PileDefinition;
 		if ( def != null )
 		{
-			SeedPileEntries( def.coinContents );
+			TreasurePileVisual visual = pile.PileVisual;
+			if ( visual == null )
+				visual = pile.GetComponent<TreasurePileVisual>();
+			TreasurePileEntry[] coinContents = visual != null
+				? visual.GetEffectiveCoinContents( def )
+				: def.coinContents;
+			SeedPileEntries( coinContents );
 			SeedPileEntries( def.treasureContents );
 			SeedAuthoredPileExtras( pile );
-			if ( ( def.coinContents != null && def.coinContents.Length > 0 )
+			if ( ( coinContents != null && coinContents.Length > 0 )
 				|| ( def.treasureContents != null && def.treasureContents.Length > 0 )
-				|| ( pile.PileVisual != null && pile.PileVisual.CountAuthoredItems() > 0 ) )
+				|| ( visual != null && visual.CountAuthoredItems() > 0 ) )
 				return;
 		}
 

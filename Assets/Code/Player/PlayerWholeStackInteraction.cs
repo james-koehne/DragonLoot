@@ -1226,6 +1226,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 				if ( display is CoinDisplayTableInteractable coinTable )
 					coinTable.TryAppendWholeStackWithAutoLevel( slotIndex, flying );
+				else if ( display is MixedDisplayTableInteractable mixedDisplay )
+					mixedDisplay.TryAppendSlotDefinitions( slotIndex, flying, playerDirected: true );
 				else
 					display.TryAppendSlotDefinitions( slotIndex, flying );
 
@@ -1298,7 +1300,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		carryDef = RuntimeDefinition.Resolve( ref carryDef );
 		float duration = carryDef != null ? carryDef.wholeStackAbsorbTweenDuration : 0.28f;
 		float seed = carry.CoinHandVariationSeed;
-		ITreasureDisplayStackOwner display = mixedTable;
+		MixedDisplayTableInteractable capturedTable = mixedTable;
 		int capturedSlot = slotIndex;
 		Vector3 capturedEndPos = endPos;
 
@@ -1312,8 +1314,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			duration,
 			() =>
 			{
-				if ( display != null )
-					display.TryAppendSlotDefinitions( capturedSlot, flying );
+				if ( capturedTable != null )
+					capturedTable.TryAppendSlotDefinitions( capturedSlot, flying, playerDirected: true );
 
 				CoinStackInteractSfx.PlayStackPlace( capturedEndPos );
 			} );

@@ -105,8 +105,7 @@ public static class DragonLootMenus
 	public const string GameObjectFloatingPlatformGroup = "GameObject/DragonLoot/Floating Platform Group";
 
 	// --- Tools ---
-	public const string ToolsMilanoteSettings = Root + "/Tools/Milanote Sync Settings";
-	public const string ToolsMilanoteTasks = Root + "/Tools/Milanote Sync Tasks";
+	public const string ToolsProjectTasks = Root + "/Tools/Project Tasks";
 	public const string ToolsHeightmapToProBuilder = Root + "/Tools/Heightmap To ProBuilder";
 
 	// --- UI ---
@@ -141,6 +140,7 @@ public static class DragonLootMenus
 
 	// --- Companions ---
 	public const string CompanionsBuildFairyHelper = Root + "/Companions/Build Fairy Helper Prefab";
+	public const string CompanionsEnsureFairyGuideTrail = Root + "/Companions/Ensure Fairy Guide Trail";
 
 	// --- Dragon ---
 	public const string DragonSetupLookAt = Root + "/Dragon/Setup Look-At";

@@ -2,6 +2,7 @@ Shader "DragonLoot/Hover Outline Mask"
 {
 	Properties
 	{
+		[Enum(UnityEngine.Rendering.CompareFunction)] _ZTest("ZTest", Float) = 8
 		[Toggle] _DeformEnabled("Runtime Deform Map", Float) = 0
 		_DeformMap("Deform Height Map", 2D) = "black" {}
 		_DeformScale("Deform Height Scale", Float) = 1.5
@@ -26,7 +27,7 @@ Shader "DragonLoot/Hover Outline Mask"
 			Tags { "LightMode" = "SRPDefaultUnlit" }
 
 			ZWrite Off
-			ZTest Always
+			ZTest [_ZTest]
 			Cull Off
 			ColorMask R
 

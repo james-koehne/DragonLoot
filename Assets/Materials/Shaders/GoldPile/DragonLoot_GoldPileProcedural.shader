@@ -206,6 +206,7 @@ Shader "DragonLoot/Gold Pile Procedural"
             struct ShadowVaryings
             {
                 float4 positionCS : SV_POSITION;
+                float2 deformUV   : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -220,6 +221,7 @@ Shader "DragonLoot/Gold Pile Procedural"
                 float3 positionOS = ApplyProcRuntimeDeform(input.positionOS.xyz, input.texcoord);
                 float3 positionWS = TransformObjectToWorld(positionOS);
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.deformUV = input.texcoord;
 
 #if _CASTING_PUNCTUAL_LIGHT_SHADOW
                 float3 lightDirectionWS = normalize(_LightPosition - positionWS);
@@ -238,6 +240,7 @@ Shader "DragonLoot/Gold Pile Procedural"
 
             half4 GoldPileProcShadowFrag(ShadowVaryings input) : SV_Target
             {
+                ProcClipBelowGround(input.deformUV);
                 return 0;
             }
             ENDHLSL
@@ -271,6 +274,7 @@ Shader "DragonLoot/Gold Pile Procedural"
             struct DepthVaryings
             {
                 float4 positionCS : SV_POSITION;
+                float2 deformUV   : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -284,11 +288,13 @@ Shader "DragonLoot/Gold Pile Procedural"
 
                 float3 positionOS = ApplyProcRuntimeDeform(input.positionOS.xyz, input.texcoord);
                 output.positionCS = TransformObjectToHClip(positionOS);
+                output.deformUV = input.texcoord;
                 return output;
             }
 
             half4 GoldPileProcDepthFrag(DepthVaryings input) : SV_Target
             {
+                ProcClipBelowGround(input.deformUV);
                 return 0;
             }
             ENDHLSL
@@ -323,6 +329,7 @@ Shader "DragonLoot/Gold Pile Procedural"
             {
                 float4 positionCS : SV_POSITION;
                 float3 normalWS   : TEXCOORD0;
+                float2 deformUV   : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -337,11 +344,13 @@ Shader "DragonLoot/Gold Pile Procedural"
                 float3 positionOS = ApplyProcRuntimeDeform(input.positionOS.xyz, input.texcoord);
                 output.positionCS = TransformObjectToHClip(positionOS);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.deformUV = input.texcoord;
                 return output;
             }
 
             half4 GoldPileProcDepthNormalsFrag(DepthNormalsVaryings input) : SV_Target
             {
+                ProcClipBelowGround(input.deformUV);
                 return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
             }
             ENDHLSL

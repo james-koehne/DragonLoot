@@ -32,7 +32,7 @@ public class WorldEventDefinitionEditor : Editor
 		EditorGUILayout.PropertyField( _sessionOnly );
 		EditorGUILayout.PropertyField( _manualOnly );
 		if ( _manualOnly.boolValue )
-			EditorGUILayout.HelpBox( "Not evaluated from conditions. Fire from objective On Complete World Event Ids or debug.", MessageType.Info );
+			EditorGUILayout.HelpBox( "Not evaluated from conditions. Fire from objective / buildable On Complete World Event Ids or debug.", MessageType.Info );
 		EditorGUILayout.PropertyField( _conditions, includeChildren: true );
 
 		EditorGUILayout.Space( 8f );
@@ -111,6 +111,10 @@ public class WorldEventDefinitionEditor : Editor
 				       " (" + calloutLines + " line" + ( calloutLines == 1 ? "" : "s" ) + ")";
 			case WorldEventActionType.BrakePlayerMovement:
 				return "Brake " + action.playerBrakeDuration.ToString( "0.##" ) + "s";
+			case WorldEventActionType.StartFairyGuide:
+				return "FairyGuide " + ( string.IsNullOrEmpty( action.markerTargetId ) ? "(no marker)" : action.markerTargetId );
+			case WorldEventActionType.StartFairyDelivery:
+				return "FairyDelivery " + ( string.IsNullOrEmpty( action.addressableKey ) ? "(no key)" : action.addressableKey );
 			default:
 				return action.type.ToString();
 		}
@@ -203,6 +207,12 @@ public class WorldEventActionDrawer : PropertyDrawer
 				break;
 			case WorldEventActionType.BrakePlayerMovement:
 				height += line;
+				break;
+			case WorldEventActionType.StartFairyGuide:
+				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
+				break;
+			case WorldEventActionType.StartFairyDelivery:
+				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
 		}
 
@@ -306,6 +316,26 @@ public class WorldEventActionDrawer : PropertyDrawer
 				break;
 			case WorldEventActionType.BrakePlayerMovement:
 				row = DrawRelative( row, property, "playerBrakeDuration" );
+				break;
+			case WorldEventActionType.StartFairyGuide:
+				row = DrawRelative( row, property, "markerTargetId" );
+				{
+					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
+					EditorGUI.HelpBox( help,
+						"Spawns a guide fairy near the player that leads to this marker/volume id (e.g. volume_workshop).",
+						MessageType.Info );
+					row.y += help.height + 2f;
+				}
+				break;
+			case WorldEventActionType.StartFairyDelivery:
+				row = DrawRelative( row, property, "addressableKey" );
+				{
+					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
+					EditorGUI.HelpBox( help,
+						"Spawns a fairy near the player with this Addressable takeable item underneath (e.g. Assets/Prefabs/Build/WorldHammer.prefab).",
+						MessageType.Info );
+					row.y += help.height + 2f;
+				}
 				break;
 		}
 
