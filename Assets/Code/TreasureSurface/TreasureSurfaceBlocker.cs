@@ -61,8 +61,7 @@ public class TreasureSurfaceBlocker : MonoBehaviour
 	public static void RefreshAll()
 	{
 		TreasureSurfaceBlocker[] blockers = UnityEngine.Object.FindObjectsByType<TreasureSurfaceBlocker>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Exclude );
 		if ( blockers == null )
 			return;
 
@@ -123,8 +122,7 @@ public class TreasureSurfaceBlocker : MonoBehaviour
 
 		Bounds bounds = GetWorldBounds();
 		TreasureItem[] items = UnityEngine.Object.FindObjectsByType<TreasureItem>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Exclude );
 		if ( items == null )
 			return;
 

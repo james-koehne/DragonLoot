@@ -483,7 +483,7 @@ public sealed class FloorPlacementTarget : ITreasurePlacementTarget
 			float distSq = delta.sqrMagnitude;
 			if ( distSq < 0.0000001f )
 			{
-				push.x += ( ( placing.GetInstanceID() & 1 ) == 0 ? 1f : -1f ) * minDist;
+				push.x += ( ( placing.GetEntityId().GetHashCode() & 1 ) == 0 ? 1f : -1f ) * minDist;
 				continue;
 			}
 
@@ -832,7 +832,7 @@ public sealed class FloorPlacementTarget : ITreasurePlacementTarget
 			float distSq = delta.sqrMagnitude;
 			if ( distSq < 0.0000001f )
 			{
-				push.x += ( ( placing.GetInstanceID() & 1 ) == 0 ? 1f : -1f ) * minDist;
+				push.x += ( ( placing.GetEntityId().GetHashCode() & 1 ) == 0 ? 1f : -1f ) * minDist;
 				continue;
 			}
 
@@ -969,7 +969,7 @@ public sealed class FloorPlacementTarget : ITreasurePlacementTarget
 			float distSq = delta.sqrMagnitude;
 			if ( distSq < 0.0000001f )
 			{
-				push.x += ( ( placing.GetInstanceID() & 1 ) == 0 ? 1f : -1f ) * minDist;
+				push.x += ( ( placing.GetEntityId().GetHashCode() & 1 ) == 0 ? 1f : -1f ) * minDist;
 				continue;
 			}
 

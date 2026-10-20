@@ -20,16 +20,16 @@ public class ProfileSaveData : IGameStats
 	public const int AbilitySlotCount = 4;
 
 	/// <summary>Unlocked ability ids (true = unlocked). Missing / false = locked.</summary>
-	public Dictionary<string, bool> unlockedAbilities;
+	[SerializeField] public Dictionary<string, bool> unlockedAbilities;
 
 	/// <summary>Equipped ability ids per hotbar slot. Null/empty entry = vacant. Length should be <see cref="AbilitySlotCount"/>.</summary>
 	public string[] equippedAbilityIds;
 
 	/// <summary>Unlocked upgrade ids (true = unlocked). Missing / false = locked.</summary>
-	public Dictionary<string, bool> unlockedUpgrades;
+	[SerializeField] public Dictionary<string, bool> unlockedUpgrades;
 
 	/// <summary>Applied upgrade levels by id. Missing / 0 = unlocked but not purchased (or locked).</summary>
-	public Dictionary<string, int> upgradeLevels;
+	[SerializeField] public Dictionary<string, int> upgradeLevels;
 
 	/// <summary>Lifetime of chests opened this profile (drives skeleton key display case unlock).</summary>
 	public int chestsOpened;
@@ -53,7 +53,7 @@ public class ProfileSaveData : IGameStats
 	public List<string> completedTutorialTaskIds;
 
 	/// <summary>Progress toward counted tutorial tasks as "tutorialId/taskId" → count.</summary>
-	public Dictionary<string, int> tutorialTaskProgressCounts;
+	[SerializeField] public Dictionary<string, int> tutorialTaskProgressCounts;
 
 	/// <summary>Objectives whose all sub-steps were completed.</summary>
 	public List<string> completedObjectiveIds;
@@ -68,7 +68,7 @@ public class ProfileSaveData : IGameStats
 	public List<string> openDoorIds;
 
 	/// <summary>Highest unlocked Coin Hall expansion level by hall id.</summary>
-	public Dictionary<string, int> coinHallExpansionLevels;
+	[SerializeField] public Dictionary<string, int> coinHallExpansionLevels;
 
 	/// <summary>User master volume (0–1). Combined with <see cref="AudioDefinition.masterVolume"/>.</summary>
 	public float masterVolume = 1f;

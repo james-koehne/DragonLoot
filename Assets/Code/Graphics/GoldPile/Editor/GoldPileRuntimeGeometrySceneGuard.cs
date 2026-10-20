@@ -20,6 +20,7 @@ static class GoldPileRuntimeGeometrySceneGuard
 	static GoldPileRuntimeGeometrySceneGuard()
 	{
 		EditorSceneManager.sceneSaving += OnSceneSaving;
+		EditorSceneManager.sceneSaved += OnSceneSaved;
 	}
 
 	[MenuItem( DragonLootMenus.GraphicsGoldPileStripRuntimeGeometry, priority = 220 )]
@@ -49,6 +50,15 @@ static class GoldPileRuntimeGeometrySceneGuard
 
 		// Mark DontSave so Unity omits them from YAML without blanking the live preview.
 		ProcessScene( scene, destroy: false );
+	}
+
+	static void OnSceneSaved( Scene scene )
+	{
+		if ( !scene.IsValid() || !scene.isLoaded )
+			return;
+
+		// hideFlags / mesh flag tweaks during sceneSaving leave the scene dirty afterward.
+		EditModePreviewDirtyUtil.ClearSceneDirtiness( scene );
 	}
 
 	static int ProcessScene( Scene scene, bool destroy )

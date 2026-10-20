@@ -367,7 +367,8 @@ public class PlayerBuildMode : MonoBehaviour
 				continue;
 
 			// Active when within fadeEnd of the bounds (nearest point) so long tracks show from either end.
-			bool show = buildable.IsEligibleToShow( playerPos, fadeEnd );
+			// Objective-outlined buildables stay visible even outside build fade / when far, but still use normal ghost fade.
+			bool show = buildable.ObjectiveOutlineRequested || buildable.IsEligibleToShow( playerPos, fadeEnd );
 			bool wasVisible = buildable.IsGhostVisible;
 			buildable.SetGhostVisible( show );
 			if ( show )
@@ -389,8 +390,11 @@ public class PlayerBuildMode : MonoBehaviour
 		for ( int i = 0; i < all.Count; i++ )
 		{
 			BuildableObject buildable = all[ i ];
-			if ( buildable != null )
-				buildable.SetGhostVisible( false );
+			if ( buildable == null )
+				continue;
+
+			// Keep quest-objective ghosts visible after leaving build mode.
+			buildable.SetGhostVisible( buildable.ObjectiveOutlineRequested );
 		}
 	}
 
@@ -467,12 +471,12 @@ public class PlayerBuildMode : MonoBehaviour
 			HoverOutlineRegistrar.Owner.BuildMode,
 			_outlineScratch,
 			settings,
-			GetInstanceID() );
+			GetEntityId() );
 	}
 
 	void ClearBuildOutline()
 	{
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.BuildMode, GetInstanceID() );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.BuildMode, GetEntityId() );
 	}
 
 	HoverOutlineVisualSettings ResolveBuildOutlineSettings()
@@ -544,15 +548,16 @@ public class PlayerBuildMode : MonoBehaviour
 		if ( def != null && def.aimMaxDistance > 0.01f )
 			return def.aimMaxDistance;
 
-		float fadeEnd = def != null ? def.fadeEnd : 18f;
+		// Match treasure pickup / interact range (not ghost fade distance).
 		float interact = _interaction != null ? _interaction.InteractRange : 8f;
-		return Mathf.Max( 0.1f, Mathf.Max( fadeEnd, interact ) );
+		return Mathf.Max( 0.1f, interact );
 	}
 
 	void EnsureBuildFeedbacks()
 	{
 		_buildStartSfx = EnsureAmbientLoopFeedback( ref _onBuildStartFeedbacks, BuildStartFeedbackChild );
-		_buildCompleteSfx = EnsureSfxFeedback( ref _onBuildCompleteFeedbacks, BuildCompleteFeedbackChild, spatial: true );
+		// Complete is a reward pop (2D): large buildables finish from an end far from bounds center.
+		_buildCompleteSfx = EnsureSfxFeedback( ref _onBuildCompleteFeedbacks, BuildCompleteFeedbackChild, spatial: false );
 		_buildHitSfx = EnsureRandomSfxFeedback( ref _onBuildHitFeedbacks, BuildHitFeedbackChild, spatial: true );
 		RefreshBuildSfxFromDefinition();
 	}
@@ -622,13 +627,13 @@ public class PlayerBuildMode : MonoBehaviour
 		if ( sfx == null )
 		{
 			sfx = new PlaySFXFeedback();
-			sfx.Playback.SpatialBlend = spatial ? 1f : 0f;
 			sfx.Playback.MinDistance = 1.25f;
 			sfx.Playback.MaxDistance = 28f;
 			sfx.Playback.FollowCallerTransform = false;
 			feedbacks.AddFeedback( sfx );
 		}
 
+		sfx.Playback.SpatialBlend = spatial ? 1f : 0f;
 		return sfx;
 	}
 
@@ -690,6 +695,7 @@ public class PlayerBuildMode : MonoBehaviour
 			float vol = def != null ? def.buildCompleteVolume : 1f;
 			_buildCompleteSfx.Playback.VolumeMin = vol;
 			_buildCompleteSfx.Playback.VolumeMax = vol;
+			_buildCompleteSfx.Playback.SpatialBlend = 0f;
 		}
 
 		if ( _buildHitSfx != null )

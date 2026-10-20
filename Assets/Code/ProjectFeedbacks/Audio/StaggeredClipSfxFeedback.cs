@@ -149,7 +149,7 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 			if ( station == null || station.IsRepositioning )
 				return;
 			CoinSortingStationDefinition def = station.Definition;
-			if ( def == null || !def.RequiresCrank( station.StationLevel ) )
+			if ( def == null || !def.AllowsCrankBoost( station.StationLevel ) )
 				return;
 			if ( Time.time < _nextPlayTime )
 				return;

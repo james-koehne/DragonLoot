@@ -164,8 +164,7 @@ public class ArtifactPresentationTableEditor : Editor
 	static void PurgeAllSceneOrphans()
 	{
 		ArtifactPresentationSlotIndicators[] all = Object.FindObjectsByType<ArtifactPresentationSlotIndicators>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 
 		int removed = 0;
 		for ( int i = 0; i < all.Length; i++ )
@@ -260,7 +259,7 @@ public class ArtifactPresentationTableEditor : Editor
 	static int MixObject( int hash, SerializedProperty prop )
 	{
 		Object value = prop != null ? prop.objectReferenceValue : null;
-		return hash * 31 + ( value != null ? value.GetInstanceID() : 0 );
+		return hash * 31 + ( value != null ? value.GetEntityId().GetHashCode() : 0 );
 	}
 
 	static int MixVector( int hash, SerializedProperty prop )

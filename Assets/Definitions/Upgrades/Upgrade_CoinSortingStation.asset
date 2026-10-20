@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeDefinition
   id: coin_sorting_station
   displayName: Coin Sorting Station
-  description: 'Levels: 1 manual crank, 2 automatic, 3 faster processing, 4 larger
-    hopper.'
+  description: 'Levels: 1 automatic sorting (crank boosts speed), 3 faster processing,
+    4 larger hopper.'
   icon: {fileID: 0}
   maxLevel: 4
   enabled: 1

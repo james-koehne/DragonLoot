@@ -8,14 +8,17 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// Wires speed-linked move loop + brake one-shot onto Addressable minecart prefabs.
+/// Wires cart move/brake loops and station call SFX onto Addressable minecart prefabs.
 /// </summary>
 public static class MinecartAudioPrefabBuilder
 {
 	const string CargoPrefabPath = "Assets/Addressables/Minecart/Minecart.prefab";
 	const string DrivePrefabPath = "Assets/Addressables/Minecart/MinecartDrive.prefab";
-	const string MoveClipPath = "Assets/Audio/SFX/Minecart/minecart_move.mp3";
-	const string BrakeClipPath = "Assets/Audio/SFX/Minecart/minecart_brake.mp3";
+	const string InputStationPrefabPath = "Assets/Addressables/Minecart/MinecartInputStation.prefab";
+	const string OutputStationPrefabPath = "Assets/Addressables/Minecart/MinecartOutputStation.prefab";
+	const string MoveClipPath = "Assets/Audio/SFX/Minecart/pixabay_minecart_move.mp3";
+	const string BrakeClipPath = "Assets/Audio/SFX/Minecart/pixabay_minecart_brake.mp3";
+	const string CallClipPath = "Assets/Audio/SFX/Minecart/BELL_Pling_Kids_Bike_01_mono.wav";
 
 	[MenuItem( DragonLootMenus.MinecartPatchAudio )]
 	public static void PatchFromMenu()
@@ -32,11 +35,15 @@ public static class MinecartAudioPrefabBuilder
 				dirty |= PatchPrefab( CargoPrefabPath, includeBrake: false );
 			if ( File.Exists( DrivePrefabPath ) )
 				dirty |= PatchPrefab( DrivePrefabPath, includeBrake: true );
+			if ( File.Exists( InputStationPrefabPath ) )
+				dirty |= PatchStationCallSfx( InputStationPrefabPath );
+			if ( File.Exists( OutputStationPrefabPath ) )
+				dirty |= PatchStationCallSfx( OutputStationPrefabPath );
 			if ( dirty )
 			{
 				AssetDatabase.SaveAssets();
 				AssetDatabase.Refresh();
-				Debug.Log( "MinecartAudioPrefabBuilder: patched minecart move/brake audio." );
+				Debug.Log( "MinecartAudioPrefabBuilder: patched cart + station call audio." );
 			}
 		}
 		catch ( System.Exception ex )
@@ -210,6 +217,88 @@ public static class MinecartAudioPrefabBuilder
 		loop.Playback.MaxDistance = 30f;
 		loop.Playback.DopplerLevel = 0.4f;
 
+		EditorUtility.SetDirty( feedbacks );
+		return changed;
+	}
+
+	static bool PatchStationCallSfx( string path )
+	{
+		AudioClip callClip = AssetDatabase.LoadAssetAtPath<AudioClip>( CallClipPath );
+		if ( callClip == null )
+		{
+			Debug.LogWarning( "MinecartAudioPrefabBuilder: missing call clip at " + CallClipPath );
+			return false;
+		}
+
+		GameObject root = PrefabUtility.LoadPrefabContents( path );
+		if ( root == null )
+			return false;
+
+		bool changed = false;
+		try
+		{
+			MinecartStationBase station = root.GetComponent<MinecartStationBase>();
+			if ( station == null )
+			{
+				Debug.LogWarning( "MinecartAudioPrefabBuilder: no MinecartStationBase on " + path );
+				return false;
+			}
+
+			Feedbacks onCall = EnsureFeedbackChild( root.transform, "OnCallFeedbacks" );
+			changed |= EnsureOneShotSfx( onCall, callClip );
+
+			SerializedObject so = new SerializedObject( station );
+			SerializedProperty callProp = so.FindProperty( "onCallFeedbacks" );
+			if ( callProp != null && callProp.objectReferenceValue != onCall )
+			{
+				callProp.objectReferenceValue = onCall;
+				changed = true;
+			}
+
+			if ( changed )
+				so.ApplyModifiedPropertiesWithoutUndo();
+
+			if ( changed )
+				PrefabUtility.SaveAsPrefabAsset( root, path );
+		}
+		finally
+		{
+			PrefabUtility.UnloadPrefabContents( root );
+		}
+
+		return changed;
+	}
+
+	static bool EnsureOneShotSfx( Feedbacks feedbacks, AudioClip clip )
+	{
+		bool changed = false;
+		PlaySFXFeedback sfx = null;
+		for ( int i = 0; i < feedbacks.FeedbackList.Count; i++ )
+		{
+			sfx = feedbacks.FeedbackList[ i ] as PlaySFXFeedback;
+			if ( sfx != null )
+				break;
+		}
+
+		if ( sfx == null )
+		{
+			sfx = new PlaySFXFeedback();
+			feedbacks.AddFeedback( sfx );
+			changed = true;
+		}
+
+		if ( sfx.Clip != clip )
+		{
+			sfx.Clip = clip;
+			changed = true;
+		}
+
+		sfx.Playback.SpatialBlend = 1f;
+		sfx.Playback.MinDistance = 1f;
+		sfx.Playback.MaxDistance = 18f;
+		sfx.Playback.VolumeMin = 0.85f;
+		sfx.Playback.VolumeMax = 1f;
+		sfx.Playback.FollowCallerTransform = true;
 		EditorUtility.SetDirty( feedbacks );
 		return changed;
 	}

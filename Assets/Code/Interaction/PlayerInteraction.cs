@@ -1645,13 +1645,13 @@ public class PlayerInteraction : MonoBehaviour
 		{
 			int slot;
 			if ( TryResolveNonCoinPickup( pile, out _, out slot ) )
-				return pile.GetInstanceID() ^ ( slot * 397 );
+				return pile.GetEntityId().GetHashCode() ^ ( slot * 397 );
 			return 0;
 		}
 
 		InteractableBase interactable = _current as InteractableBase;
 		if ( interactable != null )
-			return interactable.GetInstanceID();
+			return interactable.GetEntityId().GetHashCode();
 		return 0;
 	}
 
@@ -1763,14 +1763,14 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( _current == null )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetInstanceID() );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetEntityId() );
 			return;
 		}
 
 		IReadOnlyList<Renderer> renderers = HoverOutlineTargetUtility.CollectFromFocus( _current );
 		if ( renderers == null || renderers.Count == 0 )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetInstanceID() );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetEntityId() );
 			return;
 		}
 
@@ -1778,12 +1778,12 @@ public class PlayerInteraction : MonoBehaviour
 			HoverOutlineRegistrar.Owner.Pickable,
 			renderers,
 			_cachedPickableOutline,
-			GetInstanceID() );
+			GetEntityId() );
 	}
 
 	void ClearPickableIndicator()
 	{
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetInstanceID() );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetEntityId() );
 	}
 
 	static GameInput GetGameInput()

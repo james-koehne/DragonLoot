@@ -18,7 +18,7 @@ public class BuildModeDefinition : ScriptableObject
 	[Min( 0.1f )]
 	public float buildHoldSeconds = 2f;
 
-	[Tooltip( "Max aim ray distance for selecting a build ghost. 0 uses the larger of fadeEnd and the player's interact range." )]
+	[Tooltip( "Max aim ray distance for selecting a build ghost. 0 uses the player's pickup / interact range." )]
 	[Min( 0f )]
 	public float aimMaxDistance = 0f;
 

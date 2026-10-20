@@ -66,8 +66,8 @@ public static class HoverOutlineTargetUtility
 		if ( station == null )
 			return false;
 
-		int level = station.StationLevel;
-		return level >= 1 && level < 2;
+		CoinSortingStationDefinition def = station.Definition;
+		return def != null && def.AllowsCrankBoost( station.StationLevel );
 	}
 
 	public static bool CanOutlineChest( ChestInteractable chest )

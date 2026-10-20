@@ -54,6 +54,18 @@ public static class MinecartConsistUtility
 		if ( !MinecartTrack.TryGetNearest( nearWorld, maxRadius, out track, out along ) )
 			return false;
 
+		return TrySpawnOnTrack( track, along, drive, out spawned );
+	}
+
+	/// <summary>
+	/// Spawn a standalone cargo/drive cart at a specific along-track pose. Track must be travel-ready.
+	/// </summary>
+	public static bool TrySpawnOnTrack( MinecartTrack track, float along, bool drive, out MinecartInteractable spawned )
+	{
+		spawned = null;
+		if ( track == null || !track.IsTravelReady )
+			return false;
+
 		Vector3 position;
 		Vector3 tangent;
 		Vector3 up;

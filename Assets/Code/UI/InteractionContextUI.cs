@@ -252,7 +252,10 @@ public class InteractionContextUI : MonoBehaviour
 		if ( focus is MinecartInteractable cargoCart && cargoCart.RejectsPlayerPush )
 		{
 			MinecartAutoController auto = cargoCart.ConsistLead.GetComponent<MinecartAutoController>();
-			return auto != null && auto.CanPlayerSend ? "Send cart" : null;
+			if ( auto == null || !auto.CanPlayerSend )
+				return null;
+
+			return auto.IsTraveling ? "Stop cart" : "Send cart";
 		}
 
 		if ( focus is MinecartInteractable )

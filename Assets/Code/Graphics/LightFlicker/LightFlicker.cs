@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEngine.SceneManagement;
+#endif
 
 /// <summary>
 /// Drives a <see cref="Light"/> with organic intensity / color / range flicker from
@@ -61,11 +64,20 @@ public class LightFlicker : MonoBehaviour
 	[Tooltip( "Optional SoftVolume mesh renderer. When empty, looks for a child named VolumetricLight. That child is kept inactive in edit mode (avoids Scene picking) and enabled at runtime." )]
 	MeshRenderer _volumetricRenderer;
 
+	[SerializeField, HideInInspector]
+	float _authoredIntensity = 1f;
+
+	[SerializeField, HideInInspector]
+	Color _authoredColor = Color.white;
+
+	[SerializeField, HideInInspector]
+	float _authoredRange = 10f;
+
+	[SerializeField, HideInInspector]
+	bool _hasAuthoredBase;
+
 	Light _cachedLight;
-	float _baseIntensity = 1f;
-	Color _baseColor = Color.white;
-	float _baseRange = 10f;
-	bool _hasBase;
+	MeshRenderer _cachedVolumetricRenderer;
 	float _noiseSeed;
 	float _smoothedNoise = 0.5f;
 	string _activePresetId;
@@ -87,11 +99,11 @@ public class LightFlicker : MonoBehaviour
 		set => _playInEditMode = value;
 	}
 
-	public float AuthoredIntensity => _baseIntensity;
+	public float AuthoredIntensity => _authoredIntensity;
 
-	public float AuthoredRange => _baseRange;
+	public float AuthoredRange => _authoredRange;
 
-	public bool HasAuthoredBase => _hasBase;
+	public bool HasAuthoredBase => _hasAuthoredBase;
 
 	public LightFlickerPreset ActivePreset => _activePreset;
 
@@ -129,10 +141,19 @@ public class LightFlicker : MonoBehaviour
 		EnsureVolumetricRenderer();
 		SyncVolumetricActiveForMode();
 		ResolveEmissiveRenderers();
-		CaptureBase();
-		_noiseSeed = HashSeed( GetInstanceID() );
+		CaptureBase( forceFromLight: false );
+		_noiseSeed = HashSeed( GetEntityId().GetHashCode() );
 		_smoothedNoise = 0.5f;
 		ResolveActivePreset( force: true );
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying && !_playInEditMode )
+		{
+			RestoreBase();
+			return;
+		}
+#endif
+
 		ApplyFlicker( GetFlickerTime(), immediate: true );
 	}
 
@@ -165,8 +186,8 @@ public class LightFlicker : MonoBehaviour
 
 		if ( isActiveAndEnabled )
 		{
-			if ( !_hasBase )
-				CaptureBase();
+			if ( !_hasAuthoredBase )
+				CaptureBase( forceFromLight: false );
 			else
 				CaptureEmissionBase();
 			ResolveActivePreset( force: true );
@@ -187,12 +208,12 @@ public class LightFlicker : MonoBehaviour
 		if ( !_emissiveResolved )
 		{
 			ResolveEmissiveRenderers();
-			if ( _hasBase )
+			if ( _hasAuthoredBase )
 				CaptureEmissionBase();
 		}
 
-		if ( !_hasBase )
-			CaptureBase();
+		if ( !_hasAuthoredBase )
+			CaptureBase( forceFromLight: false );
 
 		ResolveActivePreset( force: false );
 		ApplyFlicker( GetFlickerTime(), immediate: false );
@@ -221,10 +242,10 @@ public class LightFlicker : MonoBehaviour
 	[ContextMenu( "Recapture Light Base" )]
 	public void RecaptureLightBase()
 	{
-		_hasBase = false;
+		_hasAuthoredBase = false;
 		EnsureVolumetricRenderer();
 		ResolveEmissiveRenderers();
-		CaptureBase();
+		CaptureBase( forceFromLight: true );
 		ResolveActivePreset( force: true );
 		ApplyFlicker( GetFlickerTime(), immediate: true );
 	}
@@ -246,8 +267,8 @@ public class LightFlicker : MonoBehaviour
 			return;
 
 		ResolveEmissiveRenderers();
-		if ( !_hasBase )
-			CaptureBase();
+		if ( !_hasAuthoredBase )
+			CaptureBase( forceFromLight: false );
 		else
 			CaptureEmissionBase();
 
@@ -314,33 +335,47 @@ public class LightFlicker : MonoBehaviour
 		return _cachedLight != null;
 	}
 
-	void CaptureBase()
+	void CaptureBase( bool forceFromLight )
 	{
 		if ( !EnsureLight() )
 			return;
 
-		_baseIntensity = _cachedLight.intensity;
-		_baseColor = _cachedLight.color;
-		_baseRange = _cachedLight.range;
+		// Keep serialized authored values across domain reload / edit-mode preview so we
+		// never treat mid-flicker Light properties as the saved baseline.
+		if ( forceFromLight || !_hasAuthoredBase )
+		{
+			_authoredIntensity = _cachedLight.intensity;
+			_authoredColor = _cachedLight.color;
+			_authoredRange = _cachedLight.range;
+			_hasAuthoredBase = true;
+		}
+
 		CaptureEmissionBase();
 		CaptureVolumetricBase();
-		_hasBase = true;
 	}
 
 	void RestoreBase()
 	{
-		if ( !_hasBase )
+		if ( !_hasAuthoredBase )
 			return;
 
+#if UNITY_EDITOR
+		Scene scene = default;
+		bool wasSceneDirty = false;
+		if ( !Application.isPlaying )
+			BeginEditModePreviewMutation( out scene, out wasSceneDirty );
+#endif
+
 		if ( EnsureLight() )
-		{
-			_cachedLight.intensity = _baseIntensity;
-			_cachedLight.color = _baseColor;
-			_cachedLight.range = _baseRange;
-		}
+			ApplyLightValues( _authoredIntensity, _authoredColor, _authoredRange );
 
 		RestoreEmissionBase();
 		RestoreVolumetricBase();
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying )
+			EndEditModePreviewMutation( scene, wasSceneDirty, _cachedLight, _cachedLight != null ? _cachedLight.gameObject : null );
+#endif
 	}
 
 	void ResolveActivePreset( bool force )
@@ -408,6 +443,13 @@ public class LightFlicker : MonoBehaviour
 		if ( _activePreset == null || !EnsureLight() )
 			return;
 
+#if UNITY_EDITOR
+		Scene scene = default;
+		bool wasSceneDirty = false;
+		if ( !Application.isPlaying )
+			BeginEditModePreviewMutation( out scene, out wasSceneDirty );
+#endif
+
 		float speed = _activePreset.speed * _speedScale;
 		float noise = SampleLayeredNoise( time, speed, _noiseSeed, _activePreset );
 
@@ -429,30 +471,37 @@ public class LightFlicker : MonoBehaviour
 			intensityMul = 1f + centered * _intensityScale;
 		}
 
-		_cachedLight.intensity = Mathf.Max( 0f, _baseIntensity * intensityMul );
-
-		if ( _activePreset.affectColor )
-			_cachedLight.color = _activePreset.GetLightColor( _smoothedNoise );
-		else
-			_cachedLight.color = _baseColor;
-
+		float intensity = Mathf.Max( 0f, _authoredIntensity * intensityMul );
+		Color color = _activePreset.affectColor ? _activePreset.GetLightColor( _smoothedNoise ) : _authoredColor;
+		float range = _authoredRange;
 		if ( _activePreset.affectRange )
 		{
 			float rangeMul = Mathf.Lerp( _activePreset.rangeMin, _activePreset.rangeMax, _smoothedNoise );
-			_cachedLight.range = Mathf.Max( 0.01f, _baseRange * rangeMul );
-		}
-		else
-		{
-			_cachedLight.range = _baseRange;
+			range = Mathf.Max( 0.01f, _authoredRange * rangeMul );
 		}
 
+		ApplyLightValues( intensity, color, range );
 		ApplyEmission( intensityMul );
 		ApplyVolumetricColor();
 
 #if UNITY_EDITOR
-		if ( !Application.isPlaying && _cachedLight != null )
-			UnityEditor.EditorUtility.ClearDirty( _cachedLight );
+		if ( !Application.isPlaying )
+			EndEditModePreviewMutation( scene, wasSceneDirty, _cachedLight, _cachedLight.gameObject );
 #endif
+	}
+
+	void ApplyLightValues( float intensity, Color color, float range )
+	{
+		if ( _cachedLight == null )
+			return;
+
+		// Avoid no-op writes — Unity marks the scene dirty even when values are unchanged.
+		if ( !Mathf.Approximately( _cachedLight.intensity, intensity ) )
+			_cachedLight.intensity = intensity;
+		if ( _cachedLight.color != color )
+			_cachedLight.color = color;
+		if ( !Mathf.Approximately( _cachedLight.range, range ) )
+			_cachedLight.range = range;
 	}
 
 	void EnsureCaches()
@@ -466,11 +515,18 @@ public class LightFlicker : MonoBehaviour
 	void EnsureVolumetricRenderer()
 	{
 		if ( _volumetricRenderer != null )
+		{
+			_cachedVolumetricRenderer = _volumetricRenderer;
+			return;
+		}
+
+		if ( _cachedVolumetricRenderer != null )
 			return;
 
+		// Cache only — do not write the serialized override field (that dirties the scene).
 		Transform child = transform.Find( DefaultVolumetricChildName );
 		if ( child != null )
-			_volumetricRenderer = child.GetComponent<MeshRenderer>();
+			_cachedVolumetricRenderer = child.GetComponent<MeshRenderer>();
 	}
 
 	/// <summary>
@@ -479,15 +535,27 @@ public class LightFlicker : MonoBehaviour
 	void SyncVolumetricActiveForMode()
 	{
 		EnsureVolumetricRenderer();
-		if ( _volumetricRenderer == null )
+		if ( _cachedVolumetricRenderer == null )
 			return;
 
-		GameObject volumetricObject = _volumetricRenderer.gameObject;
+		GameObject volumetricObject = _cachedVolumetricRenderer.gameObject;
 		bool wantActive = Application.isPlaying;
 		if ( volumetricObject.activeSelf == wantActive )
 			return;
 
+#if UNITY_EDITOR
+		Scene scene = default;
+		bool wasSceneDirty = false;
+		if ( !Application.isPlaying )
+			BeginEditModePreviewMutation( out scene, out wasSceneDirty );
+#endif
+
 		volumetricObject.SetActive( wantActive );
+
+#if UNITY_EDITOR
+		if ( !Application.isPlaying )
+			EndEditModePreviewMutation( scene, wasSceneDirty, volumetricObject );
+#endif
 	}
 
 	public void CopyResolvedEmissiveRenderers( List<MeshRenderer> results )
@@ -640,7 +708,7 @@ public class LightFlicker : MonoBehaviour
 
 	void TryAddEmissiveRenderer( MeshRenderer renderer )
 	{
-		if ( renderer == null || renderer == _volumetricRenderer )
+		if ( renderer == null || renderer == _cachedVolumetricRenderer )
 			return;
 		if ( _resolvedEmissiveRenderers.Contains( renderer ) )
 			return;
@@ -692,10 +760,10 @@ public class LightFlicker : MonoBehaviour
 	{
 		EnsureVolumetricRenderer();
 		_hasVolumetricBase = false;
-		if ( _volumetricRenderer == null )
+		if ( _cachedVolumetricRenderer == null )
 			return;
 
-		Material material = _volumetricRenderer.sharedMaterial;
+		Material material = _cachedVolumetricRenderer.sharedMaterial;
 		if ( material == null || !material.HasProperty( SoftVolumeColorId ) )
 			return;
 
@@ -705,7 +773,7 @@ public class LightFlicker : MonoBehaviour
 
 	void RestoreVolumetricBase()
 	{
-		if ( !_hasVolumetricBase || _volumetricRenderer == null )
+		if ( !_hasVolumetricBase || _cachedVolumetricRenderer == null )
 			return;
 
 		SetVolumetricColor( _baseVolumetricColor );
@@ -713,10 +781,10 @@ public class LightFlicker : MonoBehaviour
 
 	void ApplyVolumetricColor()
 	{
-		if ( _volumetricRenderer == null )
+		if ( _cachedVolumetricRenderer == null )
 		{
 			EnsureVolumetricRenderer();
-			if ( _volumetricRenderer == null )
+			if ( _cachedVolumetricRenderer == null )
 				return;
 		}
 
@@ -731,13 +799,13 @@ public class LightFlicker : MonoBehaviour
 
 	void SetVolumetricColor( Color color )
 	{
-		if ( _volumetricRenderer == null )
+		if ( _cachedVolumetricRenderer == null )
 			return;
 
 		EnsureCaches();
-		_volumetricRenderer.GetPropertyBlock( _propertyBlock );
+		_cachedVolumetricRenderer.GetPropertyBlock( _propertyBlock );
 		_propertyBlock.SetColor( SoftVolumeColorId, color );
-		_volumetricRenderer.SetPropertyBlock( _propertyBlock );
+		_cachedVolumetricRenderer.SetPropertyBlock( _propertyBlock );
 	}
 
 	void CaptureEmissionBase()
@@ -888,6 +956,18 @@ public class LightFlicker : MonoBehaviour
 			return ( x & 0xFFFF ) / 65535f * 100f + 1f;
 		}
 	}
+
+#if UNITY_EDITOR
+	void BeginEditModePreviewMutation( out Scene scene, out bool wasSceneDirty )
+	{
+		EditModePreviewDirtyUtil.BeginMutation( gameObject, out scene, out wasSceneDirty );
+	}
+
+	static void EndEditModePreviewMutation( Scene scene, bool wasSceneDirty, params Object[] objects )
+	{
+		EditModePreviewDirtyUtil.EndMutation( scene, wasSceneDirty, objects );
+	}
+#endif
 }
 
 public enum LightFlickerEmissiveMode

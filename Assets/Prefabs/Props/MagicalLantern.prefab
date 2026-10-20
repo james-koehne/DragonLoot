@@ -131,7 +131,7 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3287220611724306568}
   m_Enabled: 1
-  serializedVersion: 12
+  serializedVersion: 13
   m_Type: 2
   m_Color: {r: 0.53154856, g: 0.61619294, b: 1.370601, a: 1}
   m_Intensity: 1.5269845
@@ -183,7 +183,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShapeRadius: 0
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1
@@ -463,6 +463,10 @@ MonoBehaviour:
   _emissiveRenderers: []
   _emissiveMaterialIndex: 1
   _volumetricRenderer: {fileID: 6455352224364744611}
+  _authoredIntensity: 1
+  _authoredColor: {r: 1, g: 1, b: 1, a: 1}
+  _authoredRange: 10
+  _hasAuthoredBase: 0
 --- !u!114 &430978067871821418
 MonoBehaviour:
   m_ObjectHideFlags: 0

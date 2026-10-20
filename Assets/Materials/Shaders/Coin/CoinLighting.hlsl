@@ -1,7 +1,7 @@
 #ifndef DRAGONLOOT_COIN_LIGHTING_INCLUDED
 #define DRAGONLOOT_COIN_LIGHTING_INCLUDED
 
-#include "Packages/com.dragonloot.stylized-rendering/Runtime/Shaders/Stylized/StylizedLightingCommon.hlsl"
+#include "Assets/DragonLoot.StylizedRendering/Runtime/Shaders/Stylized/StylizedLightingCommon.hlsl"
 #include "CoinCommon.hlsl"
 
 struct Attributes

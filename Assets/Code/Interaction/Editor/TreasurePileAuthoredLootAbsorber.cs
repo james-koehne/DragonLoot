@@ -15,7 +15,7 @@ using UnityEngine.SceneManagement;
 static class TreasurePileAuthoredLootAbsorber
 {
 	const double ScanIntervalSeconds = 0.35;
-	static readonly HashSet<int> PendingIds = new HashSet<int>();
+	static readonly HashSet<EntityId> PendingIds = new HashSet<EntityId>();
 	static readonly Dictionary<string, TreasureDefinition> DefinitionByVisualName =
 		new Dictionary<string, TreasureDefinition>();
 	static double _nextScanTime;
@@ -44,7 +44,7 @@ static class TreasurePileAuthoredLootAbsorber
 		for ( int i = 0; i < selected.Length; i++ )
 		{
 			if ( selected[ i ] != null )
-				PendingIds.Add( selected[ i ].GetInstanceID() );
+				PendingIds.Add( selected[ i ].GetEntityId() );
 		}
 	}
 
@@ -60,13 +60,13 @@ static class TreasurePileAuthoredLootAbsorber
 				case ObjectChangeKind.ChangeGameObjectParent:
 				{
 					stream.GetChangeGameObjectParentEvent( i, out ChangeGameObjectParentEventArgs args );
-					PendingIds.Add( args.instanceId );
+					PendingIds.Add( args.entityId );
 					break;
 				}
 				case ObjectChangeKind.CreateGameObjectHierarchy:
 				{
 					stream.GetCreateGameObjectHierarchyEvent( i, out CreateGameObjectHierarchyEventArgs args );
-					PendingIds.Add( args.instanceId );
+					PendingIds.Add( args.entityId );
 					break;
 				}
 				case ObjectChangeKind.ChangeGameObjectOrComponentProperties:
@@ -74,10 +74,10 @@ static class TreasurePileAuthoredLootAbsorber
 					stream.GetChangeGameObjectOrComponentPropertiesEvent(
 						i,
 						out ChangeGameObjectOrComponentPropertiesEventArgs args );
-					Object changed = EditorUtility.EntityIdToObject( args.instanceId );
+					Object changed = EditorUtility.EntityIdToObject( args.entityId );
 					if ( changed is Transform || changed is GameObject || changed is TreasureItem
 						|| changed is TreasurePileAuthoredItem )
-						PendingIds.Add( args.instanceId );
+						PendingIds.Add( args.entityId );
 					break;
 				}
 			}
@@ -103,15 +103,14 @@ static class TreasurePileAuthoredLootAbsorber
 		try
 		{
 			TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
-				FindObjectsInactive.Exclude,
-				FindObjectsSortMode.None );
+				FindObjectsInactive.Exclude );
 			if ( piles == null || piles.Length == 0 )
 			{
 				PendingIds.Clear();
 				return;
 			}
 
-			int[] ids = new int[ PendingIds.Count ];
+			EntityId[] ids = new EntityId[ PendingIds.Count ];
 			PendingIds.CopyTo( ids );
 			PendingIds.Clear();
 

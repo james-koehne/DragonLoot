@@ -71,13 +71,46 @@ public class BuildableObject : MonoBehaviour
 	Bounds _cachedWorldBounds;
 	bool _hasCachedWorldBounds;
 
+	bool _objectiveOutlineRequested;
+
 	public bool IsBuilt => _isBuilt;
 	public bool IsCompleting => _completing;
 	public bool IsGhostVisible => _ghostVisible;
+	public bool ObjectiveOutlineRequested => _objectiveOutlineRequested;
 	public Transform BuiltRoot => _builtRoot;
 	public Transform GhostRoot => _ghostRoot;
 	public BuildableObject[] RequiredBuildables => _requiredBuildables;
 	public BuildableDefinition Definition => _definition;
+
+	/// <summary>
+	/// Keeps the ghost visible for quest outline even outside build mode / fade distance.
+	/// Ghost still uses the normal build-ghost material (same look as in build mode).
+	/// </summary>
+	public void SetObjectiveOutlineRequested( bool requested )
+	{
+		_objectiveOutlineRequested = requested;
+		if ( _isBuilt || _completing )
+		{
+			_objectiveOutlineRequested = false;
+			return;
+		}
+
+		if ( !requested )
+			return;
+
+		SetGhostVisible( true );
+		EnsureObjectiveGhostLook();
+	}
+
+	void EnsureObjectiveGhostLook()
+	{
+		BuildModeDefinition def = GameInstance.GetDefinition<BuildModeDefinition>();
+		EnsureGhostMaterial( def );
+
+		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
+		Vector3 playerPos = player != null ? player.transform.position : transform.position;
+		UpdateGhostFade( playerPos, def );
+	}
 
 	public string ResolvePersistenceId()
 	{

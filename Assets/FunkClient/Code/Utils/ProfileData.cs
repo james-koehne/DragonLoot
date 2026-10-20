@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -211,11 +209,7 @@ public static class ProfileData
 
 	private static string SerializeToBinaryBase64( object obj )
 	{
-		using MemoryStream ms = new MemoryStream();
-		BinaryFormatter formatter = new BinaryFormatter();
-		formatter.Serialize( ms, obj );
-
-		byte[] data = ms.ToArray();
+		byte[] data = Encoding.UTF8.GetBytes( JsonConvert.SerializeObject( obj ) );
 		byte[] key = GenerateKey( SystemInfo.deviceUniqueIdentifier );
 		byte[] encrypted = EncryptDecrypt( data, key );
 
@@ -244,9 +238,8 @@ public static class ProfileData
 		byte[] key = GenerateKey( SystemInfo.deviceUniqueIdentifier );
 		byte[] decrypted = EncryptDecrypt( encrypted, key );
 
-		using MemoryStream ms = new MemoryStream( decrypted );
-		BinaryFormatter formatter = new BinaryFormatter();
-		return (T)formatter.Deserialize( ms );
+		string json = Encoding.UTF8.GetString( decrypted );
+		return JsonConvert.DeserializeObject<T>( json );
 	}
 
 	private static byte[] GenerateKey( string userId, int keyLength = 8 )

@@ -31,4 +31,5 @@ MonoBehaviour:
   showReward: 1
   completionToast: Workshop machines activated
   onCompleteWorldEventIds:
+  - workshop_room_complete
   - workshop_clear_hammer_delivery

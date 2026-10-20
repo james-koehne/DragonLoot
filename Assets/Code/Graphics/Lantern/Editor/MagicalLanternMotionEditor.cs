@@ -42,6 +42,7 @@ static class MagicalLanternMotionEditorPreviewGuard
 	static MagicalLanternMotionEditorPreviewGuard()
 	{
 		EditorSceneManager.sceneSaving += OnSceneSaving;
+		EditorSceneManager.sceneSaved += OnSceneSaved;
 		PrefabStage.prefabSaving += OnPrefabSaving;
 		EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
 	}
@@ -52,6 +53,14 @@ static class MagicalLanternMotionEditorPreviewGuard
 			return;
 
 		RestoreAuthoredStateInScene( scene );
+	}
+
+	static void OnSceneSaved( Scene scene )
+	{
+		if ( !scene.IsValid() || !scene.isLoaded )
+			return;
+
+		EditModePreviewDirtyUtil.ClearSceneDirtiness( scene );
 	}
 
 	static void OnPrefabSaving( GameObject prefabRoot )

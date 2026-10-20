@@ -22,7 +22,7 @@ public class InterfaceController : MonoBehaviour, IInterfaceController
 
 	[SerializeField] private CanvasGroup fadeGroup;
 	[SerializeField] private CanvasGroup loadingGroup;
-	[SerializeField] private TweenInstance<Transform, float> currentFadeTween;
+	private TweenInstance<Transform, float> currentFadeTween;
 
 	private bool manualQuit = false;
 	private bool quitting = false;

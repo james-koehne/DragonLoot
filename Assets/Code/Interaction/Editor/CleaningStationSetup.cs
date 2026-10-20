@@ -127,8 +127,7 @@ static class CleaningStationSetup
 			return;
 
 		CleaningStationInteractable[] existing = Object.FindObjectsByType<CleaningStationInteractable>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 		for ( int i = 0; i < existing.Length; i++ )
 		{
 			if ( existing[ i ] != null && existing[ i ].gameObject.scene == scene )

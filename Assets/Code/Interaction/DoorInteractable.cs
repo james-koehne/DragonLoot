@@ -166,7 +166,7 @@ public class DoorInteractable : InteractableBase
 
 	public static void RefreshAllUnlockState()
 	{
-		DoorInteractable[] doors = UnityEngine.Object.FindObjectsByType<DoorInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		DoorInteractable[] doors = UnityEngine.Object.FindObjectsByType<DoorInteractable>( FindObjectsInactive.Exclude );
 		if ( doors == null )
 			return;
 

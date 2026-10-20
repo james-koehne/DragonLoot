@@ -52,9 +52,12 @@ MonoBehaviour:
   columns: 6
   slotSpacing: 0.25
   margin: 0.12
-  maxStackPerSlot: 0
+  maxStackPerSlot: 100
   snapDuration: 0.25
   bounceScale: 1.15
+  allowedCategories: 
+  allowDisplayedPickup: 1
+  storageKind: 0
   countLabel: {fileID: 0}
   drawLayoutGizmosAlways: 0
 --- !u!1 &116340443753886100

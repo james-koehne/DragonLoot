@@ -397,7 +397,7 @@ public static class TreasureSupportStack
 		if ( cmp != 0 )
 			return cmp;
 
-		return a.GetInstanceID().CompareTo( b.GetInstanceID() );
+		return a.GetEntityId().CompareTo( b.GetEntityId() );
 	}
 
 	static Bounds GetWorldBounds( TreasureItem item )

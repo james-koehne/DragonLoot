@@ -8,10 +8,11 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Builds <see cref="MinecartJunctionGraph"/> from overlapping track samples and endpoints.
+/// Mid-path hits are peak-picked; clusters merge transitively so Y joins become one Tee.
 /// </summary>
 public static class MinecartJunctionGraphBaker
 {
-	const float PortDistanceMerge = 0.35f;
+	const float PortDistanceMergeFloor = 1.0f;
 	static bool Baking;
 
 	struct Candidate
@@ -21,6 +22,7 @@ public static class MinecartJunctionGraphBaker
 		public float distanceA;
 		public MinecartTrack trackB;
 		public float distanceB;
+		public bool fromEndpoint;
 	}
 
 	struct Cluster
@@ -36,6 +38,15 @@ public static class MinecartJunctionGraphBaker
 		public float distance;
 	}
 
+	struct SampleHit
+	{
+		public float distA;
+		public float distB;
+		public Vector3 worldPosition;
+		public float separationSqr;
+		public bool inRange;
+	}
+
 	[MenuItem( DragonLootMenus.MinecartCreateJunctionGraph )]
 	[MenuItem( DragonLootMenus.GameObjectMinecartJunctionGraph )]
 	public static void CreateJunctionGraph()
@@ -44,7 +55,7 @@ public static class MinecartJunctionGraphBaker
 		if ( !scene.IsValid() || !scene.isLoaded )
 			return;
 
-		MinecartJunctionGraph existing = Object.FindFirstObjectByType<MinecartJunctionGraph>();
+		MinecartJunctionGraph existing = Object.FindAnyObjectByType<MinecartJunctionGraph>();
 		if ( existing != null )
 		{
 			Selection.activeGameObject = existing.gameObject;
@@ -62,7 +73,7 @@ public static class MinecartJunctionGraphBaker
 	[MenuItem( DragonLootMenus.MinecartRebuildJunctions )]
 	public static void RebuildJunctionsMenu()
 	{
-		MinecartJunctionGraph graph = Object.FindFirstObjectByType<MinecartJunctionGraph>();
+		MinecartJunctionGraph graph = Object.FindAnyObjectByType<MinecartJunctionGraph>();
 		if ( graph == null )
 		{
 			CreateJunctionGraph();
@@ -77,7 +88,7 @@ public static class MinecartJunctionGraphBaker
 		if ( Baking )
 			return;
 
-		MinecartJunctionGraph graph = Object.FindFirstObjectByType<MinecartJunctionGraph>();
+		MinecartJunctionGraph graph = Object.FindAnyObjectByType<MinecartJunctionGraph>();
 		if ( graph == null )
 			return;
 
@@ -108,7 +119,8 @@ public static class MinecartJunctionGraphBaker
 		List<Candidate> candidates = new List<Candidate>( 64 );
 		float detect = graph.DetectRadius;
 		float step = graph.SampleStep;
-		float merge = graph.ClusterMergeRadius;
+		float merge = Mathf.Max( graph.ClusterMergeRadius, detect * 2.5f );
+		float portMerge = Mathf.Max( PortDistanceMergeFloor, graph.JunctionJoinRadius * 0.5f );
 
 		for ( int i = 0; i < tracks.Count; i++ )
 		{
@@ -125,7 +137,11 @@ public static class MinecartJunctionGraphBaker
 			}
 		}
 
-		List<Cluster> clusters = ClusterCandidates( candidates, merge );
+		SuppressMidPathNearEndpoints( candidates, merge );
+
+		List<Cluster> clusters = ClusterCandidates( candidates, merge, portMerge );
+		MergeClustersTransitive( clusters, merge, portMerge );
+
 		List<MinecartJunction> junctions = new List<MinecartJunction>( clusters.Count );
 		List<MinecartTrackJunctionIndex> index = new List<MinecartTrackJunctionIndex>( clusters.Count * 2 );
 
@@ -135,6 +151,7 @@ public static class MinecartJunctionGraphBaker
 			if ( cluster.count <= 0 || cluster.ports == null || cluster.ports.Count < 2 )
 				continue;
 
+			CollapseSameTrackPorts( cluster.ports, portMerge, cluster.sum / Mathf.Max( 1, cluster.count ) );
 			List<MinecartJunctionPort> ports = BuildPorts( cluster.ports );
 			if ( ports.Count < 2 )
 				continue;
@@ -183,7 +200,7 @@ public static class MinecartJunctionGraphBaker
 
 	static List<MinecartTrack> CollectTracks()
 	{
-		MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude );
 		List<MinecartTrack> tracks = new List<MinecartTrack>( found.Length );
 		for ( int i = 0; i < found.Length; i++ )
 		{
@@ -195,37 +212,82 @@ public static class MinecartJunctionGraphBaker
 		return tracks;
 	}
 
+	/// <summary>
+	/// Sample along A; emit one candidate per continuous in-range run at the local separation minimum.
+	/// </summary>
 	static void CollectMidPathOverlaps( MinecartTrack a, MinecartTrack b, float detectRadius, float sampleStep, List<Candidate> candidates )
 	{
 		float lengthA = a.Length;
 		int samples = Mathf.Max( 2, Mathf.CeilToInt( lengthA / sampleStep ) + 1 );
 		float detectSqr = detectRadius * detectRadius;
 
+		SampleHit[] hits = new SampleHit[ samples ];
 		for ( int i = 0; i < samples; i++ )
 		{
 			float distA = lengthA * i / ( samples - 1 );
+			SampleHit hit = new SampleHit { distA = distA, inRange = false, separationSqr = float.MaxValue };
 			Vector3 posA;
 			Vector3 tanA;
 			Vector3 upA;
-			if ( !a.Evaluate( distA, out posA, out tanA, out upA ) )
-				continue;
+			if ( a.Evaluate( distA, out posA, out tanA, out upA ) )
+			{
+				float distB;
+				Vector3 nearestB;
+				if ( b.TryGetNearestPoint( posA, out distB, out nearestB ) )
+				{
+					float sepSqr = ( nearestB - posA ).sqrMagnitude;
+					hit.distB = distB;
+					hit.worldPosition = ( posA + nearestB ) * 0.5f;
+					hit.separationSqr = sepSqr;
+					hit.inRange = sepSqr <= detectSqr;
+				}
+			}
 
-			float distB;
-			Vector3 nearestB;
-			if ( !b.TryGetNearestPoint( posA, out distB, out nearestB ) )
-				continue;
+			hits[ i ] = hit;
+		}
 
-			if ( ( nearestB - posA ).sqrMagnitude > detectSqr )
-				continue;
+		EmitPeakCandidates( a, b, hits, candidates, fromEndpoint: false );
+	}
 
+	static void EmitPeakCandidates( MinecartTrack a, MinecartTrack b, SampleHit[] hits, List<Candidate> candidates, bool fromEndpoint )
+	{
+		int i = 0;
+		while ( i < hits.Length )
+		{
+			if ( !hits[ i ].inRange )
+			{
+				i++;
+				continue;
+			}
+
+			int runStart = i;
+			int best = i;
+			float bestSep = hits[ i ].separationSqr;
+			i++;
+			while ( i < hits.Length && hits[ i ].inRange )
+			{
+				if ( hits[ i ].separationSqr < bestSep )
+				{
+					bestSep = hits[ i ].separationSqr;
+					best = i;
+				}
+
+				i++;
+			}
+
+			SampleHit peak = hits[ best ];
 			candidates.Add( new Candidate
 			{
-				worldPosition = ( posA + nearestB ) * 0.5f,
+				worldPosition = peak.worldPosition,
 				trackA = a,
-				distanceA = distA,
+				distanceA = peak.distA,
 				trackB = b,
-				distanceB = distB
+				distanceB = peak.distB,
+				fromEndpoint = fromEndpoint
 			} );
+
+			// Skip empty; loop continues at i (first out-of-range or end).
+			_ = runStart;
 		}
 	}
 
@@ -249,34 +311,34 @@ public static class MinecartJunctionGraphBaker
 
 		int samples = Mathf.Max( 2, Mathf.CeilToInt( length / sampleStep ) + 1 );
 		float detectSqr = detectRadius * detectRadius;
+		SampleHit[] hits = new SampleHit[ samples ];
 
 		for ( int i = 0; i < samples; i++ )
 		{
 			float distA = length * i / ( samples - 1 );
+			SampleHit hit = new SampleHit { distA = distA, inRange = false, separationSqr = float.MaxValue };
 			Vector3 posA;
 			Vector3 tanA;
 			Vector3 upA;
-			if ( !track.Evaluate( distA, out posA, out tanA, out upA ) )
-				continue;
-
-			float distB;
-			Vector3 nearestB;
-			if ( !TryGetNearestSelfPoint( track, distA, posA, detectSqr, minSeparation, out distB, out nearestB ) )
-				continue;
-
-			// Dedup unordered pairs by only accepting distA < distB (open) / half-wrap (closed).
-			if ( !ShouldKeepSelfPair( track, distA, distB ) )
-				continue;
-
-			candidates.Add( new Candidate
+			if ( track.Evaluate( distA, out posA, out tanA, out upA ) )
 			{
-				worldPosition = ( posA + nearestB ) * 0.5f,
-				trackA = track,
-				distanceA = distA,
-				trackB = track,
-				distanceB = distB
-			} );
+				float distB;
+				Vector3 nearestB;
+				if ( TryGetNearestSelfPoint( track, distA, posA, detectSqr, minSeparation, out distB, out nearestB )
+				     && ShouldKeepSelfPair( track, distA, distB ) )
+				{
+					float sepSqr = ( nearestB - posA ).sqrMagnitude;
+					hit.distB = distB;
+					hit.worldPosition = ( posA + nearestB ) * 0.5f;
+					hit.separationSqr = sepSqr;
+					hit.inRange = sepSqr <= detectSqr;
+				}
+			}
+
+			hits[ i ] = hit;
 		}
+
+		EmitPeakCandidates( track, track, hits, candidates, fromEndpoint: false );
 	}
 
 	static void CollectSelfEndpointOverlaps( MinecartTrack track, float detectRadius, float minSeparation, List<Candidate> candidates )
@@ -312,7 +374,8 @@ public static class MinecartJunctionGraphBaker
 			trackA = track,
 			distanceA = fromDistance,
 			trackB = track,
-			distanceB = otherDistance
+			distanceB = otherDistance,
+			fromEndpoint = true
 		} );
 	}
 
@@ -385,11 +448,65 @@ public static class MinecartJunctionGraphBaker
 			trackA = from,
 			distanceA = fromDistance,
 			trackB = other,
-			distanceB = otherDistance
+			distanceB = otherDistance,
+			fromEndpoint = true
 		} );
 	}
 
-	static List<Cluster> ClusterCandidates( List<Candidate> candidates, float mergeRadius )
+	/// <summary>
+	/// Stub endpoint joins win: drop mid-path smear candidates near an accepted endpoint join.
+	/// </summary>
+	static void SuppressMidPathNearEndpoints( List<Candidate> candidates, float alongRadius )
+	{
+		if ( candidates == null || candidates.Count == 0 )
+			return;
+
+		float along = Mathf.Max( 0.5f, alongRadius );
+		for ( int i = candidates.Count - 1; i >= 0; i-- )
+		{
+			Candidate mid = candidates[ i ];
+			if ( mid.fromEndpoint )
+				continue;
+
+			bool nearEndpoint = false;
+			for ( int j = 0; j < candidates.Count; j++ )
+			{
+				Candidate end = candidates[ j ];
+				if ( !end.fromEndpoint )
+					continue;
+
+				if ( !SameUnorderedTrackPair( mid.trackA, mid.trackB, end.trackA, end.trackB ) )
+					continue;
+
+				if ( AlongClose( mid.trackA, mid.distanceA, end.trackA, end.distanceA, along )
+				     || AlongClose( mid.trackA, mid.distanceA, end.trackB, end.distanceB, along )
+				     || AlongClose( mid.trackB, mid.distanceB, end.trackA, end.distanceA, along )
+				     || AlongClose( mid.trackB, mid.distanceB, end.trackB, end.distanceB, along ) )
+				{
+					nearEndpoint = true;
+					break;
+				}
+			}
+
+			if ( nearEndpoint )
+				candidates.RemoveAt( i );
+		}
+	}
+
+	static bool SameUnorderedTrackPair( MinecartTrack a0, MinecartTrack b0, MinecartTrack a1, MinecartTrack b1 )
+	{
+		return ( a0 == a1 && b0 == b1 ) || ( a0 == b1 && b0 == a1 );
+	}
+
+	static bool AlongClose( MinecartTrack track, float dist, MinecartTrack otherTrack, float otherDist, float radius )
+	{
+		if ( track == null || track != otherTrack )
+			return false;
+
+		return Mathf.Abs( track.SignedAlong( dist, otherDist ) ) <= radius;
+	}
+
+	static List<Cluster> ClusterCandidates( List<Candidate> candidates, float mergeRadius, float portMerge )
 	{
 		List<Cluster> clusters = new List<Cluster>( candidates.Count );
 		float mergeSqr = mergeRadius * mergeRadius;
@@ -419,8 +536,8 @@ public static class MinecartJunctionGraphBaker
 					count = 1,
 					ports = new List<PortKey>( 4 )
 				};
-				AddPort( created.ports, candidate.trackA, candidate.distanceA );
-				AddPort( created.ports, candidate.trackB, candidate.distanceB );
+				AddPort( created.ports, candidate.trackA, candidate.distanceA, portMerge );
+				AddPort( created.ports, candidate.trackB, candidate.distanceB, portMerge );
 				clusters.Add( created );
 				continue;
 			}
@@ -428,15 +545,88 @@ public static class MinecartJunctionGraphBaker
 			Cluster existing = clusters[ best ];
 			existing.sum += candidate.worldPosition;
 			existing.count++;
-			AddPort( existing.ports, candidate.trackA, candidate.distanceA );
-			AddPort( existing.ports, candidate.trackB, candidate.distanceB );
+			AddPort( existing.ports, candidate.trackA, candidate.distanceA, portMerge );
+			AddPort( existing.ports, candidate.trackB, candidate.distanceB, portMerge );
 			clusters[ best ] = existing;
 		}
 
 		return clusters;
 	}
 
-	static void AddPort( List<PortKey> ports, MinecartTrack track, float distance )
+	static void MergeClustersTransitive( List<Cluster> clusters, float mergeRadius, float portMerge )
+	{
+		if ( clusters == null || clusters.Count < 2 )
+			return;
+
+		float mergeSqr = mergeRadius * mergeRadius;
+		bool merged = true;
+		while ( merged )
+		{
+			merged = false;
+			for ( int i = 0; i < clusters.Count; i++ )
+			{
+				Cluster a = clusters[ i ];
+				if ( a.count <= 0 )
+					continue;
+
+				Vector3 centerA = a.sum / a.count;
+				for ( int j = i + 1; j < clusters.Count; j++ )
+				{
+					Cluster b = clusters[ j ];
+					if ( b.count <= 0 )
+						continue;
+
+					Vector3 centerB = b.sum / b.count;
+					bool close = ( centerA - centerB ).sqrMagnitude <= mergeSqr;
+					if ( !close )
+						close = ClustersShareClosePort( a, b, portMerge );
+
+					if ( !close )
+						continue;
+
+					a.sum += b.sum;
+					a.count += b.count;
+					for ( int p = 0; p < b.ports.Count; p++ )
+						AddPort( a.ports, b.ports[ p ].track, b.ports[ p ].distance, portMerge );
+
+					clusters[ i ] = a;
+					clusters.RemoveAt( j );
+					merged = true;
+					break;
+				}
+
+				if ( merged )
+					break;
+			}
+		}
+	}
+
+	static bool ClustersShareClosePort( Cluster a, Cluster b, float portMerge )
+	{
+		if ( a.ports == null || b.ports == null )
+			return false;
+
+		for ( int i = 0; i < a.ports.Count; i++ )
+		{
+			PortKey pa = a.ports[ i ];
+			if ( pa.track == null )
+				continue;
+
+			for ( int j = 0; j < b.ports.Count; j++ )
+			{
+				PortKey pb = b.ports[ j ];
+				if ( pb.track != pa.track )
+					continue;
+
+				if ( Mathf.Abs( pa.track.SignedAlong( pa.distance, pb.distance ) ) <= portMerge * 2f )
+					return true;
+			}
+		}
+
+		return false;
+	}
+
+	static void AddPort( List<PortKey> ports, MinecartTrack track, float distance, float portMerge )
 	{
 		if ( track == null || ports == null )
 			return;
@@ -447,11 +637,61 @@ public static class MinecartJunctionGraphBaker
 			if ( existing.track != track )
 				continue;
 
-			if ( Mathf.Abs( existing.distance - distance ) <= PortDistanceMerge )
+			if ( Mathf.Abs( track.SignedAlong( existing.distance, distance ) ) <= portMerge )
 				return;
 		}
 
 		ports.Add( new PortKey { track = track, distance = distance } );
+	}
+
+	/// <summary>
+	/// Final collapse: smear ports on the same rail merge to the sample closest to the cluster center.
+	/// </summary>
+	static void CollapseSameTrackPorts( List<PortKey> ports, float portMerge, Vector3 clusterCenter )
+	{
+		if ( ports == null || ports.Count < 2 )
+			return;
+
+		for ( int i = 0; i < ports.Count; i++ )
+		{
+			PortKey keep = ports[ i ];
+			if ( keep.track == null )
+				continue;
+
+			float bestDist = keep.distance;
+			float bestWorldSep = float.MaxValue;
+			Vector3 keepPos;
+			Vector3 tan;
+			Vector3 up;
+			if ( keep.track.Evaluate( keep.distance, out keepPos, out tan, out up ) )
+				bestWorldSep = ( keepPos - clusterCenter ).sqrMagnitude;
+
+			for ( int j = ports.Count - 1; j > i; j-- )
+			{
+				PortKey other = ports[ j ];
+				if ( other.track != keep.track )
+					continue;
+
+				if ( Mathf.Abs( keep.track.SignedAlong( keep.distance, other.distance ) ) > portMerge )
+					continue;
+
+				Vector3 otherPos;
+				if ( other.track.Evaluate( other.distance, out otherPos, out tan, out up ) )
+				{
+					float sep = ( otherPos - clusterCenter ).sqrMagnitude;
+					if ( sep < bestWorldSep )
+					{
+						bestWorldSep = sep;
+						bestDist = other.distance;
+					}
+				}
+
+				ports.RemoveAt( j );
+			}
+
+			keep.distance = bestDist;
+			ports[ i ] = keep;
+		}
 	}
 
 	static List<MinecartJunctionPort> BuildPorts( List<PortKey> keys )

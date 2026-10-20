@@ -74,15 +74,26 @@ public static class CoinSortingStationSetup
 			definition.upgradeId = CoinSortingStationDefinition.DefaultUpgradeId;
 			definition.baseHopperCapacity = 50;
 			definition.level4HopperCapacity = 150;
-			definition.baseCoinsPerSecond = 4f;
-			definition.level3CoinsPerSecond = 10f;
+			definition.manualCoinsPerSecond = 4f;
+			definition.automaticCoinsPerSecond = 2f;
+			definition.level3ManualCoinsPerSecond = 10f;
+			definition.level3AutomaticCoinsPerSecond = 5f;
 			definition.crankHoldGrace = 0.2f;
 			definition.fullStackLateralOffset = 0.35f;
 			definition.autoPullFromNearbyStorage = true;
+			definition.storagePullSources = CoinSortingStoragePullSources.StationMixedStorage;
 			definition.storagePullRadius = 3f;
 			definition.storagePullInterval = 0.35f;
 			definition.storagePullFlightDuration = 0.32f;
 			AssetDatabase.CreateAsset( definition, defPath );
+		}
+		else
+		{
+			definition.automaticCoinsPerSecond = Mathf.Max( 0.01f, definition.automaticCoinsPerSecond );
+			definition.level3AutomaticCoinsPerSecond = Mathf.Max( 0.01f, definition.level3AutomaticCoinsPerSecond );
+			if ( definition.storagePullSources == ( CoinSortingStoragePullSources.GroundStacks | CoinSortingStoragePullSources.MixedStorage ) )
+				definition.storagePullSources = CoinSortingStoragePullSources.StationMixedStorage;
+			EditorUtility.SetDirty( definition );
 		}
 
 		const string upgradePath = "Assets/Definitions/Upgrades/Upgrade_CoinSortingStation.asset";
@@ -96,7 +107,7 @@ public static class CoinSortingStationSetup
 
 		upgrade.id = CoinSortingStationDefinition.DefaultUpgradeId;
 		upgrade.displayName = "Coin Sorting Station";
-		upgrade.description = "Levels: 1 manual crank, 2 automatic, 3 faster processing, 4 larger hopper.";
+		upgrade.description = "Levels: 1 automatic sorting (crank boosts speed), 3 faster processing, 4 larger hopper.";
 		upgrade.maxLevel = 4;
 		upgrade.enabled = true;
 		EditorUtility.SetDirty( upgrade );
@@ -184,8 +195,7 @@ public static class CoinSortingStationSetup
 			return;
 
 		CoinSortingStation[] existing = Object.FindObjectsByType<CoinSortingStation>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 		for ( int i = 0; i < existing.Length; i++ )
 		{
 			if ( existing[ i ] != null && existing[ i ].gameObject.scene == scene )

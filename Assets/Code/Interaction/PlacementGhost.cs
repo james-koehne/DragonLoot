@@ -28,7 +28,7 @@ public sealed class PlacementGhost
 	TreasureItem _syncedItem;
 	TreasureDefinition _syncedDefinition;
 	Transform _syncedTransform;
-	int _syncedTransformId;
+	EntityId _syncedTransformId;
 	bool _visible;
 	bool _lastValid = true;
 
@@ -122,7 +122,7 @@ public sealed class PlacementGhost
 			_syncedItem = null;
 			_syncedDefinition = null;
 			_syncedTransform = null;
-			_syncedTransformId = 0;
+			_syncedTransformId = EntityId.None;
 			ClearChildren();
 			return;
 		}
@@ -136,7 +136,7 @@ public sealed class PlacementGhost
 		_syncedItem = item;
 		_syncedDefinition = definition;
 		_syncedTransform = null;
-		_syncedTransformId = 0;
+		_syncedTransformId = EntityId.None;
 		RebuildFromItem( item );
 	}
 
@@ -150,12 +150,12 @@ public sealed class PlacementGhost
 			_syncedItem = null;
 			_syncedDefinition = null;
 			_syncedTransform = null;
-			_syncedTransformId = 0;
+			_syncedTransformId = EntityId.None;
 			ClearChildren();
 			return;
 		}
 
-		int id = sourceRoot.GetInstanceID();
+		EntityId id = sourceRoot.GetEntityId();
 		if ( _syncedTransform == sourceRoot
 			&& _syncedTransformId == id
 			&& HasGhostMeshRenderers() )

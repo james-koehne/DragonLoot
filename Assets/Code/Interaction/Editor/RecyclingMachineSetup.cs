@@ -352,7 +352,7 @@ static class RecyclingMachineSetup
 		if ( prefab == null || !scene.IsValid() )
 			return;
 
-		RecyclingMachine[] existing = Object.FindObjectsByType<RecyclingMachine>( FindObjectsInactive.Include, FindObjectsSortMode.None );
+		RecyclingMachine[] existing = Object.FindObjectsByType<RecyclingMachine>( FindObjectsInactive.Include );
 		for ( int i = 0; i < existing.Length; i++ )
 		{
 			if ( existing[ i ] != null && existing[ i ].gameObject.scene == scene )

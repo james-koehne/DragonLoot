@@ -22,7 +22,7 @@ public static class MinecartNetworkPathfinder
 
 	struct NodeKey : System.IEquatable<NodeKey>
 	{
-		public int TrackId;
+		public EntityId TrackId;
 		public int JunctionIndex;
 		public int QuantizedDistance;
 		public int ArriveSign;
@@ -44,7 +44,7 @@ public static class MinecartNetworkPathfinder
 		{
 			unchecked
 			{
-				int hash = TrackId;
+				int hash = TrackId.GetHashCode();
 				hash = ( hash * 397 ) ^ JunctionIndex;
 				hash = ( hash * 397 ) ^ QuantizedDistance;
 				hash = ( hash * 397 ) ^ ArriveSign;
@@ -265,9 +265,7 @@ public static class MinecartNetworkPathfinder
 		if ( junction == null || junction.ridePaths == null )
 			return;
 
-		if ( !graph.IsJunctionVisuallyComplete( current.JunctionIndex ) )
-			return;
-
+		// Incomplete junctions are fine — ride paths to unready tracks are skipped below.
 		int arriveSign = current.ArriveSign != 0 ? ( current.ArriveSign >= 0 ? 1 : -1 ) : 0;
 		for ( int i = 0; i < junction.ridePaths.Count; i++ )
 		{
@@ -466,7 +464,7 @@ public static class MinecartNetworkPathfinder
 	{
 		return new NodeKey
 		{
-			TrackId = track != null ? track.GetInstanceID() : 0,
+			TrackId = track != null ? track.GetEntityId() : EntityId.None,
 			JunctionIndex = junctionIndex,
 			QuantizedDistance = Mathf.RoundToInt( distance / Quantize ),
 			ArriveSign = arriveSign

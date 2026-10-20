@@ -360,7 +360,7 @@ public static class CompleteGlowMenu
 		if ( volume == null || string.IsNullOrEmpty( volume.MeshAssetId ) )
 			return false;
 
-		CompleteGlowVolume[] all = UnityEngine.Object.FindObjectsByType<CompleteGlowVolume>( FindObjectsInactive.Include, FindObjectsSortMode.None );
+		CompleteGlowVolume[] all = UnityEngine.Object.FindObjectsByType<CompleteGlowVolume>( FindObjectsInactive.Include );
 		for ( int i = 0; i < all.Length; i++ )
 		{
 			CompleteGlowVolume other = all[ i ];

@@ -166,7 +166,7 @@ public class ArtifactPresentationSlotVolume : MonoBehaviour
 			if ( part.Mesh == null )
 				continue;
 
-			string key = part.Mesh.GetInstanceID() + "|"
+			string key = part.Mesh.GetEntityId().ToString() + "|"
 				+ part.LocalPosition.x + "," + part.LocalPosition.y + "," + part.LocalPosition.z + "|"
 				+ part.LocalRotation.x + "," + part.LocalRotation.y + "," + part.LocalRotation.z + ","
 				+ part.LocalRotation.w + "|"

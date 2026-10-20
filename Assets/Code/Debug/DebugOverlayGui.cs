@@ -170,7 +170,7 @@ public static class DebugOverlayGui
 		float now = Time.unscaledTime;
 		if ( cache == null || now - lastTime >= interval )
 		{
-			cache = UnityEngine.Object.FindObjectsByType<T>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+			cache = UnityEngine.Object.FindObjectsByType<T>( FindObjectsInactive.Exclude );
 			lastTime = now;
 		}
 

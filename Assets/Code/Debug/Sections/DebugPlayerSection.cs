@@ -41,6 +41,12 @@ public class DebugPlayerSection : DebugOverlaySection
 		if ( !Mathf.Approximately( nextWalk, walk ) )
 			player.SetWalkSpeed( nextWalk );
 
+		float sprint = player.CurrentSprintSpeed;
+		GUILayout.Label( $"Sprint Speed: {sprint:0.00}" );
+		float nextSprint = GUILayout.HorizontalSlider( sprint, 1f, 100f );
+		if ( !Mathf.Approximately( nextSprint, sprint ) )
+			player.SetSprintSpeed( nextSprint );
+
 		float jump = player.CurrentJumpForce;
 		GUILayout.Label( $"Jump Force: {jump:0.00}" );
 		float nextJump = GUILayout.HorizontalSlider( jump, 0f, 20f );

@@ -300,22 +300,24 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	float _treasurePickupOutsideFraction = 0.4f;
 	float _columnNearEmptyReserve = 1f;
 	int _pileClearRemainingCoins = 10;
-	/// <summary>Only truly tiny detached crumbs — dig-edge lobes stay attached to the main mound.</summary>
-	const int MinIslandCellsForFlush = 8;
-	/// <summary>Island flush runs every N densifies so dig edges are not constantly re-scanned.</summary>
-	const int IslandFlushEveryNDigs = 4;
+	/// <summary>Flush only tiny detached crumbs (not dig-edge skirts still attached to the mound).</summary>
+	const int MinIslandCellsForFlush = 12;
 	/// <summary>
-	/// Hard safety cap. Soft dig falloff on huge piles can leave many ~1-coin cells; never
-	/// dump a whole rim of coins in one stroke.
+	/// Absolute max cell height (meters) allowed for remnant flush. Dig soft-falloff creates
+	/// size-1 "islands" with 0.5–1.5m height that are still real pile; never clear those.
+	/// On mega piles VolumePerCoin is meters-tall, so reserve≤1 is NOT a visual stub check.
 	/// </summary>
-	const int MaxColumnSpillPerDig = 6;
+	const float MaxRemnantFlushHeightMeters = 0.12f;
+	/// <summary>Hard safety cap on remnant island merges per dig.</summary>
+	const int MaxIslandMergesPerDig = 4;
+	/// <summary>How far (cells) to search for a solid column when merging a remnant island.</summary>
+	const int RemnantMergeSearchRadiusCells = 24;
 	/// <summary>
-	/// Densify uses carveRadius×2.5; remnant flush must stay near the dig core so the soft
-	/// falloff ring is not wiped (looks like a chunk edge vanishing + coin burst).
+	/// Densify uses carveRadius×2.5; island flush stays near the dig core so the pile perimeter
+	/// is never scanned as a ring of false remnants.
 	/// </summary>
-	const float SpillRadiusVsDensify = 0.4f;
+	const float SpillRadiusVsDensify = 0.35f;
 	bool _clearedHeightfieldThisDensify;
-	int _islandFlushDigCounter;
 	int[] _spillClearScratch;
 	TreasurePileVisual _owner;
 
@@ -1498,9 +1500,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	}
 
 	/// <summary>
-	/// When a dig leaves a column with ~1 coin of reserve at the loot floor, emit it and clear
-	/// the cell. Soft dig falloff on large piles leaves many mid-slope ~1-coin cells — those
-	/// must NOT flush (near-ground gate + tight radius + low spawn cap).
+	/// After a dig, merge tiny disconnected remnant islands into the nearest solid column
+	/// (height + reserve transfer, no world coins). Returns 0 world spawns always.
 	/// </summary>
 	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius, int carveUnits = 1 )
 	{
@@ -1508,13 +1509,9 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		if ( _heightfield == null || _pileRoot == null || _remaining == null || _columnCoinReserve == null )
 			return 0;
 
-		int remainingCoins = CountRemainingCoinInventory();
-		if ( remainingCoins <= 0 )
+		if ( CountRemainingCoinInventory() <= 0 )
 			return 0;
 
-		int spawned = 0;
-		// Hard cap: only the last coin in a column — never 2+.
-		float nearEmpty = Mathf.Min( 1f, _columnNearEmptyReserve );
 		float halfX = _heightfield.WorldSizeX * 0.5f;
 		float halfZ = _heightfield.WorldSizeZ * 0.5f;
 		float cellSizeX = _heightfield.LocalCellSizeX;
@@ -1522,114 +1519,37 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int resX = _heightfield.ResolutionX;
 		int resZ = _heightfield.ResolutionZ;
 
-		// Densify radius is expanded (carve×2.5). Remnant flush stays near the dig core.
+		// Densify radius is expanded (carve×2.5). Island flush stays near the dig core.
 		float spillRadius = Mathf.Max( Mathf.Max( cellSizeX, cellSizeZ ) * 2f, radius * SpillRadiusVsDensify );
-		float spillRadiusSq = spillRadius * spillRadius;
 		int minX = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.x - spillRadius + halfX ) / cellSizeX ), 0, resX - 1 );
 		int maxX = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.x + spillRadius + halfX ) / cellSizeX ), 0, resX - 1 );
 		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - spillRadius + halfZ ) / cellSizeZ ), 0, resZ - 1 );
 		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + spillRadius + halfZ ) / cellSizeZ ), 0, resZ - 1 );
 
-		// Allow ~half a coin of height above the floor so true stubs clear, but not soft-falloff rims.
-		float groundMargin = Mathf.Max( 0.02f, _heightfield.VolumePerCoin( Mathf.Max( 1, remainingCoins ) ) * 0.5f );
-
-		float[] reserves = _columnCoinReserve;
-		int reserveLen = reserves.Length;
-		int clearCount = 0;
-		EnsureSpillClearScratch( ( maxX - minX + 1 ) * ( maxZ - minZ + 1 ) );
-
-		// Pass 1: last-coin columns that are actually at the floor — O(dig-core cells).
-		for ( int z = minZ; z <= maxZ; z++ )
-		{
-			int row = z * resX;
-			float lz = -halfZ + z * cellSizeZ;
-			float dz = lz - localCenter.z;
-			for ( int x = minX; x <= maxX; x++ )
-			{
-				if ( spawned >= MaxColumnSpillPerDig || remainingCoins <= 0 )
-					break;
-
-				float lx = -halfX + x * cellSizeX;
-				float dx = lx - localCenter.x;
-				if ( dx * dx + dz * dz > spillRadiusSq )
-					continue;
-
-				int idx = row + x;
-				if ( ( uint )idx >= ( uint )reserveLen )
-					continue;
-
-				float reserved = reserves[ idx ];
-				if ( reserved < 0.5f || reserved > nearEmpty )
-					continue;
-				// Soft falloff rings on huge piles sit at ~1 coin height but are not at the floor.
-				if ( !_heightfield.IsCellNearLootGround( x, z, groundMargin ) )
-					continue;
-
-				if ( !TrySpawnColumnSpillCoin( lx, lz, idx, out _ ) )
-					continue;
-
-				spawned++;
-				remainingCoins--;
-				reserves[ idx ] = 0f;
-				_spillClearScratch[ clearCount++ ] = idx;
-			}
-
-			if ( spawned >= MaxColumnSpillPerDig || remainingCoins <= 0 )
-				break;
-		}
-
-		if ( clearCount > 0 )
-		{
-			if ( _heightfield.ClearCells( _spillClearScratch, clearCount ) > 0f )
-				_clearedHeightfieldThisDensify = true;
-		}
-
-		// Pass 2: tiny islands only, throttled — dig edges used to trigger this every stroke.
-		_islandFlushDigCounter++;
-		if ( spawned < MaxColumnSpillPerDig
-			&& ( _islandFlushDigCounter % IslandFlushEveryNDigs ) == 0 )
-		{
-			spawned += FlushSmallIslandsNear( minX, maxX, minZ, maxZ, spawned, ref remainingCoins );
-		}
-
-		HideNearGroundCoinVisualsNear( localCenter, spillRadius );
-		return spawned;
-	}
-
-	void EnsureSpillClearScratch( int needed )
-	{
-		if ( _spillClearScratch == null || _spillClearScratch.Length < needed )
-			_spillClearScratch = new int[ Mathf.Max( needed, 64 ) ];
+		int merged = FlushSmallIslandsNear( minX, maxX, minZ, maxZ );
+		if ( merged > 0 || _clearedHeightfieldThisDensify )
+			HideNearGroundCoinVisualsNear( localCenter, spillRadius );
+		// No world coins — remnant volume/reserve moves into a nearby solid column.
+		return 0;
 	}
 
 	/// <summary>
-	/// Clears tiny detached heightfield crumbs (&lt; <see cref="MinIslandCellsForFlush"/> cells,
-	/// &lt;= 1 coin total) infrequently so dig-edge falloff is not constantly wiped.
+	/// Finds tiny disconnected remnant islands and merges their height + coin reserve into the
+	/// richest nearby solid column (grows that column). Inventory stays in the pile — no world spawn.
 	/// </summary>
-	int FlushSmallIslandsNear(
-		int minX,
-		int maxX,
-		int minZ,
-		int maxZ,
-		int alreadySpawned,
-		ref int remainingCoins )
+	int FlushSmallIslandsNear( int minX, int maxX, int minZ, int maxZ )
 	{
-		// Only flush islands that are literally ~1 coin of volume total.
 		float islandCoinBudget = Mathf.Min( 1f, _columnNearEmptyReserve );
-		float halfX = _heightfield.WorldSizeX * 0.5f;
-		float halfZ = _heightfield.WorldSizeZ * 0.5f;
-		float cellSizeX = _heightfield.LocalCellSizeX;
-		float cellSizeZ = _heightfield.LocalCellSizeZ;
 		float[] reserves = _columnCoinReserve;
 		int reserveLen = reserves.Length;
-		int spawned = 0;
+		int merged = 0;
 		int resX = _heightfield.ResolutionX;
+		float ground = _heightfield.GroundLevel;
 
 		_heightfield.BeginSmallIslandScan( minX, maxX, minZ, maxZ, MinIslandCellsForFlush );
-		// Seed only from sub-coin / last-coin cells — never BFS from thick pile.
 		while ( _heightfield.TryFindNextSmallIsland( reserves, islandCoinBudget ) )
 		{
-			if ( alreadySpawned + spawned >= MaxColumnSpillPerDig || remainingCoins <= 0 )
+			if ( merged >= MaxIslandMergesPerDig )
 				break;
 
 			int[] cells = _heightfield.SmallIslandCells;
@@ -1638,53 +1558,148 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 				continue;
 
 			float islandReserve = 0f;
+			float maxH = 0f;
 			for ( int i = 0; i < size; i++ )
 			{
 				int idx = cells[ i ];
 				if ( ( uint )idx < ( uint )reserveLen )
-					islandReserve += reserves[ idx ];
+					islandReserve += Mathf.Max( 0f, reserves[ idx ] );
+				int cx = idx % resX;
+				int cz = idx / resX;
+				float h = _heightfield.GetCellHeight( cx, cz );
+				if ( h > maxH )
+					maxH = h;
 			}
 
-			if ( islandReserve > islandCoinBudget )
+			// Dig falloff leaves size-1 cells whose neighbors dipped below ground — still real pile.
+			if ( maxH > MaxRemnantFlushHeightMeters )
+				continue;
+			if ( islandReserve > islandCoinBudget + 0.001f )
 				continue;
 
 			int seedIdx = cells[ 0 ];
 			int seedX = seedIdx % resX;
 			int seedZ = seedIdx / resX;
-			// Skip soft-falloff blobs that are still above the floor.
-			if ( !_heightfield.IsCellNearLootGround( seedX, seedZ, 0.05f ) )
+			if ( !TryFindRichestSolidColumnNearby( seedX, seedZ, cells, size, ground, reserves, reserveLen, out int destX, out int destZ, out int destIdx ) )
 				continue;
 
-			int toSpill = Mathf.Min(
-				islandReserve > 0.05f ? Mathf.Max( 1, Mathf.CeilToInt( islandReserve ) ) : 0,
-				remainingCoins,
-				MaxColumnSpillPerDig - alreadySpawned - spawned );
-
-			float lx = -halfX + seedX * cellSizeX;
-			float lz = -halfZ + seedZ * cellSizeZ;
-
-			for ( int i = 0; i < toSpill; i++ )
-			{
-				// Loose spawn: island cells often hold fractional reserve (< 0.5) that
-				// TrySpawnColumnSpillCoin would reject.
-				if ( !TrySpawnLooseInventoryCoin( lx, lz, out _ ) )
-					break;
-				spawned++;
-				remainingCoins--;
-			}
-
+			EnsureSpillClearScratch( size );
 			for ( int i = 0; i < size; i++ )
 			{
 				int idx = cells[ i ];
+				_spillClearScratch[ i ] = idx;
 				if ( ( uint )idx < ( uint )reserveLen )
 					reserves[ idx ] = 0f;
 			}
 
-			if ( _heightfield.ClearCells( cells, size ) > 0f )
+			float removed = _heightfield.ClearCells( _spillClearScratch, size );
+			if ( removed > 0f )
+			{
+				_heightfield.AddCellHeight( destX, destZ, removed );
 				_clearedHeightfieldThisDensify = true;
+			}
+
+			if ( ( uint )destIdx < ( uint )reserveLen && islandReserve > 0f )
+				reserves[ destIdx ] += islandReserve;
+
+			merged++;
 		}
 
-		return spawned;
+		return merged;
+	}
+
+	/// <summary>
+	/// Within <see cref="RemnantMergeSearchRadiusCells"/>, pick the solid column with the most
+	/// coin reserve (tie-break: taller, then nearer). Skips the remnant island itself.
+	/// </summary>
+	bool TryFindRichestSolidColumnNearby(
+		int seedX,
+		int seedZ,
+		int[] islandCells,
+		int islandSize,
+		float ground,
+		float[] reserves,
+		int reserveLen,
+		out int destX,
+		out int destZ,
+		out int destIdx )
+	{
+		destX = seedX;
+		destZ = seedZ;
+		destIdx = -1;
+		int resX = _heightfield.ResolutionX;
+		int resZ = _heightfield.ResolutionZ;
+		float bestReserve = -1f;
+		float bestH = -1f;
+		int bestSq = int.MaxValue;
+		bool found = false;
+		int radius = RemnantMergeSearchRadiusCells;
+		int radiusSq = radius * radius;
+
+		int minX = Mathf.Max( 0, seedX - radius );
+		int maxX = Mathf.Min( resX - 1, seedX + radius );
+		int minZ = Mathf.Max( 0, seedZ - radius );
+		int maxZ = Mathf.Min( resZ - 1, seedZ + radius );
+
+		for ( int z = minZ; z <= maxZ; z++ )
+		{
+			for ( int x = minX; x <= maxX; x++ )
+			{
+				int dx = x - seedX;
+				int dz = z - seedZ;
+				int distSq = dx * dx + dz * dz;
+				if ( distSq > radiusSq )
+					continue;
+
+				int idx = z * resX + x;
+				if ( IsIndexInIsland( idx, islandCells, islandSize ) )
+					continue;
+
+				float h = _heightfield.GetCellHeight( x, z );
+				// Must be a real column with coins/volume — not another remnant stub.
+				if ( h < ground || h <= MaxRemnantFlushHeightMeters )
+					continue;
+
+				float reserved = ( uint )idx < ( uint )reserveLen ? reserves[ idx ] : 0f;
+				if ( reserved < bestReserve )
+					continue;
+				if ( reserved == bestReserve )
+				{
+					if ( h < bestH )
+						continue;
+					if ( h == bestH && distSq >= bestSq )
+						continue;
+				}
+
+				bestReserve = reserved;
+				bestH = h;
+				bestSq = distSq;
+				destX = x;
+				destZ = z;
+				destIdx = idx;
+				found = true;
+			}
+		}
+
+		return found;
+	}
+
+	static bool IsIndexInIsland( int idx, int[] islandCells, int islandSize )
+	{
+		if ( islandCells == null )
+			return false;
+		for ( int i = 0; i < islandSize; i++ )
+		{
+			if ( islandCells[ i ] == idx )
+				return true;
+		}
+		return false;
+	}
+
+	void EnsureSpillClearScratch( int needed )
+	{
+		if ( _spillClearScratch == null || _spillClearScratch.Length < needed )
+			_spillClearScratch = new int[ Mathf.Max( needed, 64 ) ];
 	}
 
 	/// <summary>

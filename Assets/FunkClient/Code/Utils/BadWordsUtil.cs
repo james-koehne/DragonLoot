@@ -203,7 +203,7 @@ public class BadWordsUtil
 					continue;
 				}
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEBUG
 				string originalFragment = input.Substring( originalStart, originalEnd - originalStart + 1 );
 				Debug.Log( $"[CENSOR] Input: {input} Normalized: {normalized} MatchedBadWord: {bad} OriginalFragment: {originalFragment} Indices: {originalStart}-{originalEnd}" );
 #endif
@@ -223,7 +223,7 @@ public class BadWordsUtil
 
 		string safeOutput = new string( chars );
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEBUG
 		Debug.Log( $"[CENSOR] SafeOutput: {safeOutput}" );
 #endif
 

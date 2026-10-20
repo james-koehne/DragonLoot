@@ -104,8 +104,7 @@ public class DebugArtifactCleaningSection : DebugOverlaySection
 	static void ForceCleanAllTreasure()
 	{
 		TreasureItem[] items = Object.FindObjectsByType<TreasureItem>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 		for ( int i = 0; i < items.Length; i++ )
 		{
 			TreasureItem item = items[ i ];

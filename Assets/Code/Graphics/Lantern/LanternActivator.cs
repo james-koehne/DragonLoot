@@ -482,4 +482,12 @@ public class LanternActivator : MonoBehaviour
 		context.Position = transform.position;
 		feedbacks.Play( context );
 	}
+
+#if UNITY_EDITOR
+	public void EditorAssignManualGroup( string groupId )
+	{
+		_activationMode = LanternActivationMode.Manual;
+		_groupId = groupId;
+	}
+#endif
 }

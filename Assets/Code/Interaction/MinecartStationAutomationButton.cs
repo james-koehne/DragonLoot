@@ -2,6 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Red/Green control on a minecart station: stop all automation, or resume and immediate-send.
+/// Visual brightness reflects whether global automation is currently running.
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 public class MinecartStationAutomationButton : InteractableBase
@@ -18,9 +19,13 @@ public class MinecartStationAutomationButton : InteractableBase
 	static readonly int EmissionIntensityId = Shader.PropertyToID( "_EmissionIntensity" );
 	static readonly Color StopColor = new Color( 0.85f, 0.12f, 0.12f, 1f );
 	static readonly Color ResumeColor = new Color( 0.15f, 0.75f, 0.22f, 1f );
-	const float IdleEmissionIntensity = 1.1f;
+	const float DimEmissionIntensity = 0.35f;
+	const float ActiveEmissionIntensity = 1.25f;
 	const float HoverEmissionIntensity = 1.55f;
 	const float HoverBrightness = 1.18f;
+	const float PulseSpeed = 2.4f;
+	const float PulseMin = 0.85f;
+	const float PulseMax = 1.45f;
 
 	[SerializeField]
 	ButtonMode mode = ButtonMode.Stop;
@@ -31,6 +36,7 @@ public class MinecartStationAutomationButton : InteractableBase
 	Renderer _renderer;
 	MaterialPropertyBlock _block;
 	bool _hovered;
+	bool _lastAutomationEnabled = true;
 
 	void Reset()
 	{
@@ -44,6 +50,7 @@ public class MinecartStationAutomationButton : InteractableBase
 
 		_renderer = GetComponent<Renderer>();
 		ApplyModeDefaults();
+		_lastAutomationEnabled = MinecartStationBase.AutomationEnabled;
 		ApplyButtonVisual( false );
 	}
 
@@ -55,10 +62,14 @@ public class MinecartStationAutomationButton : InteractableBase
 	void Update()
 	{
 		bool hovered = IsHoveredByPlayer();
-		if ( hovered == _hovered )
+		bool automationEnabled = MinecartStationBase.AutomationEnabled;
+		bool needsPulse = mode == ButtonMode.ResumeAndSend && !automationEnabled;
+
+		if ( hovered == _hovered && automationEnabled == _lastAutomationEnabled && !needsPulse )
 			return;
 
 		_hovered = hovered;
+		_lastAutomationEnabled = automationEnabled;
 		ApplyButtonVisual( _hovered );
 	}
 
@@ -82,6 +93,15 @@ public class MinecartStationAutomationButton : InteractableBase
 		return interaction.Current == (IInteractable)this;
 	}
 
+	bool IsStatusActive()
+	{
+		bool automationEnabled = MinecartStationBase.AutomationEnabled;
+		if ( mode == ButtonMode.Stop )
+			return !automationEnabled;
+
+		return automationEnabled;
+	}
+
 	void ApplyButtonVisual( bool hovered )
 	{
 		if ( _renderer == null )
@@ -92,12 +112,33 @@ public class MinecartStationAutomationButton : InteractableBase
 		if ( _block == null )
 			_block = new MaterialPropertyBlock();
 
+		bool automationEnabled = MinecartStationBase.AutomationEnabled;
+		bool statusActive = IsStatusActive();
+
 		Color color = mode == ButtonMode.Stop ? StopColor : ResumeColor;
-		if ( hovered )
+		float intensity;
+
+		if ( hovered && CanInteractForAutomation( automationEnabled ) )
+		{
 			color = Color.Lerp( color, Color.white, 0.35f ) * HoverBrightness;
+			intensity = HoverEmissionIntensity;
+		}
+		else if ( mode == ButtonMode.ResumeAndSend && !automationEnabled )
+		{
+			float pulse = Mathf.Lerp( PulseMin, PulseMax, 0.5f + 0.5f * Mathf.Sin( Time.time * PulseSpeed ) );
+			intensity = pulse;
+		}
+		else if ( statusActive )
+		{
+			intensity = ActiveEmissionIntensity;
+		}
+		else
+		{
+			color *= 0.45f;
+			intensity = DimEmissionIntensity;
+		}
 
 		color.a = 1f;
-		float intensity = hovered ? HoverEmissionIntensity : IdleEmissionIntensity;
 
 		_renderer.GetPropertyBlock( _block );
 		_block.SetColor( BaseColorId, color );
@@ -107,9 +148,20 @@ public class MinecartStationAutomationButton : InteractableBase
 		_renderer.SetPropertyBlock( _block );
 	}
 
+	bool CanInteractForAutomation( bool automationEnabled )
+	{
+		if ( mode == ButtonMode.Stop )
+			return automationEnabled;
+
+		return !automationEnabled;
+	}
+
 	public override bool CanInteract( PlayerController player )
 	{
-		return IsAvailable && player != null && station != null;
+		if ( !IsAvailable || player == null || station == null )
+			return false;
+
+		return CanInteractForAutomation( MinecartStationBase.AutomationEnabled );
 	}
 
 	public override void Interact( PlayerController player )

@@ -153,7 +153,22 @@ public class FairyHelper : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0.1f )]
-	float deliveryFollowSpeed = 7f;
+	float deliveryFollowSpeed = 4.5f;
+
+	[SerializeField]
+	[Min( 0.25f )]
+	[Tooltip( "Stay put while inside this radius of the preferred front point." )]
+	float deliveryLooseArriveDistance = 1.35f;
+
+	[SerializeField]
+	[Min( 0.5f )]
+	[Tooltip( "Only retarget the front point once farther than this (hysteresis)." )]
+	float deliveryLooseRetargetDistance = 2.75f;
+
+	[SerializeField]
+	[Range( -1f, 1f )]
+	[Tooltip( "Dot(playerForward, toFairy). Below this, fairy is treated as behind and may retarget." )]
+	float deliveryFrontDotMin = 0.15f;
 
 	[SerializeField]
 	Vector3 deliveryCargoOffsetLocal = new Vector3( 0f, -0.45f, 0f );
@@ -231,6 +246,9 @@ public class FairyHelper : MonoBehaviour
 	Vector3 _guideDestination;
 	Transform _guideDestinationTransform;
 	Action _guideOnFinished;
+	Vector3[] _guideWaypoints;
+	int _guideWaypointIndex;
+	Vector3 _guidePathDestination;
 	bool _farewellBubbleSeen;
 	float _farewellEndsAt = -1f;
 	float _flightSpeed;
@@ -240,6 +258,8 @@ public class FairyHelper : MonoBehaviour
 	bool _deliveryCargoTaken;
 	bool _deliveryFarewell;
 	Action _deliveryOnFinished;
+	Vector3 _deliverySoftTarget;
+	bool _hasDeliverySoftTarget;
 
 	public FairyMode Mode => mode;
 	public bool IsTalking => _talking;
@@ -425,6 +445,8 @@ public class FairyHelper : MonoBehaviour
 		_planarVelocity = Vector3.zero;
 		_frameMoveDelta = Vector3.zero;
 		_isMoving = false;
+		_deliverySoftTarget = spawnPos;
+		_hasDeliverySoftTarget = true;
 		FaceToward( player.transform.position - spawnPos, instant: true );
 	}
 
@@ -445,6 +467,7 @@ public class FairyHelper : MonoBehaviour
 		_flightSpeed = guideMoveSpeed;
 		_logicalPosition = transform.position;
 		ActiveGuide = this;
+		BuildGuidePath( destination );
 
 		PlayInteractFeedback();
 		NotifyTalkStarted();
@@ -467,6 +490,7 @@ public class FairyHelper : MonoBehaviour
 		_guideOnFinished = null;
 		_guidePhase = FairyGuidePhase.None;
 		_guideDestinationTransform = null;
+		ClearGuidePath();
 		if ( ActiveGuide == this )
 			ActiveGuide = null;
 		if ( invokeFinished && finished != null )
@@ -485,6 +509,7 @@ public class FairyHelper : MonoBehaviour
 		_farewellEndsAt = -1f;
 		_flightSpeed = moveSpeed;
 		_logicalPosition = transform.position;
+		_hasDeliverySoftTarget = false;
 		ActiveDelivery = this;
 
 		PlayInteractFeedback();
@@ -608,6 +633,11 @@ public class FairyHelper : MonoBehaviour
 		if ( ActiveDelivery == this )
 			ActiveDelivery = null;
 		ReleaseOrDetachDeliveryCargo( releaseIfUntaken: true );
+		if ( speechBubble != null )
+		{
+			Destroy( speechBubble.gameObject );
+			speechBubble = null;
+		}
 	}
 
 	void ClampTunables()
@@ -712,15 +742,53 @@ public class FairyHelper : MonoBehaviour
 		}
 		else
 		{
-			Vector3 followTarget = SnapToHoverHeight( BuildSpawnOffset( player, deliveryFollowOffsetLocal ) );
-			_flightSpeed = deliveryFollowSpeed > 0.01f ? deliveryFollowSpeed : moveSpeed;
-			StepMove( followTarget );
-			FaceToward( player.transform.position - transform.position, instant: false );
+			TickLooseFrontFollow( player );
 		}
 
 		// Taken = deactivated or destroyed (build mode consumes the world prop permanently).
 		if ( !_deliveryCargoTaken && _deliveryCargoAttached && ( _deliveryCargo == null || !_deliveryCargo.activeSelf ) )
 			OnDeliveryCargoTaken();
+	}
+
+	/// <summary>
+	/// Softly keep a front-of-player hover point. Does not aggressively chase every look turn —
+	/// retargets only when too far or clearly behind the player.
+	/// </summary>
+	void TickLooseFrontFollow( PlayerController player )
+	{
+		Vector3 preferred = SnapToHoverHeight( BuildSpawnOffset( player, deliveryFollowOffsetLocal ) );
+		float distToPreferred = HorizontalDistance( _logicalPosition, preferred );
+
+		Vector3 toFairy = _logicalPosition - player.transform.position;
+		toFairy.y = 0f;
+		float frontDot = -1f;
+		if ( toFairy.sqrMagnitude > 0.0001f )
+			frontDot = Vector3.Dot( FlatForward( player.transform ), toFairy.normalized );
+
+		bool behindPlayer = frontDot < deliveryFrontDotMin;
+		bool needRetarget = !_hasDeliverySoftTarget
+			|| distToPreferred >= deliveryLooseRetargetDistance
+			|| behindPlayer;
+
+		if ( needRetarget )
+		{
+			_deliverySoftTarget = preferred;
+			_hasDeliverySoftTarget = true;
+		}
+
+		float distToSoft = HorizontalDistance( _logicalPosition, _deliverySoftTarget );
+		if ( distToSoft <= deliveryLooseArriveDistance && !behindPlayer )
+		{
+			HoldInPlace();
+			if ( _talking || IsHovered )
+				FaceToward( player.transform.position - transform.position, instant: false );
+			return;
+		}
+
+		_flightSpeed = deliveryFollowSpeed > 0.01f ? deliveryFollowSpeed : moveSpeed;
+		StepMove( SnapToHoverHeight( _deliverySoftTarget ) );
+		if ( _talking || IsHovered || distToSoft > deliveryLooseArriveDistance * 1.5f )
+			FaceToward( player.transform.position - transform.position, instant: false );
 	}
 
 	void OnDeliveryCargoTaken()
@@ -796,7 +864,13 @@ public class FairyHelper : MonoBehaviour
 			return;
 
 		if ( _guideDestinationTransform != null )
-			_guideDestination = _guideDestinationTransform.position;
+		{
+			Vector3 liveDest = _guideDestinationTransform.position;
+			_guideDestination = liveDest;
+			float moved = HorizontalDistance( liveDest, _guidePathDestination );
+			if ( moved > 1.5f )
+				BuildGuidePath( liveDest );
+		}
 
 		if ( _guidePhase == FairyGuidePhase.Farewell )
 		{
@@ -849,8 +923,50 @@ public class FairyHelper : MonoBehaviour
 
 		_guidePhase = FairyGuidePhase.Guiding;
 		_flightSpeed = guideMoveSpeed;
-		StepMove( SnapToHoverHeight( _guideDestination ) );
+		StepMove( SnapToHoverHeight( ResolveGuideMoveTarget() ) );
 		UpdateFacingWhileMoving( player );
+	}
+
+	void BuildGuidePath( Vector3 destination )
+	{
+		_guidePathDestination = destination;
+		_guideWaypointIndex = 0;
+		_guideWaypoints = null;
+
+		TreasureSurfacePathSettings settings = TreasureSurfacePathSettings.Default;
+		if ( TreasureSurfacePathfinder.TryFindPath( _logicalPosition, destination, settings, out TreasureSurfacePath path )
+			&& path != null
+			&& path.Success
+			&& path.WaypointCount > 0 )
+		{
+			_guideWaypoints = new Vector3[ path.WaypointCount ];
+			for ( int i = 0; i < path.WaypointCount; i++ )
+				_guideWaypoints[ i ] = path.Waypoints[ i ];
+		}
+	}
+
+	void ClearGuidePath()
+	{
+		_guideWaypoints = null;
+		_guideWaypointIndex = 0;
+		_guidePathDestination = Vector3.zero;
+	}
+
+	Vector3 ResolveGuideMoveTarget()
+	{
+		if ( _guideWaypoints == null || _guideWaypoints.Length == 0 )
+			return _guideDestination;
+
+		while ( _guideWaypointIndex < _guideWaypoints.Length - 1
+			&& HorizontalDistance( _logicalPosition, _guideWaypoints[ _guideWaypointIndex ] ) <= guideArriveDistance )
+		{
+			_guideWaypointIndex++;
+		}
+
+		if ( _guideWaypointIndex >= _guideWaypoints.Length )
+			return _guideDestination;
+
+		return _guideWaypoints[ _guideWaypointIndex ];
 	}
 
 	void BeginFarewell()
@@ -1274,6 +1390,13 @@ public class FairyHelper : MonoBehaviour
 		if ( ActiveGuide == this )
 			ActiveGuide = null;
 
+		// Speech bubble detaches to a root Overlay; destroy it explicitly.
+		if ( speechBubble != null )
+		{
+			Destroy( speechBubble.gameObject );
+			speechBubble = null;
+		}
+
 		if ( _addressableOwned )
 		{
 			Addressables.ReleaseInstance( gameObject );
@@ -1311,6 +1434,21 @@ public class FairyHelper : MonoBehaviour
 	bool TrySampleGroundY( Vector3 pos, out float groundY )
 	{
 		groundY = pos.y;
+
+		// Prefer treasure surface height (includes gold-pile stamps) so guides hover above piles.
+		TreasureSurfaceWorld surfaceWorld = TreasureSurfaceWorld.Instance;
+		if ( surfaceWorld != null && surfaceWorld.IsInitialized && surfaceWorld.Sampler != null )
+		{
+			if ( surfaceWorld.TryGetChunkCoord( pos, out TreasureChunkCoord coord ) )
+				surfaceWorld.EnsureChunkLoaded( coord );
+
+			if ( surfaceWorld.Sampler.TrySample( pos, out TreasureSurfaceSample sample ) && sample.Valid )
+			{
+				groundY = sample.Height;
+				return true;
+			}
+		}
+
 		Vector3 origin = new Vector3( pos.x, pos.y + GroundProbeUp, pos.z );
 		int hitCount = Physics.RaycastNonAlloc(
 			origin,

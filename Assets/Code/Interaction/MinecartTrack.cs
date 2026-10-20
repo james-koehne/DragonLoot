@@ -217,7 +217,7 @@ public class MinecartTrack : MonoBehaviour
 		if ( All.Count > 0 )
 			return;
 
-		MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < found.Length; i++ )
 		{
 			MinecartTrack candidate = found[ i ];

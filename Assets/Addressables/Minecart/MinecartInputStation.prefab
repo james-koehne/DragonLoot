@@ -232,11 +232,40 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
-  _feedbacks: []
+  _feedbacks:
+  - rid: 535442824922137337
   _useUnscaledTime: 0
   references:
     version: 2
-    RefIds: []
+    RefIds:
+    - rid: 535442824922137337
+      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
+      data:
+        _enabled: 1
+        Clip: {fileID: 8300000, guid: 06676f922dd3ed84a94839e60cc87272, type: 3}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 1
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 1
+        _migrateVolumeMax: 1
+        _migratePitchMin: 1
+        _migratePitchMax: 1
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &4047248493328515997
 GameObject:
   m_ObjectHideFlags: 0
@@ -411,7 +440,7 @@ MonoBehaviour:
   onCallFeedbacks: {fileID: 3371737776352379591}
   onArriveFeedbacks: {fileID: 20878854461892652}
   onIdleFeedbacks: {fileID: 2943498535720456387}
-  linkedOutput: {fileID: 0}
+  autoCartLimit: 0
 --- !u!1 &8072777512414946106
 GameObject:
   m_ObjectHideFlags: 0

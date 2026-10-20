@@ -5,25 +5,18 @@ using UnityEngine;
 /// <summary>
 /// Keeps quest / tutorial target meshes registered for the quest outline channel while TutorialHud provides roots.
 /// Tutorial override roots use tutorialOutline colour; otherwise quest cyan.
-/// Fades out between <see cref="FadeStartMeters"/> and <see cref="FadeOutMeters"/>; once fully out,
-/// stays hidden until the player remains at least <see cref="FadeOutMeters"/> away for <see cref="ShowAfterAwaySeconds"/>.
+/// Objective outlines stay visible at any distance (including buildable ghosts outside build mode).
 /// </summary>
 public class QuestObjectiveOutline : MonoBehaviour
 {
-	const float FadeStartMeters = 15f;
-	const float FadeOutMeters = 10f;
-	const float ShowAfterAwaySeconds = 5f;
-
 	static QuestObjectiveOutline _instance;
 	static readonly List<Renderer> RendererScratch = new List<Renderer>( 32 );
 	static readonly List<Renderer> ActiveRenderers = new List<Renderer>( 32 );
 	static readonly List<Transform> ActiveRoots = new List<Transform>( 8 );
-	static readonly HashSet<int> SeenRoots = new HashSet<int>();
+	static readonly HashSet<EntityId> SeenRoots = new HashSet<EntityId>();
 
 	bool _subscribed;
 	bool _hadTutorialOverride;
-	bool _proximityHidden;
-	float _awayTimer;
 	HoverOutlineVisualSettings _baseSettings;
 
 	public static QuestObjectiveOutline EnsureExists()
@@ -104,8 +97,6 @@ public class QuestObjectiveOutline : MonoBehaviour
 		bool tutorialOverride = TutorialHud.HasTutorialOutlineOverride;
 		if ( tutorialOverride != _hadTutorialOverride || Time.frameCount % 15 == 0 )
 			Refresh();
-		else
-			ApplyProximityFade();
 		_hadTutorialOverride = tutorialOverride;
 	}
 
@@ -128,10 +119,10 @@ public class QuestObjectiveOutline : MonoBehaviour
 		ActiveRenderers.AddRange( RendererScratch );
 
 		_baseSettings = ResolveQuestSettings();
-		ApplyProximityFade();
+		ApplyOutline();
 	}
 
-	void ApplyProximityFade()
+	void ApplyOutline()
 	{
 		if ( _baseSettings == null || ActiveRenderers.Count == 0 || ActiveRoots.Count == 0 )
 		{
@@ -139,78 +130,9 @@ public class QuestObjectiveOutline : MonoBehaviour
 			return;
 		}
 
-		float nearest = ResolveNearestDistance();
-		UpdateProximityLatch( nearest );
-		float fade = EvaluateProximityFade( nearest );
-		if ( fade <= 0.001f )
-		{
-			QuestOutlineRegistrar.Clear();
-			return;
-		}
-
-		HoverOutlineVisualSettings faded = _baseSettings.Clone();
-		faded.outlineIntensity *= fade;
-		Color c = faded.outlineColor;
-		faded.outlineColor = new Color( c.r, c.g, c.b, c.a * fade );
-		faded.Validate();
-		QuestOutlineRegistrar.SetTargets( ActiveRenderers, faded );
-	}
-
-	float ResolveNearestDistance()
-	{
-		float nearest = float.MaxValue;
-		for ( int i = 0; i < ActiveRoots.Count; i++ )
-		{
-			Transform root = ActiveRoots[ i ];
-			if ( root == null )
-				continue;
-
-			float distance = TutorialHudDistance.HorizontalTo( root.position );
-			if ( distance < nearest )
-				nearest = distance;
-		}
-
-		return nearest;
-	}
-
-	void UpdateProximityLatch( float nearest )
-	{
-		if ( nearest == float.MaxValue )
-		{
-			_proximityHidden = false;
-			_awayTimer = 0f;
-			return;
-		}
-
-		if ( nearest <= FadeOutMeters )
-		{
-			_proximityHidden = true;
-			_awayTimer = 0f;
-			return;
-		}
-
-		if ( !_proximityHidden )
-			return;
-
-		_awayTimer += Time.deltaTime;
-		if ( _awayTimer >= ShowAfterAwaySeconds )
-		{
-			_proximityHidden = false;
-			_awayTimer = 0f;
-		}
-	}
-
-	float EvaluateProximityFade( float nearest )
-	{
-		if ( _proximityHidden || nearest == float.MaxValue )
-			return 0f;
-
-		if ( nearest >= FadeStartMeters )
-			return 1f;
-		if ( nearest <= FadeOutMeters )
-			return 0f;
-
-		return Mathf.SmoothStep( 0f, 1f, Mathf.InverseLerp( FadeOutMeters, FadeStartMeters, nearest ) );
+		HoverOutlineVisualSettings settings = _baseSettings.Clone();
+		settings.Validate();
+		QuestOutlineRegistrar.SetTargets( ActiveRenderers, settings );
 	}
 
 	void AppendRootRenderers( Transform root )
@@ -218,11 +140,27 @@ public class QuestObjectiveOutline : MonoBehaviour
 		if ( root == null )
 			return;
 
-		int id = root.GetInstanceID();
+		EntityId id = root.GetEntityId();
 		if ( !SeenRoots.Add( id ) )
 			return;
 
 		ActiveRoots.Add( root );
+
+		BuildableObject buildable = root.GetComponentInParent<BuildableObject>();
+		if ( buildable != null && buildable.ObjectiveOutlineRequested && !buildable.IsBuilt )
+		{
+			IReadOnlyList<Renderer> ghostRenderers = buildable.GetGhostOutlineRenderers();
+			for ( int i = 0; i < ghostRenderers.Count; i++ )
+			{
+				Renderer renderer = ghostRenderers[ i ];
+				if ( renderer != null && !RendererScratch.Contains( renderer ) )
+					RendererScratch.Add( renderer );
+			}
+
+			if ( ghostRenderers.Count > 0 )
+				return;
+		}
+
 		HoverOutlineTargetUtility.AppendQuestOutlineRenderers( root.gameObject, RendererScratch );
 	}
 
@@ -231,8 +169,6 @@ public class QuestObjectiveOutline : MonoBehaviour
 		ActiveRenderers.Clear();
 		ActiveRoots.Clear();
 		_baseSettings = null;
-		_proximityHidden = false;
-		_awayTimer = 0f;
 	}
 
 	static HoverOutlineVisualSettings ResolveQuestSettings()

@@ -769,7 +769,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( _coinHandVariationSeed > 0.0001f )
 			return _coinHandVariationSeed;
 
-		int id = Mathf.Abs( GetInstanceID() );
+		int id = Mathf.Abs( GetEntityId().GetHashCode() );
 		_coinHandVariationSeed = ( id % 9973 ) + 1;
 		return _coinHandVariationSeed;
 	}

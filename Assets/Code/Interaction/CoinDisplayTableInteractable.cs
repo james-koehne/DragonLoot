@@ -234,9 +234,28 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		return added;
 	}
 
+	/// <summary>After sequential whole-stack place flights finish, kick the same auto-level path as bulk append.</summary>
+	public void RequestAutoLevelAfterWholeStackPlace( int slotIndex )
+	{
+		if ( autoLevelAfterWholeStackPlace || autoLevelAllStacks )
+			BeginAutoLevelStacks( slotIndex );
+	}
+
+	int _suppressAutoLevelDepth;
+
+	public void BeginSuppressAutoLevel()
+	{
+		_suppressAutoLevelDepth++;
+	}
+
+	public void EndSuppressAutoLevel()
+	{
+		_suppressAutoLevelDepth = Mathf.Max( 0, _suppressAutoLevelDepth - 1 );
+	}
+
 	protected override void OnDisplaySlotChanged( int slotIndex )
 	{
-		if ( !autoLevelAllStacks )
+		if ( _suppressAutoLevelDepth > 0 || !autoLevelAllStacks )
 			return;
 
 		BeginAutoLevelStacks( slotIndex );
@@ -887,7 +906,7 @@ public class CoinDisplayTableInteractable : TypedDisplayTableInteractable
 		if ( required == null )
 			return new Color( 1f, 0.35f, 0.35f, 0.9f );
 
-		int hash = required.GetInstanceID();
+		int hash = required.GetEntityId().GetHashCode();
 		float hue = Mathf.Abs( hash % 360 ) / 360f;
 		return Color.HSVToRGB( hue, 0.65f, 1f );
 	}

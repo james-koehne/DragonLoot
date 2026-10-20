@@ -1,4 +1,18 @@
+using System;
+
 using UnityEngine;
+using UnityEngine.Serialization;
+
+[Flags]
+public enum CoinSortingStoragePullSources
+{
+	None = 0,
+	GroundStacks = 1 << 0,
+	/// <summary>Mixed display tables marked as station storage (not plain world tables).</summary>
+	StationMixedStorage = 1 << 1,
+	/// <summary>Legacy alias for <see cref="StationMixedStorage"/>.</summary>
+	MixedStorage = StationMixedStorage,
+}
 
 /// <summary>
 /// Tuning for the coin sorting station. Asset name must be
@@ -23,20 +37,30 @@ public class CoinSortingStationDefinition : ScriptableObject
 	public int level4HopperCapacity = 150;
 
 	[Header( "Process Rate" )]
-	[Tooltip( "Coins processed per second at levels 1–2 (and while cranking at L1)." )]
+	[Tooltip( "Coins per second while the player is cranking (manual boost rate)." )]
+	[FormerlySerializedAs( "baseCoinsPerSecond" )]
 	[Min( 0.01f )]
-	public float baseCoinsPerSecond = 4f;
+	public float manualCoinsPerSecond = 4f;
 
-	[Tooltip( "Coins processed per second at level 3+." )]
+	[Tooltip( "Coins per second while sorting unattended. Default is 50% of manual." )]
 	[Min( 0.01f )]
-	public float level3CoinsPerSecond = 10f;
+	public float automaticCoinsPerSecond = 2f;
+
+	[Tooltip( "Manual (crank) coins per second at level 3+." )]
+	[FormerlySerializedAs( "level3CoinsPerSecond" )]
+	[Min( 0.01f )]
+	public float level3ManualCoinsPerSecond = 10f;
+
+	[Tooltip( "Automatic coins per second at level 3+. Default is 50% of level-3 manual." )]
+	[Min( 0.01f )]
+	public float level3AutomaticCoinsPerSecond = 5f;
 
 	[Header( "Crank" )]
-	[Tooltip( "Seconds after an Interact pulse that L1 still counts as cranking (covers hold-repeat gaps)." )]
+	[Tooltip( "Seconds after an Interact pulse that still counts as cranking (covers hold-repeat gaps)." )]
 	[Min( 0.05f )]
 	public float crankHoldGrace = 0.2f;
 
-	[Tooltip( "Sort-seconds gained per second of cranking. 2 means crank 1s → 2s of sorting." )]
+	[Tooltip( "Sort-seconds gained per second of cranking for the energy gauge visual." )]
 	[Min( 0.01f )]
 	public float crankToSortMultiplier = 2f;
 
@@ -108,10 +132,13 @@ public class CoinSortingStationDefinition : ScriptableObject
 	public float sortPlayInterval = 1f;
 
 	[Header( "Auto Storage Pull" )]
-	[Tooltip( "When enabled, the hopper automatically pulls whole coin stacks from nearby ground piles and mixed storage tables." )]
+	[Tooltip( "When enabled, the hopper automatically pulls whole coin stacks from the selected sources." )]
 	public bool autoPullFromNearbyStorage = true;
 
-	[Tooltip( "XZ radius around the station used to find pullable coin stacks / mixed storage." )]
+	[Tooltip( "Which sources the hopper may pull from. Station mixed storage only by default." )]
+	public CoinSortingStoragePullSources storagePullSources = CoinSortingStoragePullSources.StationMixedStorage;
+
+	[Tooltip( "XZ radius around the station used to find pullable ground stacks (when enabled)." )]
 	[Min( 0.25f )]
 	public float storagePullRadius = 3f;
 
@@ -122,6 +149,11 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Tooltip( "Seconds for a pulled stack to fly into the hopper." )]
 	[Min( 0.05f )]
 	public float storagePullFlightDuration = 0.32f;
+
+	public bool AllowsStoragePullSource( CoinSortingStoragePullSources source )
+	{
+		return ( storagePullSources & source ) != 0;
+	}
 
 	[Header( "Output" )]
 	[Tooltip( "World-space lateral step when starting a new stack beside a full chute stack." )]
@@ -239,21 +271,38 @@ public class CoinSortingStationDefinition : ScriptableObject
 		return Mathf.Max( 1, baseHopperCapacity );
 	}
 
-	public float ResolveCoinsPerSecond( int level )
+	public float ResolveCoinsPerSecond( int level, bool crankBoost )
 	{
 		if ( level >= 3 )
-			return Mathf.Max( 0.01f, level3CoinsPerSecond );
-		return Mathf.Max( 0.01f, baseCoinsPerSecond );
+		{
+			return Mathf.Max( 0.01f, crankBoost ? level3ManualCoinsPerSecond : level3AutomaticCoinsPerSecond );
+		}
+
+		return Mathf.Max( 0.01f, crankBoost ? manualCoinsPerSecond : automaticCoinsPerSecond );
 	}
 
+	/// <summary>Legacy overload — automatic rate (no crank boost).</summary>
+	public float ResolveCoinsPerSecond( int level )
+	{
+		return ResolveCoinsPerSecond( level, crankBoost: false );
+	}
+
+	/// <summary>Workshop sorter always sorts unattended; crank only boosts rate.</summary>
 	public bool IsAutomatic( int level )
 	{
-		return level >= 2;
+		return level >= 1;
 	}
 
+	/// <summary>Crank is never required to process; it only boosts speed.</summary>
 	public bool RequiresCrank( int level )
 	{
-		return level >= 1 && level < 2;
+		return false;
+	}
+
+	/// <summary>Crank remains available as a 100% speed boost over automatic rate.</summary>
+	public bool AllowsCrankBoost( int level )
+	{
+		return level >= 1;
 	}
 
 	public float ResolveMaxReserveSeconds()

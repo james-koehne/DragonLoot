@@ -411,7 +411,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return;
 
 		// Mix instance id with contact XZ so nearby stacks rarely share the same pattern.
-		int id = Mathf.Abs( GetInstanceID() );
+		int id = Mathf.Abs( GetEntityId().GetHashCode() );
 		Vector3 p = transform.position;
 		unchecked
 		{
@@ -1098,6 +1098,17 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			return false;
 
 		definition = _slots[ 0 ];
+		return definition != null;
+	}
+
+	/// <summary>Peek the top (newest) settled logical slot without removing it.</summary>
+	public bool TryPeekTopDefinition( out TreasureDefinition definition )
+	{
+		definition = null;
+		if ( _destroying || SettledCount <= 0 )
+			return false;
+
+		definition = _slots[ SettledCount - 1 ];
 		return definition != null;
 	}
 

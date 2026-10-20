@@ -86,7 +86,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 
 	static void CapturePiles( List<GameSavePileEntry> into )
 	{
-		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < piles.Length; i++ )
 		{
 			TreasurePileVisual pile = piles[ i ];
@@ -111,7 +111,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 			byId[ entry.persistenceId ] = entry;
 		}
 
-		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < piles.Length; i++ )
 		{
 			TreasurePileVisual pile = piles[ i ];
@@ -126,7 +126,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 
 	static void CaptureStations( List<GameSaveStationEntry> into )
 	{
-		RecyclingMachine[] recycling = Object.FindObjectsByType<RecyclingMachine>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		RecyclingMachine[] recycling = Object.FindObjectsByType<RecyclingMachine>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < recycling.Length; i++ )
 		{
 			if ( recycling[ i ] == null )
@@ -137,7 +137,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 				into.Add( entry );
 		}
 
-		CleaningStationInteractable[] cleaning = Object.FindObjectsByType<CleaningStationInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		CleaningStationInteractable[] cleaning = Object.FindObjectsByType<CleaningStationInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < cleaning.Length; i++ )
 		{
 			if ( cleaning[ i ] == null )
@@ -148,7 +148,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 				into.Add( entry );
 		}
 
-		CoinSortingStation[] sorting = Object.FindObjectsByType<CoinSortingStation>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		CoinSortingStation[] sorting = Object.FindObjectsByType<CoinSortingStation>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < sorting.Length; i++ )
 		{
 			if ( sorting[ i ] == null )
@@ -167,7 +167,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 
 		Dictionary<string, GameSaveStationEntry> byId = IndexStations( entries );
 
-		RecyclingMachine[] recycling = Object.FindObjectsByType<RecyclingMachine>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		RecyclingMachine[] recycling = Object.FindObjectsByType<RecyclingMachine>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < recycling.Length; i++ )
 		{
 			RecyclingMachine station = recycling[ i ];
@@ -177,7 +177,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 				station.ApplySave( entry );
 		}
 
-		CleaningStationInteractable[] cleaning = Object.FindObjectsByType<CleaningStationInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		CleaningStationInteractable[] cleaning = Object.FindObjectsByType<CleaningStationInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < cleaning.Length; i++ )
 		{
 			CleaningStationInteractable station = cleaning[ i ];
@@ -187,7 +187,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 				station.ApplySave( entry );
 		}
 
-		CoinSortingStation[] sorting = Object.FindObjectsByType<CoinSortingStation>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		CoinSortingStation[] sorting = Object.FindObjectsByType<CoinSortingStation>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < sorting.Length; i++ )
 		{
 			CoinSortingStation station = sorting[ i ];
@@ -214,7 +214,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 
 	static void CaptureDisplays( List<GameSaveDisplayTableEntry> into )
 	{
-		TypedDisplayTableInteractable[] tables = Object.FindObjectsByType<TypedDisplayTableInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		TypedDisplayTableInteractable[] tables = Object.FindObjectsByType<TypedDisplayTableInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < tables.Length; i++ )
 		{
 			TypedDisplayTableInteractable table = tables[ i ];
@@ -226,7 +226,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 				into.Add( entry );
 		}
 
-		MixedDisplayTableInteractable[] mixed = Object.FindObjectsByType<MixedDisplayTableInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		MixedDisplayTableInteractable[] mixed = Object.FindObjectsByType<MixedDisplayTableInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < mixed.Length; i++ )
 		{
 			MixedDisplayTableInteractable table = mixed[ i ];
@@ -253,7 +253,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 			byId[ entry.persistenceId ] = entry;
 		}
 
-		TypedDisplayTableInteractable[] tables = Object.FindObjectsByType<TypedDisplayTableInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		TypedDisplayTableInteractable[] tables = Object.FindObjectsByType<TypedDisplayTableInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < tables.Length; i++ )
 		{
 			TypedDisplayTableInteractable table = tables[ i ];
@@ -263,7 +263,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 				table.ApplySave( entry );
 		}
 
-		MixedDisplayTableInteractable[] mixed = Object.FindObjectsByType<MixedDisplayTableInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		MixedDisplayTableInteractable[] mixed = Object.FindObjectsByType<MixedDisplayTableInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < mixed.Length; i++ )
 		{
 			MixedDisplayTableInteractable table = mixed[ i ];
@@ -276,7 +276,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 
 	static void CaptureConstellations( List<GameSaveConstellationEntry> into )
 	{
-		GemConstellationInteractable[] constellations = Object.FindObjectsByType<GemConstellationInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		GemConstellationInteractable[] constellations = Object.FindObjectsByType<GemConstellationInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < constellations.Length; i++ )
 		{
 			GemConstellationInteractable constellation = constellations[ i ];
@@ -303,7 +303,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 			byId[ entry.persistenceId ] = entry;
 		}
 
-		GemConstellationInteractable[] constellations = Object.FindObjectsByType<GemConstellationInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		GemConstellationInteractable[] constellations = Object.FindObjectsByType<GemConstellationInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < constellations.Length; i++ )
 		{
 			GemConstellationInteractable constellation = constellations[ i ];
@@ -316,7 +316,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 
 	static void CaptureChests( List<GameSaveChestEntry> into )
 	{
-		ChestInteractable[] chests = Object.FindObjectsByType<ChestInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		ChestInteractable[] chests = Object.FindObjectsByType<ChestInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < chests.Length; i++ )
 		{
 			ChestInteractable chest = chests[ i ];
@@ -348,7 +348,7 @@ public sealed class GameSaveExtendedWorldContributor : IGameSaveContributor
 			byId[ entry.persistenceId ] = entry;
 		}
 
-		ChestInteractable[] chests = Object.FindObjectsByType<ChestInteractable>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		ChestInteractable[] chests = Object.FindObjectsByType<ChestInteractable>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < chests.Length; i++ )
 		{
 			ChestInteractable chest = chests[ i ];

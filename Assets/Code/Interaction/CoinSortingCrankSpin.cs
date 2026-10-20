@@ -33,7 +33,7 @@ public class CoinSortingCrankSpin : MonoBehaviour
 			return;
 
 		CoinSortingStationDefinition def = station.Definition;
-		if ( def == null || !def.RequiresCrank( station.StationLevel ) )
+		if ( def == null || !def.AllowsCrankBoost( station.StationLevel ) )
 			return;
 
 		float speed = 0f;

@@ -135,6 +135,7 @@ public static class DragonLootMenus
 	public const string DefinitionsEnsureObjectiveFeedbacks = Root + "/Definitions/Ensure Objective HUD Feedbacks";
 	public const string DefinitionsEnsureToastStack = Root + "/Definitions/Ensure Toast Stack";
 	public const string DefinitionsEnsureIslandCompleteWorldEvents = Root + "/Definitions/Ensure Island Complete World Events";
+	public const string DefinitionsEnsureWorkshopRoomComplete = Root + "/Definitions/Ensure Workshop Room Complete";
 	public const string DefinitionsEnsureBuildMode = Root + "/Definitions/Ensure Build Mode Definition";
 	public const string DefinitionsEnsureBuildModeTutorial = Root + "/Definitions/Ensure Build Mode Tutorial";
 

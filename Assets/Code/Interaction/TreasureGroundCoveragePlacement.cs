@@ -217,8 +217,7 @@ public static class TreasureGroundCoveragePlacement
 	static TreasurePileVisual[] CollectPiles()
 	{
 		return UnityEngine.Object.FindObjectsByType<TreasurePileVisual>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Exclude );
 	}
 
 	static int ResolveLayoutSeed( int layoutSeed )

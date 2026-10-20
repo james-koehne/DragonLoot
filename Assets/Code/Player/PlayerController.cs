@@ -89,6 +89,7 @@ public class PlayerController : MonoBehaviour
 	PlayerControllerDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
 	float _walkSpeed = -1f;
+	float _sprintSpeed = -1f;
 	float _jumpForce = -1f;
 	float _gravity = float.NaN;
 	float _moveSpeedBuffMultiplier = 1f;
@@ -124,7 +125,15 @@ public class PlayerController : MonoBehaviour
 	bool GlideRequiresJumpHeld => RuntimeDefinition.Get( Definition, d => d.glideRequiresJumpHeld, true );
 	float AirAcceleration => RuntimeDefinition.Get( Definition, d => d.airAcceleration, 6f );
 	float AirDeceleration => RuntimeDefinition.Get( Definition, d => d.airDeceleration, 4f );
-	float SprintSpeed => RuntimeDefinition.Get( Definition, d => d.sprintSpeed, 9f );
+	float SprintSpeed
+	{
+		get
+		{
+			EnsureSprintSpeedInitialized();
+			return _sprintSpeed;
+		}
+	}
+
 	float SprintAcceleration => RuntimeDefinition.Get( Definition, d => d.sprintAcceleration, 50f );
 	float SprintDeceleration => RuntimeDefinition.Get( Definition, d => d.sprintDeceleration, 45f );
 	float SprintAirControl => RuntimeDefinition.Get( Definition, d => d.sprintAirControl, 8f );
@@ -566,6 +575,15 @@ public class PlayerController : MonoBehaviour
 		}
 	}
 
+	public float CurrentSprintSpeed
+	{
+		get
+		{
+			EnsureSprintSpeedInitialized();
+			return _sprintSpeed;
+		}
+	}
+
 	public float CurrentJumpForce
 	{
 		get
@@ -588,6 +606,12 @@ public class PlayerController : MonoBehaviour
 	{
 		EnsureWalkSpeedInitialized();
 		_walkSpeed = Mathf.Max( 0.1f, value );
+	}
+
+	public void SetSprintSpeed( float value )
+	{
+		EnsureSprintSpeedInitialized();
+		_sprintSpeed = Mathf.Clamp( value, 1f, 100f );
 	}
 
 	public void SetJumpForce( float value )
@@ -634,6 +658,13 @@ public class PlayerController : MonoBehaviour
 		if ( _walkSpeed >= 0f )
 			return;
 		_walkSpeed = RuntimeDefinition.Get( Definition, d => d.walkSpeed, 6f );
+	}
+
+	void EnsureSprintSpeedInitialized()
+	{
+		if ( _sprintSpeed >= 0f )
+			return;
+		_sprintSpeed = RuntimeDefinition.Get( Definition, d => d.sprintSpeed, 9f );
 	}
 
 	void EnsureJumpForceInitialized()

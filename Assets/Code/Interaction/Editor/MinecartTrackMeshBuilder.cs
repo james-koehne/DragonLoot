@@ -54,7 +54,7 @@ public static class MinecartTrackMeshBuilder
 		MinecartJunctionGraph.BeginForceAllGaps();
 		try
 		{
-			MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+			MinecartTrack[] found = Object.FindObjectsByType<MinecartTrack>( FindObjectsInactive.Exclude );
 			for ( int i = 0; i < found.Length; i++ )
 			{
 				MinecartTrack track = found[ i ];
@@ -113,7 +113,7 @@ public static class MinecartTrackMeshBuilder
 		foreach ( char c in Path.GetInvalidFileNameChars() )
 			safeName = safeName.Replace( c, '_' );
 
-		string path = GeneratedFolder + "/" + safeName + "_" + track.GetInstanceID().ToString( "X" ) + ".asset";
+		string path = GeneratedFolder + "/" + safeName + "_" + track.GetEntityId().ToString( "X" ) + ".asset";
 		Mesh existing = track.BakedMesh;
 		if ( existing != null )
 		{

@@ -388,7 +388,7 @@ public sealed class TreasureSurfaceSimulator
 				&& body.Category != TreasureCategory.Gem
 				&& sample.Slope <= def.stableSlopeThreshold )
 			{
-				float phase = Time.time * 7.3f + item.GetInstanceID() * 0.01f;
+				float phase = Time.time * 7.3f + item.GetEntityId().GetHashCode() * 0.01f;
 				velocity.x += Mathf.Sin( phase ) * wobble * dt * restRamp;
 				velocity.z += Mathf.Cos( phase * 0.87f ) * wobble * dt * restRamp;
 			}
@@ -882,7 +882,7 @@ public sealed class TreasureSurfaceSimulator
 			float distSq = delta.sqrMagnitude;
 			if ( distSq < 0.0000001f )
 			{
-				push.x += ( ( item.GetInstanceID() & 1 ) == 0 ? 1f : -1f ) * 0.02f;
+				push.x += ( ( item.GetEntityId().GetHashCode() & 1 ) == 0 ? 1f : -1f ) * 0.02f;
 				continue;
 			}
 

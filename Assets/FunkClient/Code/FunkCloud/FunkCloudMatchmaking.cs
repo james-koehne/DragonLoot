@@ -16,7 +16,7 @@ public class FunkCloudMatchmaking : MonoBehaviour
 	public bool isMatchmaking = false;
 
 	public bool IsInMatch { get => CurrentMatch != null; }
-	public FunkMatchInfo CurrentMatch = null;
+	[System.NonSerialized] public FunkMatchInfo CurrentMatch = null;
 
 	private Dictionary<long, Action<FunkCloudMessage>> onReceiveData = new Dictionary<long, Action<FunkCloudMessage>>();
 

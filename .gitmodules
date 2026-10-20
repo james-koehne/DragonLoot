@@ -1,3 +1,6 @@
 [submodule "Assets/FunkClient"]
 	path = Assets/FunkClient
 	url = git@github.com:FunkGames/FunkClient.git
+[submodule "Assets/DragonLoot.StylizedRendering"]
+	path = Assets/DragonLoot.StylizedRendering
+	url = https://github.com/james-koehne/DragonLoot.StylizedRendering.git

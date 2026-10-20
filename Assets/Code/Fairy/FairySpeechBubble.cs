@@ -4,12 +4,18 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Screen-space speech bubble that auto-sizes to text, tracks a world follow target,
-/// and clamps itself inside the player's viewport.
+/// Screen-space speech bubble that tracks a fairy like a world label: fixed UI text size,
+/// soft follow above the fairy, whole-panel clamp on-screen, and a short aiming tail.
+/// The Overlay canvas stays fullscreen; a child FollowRoot is what moves.
 /// </summary>
 [DisallowMultipleComponent]
 public class FairySpeechBubble : MonoBehaviour
 {
+	const float MinTailLength = 14f;
+	const float DefaultTailWidth = 22f;
+	const float TipVisibilityFadeSpeed = 8f;
+	const string FollowRootName = "FollowRoot";
+
 	[SerializeField]
 	Canvas canvas;
 
@@ -26,6 +32,9 @@ public class FairySpeechBubble : MonoBehaviour
 	RectTransform tail;
 
 	[SerializeField]
+	RectTransform followRoot;
+
+	[SerializeField]
 	[Min( 0.5f )]
 	float defaultHoldSeconds = 3.5f;
 
@@ -34,33 +43,56 @@ public class FairySpeechBubble : MonoBehaviour
 	float fadeSeconds = 0.2f;
 
 	[SerializeField]
-	Vector3 worldOffset = new Vector3( 0f, 0.55f, 0f );
+	Vector3 worldOffset = new Vector3( 0f, 0.7f, 0f );
 
 	[SerializeField]
 	[Min( 0f )]
-	float screenPadding = 24f;
+	float screenPadding = 28f;
 
 	[SerializeField]
-	Vector2 screenOffset = new Vector2( 0f, 36f );
+	[Min( 0f )]
+	float tipClearance = 12f;
+
+	[SerializeField]
+	[Min( 0.01f )]
+	[Tooltip( "SmoothDamp time for floating toward the preferred screen position." )]
+	float screenFollowSmoothTime = 0.1f;
+
+	[SerializeField]
+	[Min( 16f )]
+	[Tooltip( "Max tail length in reference pixels (before canvas scale)." )]
+	float maxTailLength = 100f;
+
+	[SerializeField]
+	[Tooltip( "Fade the bubble when the fairy is behind the camera." )]
+	bool hideWhenBehind = true;
 
 	[SerializeField]
 	float maxPreferredWidth = 280f;
 
 	readonly Queue<string> _queue = new Queue<string>( 4 );
 
-	RectTransform _rect;
+	RectTransform _canvasRect;
 	Transform _follow;
 	float _lineEndsAt;
 	float _fadeOutAt = -1f;
 	bool _showing;
+	float _tailBaseWidth = DefaultTailWidth;
+	Vector2 _smoothedScreen;
+	Vector2 _smoothVelocity;
+	bool _hasSmoothedScreen;
+	float _tipVisibility = 1f;
+	bool _tipValid;
+	Vector2 _lastTipScreen;
+	bool _detached;
 
 	public bool IsShowing => _showing || _queue.Count > 0;
 
 	void Awake()
 	{
-		_rect = transform as RectTransform;
 		if ( canvas == null )
 			canvas = GetComponent<Canvas>();
+		_canvasRect = transform as RectTransform;
 		if ( canvasGroup == null && canvas != null )
 			canvasGroup = canvas.GetComponent<CanvasGroup>();
 		if ( body == null )
@@ -80,6 +112,7 @@ public class FairySpeechBubble : MonoBehaviour
 				tail = found as RectTransform;
 		}
 
+		EnsureFollowRoot();
 		ConfigureOverlayCanvas();
 		SetVisible( false );
 	}
@@ -88,6 +121,9 @@ public class FairySpeechBubble : MonoBehaviour
 	{
 		if ( _follow == null && transform.parent != null )
 			_follow = transform.parent;
+		EnsureDetachedOverlay();
+		EnsureFollowRoot();
+		ConfigureOverlayCanvas();
 	}
 
 	void LateUpdate()
@@ -104,6 +140,9 @@ public class FairySpeechBubble : MonoBehaviour
 			_follow = transform.parent != null ? transform.parent : null;
 		else
 			_follow = follow;
+		EnsureDetachedOverlay();
+		EnsureFollowRoot();
+		ConfigureOverlayCanvas();
 		if ( _showing )
 			UpdateScreenPosition();
 	}
@@ -145,7 +184,83 @@ public class FairySpeechBubble : MonoBehaviour
 		_queue.Clear();
 		_showing = false;
 		_fadeOutAt = -1f;
+		_hasSmoothedScreen = false;
+		_smoothVelocity = Vector2.zero;
+		_tipVisibility = 1f;
 		SetVisible( false );
+	}
+
+	/// <summary>
+	/// Overlay + CanvasScaler must stay fullscreen. Nesting under the fairy breaks positioning,
+	/// so detach to a root Overlay and only move <see cref="followRoot"/>.
+	/// </summary>
+	void EnsureDetachedOverlay()
+	{
+		if ( _detached )
+			return;
+		if ( transform.parent != null )
+			transform.SetParent( null, false );
+		_detached = true;
+		ConfigureOverlayCanvas();
+		Canvas.ForceUpdateCanvases();
+	}
+
+	void EnsureFollowRoot()
+	{
+		if ( followRoot != null )
+		{
+			SetupFollowRoot( followRoot );
+			return;
+		}
+
+		Transform existing = transform.Find( FollowRootName );
+		if ( existing != null )
+		{
+			followRoot = existing as RectTransform;
+			SetupFollowRoot( followRoot );
+			return;
+		}
+
+		GameObject go = new GameObject( FollowRootName, typeof( RectTransform ) );
+		go.layer = gameObject.layer;
+		followRoot = go.GetComponent<RectTransform>();
+		followRoot.SetParent( transform, false );
+		SetupFollowRoot( followRoot );
+
+		if ( bubbleRoot != null && bubbleRoot.parent != followRoot )
+			bubbleRoot.SetParent( followRoot, false );
+		if ( tail != null && tail.parent != followRoot )
+			tail.SetParent( followRoot, false );
+	}
+
+	void SetupFollowRoot( RectTransform root )
+	{
+		root.anchorMin = new Vector2( 0.5f, 0.5f );
+		root.anchorMax = new Vector2( 0.5f, 0.5f );
+		root.pivot = new Vector2( 0.5f, 0.5f );
+		root.localScale = Vector3.one;
+		root.localRotation = Quaternion.identity;
+		root.sizeDelta = Vector2.zero;
+
+		if ( bubbleRoot != null )
+		{
+			if ( bubbleRoot.parent != root )
+				bubbleRoot.SetParent( root, false );
+			bubbleRoot.anchorMin = new Vector2( 0.5f, 0.5f );
+			bubbleRoot.anchorMax = new Vector2( 0.5f, 0.5f );
+			bubbleRoot.pivot = new Vector2( 0.5f, 0.5f );
+			bubbleRoot.anchoredPosition = Vector2.zero;
+		}
+
+		if ( tail != null )
+		{
+			if ( tail.parent != root )
+				tail.SetParent( root, false );
+			_tailBaseWidth = Mathf.Max( 8f, Mathf.Abs( tail.sizeDelta.x ) );
+			tail.pivot = new Vector2( 0.5f, 1f );
+			tail.anchorMin = new Vector2( 0.5f, 0.5f );
+			tail.anchorMax = new Vector2( 0.5f, 0.5f );
+		}
 	}
 
 	void ConfigureOverlayCanvas()
@@ -158,84 +273,194 @@ public class FairySpeechBubble : MonoBehaviour
 				canvas.sortingOrder = 50;
 		}
 
-		if ( _rect != null )
+		// Fullscreen root — CanvasScaler owns this; do not move it.
+		if ( _canvasRect != null )
 		{
-			_rect.localScale = Vector3.one;
-			_rect.localRotation = Quaternion.identity;
-			_rect.pivot = new Vector2( 0.5f, 0f );
+			_canvasRect.anchorMin = Vector2.zero;
+			_canvasRect.anchorMax = Vector2.one;
+			_canvasRect.pivot = new Vector2( 0.5f, 0.5f );
+			_canvasRect.offsetMin = Vector2.zero;
+			_canvasRect.offsetMax = Vector2.zero;
+			_canvasRect.localScale = Vector3.one;
+			_canvasRect.localRotation = Quaternion.identity;
 		}
 	}
 
 	void UpdateScreenPosition()
 	{
-		if ( _rect == null )
-			_rect = transform as RectTransform;
-		if ( _rect == null )
+		if ( followRoot == null )
+			EnsureFollowRoot();
+		if ( followRoot == null )
 			return;
 
 		Transform follow = _follow;
 		if ( follow == null || follow == transform )
-			follow = transform.parent;
-		if ( follow == null )
 			return;
 
 		Camera cam = ResolveCamera();
 		if ( cam == null )
 			return;
 
-		Vector3 world = follow.position + worldOffset;
-		Vector3 screen = cam.WorldToScreenPoint( world );
-		if ( screen.z <= 0f )
+		Vector2 tipScreen;
+		_tipValid = TryResolveTipScreen( follow, cam, out tipScreen );
+		if ( _tipValid )
+			_lastTipScreen = tipScreen;
+		else
+			tipScreen = _lastTipScreen;
+
+		float targetVis = ( !hideWhenBehind || _tipValid ) ? 1f : 0f;
+		_tipVisibility = Mathf.MoveTowards( _tipVisibility, targetVis, TipVisibilityFadeSpeed * Time.unscaledDeltaTime );
+
+		if ( !_tipValid && _tipVisibility <= 0.01f )
 		{
-			screen.x = Screen.width - screen.x;
-			screen.y = Screen.height - screen.y;
+			ApplyDisplayAlpha( 0f );
+			if ( tail != null )
+				tail.gameObject.SetActive( false );
+			return;
 		}
 
-		screen.x += screenOffset.x;
-		screen.y += screenOffset.y;
+		if ( tail != null && !tail.gameObject.activeSelf )
+			tail.gameObject.SetActive( true );
 
-		Vector2 half = EstimateHalfSizePixels();
-		float pad = Mathf.Max( 0f, screenPadding );
-		// Pivot is bottom-center, so clamp using half-width and full height above the pivot.
-		float minX = pad + half.x;
-		float maxX = Screen.width - pad - half.x;
-		float minY = pad;
-		float maxY = Screen.height - pad - half.y * 2f;
+		Vector2 panelSize = GetPanelPixelSize();
+		float scale = canvas != null ? Mathf.Max( 0.0001f, canvas.scaleFactor ) : 1f;
+		float clearance = tipClearance * scale;
 
-		if ( maxX < minX )
-			screen.x = Screen.width * 0.5f;
+		Vector2 preferred = new Vector2( tipScreen.x, tipScreen.y + clearance + panelSize.y * 0.5f );
+		Vector2 logicalScreen = ClampPanelCenter( preferred, panelSize );
+
+		if ( !_hasSmoothedScreen )
+		{
+			_smoothedScreen = logicalScreen;
+			_smoothVelocity = Vector2.zero;
+			_hasSmoothedScreen = true;
+		}
 		else
-			screen.x = Mathf.Clamp( screen.x, minX, maxX );
+		{
+			float smooth = Mathf.Max( 0.01f, screenFollowSmoothTime );
+			_smoothedScreen = Vector2.SmoothDamp(
+				_smoothedScreen,
+				logicalScreen,
+				ref _smoothVelocity,
+				smooth,
+				Mathf.Infinity,
+				Time.unscaledDeltaTime );
+		}
 
-		if ( maxY < minY )
-			screen.y = Screen.height * 0.5f;
-		else
-			screen.y = Mathf.Clamp( screen.y, minY, maxY );
+		SetFollowRootScreenPosition( _smoothedScreen );
+		UpdateTailAim( tipScreen, _smoothedScreen, panelSize, scale );
 
-		_rect.position = new Vector3( screen.x, screen.y, 0f );
+		if ( _fadeOutAt <= 0f )
+			ApplyDisplayAlpha( _tipVisibility );
 	}
 
-	Vector2 EstimateHalfSizePixels()
+	void SetFollowRootScreenPosition( Vector2 screenPoint )
 	{
-		RectTransform sizeSource = bubbleRoot != null ? bubbleRoot : _rect;
+		if ( followRoot == null )
+			return;
+
+		// Overlay RectTransforms use screen pixels for world position. Prefer this over
+		// ScreenPointToLocalPointInRectangle, which collapses to center when the root
+		// canvas rect is still 0-sized (common while nested under a 3D fairy).
+		followRoot.position = new Vector3( screenPoint.x, screenPoint.y, 0f );
+	}
+
+	bool TryResolveTipScreen( Transform follow, Camera cam, out Vector2 tipScreen )
+	{
+		tipScreen = Vector2.zero;
+		Vector3 world = follow.position + worldOffset;
+		Vector3 screen = cam.WorldToScreenPoint( world );
+
+		if ( screen.z <= 0.05f )
+			return false;
+
+		tipScreen = new Vector2( screen.x, screen.y );
+
+		float margin = 80f;
+		if ( tipScreen.x < -margin || tipScreen.x > Screen.width + margin
+			|| tipScreen.y < -margin || tipScreen.y > Screen.height + margin )
+			return false;
+
+		return true;
+	}
+
+	Vector2 ClampPanelCenter( Vector2 center, Vector2 panelSize )
+	{
+		float pad = Mathf.Max( 0f, screenPadding );
+		float halfW = Mathf.Min( panelSize.x * 0.5f, Screen.width * 0.35f );
+		float halfH = Mathf.Min( panelSize.y * 0.5f, Screen.height * 0.35f );
+		float minX = pad + halfW;
+		float maxX = Screen.width - pad - halfW;
+		float minY = pad + halfH;
+		float maxY = Screen.height - pad - halfH;
+
+		if ( maxX < minX )
+			center.x = Mathf.Clamp( center.x, pad, Screen.width - pad );
+		else
+			center.x = Mathf.Clamp( center.x, minX, maxX );
+
+		if ( maxY < minY )
+			center.y = Mathf.Clamp( center.y, pad, Screen.height - pad );
+		else
+			center.y = Mathf.Clamp( center.y, minY, maxY );
+
+		return center;
+	}
+
+	void UpdateTailAim( Vector2 tipScreen, Vector2 panelCenterScreen, Vector2 panelSize, float scale )
+	{
+		if ( tail == null || followRoot == null || _canvasRect == null )
+			return;
+
+		Vector2 toTip = tipScreen - panelCenterScreen;
+		float distance = toTip.magnitude;
+		Vector2 dir = distance < 0.001f ? Vector2.down : toTip / distance;
+
+		Vector2 half = panelSize * 0.5f;
+		float tx = Mathf.Abs( dir.x ) > 0.0001f ? half.x / Mathf.Abs( dir.x ) : float.MaxValue;
+		float ty = Mathf.Abs( dir.y ) > 0.0001f ? half.y / Mathf.Abs( dir.y ) : float.MaxValue;
+		float edgeT = Mathf.Min( tx, ty );
+		if ( float.IsInfinity( edgeT ) || edgeT > 10000f )
+			edgeT = half.y;
+		Vector2 baseScreen = panelCenterScreen + dir * edgeT;
+
+		Vector2 towardTip = tipScreen - baseScreen;
+		float tipDist = towardTip.magnitude;
+		if ( tipDist > 0.01f )
+			dir = towardTip / tipDist;
+		else
+			dir = Vector2.down;
+
+		float maxLenPx = Mathf.Max( MinTailLength, maxTailLength ) * scale;
+		float lengthPx = Mathf.Clamp( tipDist, MinTailLength * scale, maxLenPx );
+
+		Vector2 baseLocal;
+		Vector2 centerLocal;
+		RectTransformUtility.ScreenPointToLocalPointInRectangle( followRoot, baseScreen, null, out baseLocal );
+		RectTransformUtility.ScreenPointToLocalPointInRectangle( followRoot, panelCenterScreen, null, out centerLocal );
+
+		float angle = Mathf.Atan2( dir.x, -dir.y ) * Mathf.Rad2Deg;
+		tail.anchoredPosition = baseLocal;
+		tail.localRotation = Quaternion.Euler( 0f, 0f, angle );
+		tail.sizeDelta = new Vector2( _tailBaseWidth, lengthPx / Mathf.Max( 0.0001f, scale ) );
+	}
+
+	Vector2 GetPanelPixelSize()
+	{
+		RectTransform sizeSource = bubbleRoot != null ? bubbleRoot : followRoot;
 		if ( sizeSource == null )
-			return new Vector2( 80f, 40f );
+			return new Vector2( 160f, 64f );
 
 		Vector2 size = sizeSource.rect.size;
 		if ( size.x < 1f || size.y < 1f )
 			size = sizeSource.sizeDelta;
+		if ( size.x < 1f || size.y < 1f )
+			size = new Vector2( 160f, 64f );
 
-		float tailH = 0f;
-		if ( tail != null )
-			tailH = Mathf.Abs( tail.rect.height > 1f ? tail.rect.height : tail.sizeDelta.y );
-
-		float scale = 1f;
-		if ( canvas != null )
-			scale = canvas.scaleFactor;
-
+		float scale = canvas != null ? Mathf.Max( 0.0001f, canvas.scaleFactor ) : 1f;
 		return new Vector2(
-			Mathf.Max( 24f, size.x * scale * 0.5f ),
-			Mathf.Max( 16f, ( size.y + tailH ) * scale * 0.5f ) );
+			Mathf.Clamp( size.x * scale, 48f, Screen.width * 0.7f ),
+			Mathf.Clamp( size.y * scale, 32f, Screen.height * 0.5f ) );
 	}
 
 	static Camera ResolveCamera()
@@ -260,8 +485,7 @@ public class FairySpeechBubble : MonoBehaviour
 			float t = fadeSeconds <= 0.001f
 				? 1f
 				: Mathf.Clamp01( 1f - ( _fadeOutAt - Time.unscaledTime ) / fadeSeconds );
-			if ( canvasGroup != null )
-				canvasGroup.alpha = 1f - t;
+			ApplyDisplayAlpha( ( 1f - t ) * _tipVisibility );
 			if ( Time.unscaledTime >= _fadeOutAt )
 			{
 				_fadeOutAt = -1f;
@@ -301,9 +525,10 @@ public class FairySpeechBubble : MonoBehaviour
 		ApplyLine( line );
 		_lineEndsAt = Time.unscaledTime + EstimateHoldSeconds( line );
 		_showing = true;
+		_hasSmoothedScreen = false;
+		_smoothVelocity = Vector2.zero;
+		_tipVisibility = 1f;
 		SetVisible( true );
-		if ( canvasGroup != null )
-			canvasGroup.alpha = 1f;
 		UpdateScreenPosition();
 	}
 
@@ -350,27 +575,14 @@ public class FairySpeechBubble : MonoBehaviour
 		Canvas.ForceUpdateCanvases();
 		if ( bubbleRoot != null )
 			LayoutRebuilder.ForceRebuildLayoutImmediate( bubbleRoot );
-		if ( _rect != null )
-			LayoutRebuilder.ForceRebuildLayoutImmediate( _rect );
-
-		SyncRootToBubble();
-	}
-
-	void SyncRootToBubble()
-	{
-		if ( _rect == null || bubbleRoot == null )
-			return;
-
-		Vector2 size = bubbleRoot.rect.size;
-		if ( size.x < 1f || size.y < 1f )
-			size = bubbleRoot.sizeDelta;
-
-		float tailH = 0f;
-		if ( tail != null )
-			tailH = Mathf.Abs( tail.sizeDelta.y );
-
-		_rect.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, size.x );
-		_rect.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, size.y + tailH );
+		if ( followRoot != null && bubbleRoot != null )
+		{
+			Vector2 size = bubbleRoot.rect.size;
+			if ( size.x < 1f || size.y < 1f )
+				size = bubbleRoot.sizeDelta;
+			followRoot.SetSizeWithCurrentAnchors( RectTransform.Axis.Horizontal, size.x );
+			followRoot.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, size.y );
+		}
 	}
 
 	float EstimateHoldSeconds( string text )
@@ -378,6 +590,15 @@ public class FairySpeechBubble : MonoBehaviour
 		if ( string.IsNullOrEmpty( text ) )
 			return defaultHoldSeconds;
 		return Mathf.Max( defaultHoldSeconds, Mathf.Clamp( text.Length / 12f, 2.5f, 8f ) );
+	}
+
+	void ApplyDisplayAlpha( float alpha )
+	{
+		if ( canvasGroup == null )
+			return;
+		canvasGroup.alpha = Mathf.Clamp01( alpha );
+		canvasGroup.blocksRaycasts = false;
+		canvasGroup.interactable = false;
 	}
 
 	void SetVisible( bool visible )

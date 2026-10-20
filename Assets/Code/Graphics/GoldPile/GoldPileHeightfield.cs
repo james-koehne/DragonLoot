@@ -421,6 +421,33 @@ public sealed class GoldPileHeightfield
 		return removed;
 	}
 
+	/// <summary>
+	/// Adds height to a single cell (meters). Used when merging remnant islands into a nearby column.
+	/// Returns the amount actually added after clamping.
+	/// </summary>
+	public float AddCellHeight( int cellX, int cellZ, float amount )
+	{
+		if ( _heights == null || amount <= 0f )
+			return 0f;
+
+		cellX = Mathf.Clamp( cellX, 0, _resolutionX - 1 );
+		cellZ = Mathf.Clamp( cellZ, 0, _resolutionZ - 1 );
+		int idx = Index( cellX, cellZ );
+		float before = _heights[ idx ];
+		float after = ClampHeight( before + amount );
+		float added = after - before;
+		if ( added <= 0f )
+			return 0f;
+
+		_heights[ idx ] = after;
+		if ( _heightSumValid )
+			_cachedHeightSum += added;
+		if ( after > _maxHeight && !_lockMaxHeight )
+			_maxHeight = after;
+		ExpandDirtyRect( cellX, cellX, cellZ, cellZ );
+		return added;
+	}
+
 	/// <summary>Cell indices of the island found by the last successful <see cref="TryFindNextSmallIsland"/>.</summary>
 	public int[] SmallIslandCells => _islandComp;
 

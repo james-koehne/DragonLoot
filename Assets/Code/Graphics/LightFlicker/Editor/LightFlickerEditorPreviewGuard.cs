@@ -13,6 +13,7 @@ static class LightFlickerEditorPreviewGuard
 	static LightFlickerEditorPreviewGuard()
 	{
 		EditorSceneManager.sceneSaving += OnSceneSaving;
+		EditorSceneManager.sceneSaved += OnSceneSaved;
 		PrefabStage.prefabSaving += OnPrefabSaving;
 		LightFlickerDefinition.PresetsChanged += OnPresetsChanged;
 		EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
@@ -24,6 +25,21 @@ static class LightFlickerEditorPreviewGuard
 			return;
 
 		RestoreAuthoredStateInScene( scene );
+	}
+
+	static void OnSceneSaved( Scene scene )
+	{
+		if ( !scene.IsValid() || !scene.isLoaded )
+			return;
+
+		// sceneSaving restore writes Light properties; Unity often leaves the scene dirty afterward.
+		EditModePreviewDirtyUtil.ClearSceneDirtiness( scene );
+
+		if ( Application.isPlaying )
+			return;
+
+		RefreshEditPreviewsInScene( scene );
+		EditModePreviewDirtyUtil.ClearSceneDirtiness( scene );
 	}
 
 	static void OnPrefabSaving( GameObject prefabRoot )
@@ -97,6 +113,26 @@ static class LightFlickerEditorPreviewGuard
 			{
 				if ( flickers[ i ] != null )
 					flickers[ i ].RestoreAuthoredState();
+			}
+		}
+	}
+
+	static void RefreshEditPreviewsInScene( Scene scene )
+	{
+		if ( !scene.IsValid() )
+			return;
+
+		GameObject[] roots = scene.GetRootGameObjects();
+		for ( int r = 0; r < roots.Length; r++ )
+		{
+			LightFlicker[] flickers = roots[ r ].GetComponentsInChildren<LightFlicker>( true );
+			for ( int i = 0; i < flickers.Length; i++ )
+			{
+				LightFlicker flicker = flickers[ i ];
+				if ( flicker == null || !flicker.PlayInEditMode || !flicker.isActiveAndEnabled )
+					continue;
+
+				flicker.RefreshEditorPreview();
 			}
 		}
 	}

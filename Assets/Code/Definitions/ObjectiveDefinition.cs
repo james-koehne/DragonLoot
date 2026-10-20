@@ -11,7 +11,9 @@ public enum ObjectiveSubCompleteType
 	ConstellationComplete = 3,
 	EnterVolume = 4,
 	WorldEventFired = 5,
-	WorldEventCompleted = 6
+	WorldEventCompleted = 6,
+	/// <summary>BuildableObject finished construction. targetId = persistence id (definition id).</summary>
+	BuildableCompleted = 7
 }
 
 public enum ObjectiveRewardType
@@ -30,7 +32,7 @@ public class ObjectiveSubDefinition
 
 	public ObjectiveSubCompleteType completeType;
 
-	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, or world event id for WorldEventFired / WorldEventCompleted. Empty DisplayComplete / PileEmptied = all matching targets inside showVolumeId. Empty for other types = any matching event." )]
+	[Tooltip( "QuestTarget id for display / pile / constellation, volume id for EnterVolume, world event id for WorldEventFired / WorldEventCompleted, or BuildableObject persistence id for BuildableCompleted. Empty DisplayComplete / PileEmptied = all matching targets inside showVolumeId. Empty for other types = any matching event." )]
 	public string targetId;
 
 	[Tooltip( "Count shown as label: current/required. 0 = use the target's capacity or pile size." )]

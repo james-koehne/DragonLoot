@@ -286,8 +286,7 @@ public class TreasurePileVisualEditor : Editor
 	static void BakeLatentsForAllPilesInScene()
 	{
 		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 
 		int sceneCount = 0;
 		for ( int i = 0; i < piles.Length; i++ )
@@ -381,8 +380,7 @@ public class TreasurePileVisualEditor : Editor
 			return 0;
 
 		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 		int count = 0;
 		for ( int i = 0; i < piles.Length; i++ )
 		{
@@ -447,8 +445,7 @@ public class TreasurePileVisualEditor : Editor
 			return 0;
 
 		TreasurePileVisual[] piles = Object.FindObjectsByType<TreasurePileVisual>(
-			FindObjectsInactive.Include,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Include );
 		int count = 0;
 		for ( int i = 0; i < piles.Length; i++ )
 		{

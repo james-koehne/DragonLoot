@@ -257,7 +257,7 @@ MonoBehaviour:
   rows: 8
   slotSpacing: 0.25
   margin: 0.12
-  maxStackPerCell: 0
+  maxStackPerCell: 100
   snapDuration: 0.25
   bounceScale: 1.15
   drawLayoutGizmosAlways: 0
@@ -1076,6 +1076,19 @@ MonoBehaviour:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 1c4699a16f6a00042bccdff3e7aa8071, type: 3}
         AudioSource: {fileID: 7290727321014383511}
+        Playback:
+          VolumeMin: 1
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 2
+          MaxDistance: 30
+          DopplerLevel: 0.4
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
         PitchAtRest: 0.75
         PitchAtMax: 1.2
         VolumeAtRest: 0
@@ -1085,10 +1098,11 @@ MonoBehaviour:
         BrakeDuck: 0.55
         BrakeDuckBlendSeconds: 0.1
         RequireBraking: 0
-        SpatialBlend: 1
-        MinDistance: 2
-        MaxDistance: 30
-        DopplerLevel: 0.4
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 2
+        _migrateMaxDistance: 30
+        _migrateDopplerLevel: 0.4
+        _serializedPlaybackMerged: 1
 --- !u!82 &7290727321014383511
 AudioSource:
   m_ObjectHideFlags: 0

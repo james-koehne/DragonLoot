@@ -178,7 +178,7 @@ public class LanternRevealSweepController : MonoBehaviour
 			return false;
 
 		LanternRevealSweepController[] found =
-			UnityEngine.Object.FindObjectsByType<LanternRevealSweepController>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+			UnityEngine.Object.FindObjectsByType<LanternRevealSweepController>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < found.Length; i++ )
 		{
 			if ( found[ i ] != null && found[ i ].RevealId == revealId )
@@ -255,7 +255,7 @@ public class LanternRevealSweepController : MonoBehaviour
 
 	public static void DebugResetAll()
 	{
-		LanternRevealSweepController[] controllers = UnityEngine.Object.FindObjectsByType<LanternRevealSweepController>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		LanternRevealSweepController[] controllers = UnityEngine.Object.FindObjectsByType<LanternRevealSweepController>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < controllers.Length; i++ )
 		{
 			if ( controllers[ i ] != null )
@@ -312,7 +312,7 @@ public class LanternRevealSweepController : MonoBehaviour
 
 		ResetPunchEffects();
 
-		LanternActivator[] activators = UnityEngine.Object.FindObjectsByType<LanternActivator>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		LanternActivator[] activators = UnityEngine.Object.FindObjectsByType<LanternActivator>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < activators.Length; i++ )
 		{
 			LanternActivator activator = activators[ i ];
@@ -481,7 +481,7 @@ public class LanternRevealSweepController : MonoBehaviour
 	List<LanternActivator> CollectRevealLanterns()
 	{
 		List<LanternActivator> results = new List<LanternActivator>();
-		LanternActivator[] activators = UnityEngine.Object.FindObjectsByType<LanternActivator>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		LanternActivator[] activators = UnityEngine.Object.FindObjectsByType<LanternActivator>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < activators.Length; i++ )
 		{
 			LanternActivator activator = activators[ i ];

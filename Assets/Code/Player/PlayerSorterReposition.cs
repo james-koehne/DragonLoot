@@ -906,7 +906,7 @@ public class PlayerSorterReposition : MonoBehaviour
 			HoverOutlineRegistrar.Owner.StackVolume,
 			OutlineScratch,
 			ResolveValidityOutlineSettings( _placementValid ),
-			GetInstanceID() );
+			GetEntityId() );
 	}
 
 	HoverOutlineVisualSettings ResolveValidityOutlineSettings( bool valid )
@@ -927,7 +927,7 @@ public class PlayerSorterReposition : MonoBehaviour
 
 	void ClearValidityOutline()
 	{
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 	}
 
 	bool TryConfirmPlace()

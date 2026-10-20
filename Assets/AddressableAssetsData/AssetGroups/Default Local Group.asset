@@ -253,6 +253,12 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5730dde4632f9c343b64e3d7fcb5ca55
+    m_Address: Assets/Definitions/WorldEvents/WorldEvent_WorkshopRoomComplete.asset
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - Definition
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 57f0fbbbbb1d80b449b7fa387655b0ad
     m_Address: Assets/Addressables/Treasure/Artifacts/Bottle_05Visual.prefab
     m_ReadOnly: 0

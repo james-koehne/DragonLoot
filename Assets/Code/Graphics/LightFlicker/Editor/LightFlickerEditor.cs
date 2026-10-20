@@ -19,7 +19,7 @@ public class LightFlickerEditor : Editor
 	SerializedProperty _emissiveRenderers;
 	SerializedProperty _emissiveMaterialIndex;
 
-	readonly Dictionary<int, int> _fingerprints = new Dictionary<int, int>();
+	readonly Dictionary<EntityId, int> _fingerprints = new Dictionary<EntityId, int>();
 
 	void OnEnable()
 	{
@@ -54,7 +54,7 @@ public class LightFlickerEditor : Editor
 			if ( flicker == null || !flicker.PlayInEditMode || !flicker.isActiveAndEnabled )
 				continue;
 
-			int instanceId = flicker.GetInstanceID();
+			EntityId instanceId = flicker.GetEntityId();
 			int fingerprint = flicker.GetPresetFingerprint();
 			if ( _fingerprints.TryGetValue( instanceId, out int lastFingerprint ) && lastFingerprint == fingerprint )
 				continue;
@@ -89,7 +89,7 @@ public class LightFlickerEditor : Editor
 		EditorGUILayout.PropertyField( _playInEditMode, new GUIContent( "Play In Edit Mode" ) );
 		bool previewToggleChanged = EditorGUI.EndChangeCheck();
 
-		EditorGUILayout.HelpBox( "Edit-mode flicker is visual only; Light values restore on save.", MessageType.None );
+		EditorGUILayout.HelpBox( "Edit-mode flicker is visual only. Authored Light values are kept separately and restored on save; preview should not dirty the scene.", MessageType.None );
 
 		EditorGUILayout.BeginHorizontal();
 		if ( GUILayout.Button( "Recapture Light Base" ) )
@@ -98,7 +98,7 @@ public class LightFlickerEditor : Editor
 			ForEachTarget( flicker =>
 			{
 				flicker.RecaptureLightBase();
-				_fingerprints[ flicker.GetInstanceID() ] = flicker.GetPresetFingerprint();
+				_fingerprints[ flicker.GetEntityId() ] = flicker.GetPresetFingerprint();
 			} );
 		}
 
@@ -107,7 +107,7 @@ public class LightFlickerEditor : Editor
 			ForEachTarget( flicker =>
 			{
 				flicker.RefreshEditorPreview();
-				_fingerprints[ flicker.GetInstanceID() ] = flicker.GetPresetFingerprint();
+				_fingerprints[ flicker.GetEntityId() ] = flicker.GetPresetFingerprint();
 			} );
 		}
 
@@ -174,7 +174,7 @@ public class LightFlickerEditor : Editor
 				else
 					flicker.RefreshEditorPreview();
 
-				_fingerprints[ flicker.GetInstanceID() ] = flicker.GetPresetFingerprint();
+				_fingerprints[ flicker.GetEntityId() ] = flicker.GetPresetFingerprint();
 			} );
 		}
 	}

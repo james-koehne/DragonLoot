@@ -17,6 +17,7 @@ MonoBehaviour:
   tags:
   - gems
   - constellations
+  disabled: 1
   trigger: 9
   holdingCategory: 1
   volumeId: 
@@ -36,9 +37,9 @@ MonoBehaviour:
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Find constellations around the level and fill them with gems to reveal their
-    secrets.
+  body: Find constellations around the level and fill them with gems to reveal their secrets.
   keybindHint: '[{SecondaryInteract}] Place gem  [M] Open map'
   tasks:
   - id: place_gem_constellation

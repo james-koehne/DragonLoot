@@ -184,7 +184,7 @@ public class MagicalLanternMotion : MonoBehaviour
 	void OnEnable()
 	{
 		_activator = GetComponent<LanternActivator>();
-		_noiseSeed = HashSeed( GetInstanceID() );
+		_noiseSeed = HashSeed( GetEntityId().GetHashCode() );
 		ResetMotionState();
 		if ( !hasRestPose )
 			CaptureRestPose();
@@ -264,17 +264,20 @@ public class MagicalLanternMotion : MonoBehaviour
 		if ( !hasRestPose || !_appliedPose )
 			return;
 
-		transform.localPosition = restLocalPosition;
-		transform.localRotation = restLocalRotation;
+#if UNITY_EDITOR
+		UnityEngine.SceneManagement.Scene scene = default;
+		bool wasSceneDirty = false;
+		if ( !Application.isPlaying )
+			EditModePreviewDirtyUtil.BeginMutation( gameObject, out scene, out wasSceneDirty );
+#endif
+
+		ApplyRestPoseTransform();
 		_appliedPose = false;
 		ResetMotionState();
 
 #if UNITY_EDITOR
 		if ( !Application.isPlaying )
-		{
-			UnityEditor.EditorUtility.ClearDirty( transform );
-			UnityEditor.EditorUtility.ClearDirty( gameObject );
-		}
+			EditModePreviewDirtyUtil.EndMutation( scene, wasSceneDirty, transform, gameObject );
 #endif
 	}
 
@@ -350,17 +353,34 @@ public class MagicalLanternMotion : MonoBehaviour
 			_tilt = Quaternion.Slerp( _tilt, desiredTilt, t );
 		}
 
-		transform.localPosition = restLocalPosition + offset;
-		transform.localRotation = restLocalRotation * _tilt;
+		Vector3 localPosition = restLocalPosition + offset;
+		Quaternion localRotation = restLocalRotation * _tilt;
+
+#if UNITY_EDITOR
+		UnityEngine.SceneManagement.Scene scene = default;
+		bool wasSceneDirty = false;
+		if ( !Application.isPlaying )
+			EditModePreviewDirtyUtil.BeginMutation( gameObject, out scene, out wasSceneDirty );
+#endif
+
+		if ( transform.localPosition != localPosition )
+			transform.localPosition = localPosition;
+		if ( transform.localRotation != localRotation )
+			transform.localRotation = localRotation;
 		_appliedPose = true;
 
 #if UNITY_EDITOR
 		if ( !Application.isPlaying )
-		{
-			UnityEditor.EditorUtility.ClearDirty( transform );
-			UnityEditor.EditorUtility.ClearDirty( gameObject );
-		}
+			EditModePreviewDirtyUtil.EndMutation( scene, wasSceneDirty, transform, gameObject );
 #endif
+	}
+
+	void ApplyRestPoseTransform()
+	{
+		if ( transform.localPosition != restLocalPosition )
+			transform.localPosition = restLocalPosition;
+		if ( transform.localRotation != restLocalRotation )
+			transform.localRotation = restLocalRotation;
 	}
 
 	void SteerAlongCurve( Vector3 attractor, Vector3 tangent, float amount, float dt )

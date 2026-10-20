@@ -6,6 +6,14 @@ using FeedbackSystem;
 using UnityEngine;
 using UnityEngine.UI;
 
+public enum MixedDisplayStorageKind
+{
+	/// <summary>Standalone world table players place and sort onto.</summary>
+	Plain = 0,
+	/// <summary>Storage attached to a machine (minecart dock, coin sorter, etc.).</summary>
+	Station = 1,
+}
+
 /// <summary>
 /// Open display table: accepts any <see cref="TreasureItem"/>.
 /// Slots sit on a horizontal XZ plane. Items claim a rectangular footprint via
@@ -75,6 +83,11 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	[SerializeField]
 	bool allowDisplayedPickup = true;
 
+	[Header( "Storage Role" )]
+	[Tooltip( "Plain = standalone world table. Station = machine-attached storage (minecart / coin sorter)." )]
+	[SerializeField]
+	MixedDisplayStorageKind storageKind = MixedDisplayStorageKind.Plain;
+
 	[Header( "Feedback" )]
 	[SerializeField]
 	Text countLabel;
@@ -96,6 +109,10 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	public TreasureOwnerKind OwnerKind => TreasureOwnerKind.Table;
 	public bool AllowsDisplayedPickup => allowDisplayedPickup && !_burnLocked;
 	public bool BurnLocked => _burnLocked;
+
+	public MixedDisplayStorageKind StorageKind => storageKind;
+	public bool IsStationStorage => storageKind == MixedDisplayStorageKind.Station;
+	public bool IsPlainStorage => storageKind == MixedDisplayStorageKind.Plain;
 
 	public int ItemCount => _itemCount;
 	public int SlotCount => DisplayTableSlotLayout.SlotCount( rows, columns );
@@ -597,8 +614,8 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	}
 
 	/// <summary>
-	/// Finds a ground-stackable coin slot whose full stack fits in <paramref name="maxCoins"/>,
-	/// preferring the nearest to <paramref name="worldPos"/>.
+	/// Finds a coin slot with at least one ground-stackable coin, preferring nearer stacks.
+	/// <paramref name="coinCount"/> is clamped to <paramref name="maxCoins"/> (partial pulls allowed).
 	/// </summary>
 	public bool TryFindPullableCoinStack(
 		Vector3 worldPos,
@@ -616,11 +633,24 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		for ( int s = 0; s < _stacks.Count; s++ )
 		{
 			SlotStack slot = _stacks[ s ];
-			if ( slot == null || slot.IsEmpty || slot.Definition == null )
+			if ( slot == null || slot.IsEmpty )
 				continue;
-			if ( !GroundCoinStack.IsGroundStackableCoin( slot.Definition ) )
+
+			TreasureDefinition def = slot.Definition;
+			if ( def == null && slot.Items.Count > 0 && slot.Items[ 0 ] != null )
+				def = slot.Items[ 0 ].Definition;
+			if ( !GroundCoinStack.IsGroundStackableCoin( def ) )
 				continue;
-			if ( slot.Count <= 0 || slot.Count > maxCoins )
+
+			int available = 0;
+			for ( int i = 0; i < slot.Items.Count; i++ )
+			{
+				TreasureItem member = slot.Items[ i ];
+				if ( member != null && GroundCoinStack.IsGroundStackableCoin( member.Definition ) )
+					available++;
+			}
+
+			if ( available <= 0 )
 				continue;
 
 			int candidateSlot = SlotIndex( slot.OriginX, slot.OriginY );
@@ -632,10 +662,26 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 			distSq = sq;
 			slotIndex = candidateSlot;
-			coinCount = slot.Count;
+			coinCount = Mathf.Min( available, maxCoins );
 		}
 
 		return slotIndex >= 0 && coinCount > 0;
+	}
+
+	/// <summary>True while any displayed item is mid arc/snap flight.</summary>
+	public bool HasTransferInFlight
+	{
+		get
+		{
+			for ( int i = 0; i < _allItems.Count; i++ )
+			{
+				TreasureItem item = _allItems[ i ];
+				if ( item != null && item.IsInFlight )
+					return true;
+			}
+
+			return false;
+		}
 	}
 
 	/// <summary>Accepts an already-detached world item into the first free / stackable slot.</summary>
@@ -655,9 +701,199 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		return true;
 	}
 
+	/// <summary>Accepts a world item into a specific slot, optionally with the shared snap/arc tween.</summary>
+	public bool TryAcceptWorldItemAtSlot( int slotIndex, TreasureItem item, bool animate )
+	{
+		if ( item == null || item.Definition == null || _cellStacks == null || !IsAvailable )
+			return false;
+
+		RemapSlotToOrigin( ref slotIndex );
+		if ( !TryGetCell( slotIndex, out int ox, out int oy ) )
+			return false;
+
+		if ( !CommitItem( item, ox, oy, animate ) )
+			return false;
+
+		RefreshCountLabel();
+		PublishChanged();
+		return true;
+	}
+
 	public bool CanAcceptWorldItem( TreasureDefinition def )
 	{
 		return def != null && TryFindAutoPlacement( def, out _, out _ );
+	}
+
+	public void ConfigureAsStationStorage()
+	{
+		storageKind = MixedDisplayStorageKind.Station;
+	}
+
+	public void ConfigureAsPlainStorage()
+	{
+		storageKind = MixedDisplayStorageKind.Plain;
+	}
+
+	/// <summary>World pose for the next auto-placed item of this definition.</summary>
+	public bool TryGetAutoAcceptPose( TreasureDefinition def, out Vector3 worldPos, out Quaternion worldRot, out int slotIndex )
+	{
+		worldPos = transform.position;
+		worldRot = transform.rotation;
+		slotIndex = -1;
+		if ( def == null || !TryFindAutoPlacement( def, out int ox, out int oy ) )
+			return false;
+
+		slotIndex = SlotIndex( ox, oy );
+		return TryGetSlotAppendPose( slotIndex, out worldPos, out worldRot );
+	}
+
+	/// <summary>
+	/// World pose for a type-sorted coin pile (same coin type only; never mixes coin types).
+	/// </summary>
+	public bool TryGetSortedCoinAcceptPose( TreasureDefinition def, out Vector3 worldPos, out Quaternion worldRot, out int slotIndex )
+	{
+		worldPos = transform.position;
+		worldRot = transform.rotation;
+		slotIndex = -1;
+		if ( def == null || !TryFindSortedCoinPlacement( def, out int ox, out int oy ) )
+			return false;
+
+		slotIndex = SlotIndex( ox, oy );
+		return TryGetSlotAppendPose( slotIndex, out worldPos, out worldRot );
+	}
+
+	/// <summary>Appends one logical coin/item into the first auto-placement slot.</summary>
+	public bool TryAcceptDefinition( TreasureDefinition def )
+	{
+		if ( def == null || !TryFindAutoPlacement( def, out int ox, out int oy ) )
+			return false;
+
+		int slotIndex = SlotIndex( ox, oy );
+		StoragePullAcceptScratch.Clear();
+		StoragePullAcceptScratch.Add( def );
+		int added = TryAppendSlotDefinitions( slotIndex, StoragePullAcceptScratch );
+		StoragePullAcceptScratch.Clear();
+		return added > 0;
+	}
+
+	/// <summary>Appends one coin onto a same-type pile (or a free slot). Rejects mixed coin stacks.</summary>
+	public bool TryAcceptSortedDefinition( TreasureDefinition def )
+	{
+		if ( def == null || !GroundCoinStack.IsGroundStackableCoin( def ) )
+			return false;
+		if ( !TryFindSortedCoinPlacement( def, out int ox, out int oy ) )
+			return false;
+
+		int slotIndex = SlotIndex( ox, oy );
+		StoragePullAcceptScratch.Clear();
+		StoragePullAcceptScratch.Add( def );
+		int added = TryAppendSlotDefinitions( slotIndex, StoragePullAcceptScratch );
+		StoragePullAcceptScratch.Clear();
+		return added > 0;
+	}
+
+	public bool CanAcceptSortedCoin( TreasureDefinition def )
+	{
+		return def != null
+			&& GroundCoinStack.IsGroundStackableCoin( def )
+			&& TryFindSortedCoinPlacement( def, out _, out _ );
+	}
+
+	static readonly List<TreasureDefinition> StoragePullAcceptScratch = new List<TreasureDefinition>( 1 );
+
+	/// <summary>
+	/// Prefer an existing same-type coin pile; otherwise the first free slot.
+	/// Never stacks onto a different coin type.
+	/// </summary>
+	bool TryFindSortedCoinPlacement( TreasureDefinition def, out int ox, out int oy )
+	{
+		ox = 0;
+		oy = 0;
+		if ( def == null || _cellStacks == null || !GroundCoinStack.IsGroundStackableCoin( def ) )
+			return false;
+
+		Vector2Int footprint = GetItemFootprint( def );
+		int cols = GridColumns;
+		int rowCount = GridRows;
+
+		for ( int y = 0; y <= rowCount - footprint.y; y++ )
+		{
+			for ( int x = 0; x <= cols - footprint.x; x++ )
+			{
+				SlotStack existing = _cellStacks[ x, y ];
+				if ( existing == null )
+					continue;
+				if ( existing.OriginX != x || existing.OriginY != y )
+					continue;
+				if ( !CanStackSameCoinType( def, existing ) || existing.Footprint != footprint )
+					continue;
+
+				ox = x;
+				oy = y;
+				return true;
+			}
+		}
+
+		for ( int y = 0; y <= rowCount - footprint.y; y++ )
+		{
+			for ( int x = 0; x <= cols - footprint.x; x++ )
+			{
+				if ( !IsRectangleFree( x, y, footprint ) )
+					continue;
+
+				ox = x;
+				oy = y;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool CanStackSameCoinType( TreasureDefinition placing, SlotStack slot )
+	{
+		if ( placing == null || slot == null || slot.IsEmpty )
+			return false;
+		if ( !GroundCoinStack.IsGroundStackableCoin( placing ) )
+			return false;
+
+		TreasureDefinition occupied = slot.Definition;
+		if ( occupied == null && slot.Items.Count > 0 && slot.Items[ 0 ] != null )
+			occupied = slot.Items[ 0 ].Definition;
+		if ( !GroundCoinStack.IsGroundStackableCoin( occupied ) )
+			return false;
+
+		if ( !SameTreasureType( placing, occupied ) )
+			return false;
+
+		if ( slot.Footprint != GetItemFootprint( placing ) )
+			return false;
+
+		if ( maxStackPerSlot > 0 && slot.Count >= maxStackPerSlot )
+			return false;
+
+		// Reject already-mixed piles so sorter output stays homogeneous.
+		for ( int i = 0; i < slot.Items.Count; i++ )
+		{
+			TreasureItem member = slot.Items[ i ];
+			if ( member == null || member.Definition == null )
+				continue;
+			if ( !SameTreasureType( placing, member.Definition ) )
+				return false;
+		}
+
+		return true;
+	}
+
+	static bool SameTreasureType( TreasureDefinition a, TreasureDefinition b )
+	{
+		if ( a == b )
+			return true;
+		if ( a == null || b == null )
+			return false;
+		if ( !string.IsNullOrEmpty( a.id ) && a.id == b.id )
+			return true;
+		return false;
 	}
 
 	bool TryFindAutoPlacement( TreasureDefinition def, out int ox, out int oy )
@@ -1422,6 +1658,8 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 		Transform area = displayArea != null ? displayArea : transform;
 		Vector3 localBase = GetFootprintLocalBase( slot.OriginX, slot.OriginY, slot.Footprint );
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( area, _collider );
+		localBase.y = TreasureStorageSeat.GetPlatformTopLocalY( platform, area );
 		CoinStackCylinderVisual visual = slot.Cylinder;
 		CoinColumnCylinderBinder.Bind(
 			ref visual,
@@ -1480,10 +1718,13 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 	{
 		Transform area = displayArea != null ? displayArea : transform;
 		Vector3 local = GetFootprintLocalBase( ox, oy, footprint );
-		local.y += GetStackHeightForIndex( stack, stackIndex, item );
-		worldPos = area.TransformPoint( local );
+		local.y = 0f;
+		Vector3 planePoint = area.TransformPoint( local );
 		Quaternion localRot = stack != null ? stack.LocalRotation : Quaternion.identity;
 		worldRot = area.rotation * localRot;
+		float stackHeight = GetStackHeightForIndex( stack, stackIndex, item );
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( area, _collider );
+		worldPos = TreasureStorageSeat.PlantWorldPosition( platform, planePoint, stackHeight, item, worldRot, area.up );
 	}
 
 	Vector3 GetFootprintLocalBase( int ox, int oy, Vector2Int footprint )

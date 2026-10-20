@@ -2,14 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// Fills from mixed storage into auto cargo carts. Auto-calls a free cart when storage has items.
-/// On leave, sends loaded carts to the linked output station.
+/// On leave, routes loaded carts to the best output. Autocart fleet is owned by <see cref="MinecartStationBase"/>.
 /// </summary>
 public class MinecartInputStation : MinecartStationBase
 {
 	static readonly Color InputRoleTint = new Color( 0.95f, 0.62f, 0.12f, 1f );
-
-	[SerializeField]
-	MinecartOutputStation linkedOutput;
 
 	protected override bool ShowsCallVisualization => true;
 
@@ -44,7 +41,17 @@ public class MinecartInputStation : MinecartStationBase
 		if ( cart == null )
 			return;
 
-		TryBeginCall( cart );
+		if ( TryBeginCall( cart ) )
+			RememberHome( cart );
+	}
+
+	protected override bool TryBeginCall( MinecartInteractable cart )
+	{
+		if ( !base.TryBeginCall( cart ) )
+			return false;
+
+		RememberHome( cart );
+		return true;
 	}
 
 	protected override bool TryTransferOnce( MinecartInteractable cart )
@@ -58,13 +65,13 @@ public class MinecartInputStation : MinecartStationBase
 
 		if ( !cart.TryAcceptWorldItem( item ) )
 		{
-			// Put it back if the cart cannot take it.
 			if ( !table.TryAcceptWorldItem( item ) )
 				item.EnterPhysics( item.transform.position, item.transform.rotation );
 			return false;
 		}
 
 		cart.NotifyCargoPlaced();
+		RememberHome( cart );
 		return true;
 	}
 
@@ -111,15 +118,29 @@ public class MinecartInputStation : MinecartStationBase
 		if ( auto == null )
 			return;
 
-		MinecartOutputStation output = linkedOutput;
-		if ( output != null && cart != null && cart.ItemCount > 0 && MinecartStationBase.AutomationEnabled )
-			auto.LeaveDock( output );
-		else
-			auto.LeaveDock( null );
+		RememberHome( cart );
+
+		if ( cart != null && cart.ItemCount > 0 && MinecartStationBase.AutomationEnabled )
+		{
+			MinecartOutputStation output = MinecartAutoController.FindBestOutputForCart( cart );
+			if ( output != null )
+			{
+				auto.LeaveDock( output );
+				return;
+			}
+		}
+
+		// No accepting output (or empty cart): undock and idle here with remaining cargo.
+		auto.LeaveDock( null );
 	}
 
-	public void EditorSetLinkedOutput( MinecartOutputStation value )
+	void RememberHome( MinecartInteractable cart )
 	{
-		linkedOutput = value;
+		if ( cart == null )
+			return;
+
+		MinecartAutoController auto = cart.GetComponent<MinecartAutoController>();
+		if ( auto != null )
+			auto.SetHomeInput( this );
 	}
 }

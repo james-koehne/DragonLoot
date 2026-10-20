@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 99d0596b6df41e74ab75bf6d3c8f83cf, type: 3}
+  m_Name: Tutorial_AutoMinecarts
+  m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
+  id: tut_auto_minecarts
+  title: Auto Minecarts
+  tags:
+  - minecart
+  - workshop
+  disabled: 0
+  trigger: 23
+  holdingCategory: 0
+  volumeId: obj_auto_minecarts
+  fallbackVolumeId: 
+  alsoShowWhenAimingTreasurePile: 0
+  alsoShowWhenAimingCoinStack: 0
+  minWorldCoinsToShow: 100
+  minCarriedCoinsToShow: 50
+  minDisplayCoinsToShow: 50
+  sorterCoinsToComplete: 30
+  minHeightY: 30
+  requiredAbilityId: 
+  cinematicPresentationId: 
+  showDelaySeconds: 0.75
+  walkSecondsToShow: 5
+  prerequisiteVolumeId: 
+  prerequisiteTutorialIds: []
+  highlightMapLabel: 
+  mapMarkerId: 
+  outlineTargetIds: []
+  completeAllTasksOnVolumeEnter: 0
+  body: Fill the input station with treasure. An autocart will carry it to the output station near the coin sorter.
+  keybindHint: 
+  tasks:
+  - id: fill_input
+    label: Place treasure on the input station
+    keybindHint: '[{Interact}]'
+    completeTrigger: 36
+    completeVolumeId: minecart_input_station
+    requiredCount: 0
+  - id: visit_output
+    label: Go to the output station
+    keybindHint: 
+    completeTrigger: 11
+    completeVolumeId: volume_minecart_output
+    requiredCount: 0

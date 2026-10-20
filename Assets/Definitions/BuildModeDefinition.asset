@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a34438fac45ca1c408216c326912dc1c, type: 3}
   m_Name: BuildModeDefinition
   m_EditorClassIdentifier: Assembly-CSharp::BuildModeDefinition
-  fadeStart: 12
-  fadeEnd: 18
+  fadeStart: 24
+  fadeEnd: 36
   buildHoldSeconds: 2
   aimMaxDistance: 0
   ghostShader: {fileID: 4800000, guid: d566e18f486577a4eba9174ebc7e7f0b, type: 3}
@@ -41,6 +41,7 @@ MonoBehaviour:
     normalEdgeWeight: 1
     pulseSpeed: 1.1
     pulseAmount: 0.1
+    respectSceneDepth: 0
   buildStartClip: {fileID: 0}
   buildCompleteClip: {fileID: 8300000, guid: 0b3f39b6f7cd6774ca4f6397a533e694, type: 3}
   buildHitClips:

@@ -33,12 +33,13 @@ static class MinecartJunctionBuildVisualsEditorHook
 		for ( int i = 0; i < stream.length; i++ )
 		{
 			ObjectChangeKind kind = stream.GetEventType( i );
+			// Do not react to ChangeScene — save/load emits it and RefreshBuildVisuals SetDirty
+			// would immediately re-dirty the scene after a clean save.
 			if ( kind == ObjectChangeKind.ChangeGameObjectOrComponentProperties
 				|| kind == ObjectChangeKind.ChangeGameObjectStructure
 				|| kind == ObjectChangeKind.ChangeGameObjectParent
 				|| kind == ObjectChangeKind.CreateGameObjectHierarchy
-				|| kind == ObjectChangeKind.DestroyGameObjectHierarchy
-				|| kind == ObjectChangeKind.ChangeScene )
+				|| kind == ObjectChangeKind.DestroyGameObjectHierarchy )
 			{
 				QueueRefresh();
 				return;
@@ -76,8 +77,7 @@ static class MinecartJunctionBuildVisualsEditorHook
 	static void RefreshAllGraphs()
 	{
 		MinecartJunctionGraph[] graphs = Object.FindObjectsByType<MinecartJunctionGraph>(
-			FindObjectsInactive.Exclude,
-			FindObjectsSortMode.None );
+			FindObjectsInactive.Exclude );
 		for ( int i = 0; i < graphs.Length; i++ )
 		{
 			MinecartJunctionGraph graph = graphs[ i ];

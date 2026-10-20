@@ -735,6 +735,40 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		return true;
 	}
 
+	/// <summary>
+	/// Accepts an already-detached world coin into a slot with the shared arc/snap flight + place SFX.
+	/// </summary>
+	public bool TryAcceptWorldItemAtSlot( int slotIndex, TreasureItem item, bool respectPerSlotMax = true )
+	{
+		if ( item == null || item.Definition == null || Slots == null )
+			return false;
+		if ( slotIndex < 0 || slotIndex >= Slots.Length )
+			return false;
+		if ( !AcceptsInSlot( item.Definition, slotIndex ) )
+			return false;
+
+		if ( respectPerSlotMax )
+		{
+			if ( GetSlotCoinAppendCapacity( slotIndex, item.Definition ) <= 0 )
+				return false;
+		}
+		else if ( GetWholeStackAppendCapacity( item.Definition ) <= 0 )
+			return false;
+
+		int stackIndex = Slots[ slotIndex ].Items.Count;
+		Slots[ slotIndex ].Items.Add( item );
+		Slots[ slotIndex ].Definitions.Add( item.Definition );
+		if ( !_displayedItems.Contains( item ) )
+			_displayedItems.Add( item );
+		_currentCount++;
+		RefreshCountLabel();
+		PublishChanged();
+		NotifySortedDelta( item.Definition, 1 );
+
+		StartCoroutine( SnapIntoSlotRoutine( item, slotIndex, stackIndex ) );
+		return true;
+	}
+
 	/// <summary>Hold ContextualInteract whole coin stack: resolve a placeable slot (lowest pile on coin tables).</summary>
 	public bool TryResolveWholeCoinPlaceSlot(
 		TreasureItem probe,
@@ -1403,6 +1437,9 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 		DisplaySlot slot = Slots[ slotIndex ];
 		Transform area = displayArea != null ? displayArea : transform;
+		Vector3 localBase = slot.LocalBasePosition;
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( area, TableCollider );
+		localBase.y = TreasureStorageSeat.GetPlatformTopLocalY( platform, area );
 		CoinStackCylinderVisual visual = slot.Cylinder;
 		string hostName = CoinColumnCylinderBinder.HostChildName + "_Typed_" + slotIndex;
 		if ( slot.Definitions.Count >= CoinColumnCylinderBinder.MinCountForCylinder )
@@ -1415,7 +1452,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 				host.SetParent( area, false );
 			}
 
-			host.localPosition = slot.LocalBasePosition;
+			host.localPosition = localBase;
 			host.localRotation = slot.LocalRotation;
 			host.localScale = Vector3.one;
 			CoinColumnCylinderBinder.BindDefinitions(
@@ -1435,7 +1472,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 				area,
 				slot.Items,
 				snap: !animate,
-				localPosition: slot.LocalBasePosition,
+				localPosition: localBase,
 				localRotation: slot.LocalRotation,
 				hostName: hostName );
 		}
@@ -1479,17 +1516,24 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		Transform area = displayArea != null ? displayArea : transform;
 		DisplaySlot slot = Slots[ slotIndex ];
 		Vector3 local = slot.LocalBasePosition;
-		local.y += GetStackHeightForIndex( slot, stackIndex, item );
-		worldPos = area.TransformPoint( local );
+		local.y = 0f;
+		Vector3 planePoint = area.TransformPoint( local );
 		worldRot = area.rotation * slot.LocalRotation;
+		float stackHeight = GetStackHeightForIndex( slot, stackIndex, item );
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( area, TableCollider );
+		worldPos = TreasureStorageSeat.PlantWorldPosition( platform, planePoint, stackHeight, item, worldRot, area.up );
 	}
 
 	void GetSlotBaseWorldPose( int slotIndex, out Vector3 worldPos, out Quaternion worldRot )
 	{
 		Transform area = displayArea != null ? displayArea : transform;
 		DisplaySlot slot = Slots[ slotIndex ];
-		worldPos = area.TransformPoint( slot.LocalBasePosition );
+		Vector3 local = slot.LocalBasePosition;
+		local.y = 0f;
+		Vector3 planePoint = area.TransformPoint( local );
 		worldRot = area.rotation * slot.LocalRotation;
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( area, TableCollider );
+		worldPos = TreasureStorageSeat.PlantWorldPosition( platform, planePoint, 0f, null, worldRot, area.up );
 	}
 
 	float GetSlotStackHeight( int slotIndex )

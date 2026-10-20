@@ -37,10 +37,10 @@ public class MinecartJunctionGraph : MonoBehaviour
 	[Min( 0.1f )]
 	float sampleStep = 0.4f;
 
-	[Tooltip( "Merge nearby detections into one junction node." )]
+	[Tooltip( "Merge nearby detections into one junction node. Bake also expands this to at least detectRadius * 2.5." )]
 	[SerializeField]
 	[Min( 0.05f )]
-	float clusterMergeRadius = 1.0f;
+	float clusterMergeRadius = 2.0f;
 
 	[Tooltip( "Minimum along-track separation for a track to form a self-junction (mid-touch or end-to-mid). Filters trivial nearest-point hits." )]
 	[SerializeField]
@@ -101,10 +101,22 @@ public class MinecartJunctionGraph : MonoBehaviour
 	bool drawGizmosAlways = true;
 
 	[SerializeField]
-	bool drawDebugGizmos = true;
+	bool drawDebugGizmos = false;
+
+	[SerializeField]
+	bool drawConnectionGizmos = true;
 
 	[SerializeField]
 	float gizmoPortLength = 1.25f;
+
+	/// <summary>Editor highlight: junction index, or -1.</summary>
+	public static int EditorHighlightJunction = -1;
+
+	/// <summary>Editor highlight: option index within through or corner list, or -1.</summary>
+	public static int EditorHighlightOption = -1;
+
+	/// <summary>Editor highlight: true = throughOptions, false = cornerOptions.</summary>
+	public static bool EditorHighlightIsThrough;
 
 	[SerializeField]
 	List<MinecartJunctionDebugEntry> debugEntries = new List<MinecartJunctionDebugEntry>( 8 );
@@ -123,7 +135,6 @@ public class MinecartJunctionGraph : MonoBehaviour
 
 	bool[] _junctionVisualActive;
 	bool _subscribedBuildEvents;
-	bool _hasAppliedVisuals;
 	bool _refreshQueued;
 
 	public static IReadOnlyList<MinecartJunctionGraph> ActiveGraphs => All;
@@ -177,6 +188,8 @@ public class MinecartJunctionGraph : MonoBehaviour
 	public bool DrawShapedSleeper => drawShapedSleeper;
 
 	public bool DrawDebugGizmos => drawDebugGizmos;
+
+	public bool DrawConnectionGizmos => drawConnectionGizmos;
 
 	public IReadOnlyList<MinecartJunction> Junctions => junctions;
 
@@ -317,7 +330,7 @@ public class MinecartJunctionGraph : MonoBehaviour
 		if ( All.Count > 0 )
 			return;
 
-		MinecartJunctionGraph[] found = FindObjectsByType<MinecartJunctionGraph>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		MinecartJunctionGraph[] found = FindObjectsByType<MinecartJunctionGraph>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < found.Length; i++ )
 		{
 			MinecartJunctionGraph candidate = found[ i ];
@@ -446,8 +459,10 @@ public class MinecartJunctionGraph : MonoBehaviour
 
 	/// <summary>
 	/// Builds valid leave-options at a junction, excluding reverse of current travel on the arrival track.
-	/// Cross-track and same-track other-port exits require a baked ride path.
+	/// Cross-track and same-track other-port exits require a baked ride path (authored Used + meshed).
 	/// Same-track continue (same port) requires an enabled through option when one exists.
+	/// Unready tracks (<see cref="MinecartTrack.IsTravelReady"/>) are skipped — runtime availability
+	/// is authored Used AND both tracks ready.
 	/// </summary>
 	public int BuildExits( int junctionIndex, MinecartTrack arrivalTrack, int travelSign, List<MinecartJunctionExit> results )
 	{
@@ -485,9 +500,6 @@ public class MinecartJunctionGraph : MonoBehaviour
 
 	static void TryAddExit( MinecartJunctionGraph graph, int junctionIndex, List<MinecartJunctionExit> results, MinecartJunctionPort port, int exitSign, MinecartTrack arrivalTrack, float arrivalPortDistance, int arrivalTravelSign )
 	{
-		if ( port.track == arrivalTrack && exitSign == -arrivalTravelSign )
-			return;
-
 		if ( !IsValidExitDirection( port, exitSign ) )
 			return;
 
@@ -499,6 +511,11 @@ public class MinecartJunctionGraph : MonoBehaviour
 		bool samePort = sameTrack
 			&& arrivalTrack != null
 			&& Mathf.Abs( arrivalTrack.SignedAlong( arrivalPortDistance, port.distance ) ) <= PortMatchEpsilon;
+
+		// Reject reverse only on the arrival port (true U-turn). Same-track branches to another
+		// port (loop / self-intersect) often leave with opposite along-sign and must stay valid.
+		if ( samePort && exitSign == -arrivalTravelSign )
+			return;
 
 		if ( sameTrack && samePort )
 		{
@@ -522,7 +539,8 @@ public class MinecartJunctionGraph : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Same-track continue is allowed when no through option exists for the track, or the matching through option is enabled.
+	/// Same-track continue is allowed when no through option exists for the track, or the matching
+	/// through option is authored Used (<see cref="MinecartJunctionCornerOption.enabled"/>).
 	/// </summary>
 	public bool IsSameTrackThroughAllowed( int junctionIndex, MinecartTrack track )
 	{
@@ -767,6 +785,7 @@ public class MinecartJunctionGraph : MonoBehaviour
 			clone.Add( new MinecartJunctionCornerOption
 			{
 				label = o.label,
+				kind = o.kind,
 				trackA = o.trackA,
 				trackB = o.trackB,
 				angleA = o.angleA,
@@ -955,10 +974,11 @@ public class MinecartJunctionGraph : MonoBehaviour
 		if ( RefreshingVisuals || ForceAllGapsActive )
 			return;
 
+		bool changed = false;
 		RefreshingVisuals = true;
 		try
 		{
-			RefreshBuildVisualsInternal();
+			changed = RefreshBuildVisualsInternal();
 		}
 		finally
 		{
@@ -968,14 +988,18 @@ public class MinecartJunctionGraph : MonoBehaviour
 #if UNITY_EDITOR
 		if ( !Application.isPlaying )
 		{
-			UnityEditor.EditorUtility.SetDirty( this );
+			// Only dirty when visibility/mesh state actually changed. Unconditional SetDirty
+			// was re-dirtying the scene after every save (via hierarchy/ChangeScene hooks).
+			if ( changed )
+				UnityEditor.EditorUtility.SetDirty( this );
 			UnityEditor.SceneView.RepaintAll();
 		}
 #endif
 	}
 
-	void RefreshBuildVisualsInternal()
+	bool RefreshBuildVisualsInternal()
 	{
+		bool changed = false;
 		int count = JunctionCount;
 		if ( _junctionVisualActive == null || _junctionVisualActive.Length != count )
 			_junctionVisualActive = new bool[ count ];
@@ -983,19 +1007,26 @@ public class MinecartJunctionGraph : MonoBehaviour
 		for ( int i = 0; i < count; i++ )
 		{
 			bool complete = IsJunctionVisuallyComplete( i );
-			_junctionVisualActive[ i ] = complete;
+			if ( _junctionVisualActive[ i ] != complete )
+			{
+				_junctionVisualActive[ i ] = complete;
+				changed = true;
+			}
 
 			Transform child = transform.Find( JunctionChildPrefix + i );
 			if ( child != null && child.gameObject.activeSelf != complete )
+			{
 				child.gameObject.SetActive( complete );
+				changed = true;
+			}
 		}
-
-		_hasAppliedVisuals = true;
 
 		List<MinecartTrack> affected = new List<MinecartTrack>( 8 );
 		CollectAllIndexedTracks( affected );
 		for ( int i = 0; i < affected.Count; i++ )
 			ApplyTrackVisualForCurrentGaps( affected[ i ] );
+
+		return changed;
 	}
 
 	void CollectAllIndexedTracks( List<MinecartTrack> into )
@@ -1153,7 +1184,12 @@ public class MinecartJunctionGraph : MonoBehaviour
 	void OnDrawGizmos()
 	{
 		if ( drawGizmosAlways )
+		{
 			DrawJunctionGizmos();
+			if ( drawConnectionGizmos )
+				DrawConnectionAuthoringGizmos();
+		}
+
 		if ( drawDebugGizmos && drawGizmosAlways )
 			DrawDebugBakeGizmos();
 	}
@@ -1161,7 +1197,12 @@ public class MinecartJunctionGraph : MonoBehaviour
 	void OnDrawGizmosSelected()
 	{
 		if ( !drawGizmosAlways )
+		{
 			DrawJunctionGizmos();
+			if ( drawConnectionGizmos )
+				DrawConnectionAuthoringGizmos();
+		}
+
 		if ( drawDebugGizmos )
 			DrawDebugBakeGizmos();
 	}
@@ -1178,8 +1219,11 @@ public class MinecartJunctionGraph : MonoBehaviour
 			if ( junction == null )
 				continue;
 
-			Gizmos.color = new Color( 1f, 0.55f, 0.1f, 0.9f );
-			Gizmos.DrawWireSphere( junction.worldPosition, 0.35f );
+			bool highlightNode = EditorHighlightJunction == i && EditorHighlightOption < 0;
+			Gizmos.color = highlightNode
+				? new Color( 1f, 0.95f, 0.2f, 1f )
+				: new Color( 1f, 0.55f, 0.1f, 0.9f );
+			Gizmos.DrawWireSphere( junction.worldPosition, highlightNode ? 0.45f : 0.35f );
 			Gizmos.DrawSphere( junction.worldPosition, 0.12f );
 
 			if ( junction.ports == null )
@@ -1199,6 +1243,175 @@ public class MinecartJunctionGraph : MonoBehaviour
 				Gizmos.DrawLine( junction.worldPosition, junction.worldPosition - tan * len );
 			}
 		}
+	}
+
+	/// <summary>
+	/// Authored connections: green = used + ready, amber = used but unbuilt, grey = unused proposal.
+	/// </summary>
+	void DrawConnectionAuthoringGizmos()
+	{
+		if ( junctions == null )
+			return;
+
+		for ( int j = 0; j < junctions.Count; j++ )
+		{
+			MinecartJunction junction = junctions[ j ];
+			if ( junction == null )
+				continue;
+
+			DrawOptionConnectionGizmos( j, junction, junction.throughOptions, isThrough: true );
+			DrawOptionConnectionGizmos( j, junction, junction.cornerOptions, isThrough: false );
+		}
+	}
+
+	void DrawOptionConnectionGizmos( int junctionIndex, MinecartJunction junction, List<MinecartJunctionCornerOption> options, bool isThrough )
+	{
+		if ( options == null )
+			return;
+
+		for ( int o = 0; o < options.Count; o++ )
+		{
+			MinecartJunctionCornerOption opt = options[ o ];
+			if ( opt == null )
+				continue;
+
+			bool highlighted = EditorHighlightJunction == junctionIndex
+				&& EditorHighlightOption == o
+				&& EditorHighlightIsThrough == isThrough;
+
+			Color color;
+			if ( !opt.enabled )
+				color = new Color( 0.55f, 0.55f, 0.55f, highlighted ? 0.95f : 0.45f );
+			else if ( !opt.BothTracksTravelReady )
+				color = new Color( 1f, 0.65f, 0.15f, highlighted ? 1f : 0.85f );
+			else
+				color = new Color( 0.2f, 0.95f, 0.35f, highlighted ? 1f : 0.9f );
+
+			List<Vector3> points;
+			if ( !TryGetConnectionPolyline( junction, opt, out points ) || points == null || points.Count < 2 )
+			{
+				// Fallback: straight chord between port samples if ride path missing.
+				Vector3 a;
+				Vector3 b;
+				if ( !TryGetOptionEndpoints( junction, opt, out a, out b ) )
+					continue;
+
+				Gizmos.color = color;
+				Gizmos.DrawLine( a, b );
+				DrawTravelArrow( a, b - a, highlighted ? 0.45f : 0.3f );
+				continue;
+			}
+
+			Gizmos.color = color;
+			for ( int p = 0; p < points.Count - 1; p++ )
+				Gizmos.DrawLine( points[ p ], points[ p + 1 ] );
+
+			int mid = points.Count / 2;
+			if ( mid > 0 && mid < points.Count )
+			{
+				Vector3 dir = points[ mid ] - points[ mid - 1 ];
+				DrawTravelArrow( points[ mid ], dir, highlighted ? 0.5f : 0.32f );
+			}
+		}
+	}
+
+	static void DrawTravelArrow( Vector3 origin, Vector3 direction, float size )
+	{
+		if ( direction.sqrMagnitude < 0.0001f )
+			return;
+
+		direction.Normalize();
+		Vector3 right = Vector3.Cross( Vector3.up, direction );
+		if ( right.sqrMagnitude < 0.0001f )
+			right = Vector3.Cross( Vector3.forward, direction );
+		right.Normalize();
+
+		Vector3 tip = origin + direction * size;
+		Gizmos.DrawLine( origin, tip );
+		Gizmos.DrawLine( tip, tip - direction * size * 0.45f + right * size * 0.3f );
+		Gizmos.DrawLine( tip, tip - direction * size * 0.45f - right * size * 0.3f );
+	}
+
+	static bool TryGetConnectionPolyline( MinecartJunction junction, MinecartJunctionCornerOption opt, out List<Vector3> points )
+	{
+		points = null;
+		if ( junction == null || opt == null || junction.ridePaths == null )
+			return false;
+
+		MinecartJunctionRidePath best = null;
+		float bestScore = float.MaxValue;
+		for ( int i = 0; i < junction.ridePaths.Count; i++ )
+		{
+			MinecartJunctionRidePath path = junction.ridePaths[ i ];
+			if ( path == null || path.worldPoints == null || path.worldPoints.Count < 2 )
+				continue;
+
+			if ( !OptionMatchesRidePath( opt, path ) )
+				continue;
+
+			float score = path.length;
+			if ( score >= bestScore )
+				continue;
+
+			bestScore = score;
+			best = path;
+		}
+
+		if ( best == null )
+			return false;
+
+		points = best.worldPoints;
+		return true;
+	}
+
+	static bool OptionMatchesRidePath( MinecartJunctionCornerOption opt, MinecartJunctionRidePath path )
+	{
+		if ( opt.trackA == opt.trackB )
+		{
+			return path.fromTrack == opt.trackA && path.toTrack == opt.trackA;
+		}
+
+		return ( path.fromTrack == opt.trackA && path.toTrack == opt.trackB )
+			|| ( path.fromTrack == opt.trackB && path.toTrack == opt.trackA );
+	}
+
+	static bool TryGetOptionEndpoints( MinecartJunction junction, MinecartJunctionCornerOption opt, out Vector3 a, out Vector3 b )
+	{
+		a = junction.worldPosition;
+		b = junction.worldPosition;
+		if ( junction.ports == null || opt == null )
+			return false;
+
+		bool foundA = false;
+		bool foundB = false;
+		for ( int i = 0; i < junction.ports.Count; i++ )
+		{
+			MinecartJunctionPort port = junction.ports[ i ];
+			if ( port.track == null )
+				continue;
+
+			Vector3 pos;
+			Vector3 tan;
+			Vector3 up;
+			if ( !port.track.Evaluate( port.distance, out pos, out tan, out up ) )
+				continue;
+
+			if ( !foundA && port.track == opt.trackA )
+			{
+				a = pos;
+				foundA = true;
+			}
+			else if ( !foundB && port.track == opt.trackB )
+			{
+				b = pos;
+				foundB = true;
+			}
+		}
+
+		if ( opt.trackA == opt.trackB )
+			return foundA;
+
+		return foundA && foundB;
 	}
 
 	void DrawDebugBakeGizmos()
@@ -1293,16 +1506,55 @@ public class MinecartJunction
 	public List<MinecartJunctionRidePath> ridePaths = new List<MinecartJunctionRidePath>( 8 );
 }
 
+public enum MinecartJunctionConnectionKind
+{
+	Through = 0,
+	Turn = 1
+}
+
 [Serializable]
 public class MinecartJunctionCornerOption
 {
 	public string label = "Corner";
+	public MinecartJunctionConnectionKind kind = MinecartJunctionConnectionKind.Turn;
 	public MinecartTrack trackA;
 	public MinecartTrack trackB;
 	public float angleA;
 	public float angleB;
 	public float cornerAngleDegrees;
+	[Tooltip( "Authored: include this connection when tracks are ready." )]
 	public bool enabled = true;
+
+	public bool BothTracksTravelReady
+	{
+		get
+		{
+			bool aReady = trackA != null && trackA.IsTravelReady;
+			bool bReady = trackB != null && trackB.IsTravelReady;
+			if ( trackA == trackB )
+				return aReady;
+
+			return aReady && bReady;
+		}
+	}
+
+	public bool IsRuntimeAvailable => enabled && BothTracksTravelReady;
+
+	public static string FormatThroughLabel( MinecartTrack track )
+	{
+		string name = track != null ? track.name : "?";
+		return "Through · " + name;
+	}
+
+	public static string FormatTurnLabel( MinecartTrack a, MinecartTrack b, float cornerDegrees )
+	{
+		string nameA = a != null ? a.name : "?";
+		string nameB = b != null ? b.name : "?";
+		if ( a == b )
+			return $"Turn · {nameA} loop ({cornerDegrees:0}°)";
+
+		return $"Turn · {nameA} → {nameB} ({cornerDegrees:0}°)";
+	}
 }
 
 [Serializable]

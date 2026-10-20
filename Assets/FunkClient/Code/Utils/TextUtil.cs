@@ -8,8 +8,8 @@ public static class TextUtils
 {
 	private class TweenHandle : MonoBehaviour
 	{
-		public TweenInstance<Transform, Color> colorTween;
-		public TweenInstance<Transform, float> gradientTween;
+		[System.NonSerialized] public TweenInstance<Transform, Color> colorTween;
+		[System.NonSerialized] public TweenInstance<Transform, float> gradientTween;
 	}
 
 	private class ActiveTween

@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Manual crank for level-1 coin sorting. Hold ContextualInteract (E) or Interact (LMB)
-/// to keep processing active. Hidden (non-interactable) once the station is automatic (level 2+).
+/// Optional crank boost for the coin sorter. Hold ContextualInteract (E) or Interact (LMB)
+/// to sort at the manual rate (100% faster than automatic by default).
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 public class CoinSortingCrankInteractable : InteractableBase
@@ -36,11 +36,8 @@ public class CoinSortingCrankInteractable : InteractableBase
 		if ( reposition != null && reposition.IsCarrying )
 			return false;
 
-		int level = station.StationLevel;
-		if ( level >= 2 )
-			return false;
-
-		return level >= 1;
+		CoinSortingStationDefinition def = station.Definition;
+		return def != null && def.AllowsCrankBoost( station.StationLevel );
 	}
 
 	public override void Interact( PlayerController player )

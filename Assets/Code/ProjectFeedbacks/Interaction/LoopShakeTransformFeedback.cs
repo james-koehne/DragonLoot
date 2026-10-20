@@ -21,7 +21,7 @@ public class LoopShakeTransformFeedback : Feedback, IFeedbackTick
 
 	Vector3 _basePosition;
 	Quaternion _baseRotation;
-	int _anchorId;
+	EntityId _anchorId;
 	bool _running;
 
 	public override void Play()

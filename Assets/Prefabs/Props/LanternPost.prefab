@@ -139,6 +139,10 @@ MonoBehaviour:
   _emissiveRenderers: []
   _emissiveMaterialIndex: 1
   _volumetricRenderer: {fileID: 858327941217110897}
+  _authoredIntensity: 1
+  _authoredColor: {r: 1, g: 1, b: 1, a: 1}
+  _authoredRange: 10
+  _hasAuthoredBase: 0
 --- !u!114 &5639407865142041459
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -283,7 +287,7 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5441916690368165736}
   m_Enabled: 1
-  serializedVersion: 12
+  serializedVersion: 13
   m_Type: 2
   m_Color: {r: 0.68939453, g: 0.9318125, b: 0.99607843, a: 1}
   m_Intensity: 1.7928272
@@ -335,7 +339,7 @@ Light:
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ForceVisible: 0
-  m_ShadowRadius: 0
+  m_ShapeRadius: 0
   m_ShadowAngle: 0
   m_LightUnit: 1
   m_LuxAtDistance: 1

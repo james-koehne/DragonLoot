@@ -5,7 +5,7 @@ using UnityEngine;
 namespace FeedbackSystem
 {
 	/// <summary>
-	/// Shared rest pose for overlapping shake feedbacks on the same transform.
+	/// Shared rest pose for ovWhat erlapping shake feedbacks on the same transform.
 	/// Prevents each new shake from baking the previous offset into its base.
 	/// </summary>
 	public static class TransformShakeAnchor
@@ -17,11 +17,11 @@ namespace FeedbackSystem
 			public int RetainCount;
 		}
 
-		static readonly Dictionary<int, State> States = new Dictionary<int, State>( 8 );
+		static readonly Dictionary<EntityId, State> States = new Dictionary<EntityId, State>( 8 );
 
-		public static int Retain( Transform target, out Vector3 basePosition, out Quaternion baseRotation )
+		public static EntityId Retain( Transform target, out Vector3 basePosition, out Quaternion baseRotation )
 		{
-			int id = target.GetInstanceID();
+			EntityId id = target.GetEntityId();
 			State state;
 			if ( States.TryGetValue( id, out state ) )
 			{
@@ -43,7 +43,7 @@ namespace FeedbackSystem
 			return id;
 		}
 
-		public static void Release( int anchorId, Transform target, bool restore )
+		public static void Release( EntityId anchorId, Transform target, bool restore )
 		{
 			State state;
 			if ( !States.TryGetValue( anchorId, out state ) )

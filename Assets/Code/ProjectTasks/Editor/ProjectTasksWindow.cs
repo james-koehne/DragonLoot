@@ -16,12 +16,15 @@ public sealed class ProjectTasksWindow : EditorWindow
 	const string NewFeatureOption = "New feature…";
 	const float InboxListMinHeight = 120f;
 	const float FeatureListMinHeight = 200f;
-	const float VerificationListMinHeight = 140f;
 	const float DetailMinHeight = 140f;
+	const int TabTasks = 0;
+	const int TabVerification = 1;
 
 	static readonly Color SectionBg = new Color( 0.16f, 0.16f, 0.18f, 0.92f );
 	static readonly Color SectionBorder = new Color( 0.32f, 0.32f, 0.36f, 1f );
 	static readonly Color HeaderBg = new Color( 0.13f, 0.13f, 0.15f, 0.95f );
+	static readonly Color TabActiveBg = new Color( 0.24f, 0.24f, 0.28f, 1f );
+	static readonly Color TabInactiveBg = new Color( 0.14f, 0.14f, 0.16f, 1f );
 
 	ProjectTasksCatalog _catalog;
 	string _rootPath = string.Empty;
@@ -29,6 +32,7 @@ public sealed class ProjectTasksWindow : EditorWindow
 	string _featureChoice = AutoOption;
 	string _newFeatureName = string.Empty;
 	bool _showRootEditor;
+	int _activeTab = TabTasks;
 
 	TextField _rootField;
 	TextField _captureField;
@@ -43,8 +47,12 @@ public sealed class ProjectTasksWindow : EditorWindow
 	Button _planButton;
 	Button _initializeButton;
 	Button _editRootButton;
+	Button _tasksTabButton;
+	Button _verificationTabButton;
 	VisualElement _rootEditorPanel;
 	VisualElement _newFeatureRow;
+	VisualElement _tasksTabContent;
+	VisualElement _verificationTabContent;
 	ListView _inboxList;
 	ListView _featureList;
 	ListView _verificationList;
@@ -92,21 +100,36 @@ public sealed class ProjectTasksWindow : EditorWindow
 		rootVisualElement.Clear();
 		rootVisualElement.style.flexGrow = 1;
 
-		var scroll = new ScrollView( ScrollViewMode.Vertical );
-		scroll.style.flexGrow = 1;
-		scroll.contentContainer.style.paddingLeft = 8;
-		scroll.contentContainer.style.paddingRight = 8;
-		scroll.contentContainer.style.paddingTop = 8;
-		scroll.contentContainer.style.paddingBottom = 4;
-		rootVisualElement.Add( scroll );
+		var chrome = new VisualElement();
+		chrome.style.flexShrink = 0;
+		chrome.style.paddingLeft = 8;
+		chrome.style.paddingRight = 8;
+		chrome.style.paddingTop = 8;
+		chrome.Add( BuildHeader() );
+		chrome.Add( BuildTabBar() );
+		rootVisualElement.Add( chrome );
 
-		scroll.Add( BuildHeader() );
-		scroll.Add( BuildCaptureZone() );
-		scroll.Add( BuildVerificationPanel() );
-		scroll.Add( BuildCommandsRail() );
-		scroll.Add( BuildInboxPanel() );
-		scroll.Add( BuildFeaturesPanel() );
-		scroll.Add( BuildFeatureDetailPanel() );
+		_tasksTabContent = new ScrollView( ScrollViewMode.Vertical );
+		_tasksTabContent.style.flexGrow = 1;
+		var tasksScroll = (ScrollView)_tasksTabContent;
+		tasksScroll.contentContainer.style.paddingLeft = 8;
+		tasksScroll.contentContainer.style.paddingRight = 8;
+		tasksScroll.contentContainer.style.paddingTop = 4;
+		tasksScroll.contentContainer.style.paddingBottom = 4;
+		tasksScroll.Add( BuildCaptureZone() );
+		tasksScroll.Add( BuildCommandsRail() );
+		tasksScroll.Add( BuildInboxPanel() );
+		tasksScroll.Add( BuildFeaturesPanel() );
+		tasksScroll.Add( BuildFeatureDetailPanel() );
+		rootVisualElement.Add( _tasksTabContent );
+
+		_verificationTabContent = BuildVerificationPanel();
+		_verificationTabContent.style.flexGrow = 1;
+		_verificationTabContent.style.marginLeft = 8;
+		_verificationTabContent.style.marginRight = 8;
+		_verificationTabContent.style.marginTop = 4;
+		_verificationTabContent.style.marginBottom = 4;
+		rootVisualElement.Add( _verificationTabContent );
 
 		_statusLabel = new Label( _statusText );
 		_statusLabel.style.flexShrink = 0;
@@ -120,7 +143,65 @@ public sealed class ProjectTasksWindow : EditorWindow
 		_statusLabel.style.borderTopColor = SectionBorder;
 		rootVisualElement.Add( _statusLabel );
 
+		ApplyActiveTab();
 		RefreshUi();
+	}
+
+	VisualElement BuildTabBar()
+	{
+		var bar = new VisualElement();
+		bar.style.flexDirection = FlexDirection.Row;
+		bar.style.flexShrink = 0;
+		bar.style.marginBottom = 4;
+
+		_tasksTabButton = MakeTabButton( "Tasks", () => SetActiveTab( TabTasks ) );
+		_verificationTabButton = MakeTabButton( "Verification", () => SetActiveTab( TabVerification ) );
+		bar.Add( _tasksTabButton );
+		bar.Add( _verificationTabButton );
+		return bar;
+	}
+
+	static Button MakeTabButton( string text, Action onClick )
+	{
+		var button = new Button( onClick ) { text = text };
+		button.style.flexGrow = 1;
+		button.style.height = 26;
+		button.style.marginLeft = 0;
+		button.style.marginRight = 2;
+		button.style.marginTop = 0;
+		button.style.marginBottom = 0;
+		button.style.borderTopLeftRadius = 4;
+		button.style.borderTopRightRadius = 4;
+		button.style.borderBottomLeftRadius = 0;
+		button.style.borderBottomRightRadius = 0;
+		return button;
+	}
+
+	void SetActiveTab( int tab )
+	{
+		_activeTab = tab;
+		ApplyActiveTab();
+	}
+
+	void ApplyActiveTab()
+	{
+		bool tasks = _activeTab == TabTasks;
+		if ( _tasksTabContent != null )
+			_tasksTabContent.style.display = tasks ? DisplayStyle.Flex : DisplayStyle.None;
+		if ( _verificationTabContent != null )
+			_verificationTabContent.style.display = tasks ? DisplayStyle.None : DisplayStyle.Flex;
+
+		StyleTabButton( _tasksTabButton, tasks );
+		StyleTabButton( _verificationTabButton, !tasks );
+	}
+
+	static void StyleTabButton( Button button, bool active )
+	{
+		if ( button == null )
+			return;
+		button.style.backgroundColor = active ? TabActiveBg : TabInactiveBg;
+		button.style.unityFontStyleAndWeight = active ? FontStyle.Bold : FontStyle.Normal;
+		button.style.opacity = active ? 1f : 0.75f;
 	}
 
 	VisualElement BuildHeader()
@@ -264,40 +345,49 @@ public sealed class ProjectTasksWindow : EditorWindow
 	VisualElement BuildVerificationPanel()
 	{
 		var panel = MakeSection( "Verification" );
+		panel.style.flexGrow = 1;
+		panel.style.flexShrink = 1;
+		panel.style.marginBottom = 0;
 
 		var hint = new Label( "Tick after playtesting. Click the text to copy a reference. Completed items clear next time that feature is worked on." );
 		hint.style.opacity = 0.65f;
 		hint.style.whiteSpace = WhiteSpace.Normal;
-		hint.style.fontSize = 10;
-		hint.style.marginBottom = 4;
+		hint.style.fontSize = 11;
+		hint.style.marginBottom = 6;
+		hint.style.flexShrink = 0;
 		panel.Add( hint );
 
 		_verificationEmptyLabel = new Label( "No verification items yet. Cursor adds them after implementing a feature." );
 		_verificationEmptyLabel.style.opacity = 0.7f;
 		_verificationEmptyLabel.style.whiteSpace = WhiteSpace.Normal;
-		_verificationEmptyLabel.style.fontSize = 11;
+		_verificationEmptyLabel.style.fontSize = 12;
 		_verificationEmptyLabel.style.marginBottom = 4;
+		_verificationEmptyLabel.style.flexShrink = 0;
 		panel.Add( _verificationEmptyLabel );
 
 		_verificationList = new ListView();
-		_verificationList.style.minHeight = VerificationListMinHeight;
-		_verificationList.style.height = VerificationListMinHeight + 60f;
+		_verificationList.style.flexGrow = 1;
+		_verificationList.style.flexShrink = 1;
+		_verificationList.style.minHeight = 200f;
 		_verificationList.selectionType = SelectionType.None;
-		_verificationList.fixedItemHeight = 48;
+		_verificationList.virtualizationMethod = CollectionVirtualizationMethod.DynamicHeight;
 		_verificationList.makeItem = () =>
 		{
 			var row = new VisualElement();
 			row.style.flexDirection = FlexDirection.Row;
 			row.style.alignItems = Align.FlexStart;
 			row.style.paddingLeft = 2;
-			row.style.paddingRight = 4;
-			row.style.paddingTop = 3;
-			row.style.paddingBottom = 3;
+			row.style.paddingRight = 6;
+			row.style.paddingTop = 6;
+			row.style.paddingBottom = 6;
+			row.style.borderBottomWidth = 1;
+			row.style.borderBottomColor = new Color( SectionBorder.r, SectionBorder.g, SectionBorder.b, 0.55f );
 
 			var swatch = new VisualElement { name = "swatch" };
 			swatch.style.width = 4;
-			swatch.style.height = 38;
-			swatch.style.marginRight = 6;
+			swatch.style.minHeight = 44;
+			swatch.style.alignSelf = Align.Stretch;
+			swatch.style.marginRight = 8;
 			swatch.style.flexShrink = 0;
 			swatch.style.borderTopLeftRadius = 2;
 			swatch.style.borderTopRightRadius = 2;
@@ -305,20 +395,22 @@ public sealed class ProjectTasksWindow : EditorWindow
 			swatch.style.borderBottomRightRadius = 2;
 
 			var toggle = new Toggle { name = "done" };
-			toggle.style.marginRight = 6;
+			toggle.style.marginRight = 8;
 			toggle.style.marginTop = 2;
 			toggle.style.flexShrink = 0;
 			toggle.RegisterValueChangedCallback( OnVerificationToggleChanged );
 
 			var textCol = new VisualElement { name = "text-col" };
 			textCol.style.flexGrow = 1;
+			textCol.style.flexShrink = 1;
 			textCol.focusable = true;
 			textCol.RegisterCallback<ClickEvent>( OnVerificationTextClicked );
 			var feature = new Label { name = "feature" };
 			feature.style.unityFontStyleAndWeight = FontStyle.Bold;
-			feature.style.fontSize = 11;
+			feature.style.fontSize = 12;
+			feature.style.marginBottom = 2;
 			var text = new Label { name = "text" };
-			text.style.fontSize = 11;
+			text.style.fontSize = 12;
 			text.style.whiteSpace = WhiteSpace.Normal;
 			text.style.opacity = 0.9f;
 			textCol.Add( feature );
@@ -887,6 +979,13 @@ public sealed class ProjectTasksWindow : EditorWindow
 		                   + "  ·  Features " + features
 		                   + "  ·  Archive " + archive
 		                   + "  ·  " + refreshed;
+
+		if ( _verificationTabButton != null )
+		{
+			_verificationTabButton.text = verifyPending > 0
+				? "Verification (" + verifyPending + ")"
+				: "Verification";
+		}
 	}
 
 	void RebuildVerificationList()

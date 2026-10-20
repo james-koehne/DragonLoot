@@ -17,7 +17,7 @@ public static class GoldBarStackLattice
 		public float BottomLift;
 	}
 
-	static readonly Dictionary<int, GoldBarSize> SizeCache = new Dictionary<int, GoldBarSize>( 8 );
+	static readonly Dictionary<EntityId, GoldBarSize> SizeCache = new Dictionary<EntityId, GoldBarSize>( 8 );
 
 	const float FallbackLength = 0.42f;
 	const float FallbackWidth = 0.16f;
@@ -41,7 +41,7 @@ public static class GoldBarStackLattice
 		if ( item != null )
 			CacheFromItem( item );
 
-		if ( definition != null && SizeCache.TryGetValue( definition.GetInstanceID(), out GoldBarSize cached ) )
+		if ( definition != null && SizeCache.TryGetValue( definition.GetEntityId(), out GoldBarSize cached ) )
 			return cached;
 
 		if ( item != null )
@@ -73,7 +73,7 @@ public static class GoldBarStackLattice
 		if ( item == null || item.Definition == null )
 			return;
 
-		SizeCache[ item.Definition.GetInstanceID() ] = MeasureItemUncached( item );
+		SizeCache[ item.Definition.GetEntityId() ] = MeasureItemUncached( item );
 	}
 
 	public static bool TryGetLocalSlot(

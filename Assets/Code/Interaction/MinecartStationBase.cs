@@ -36,6 +36,13 @@ public abstract class MinecartStationBase : InteractableBase
 	[SerializeField]
 	Feedbacks onIdleFeedbacks;
 
+	[SerializeField]
+	[Min( 0 )]
+	[Tooltip( "Max autocarts this station keeps spawned idle on its bound track. 0 = never spawn. Waits until the station and track are built." )]
+	int autoCartLimit = 1;
+
+	readonly List<MinecartInteractable> _ownedAutoCarts = new List<MinecartInteractable>( 2 );
+
 	static readonly List<MinecartStationBase> All = new List<MinecartStationBase>( 8 );
 	static readonly int BaseColorId = Shader.PropertyToID( "_BaseColor" );
 	static readonly int ColorId = Shader.PropertyToID( "_Color" );
@@ -45,6 +52,8 @@ public abstract class MinecartStationBase : InteractableBase
 	static readonly Color PresentEmissionColor = new Color( 0.25f, 0.75f, 0.3f, 1f );
 	static readonly Color CallingBaseColor = new Color( 0.95f, 0.72f, 0.12f, 1f );
 	static readonly Color CallingEmissionColor = new Color( 0.85f, 0.6f, 0.15f, 1f );
+	static readonly Color AutomationPausedBaseColor = new Color( 0.35f, 0.08f, 0.08f, 1f );
+	static readonly Color AutomationPausedEmissionColor = new Color( 0.45f, 0.1f, 0.1f, 1f );
 	const float LampEmissionBase = 0.55f;
 	const float LampEmissionIntensity = LampEmissionBase * 3f;
 
@@ -115,6 +124,8 @@ public abstract class MinecartStationBase : InteractableBase
 
 		if ( storage == null )
 			storage = GetComponentInChildren<MixedDisplayTableInteractable>( true );
+		if ( storage != null )
+			storage.ConfigureAsStationStorage();
 
 		if ( dockPoint == null )
 		{
@@ -147,6 +158,7 @@ public abstract class MinecartStationBase : InteractableBase
 		_lampCalling = false;
 		PlayFeedbacks( onIdleFeedbacks );
 		ApplyIdleLamp();
+		EnsureAutoCarts();
 	}
 
 	protected virtual void OnDisable()
@@ -162,8 +174,60 @@ public abstract class MinecartStationBase : InteractableBase
 	protected virtual void Update()
 	{
 		EnsureBoundTrack();
+		EnsureAutoCarts();
 		TickDockedTransfer();
 		TickCallVisualization();
+	}
+
+	/// <summary>
+	/// Spawns owned idle autocarts on the bound travel-ready track. No-ops until the station
+	/// (and its track) are built; retries each frame while under <see cref="autoCartLimit"/>.
+	/// </summary>
+	protected void EnsureAutoCarts()
+	{
+		if ( !isActiveAndEnabled || autoCartLimit <= 0 )
+			return;
+
+		BuildableObject buildable = GetComponentInParent<BuildableObject>( true );
+		if ( buildable != null && !buildable.IsBuilt )
+			return;
+
+		if ( !EnsureBoundTrack() || track == null || !track.IsTravelReady )
+			return;
+
+		CullOwnedAutoCarts();
+		while ( _ownedAutoCarts.Count < autoCartLimit )
+		{
+			float along = TrackStopDistance;
+			if ( !MinecartConsistUtility.TrySpawnOnTrack( track, along, drive: false, out MinecartInteractable spawned ) )
+				break;
+
+			if ( spawned == null )
+				break;
+
+			MinecartAutoController auto = spawned.GetComponent<MinecartAutoController>();
+			if ( auto == null )
+				auto = spawned.gameObject.AddComponent<MinecartAutoController>();
+
+			if ( this is MinecartInputStation input )
+				auto.SetHomeInput( input );
+
+			_ownedAutoCarts.Add( spawned );
+		}
+	}
+
+	void CullOwnedAutoCarts()
+	{
+		for ( int i = _ownedAutoCarts.Count - 1; i >= 0; i-- )
+		{
+			if ( _ownedAutoCarts[ i ] == null )
+				_ownedAutoCarts.RemoveAt( i );
+		}
+	}
+
+	public void EditorSetAutoCartLimit( int limit )
+	{
+		autoCartLimit = Mathf.Max( 0, limit );
 	}
 
 	public override bool CanInteract( PlayerController player )
@@ -211,11 +275,24 @@ public abstract class MinecartStationBase : InteractableBase
 			if ( station != null )
 				station.ClearAutomationReservations();
 		}
+
+		RefreshAllIdleLamps();
 	}
 
 	public static void ResumeAutomation()
 	{
 		AutomationEnabled = true;
+		RefreshAllIdleLamps();
+	}
+
+	static void RefreshAllIdleLamps()
+	{
+		for ( int i = 0; i < All.Count; i++ )
+		{
+			MinecartStationBase station = All[ i ];
+			if ( station != null )
+				station.ApplyIdleLamp();
+		}
 	}
 
 	/// <summary>
@@ -302,7 +379,7 @@ public abstract class MinecartStationBase : InteractableBase
 		ApplyIdleLamp();
 	}
 
-	protected bool TryBeginCall( MinecartInteractable cart )
+	protected virtual bool TryBeginCall( MinecartInteractable cart )
 	{
 		if ( cart == null || HasDockedCart || HasInboundCart )
 			return false;
@@ -405,6 +482,13 @@ public abstract class MinecartStationBase : InteractableBase
 			BeginJobCompleteWait();
 			return;
 		}
+
+		if ( cart.HasTransferInFlight )
+			return;
+
+		MixedDisplayTableInteractable storage = Storage;
+		if ( storage != null && storage.HasTransferInFlight )
+			return;
 
 		if ( _transferTimer < TransferInterval )
 			return;
@@ -576,6 +660,12 @@ public abstract class MinecartStationBase : InteractableBase
 		if ( HasDockedCart || HasInboundCart )
 			return;
 
+		if ( !AutomationEnabled )
+		{
+			ApplyLampColors( AutomationPausedBaseColor, AutomationPausedEmissionColor );
+			return;
+		}
+
 		Color tint = RoleTint;
 		if ( tint.a <= 0f || tint == Color.white )
 			tint = CallingBaseColor;
@@ -672,6 +762,8 @@ public abstract class MinecartStationBase : InteractableBase
 	public void EditorSetStorage( MixedDisplayTableInteractable value )
 	{
 		storage = value;
+		if ( storage != null )
+			storage.ConfigureAsStationStorage();
 	}
 
 	public void EditorSetDockPoint( Transform value )

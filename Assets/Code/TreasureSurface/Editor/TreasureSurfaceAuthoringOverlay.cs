@@ -31,7 +31,7 @@ static class TreasureSurfaceAuthoringOverlay
 	static readonly List<int> s_PriorityScratch = new List<int>( 64 );
 	static readonly List<int> s_EmptyScratch = new List<int>( 64 );
 
-	static int s_CachedAuthoringId;
+	static EntityId s_CachedAuthoringId;
 	static int s_CachedRevision = -1;
 	static int s_CachedChunkCountX;
 	static int s_CachedChunkCountZ;
@@ -278,7 +278,7 @@ static class TreasureSurfaceAuthoringOverlay
 		if ( chunkCountX <= 0 || chunkCountZ <= 0 || cellsPerChunk <= 0 )
 			return;
 
-		int id = authoring.GetInstanceID();
+		EntityId id = authoring.GetEntityId();
 		int revision = authoring.PaintRevision;
 
 		bool layoutChanged = s_CachedAuthoringId != id

@@ -7,8 +7,9 @@ using FeedbackSystem;
 using UnityEngine;
 
 /// <summary>
-/// World coin sorter: hopper stack intake → timed process (bottom-first) → per-type output stacks.
-/// Auto-pulls whole coin stacks from nearby ground piles and mixed storage tables into the hopper.
+/// World coin sorter: hopper stack intake → timed process (bottom-first) → chute or station mixed-storage output.
+/// Auto-pulls from linked station mixed storage (not plain world tables). Always sorts automatically;
+/// cranking boosts to the manual rate.
 /// Levels via <see cref="UpgradeSystem"/> / <see cref="CoinSortingStationDefinition"/>.
 /// </summary>
 public class CoinSortingStation : MonoBehaviour
@@ -26,7 +27,6 @@ public class CoinSortingStation : MonoBehaviour
 	static readonly List<TreasureItem> CarryDumpScratch = new List<TreasureItem>( 64 );
 	static readonly List<Collider> ColliderScratch = new List<Collider>( 16 );
 	static readonly Collider[] OverlapScratch = new Collider[ 64 ];
-	static readonly Collider[] StoragePullOverlap = new Collider[ 64 ];
 	static readonly RaycastHit[] FloorHits = new RaycastHit[ 16 ];
 
 	[SerializeField]
@@ -40,6 +40,14 @@ public class CoinSortingStation : MonoBehaviour
 
 	[SerializeField]
 	List<ChuteBinding> chutes = new List<ChuteBinding>();
+
+	[Tooltip( "Station mixed storage the hopper pulls from. Plain world tables are ignored." )]
+	[SerializeField]
+	MixedDisplayTableInteractable inputStorage;
+
+	[Tooltip( "Optional station mixed storage for sorted output. When set, chutes are unused; sorting stops when this is full." )]
+	[SerializeField]
+	MixedDisplayTableInteractable outputStorage;
 
 	[Tooltip( "World pose coins leave from when sorted. Null uses a child named Output, then the body face toward the chutes." )]
 	[SerializeField]
@@ -94,6 +102,7 @@ public class CoinSortingStation : MonoBehaviour
 		new Dictionary<TreasureDefinition, int>();
 	readonly HashSet<TreasureDefinition> _missingChuteLogged = new HashSet<TreasureDefinition>();
 	static readonly List<GroundCoinStack> BindStackScratch = new List<GroundCoinStack>( 16 );
+	static readonly Collider[] StationStorageOverlap = new Collider[ 64 ];
 
 	CoinSortingStationDefinition _definition;
 	GroundCoinStack _hopperStack;
@@ -112,6 +121,7 @@ public class CoinSortingStation : MonoBehaviour
 	bool _sortingClipSfxActive;
 	bool _storagePullInFlight;
 	int _pendingStoragePullCount;
+	int _pendingOutputStorageCount;
 	float _nextStoragePullTime;
 
 	public static IReadOnlyList<CoinSortingStation> ActiveStations => All;
@@ -184,7 +194,7 @@ public class CoinSortingStation : MonoBehaviour
 		get
 		{
 			CoinSortingStationDefinition def = ResolveDefinition();
-			return def != null && def.RequiresCrank( StationLevel ) && IsCrankActive;
+			return def != null && def.AllowsCrankBoost( StationLevel ) && IsCrankActive;
 		}
 	}
 
@@ -192,28 +202,55 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		get
 		{
-			return !IsCranking && _reserveSeconds > 0.0001f && BufferedCount > 0 && RequiresManualCrank();
+			return !IsCranking && _reserveSeconds > 0.0001f && BufferedCount > 0;
 		}
 	}
+
+	public bool IsUnlocked => ObjectiveUnlockGate.IsUnlockedFor( this );
 
 	public bool IsProcessing
 	{
 		get
 		{
+			if ( !IsUnlocked )
+				return false;
+
 			int level = StationLevel;
 			if ( level < 1 || BufferedCount <= 0 )
 				return false;
 
 			CoinSortingStationDefinition def = ResolveDefinition();
-			if ( def == null )
+			if ( def == null || !def.IsAutomatic( level ) )
 				return false;
 
-			if ( def.IsAutomatic( level ) )
-				return true;
-
-			return def.RequiresCrank( level ) && _reserveSeconds > 0.0001f;
+			return CanEmitToOutput();
 		}
 	}
+
+	/// <summary>
+	/// Status gauge for automatic sorters: Ready (green), Empty (red), Blocked (orange — no output room).
+	/// </summary>
+	public enum GaugeStatus
+	{
+		Empty = 0,
+		Ready = 1,
+		Blocked = 2,
+	}
+
+	public GaugeStatus ResolveGaugeStatus()
+	{
+		if ( BufferedCount <= 0 )
+			return GaugeStatus.Empty;
+		if ( !CanEmitToOutput() )
+			return GaugeStatus.Blocked;
+		return GaugeStatus.Ready;
+	}
+
+	public MixedDisplayTableInteractable InputStorage => inputStorage;
+
+	public MixedDisplayTableInteractable OutputStorage => outputStorage;
+
+	public bool UsesOutputStorage => outputStorage != null;
 
 	public CoinSortingHopper Hopper => hopper;
 
@@ -237,6 +274,7 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		ResolveDefinition();
 		ResolveChildRefs();
+		EnsureStorageRefs();
 		EnsureBodyPlacementCollider();
 		EnsureBody();
 		StripNestedRigidbodies();
@@ -262,11 +300,22 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		EnsureDefaultUpgradeLevel();
 		SyncHopperStackCapacity();
-		if ( !_isRepositioning && ObjectiveUnlockGate.IsUnlockedFor( this ) )
+		if ( !_isRepositioning && IsUnlocked )
 		{
-			TickReserve( Time.deltaTime );
+			// Automatic sorting needs no power/reserve — reserve only tracks optional crank-boost juice.
 			TickProcess( Time.deltaTime );
 			TickStoragePull();
+			if ( IsCranking )
+				TickReserve( Time.deltaTime );
+			else
+				_reserveSeconds = 0f;
+		}
+		else if ( !IsUnlocked )
+		{
+			_processAccumulator = 0f;
+			_reserveSeconds = 0f;
+			StopSortingShake();
+			StopSortingClipSfx();
 		}
 
 		TickSortingShake();
@@ -291,6 +340,58 @@ public class CoinSortingStation : MonoBehaviour
 			Debug.LogWarning( $"CoinSortingStation '{name}': MoveInteractable is missing on the prefab.", this );
 
 		EnsureSortedOutput();
+	}
+
+	void EnsureStorageRefs()
+	{
+		if ( inputStorage == null )
+		{
+			Transform named = transform.Find( "InputStorage" );
+			if ( named != null )
+				inputStorage = named.GetComponentInChildren<MixedDisplayTableInteractable>( true );
+		}
+
+		if ( outputStorage == null )
+		{
+			Transform named = transform.Find( "OutputStorage" );
+			if ( named != null )
+				outputStorage = named.GetComponentInChildren<MixedDisplayTableInteractable>( true );
+		}
+
+		if ( inputStorage == null || outputStorage == null )
+		{
+			MixedDisplayTableInteractable[] tables = GetComponentsInChildren<MixedDisplayTableInteractable>( true );
+			for ( int i = 0; i < tables.Length; i++ )
+			{
+				MixedDisplayTableInteractable table = tables[ i ];
+				if ( table == null )
+					continue;
+
+				string n = table.name;
+				if ( inputStorage == null
+					&& ( n.IndexOf( "Input", System.StringComparison.OrdinalIgnoreCase ) >= 0
+						|| n.IndexOf( "Intake", System.StringComparison.OrdinalIgnoreCase ) >= 0 ) )
+				{
+					inputStorage = table;
+				}
+				else if ( outputStorage == null
+					&& ( n.IndexOf( "Output", System.StringComparison.OrdinalIgnoreCase ) >= 0
+						|| n.IndexOf( "Outake", System.StringComparison.OrdinalIgnoreCase ) >= 0
+						|| n.IndexOf( "Outtake", System.StringComparison.OrdinalIgnoreCase ) >= 0 ) )
+				{
+					outputStorage = table;
+				}
+			}
+
+			// Single child station table defaults to input when nothing named.
+			if ( inputStorage == null && outputStorage == null && tables.Length == 1 )
+				inputStorage = tables[ 0 ];
+		}
+
+		if ( inputStorage != null )
+			inputStorage.ConfigureAsStationStorage();
+		if ( outputStorage != null )
+			outputStorage.ConfigureAsStationStorage();
 	}
 
 	Rigidbody EnsureBody()
@@ -351,10 +452,37 @@ public class CoinSortingStation : MonoBehaviour
 			onSortingClipSfxFeedback.Initialize();
 	}
 
-	bool RequiresManualCrank()
+	bool AllowsCrankBoost()
 	{
 		CoinSortingStationDefinition def = ResolveDefinition();
-		return def != null && def.RequiresCrank( StationLevel );
+		return def != null && def.AllowsCrankBoost( StationLevel );
+	}
+
+	bool CanEmitToOutput()
+	{
+		if ( outputStorage == null )
+			return true;
+		if ( !outputStorage.isActiveAndEnabled || !outputStorage.IsStationStorage )
+			return false;
+
+		GroundCoinStack hopperStack = _hopperStack != null ? _hopperStack : EnsureHopperStack();
+		if ( hopperStack == null || hopperStack.Count <= 0 )
+			return false;
+		if ( !hopperStack.TryPeekBottomDefinition( out TreasureDefinition next ) || next == null )
+			return false;
+
+		return CanAcceptOutputCoin( next );
+	}
+
+	bool CanAcceptOutputCoin( TreasureDefinition definition )
+	{
+		if ( definition == null )
+			return false;
+		if ( outputStorage == null )
+			return true;
+		if ( !outputStorage.isActiveAndEnabled )
+			return false;
+		return outputStorage.CanAcceptSortedCoin( definition );
 	}
 
 	public void BeginRepositioning()
@@ -1019,7 +1147,7 @@ public class CoinSortingStation : MonoBehaviour
 
 	public void NotifyCrankClick()
 	{
-		if ( _isRepositioning || !RequiresManualCrank() )
+		if ( _isRepositioning || !AllowsCrankBoost() )
 			return;
 
 		if ( onCrankClickFeedback != null )
@@ -1135,7 +1263,7 @@ public class CoinSortingStation : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Consumes fitting coin defs from carry, flies the stack cylinder into the hopper, then appends.
+	/// Consumes fitting coin defs from carry, flies the whole stack cylinder into the hopper, then appends.
 	/// </summary>
 	public bool TryDumpCarryIntoHopperAnimated( PlayerCarry carry )
 	{
@@ -1239,7 +1367,11 @@ public class CoinSortingStation : MonoBehaviour
 			return false;
 
 		GroundCoinStack stack = EnsureHopperStack();
-		return stack.TryAbsorbLooseImmediate( item );
+		if ( stack == null || !stack.CanAccept( item.Definition ) )
+			return false;
+
+		stack.BeginAppendFlight( item, stack.transform.rotation, playerDirected: false );
+		return true;
 	}
 
 	public bool TryAbsorbStack( GroundCoinStack stack )
@@ -1281,6 +1413,8 @@ public class CoinSortingStation : MonoBehaviour
 		CoinSortingStationDefinition def = ResolveDefinition();
 		if ( def == null || !def.autoPullFromNearbyStorage )
 			return;
+		if ( def.storagePullSources == CoinSortingStoragePullSources.None )
+			return;
 
 		if ( Time.time < _nextStoragePullTime )
 			return;
@@ -1298,13 +1432,35 @@ public class CoinSortingStation : MonoBehaviour
 		if ( room <= 0 )
 			return false;
 
+		bool allowGround = def.AllowsStoragePullSource( CoinSortingStoragePullSources.GroundStacks );
+		bool allowStationMixed = def.AllowsStoragePullSource( CoinSortingStoragePullSources.StationMixedStorage );
+		if ( !allowGround && !allowStationMixed )
+			return false;
+
+		float duration = Mathf.Max( 0.05f, def.storagePullFlightDuration );
+
+		if ( allowStationMixed )
+		{
+			MixedDisplayTableInteractable table = ResolvePullStationStorage( origin, radius );
+			if ( table != null
+				&& table.TryFindPullableCoinStack( origin, room, out int slotIndex, out int coinCount, out _ )
+				&& coinCount > 0
+				&& BeginPullMixedStorageStack( table, slotIndex, coinCount, duration ) )
+			{
+				return true;
+			}
+		}
+
+		if ( !allowGround )
+			return false;
+
 		GroundCoinStack bestGround = null;
 		float bestGroundSq = radiusSq;
 		IReadOnlyList<GroundCoinStack> stacks = GroundCoinStack.ActiveStacks;
 		for ( int i = 0; i < stacks.Count; i++ )
 		{
 			GroundCoinStack stack = stacks[ i ];
-			if ( !IsPullableGroundStack( stack ) || stack.Count > room )
+			if ( !IsPullableGroundStack( stack ) || stack.Count <= 0 )
 				continue;
 
 			Vector3 delta = stack.ContactPosition - origin;
@@ -1316,18 +1472,75 @@ public class CoinSortingStation : MonoBehaviour
 			bestGround = stack;
 		}
 
-		MixedDisplayTableInteractable bestTable = null;
-		int bestTableSlot = -1;
-		int bestTableCount = 0;
-		float bestTableSq = radiusSq;
-		FindNearestMixedStorageCoinStack( origin, radius, room, ref bestTable, ref bestTableSlot, ref bestTableCount, ref bestTableSq );
+		if ( bestGround != null )
+			return BeginPullGroundStackPartial( bestGround, room, duration );
+		return false;
+	}
 
-		bool preferGround = bestGround != null && ( bestTable == null || bestGroundSq <= bestTableSq );
-		float duration = Mathf.Max( 0.05f, def.storagePullFlightDuration );
-		if ( preferGround )
-			return BeginPullGroundStack( bestGround, duration );
-		if ( bestTable != null && bestTableSlot >= 0 )
-			return BeginPullMixedStorageStack( bestTable, bestTableSlot, bestTableCount, duration );
+	MixedDisplayTableInteractable ResolvePullStationStorage( Vector3 origin, float radius )
+	{
+		EnsureStorageRefs();
+		if ( inputStorage != null && inputStorage.isActiveAndEnabled )
+		{
+			inputStorage.ConfigureAsStationStorage();
+			return inputStorage;
+		}
+
+		float bestSq = radius * radius;
+		MixedDisplayTableInteractable best = null;
+		int hits = Physics.OverlapSphereNonAlloc(
+			origin,
+			radius,
+			StationStorageOverlap,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Collide );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider col = StationStorageOverlap[ i ];
+			if ( col == null )
+				continue;
+
+			MixedDisplayTableInteractable table = col.GetComponentInParent<MixedDisplayTableInteractable>();
+			if ( !IsEligibleStationPullSource( table ) )
+				continue;
+
+			Vector3 delta = table.transform.position - origin;
+			float sq = delta.x * delta.x + delta.z * delta.z;
+			if ( sq > bestSq )
+				continue;
+
+			bestSq = sq;
+			best = table;
+		}
+
+		if ( best != null )
+		{
+			best.ConfigureAsStationStorage();
+			if ( inputStorage == null )
+				inputStorage = best;
+		}
+
+		return best;
+	}
+
+	bool IsEligibleStationPullSource( MixedDisplayTableInteractable table )
+	{
+		if ( table == null || !table.isActiveAndEnabled )
+			return false;
+		if ( table == outputStorage )
+			return false;
+
+		CoinSortingStation ownerSorter = table.GetComponentInParent<CoinSortingStation>();
+		if ( ownerSorter != null && ownerSorter != this && ownerSorter.OutputStorage == table )
+			return false;
+
+		if ( table.IsStationStorage )
+			return true;
+		if ( table.GetComponentInParent<MinecartStationBase>() != null )
+			return true;
+		if ( ownerSorter == this )
+			return true;
 		return false;
 	}
 
@@ -1352,49 +1565,15 @@ public class CoinSortingStation : MonoBehaviour
 		return true;
 	}
 
-	void FindNearestMixedStorageCoinStack(
-		Vector3 origin,
-		float radius,
-		int room,
-		ref MixedDisplayTableInteractable bestTable,
-		ref int bestSlot,
-		ref int bestCount,
-		ref float bestSq )
+	bool BeginPullGroundStackPartial( GroundCoinStack stack, int maxCount, float duration )
 	{
-		int hits = Physics.OverlapSphereNonAlloc(
-			origin,
-			radius,
-			StoragePullOverlap,
-			Physics.DefaultRaycastLayers,
-			QueryTriggerInteraction.Collide );
-
-		for ( int i = 0; i < hits; i++ )
-		{
-			Collider col = StoragePullOverlap[ i ];
-			if ( col == null || IsOwnCollider( col ) )
-				continue;
-
-			MixedDisplayTableInteractable table = col.GetComponentInParent<MixedDisplayTableInteractable>();
-			if ( table == null || !table.isActiveAndEnabled )
-				continue;
-
-			if ( !table.TryFindPullableCoinStack( origin, room, out int slotIndex, out int coinCount, out float distSq ) )
-				continue;
-			if ( distSq > bestSq )
-				continue;
-
-			bestSq = distSq;
-			bestTable = table;
-			bestSlot = slotIndex;
-			bestCount = coinCount;
-		}
-	}
-
-	bool BeginPullGroundStack( GroundCoinStack stack, float duration )
-	{
-		if ( !IsPullableGroundStack( stack ) || !HasRoomFor( stack.Count ) )
+		if ( !IsPullableGroundStack( stack ) || maxCount <= 0 )
 			return false;
 		if ( EnsureHopperStack() == null )
+			return false;
+
+		int take = Mathf.Min( stack.Count, maxCount );
+		if ( take <= 0 || !HasRoomFor( take ) )
 			return false;
 
 		Vector3 startPos = stack.ContactPosition;
@@ -1402,10 +1581,25 @@ public class CoinSortingStation : MonoBehaviour
 		float seed = stack.VariationSeed;
 
 		StoragePullScratch.Clear();
-		if ( !stack.TryConsumeAllDefinitions( StoragePullScratch ) || StoragePullScratch.Count == 0 )
+		if ( take >= stack.Count )
 		{
-			StoragePullScratch.Clear();
-			return false;
+			if ( !stack.TryConsumeAllDefinitions( StoragePullScratch ) || StoragePullScratch.Count == 0 )
+			{
+				StoragePullScratch.Clear();
+				return false;
+			}
+		}
+		else
+		{
+			for ( int i = 0; i < take; i++ )
+			{
+				if ( !stack.TryConsumeBottomDefinition( out TreasureDefinition def ) || def == null )
+					break;
+				StoragePullScratch.Add( def );
+			}
+
+			if ( StoragePullScratch.Count == 0 )
+				return false;
 		}
 
 		return BeginStoragePullFlight( StoragePullScratch, startPos, startRot, seed, duration );
@@ -1417,11 +1611,12 @@ public class CoinSortingStation : MonoBehaviour
 		int expectedCount,
 		float duration )
 	{
-		if ( table == null || slotIndex < 0 || expectedCount <= 0 || !HasRoomFor( expectedCount ) )
+		int take = Mathf.Min( expectedCount, RemainingCapacity );
+		if ( table == null || slotIndex < 0 || take <= 0 )
 			return false;
 
 		StoragePullScratch.Clear();
-		if ( !table.TryConsumeSlotDefinitions( slotIndex, StoragePullScratch, out Vector3 startPos, out Quaternion startRot, int.MaxValue )
+		if ( !table.TryConsumeSlotDefinitions( slotIndex, StoragePullScratch, out Vector3 startPos, out Quaternion startRot, take )
 			|| StoragePullScratch.Count == 0 )
 		{
 			StoragePullScratch.Clear();
@@ -1430,7 +1625,6 @@ public class CoinSortingStation : MonoBehaviour
 
 		if ( !HasRoomFor( StoragePullScratch.Count ) )
 		{
-			// Put the stack back if capacity changed between find and consume.
 			table.TryAppendSlotDefinitions( slotIndex, StoragePullScratch );
 			StoragePullScratch.Clear();
 			return false;
@@ -1439,7 +1633,7 @@ public class CoinSortingStation : MonoBehaviour
 		float seed = 1f;
 		TreasureDefinition first = StoragePullScratch[ 0 ];
 		if ( first != null )
-			seed = Mathf.Abs( first.GetInstanceID() % 1000 ) * 0.001f + 1f;
+			seed = Mathf.Abs( first.GetEntityId().GetHashCode() % 1000 ) * 0.001f + 1f;
 
 		return BeginStoragePullFlight( StoragePullScratch, startPos, startRot, seed, duration );
 	}
@@ -1465,19 +1659,14 @@ public class CoinSortingStation : MonoBehaviour
 
 		_storagePullInFlight = true;
 		_pendingStoragePullCount += flying.Count;
-
-		Vector3 endPos = hopperStack.ContactPosition + Vector3.up * hopperStack.SettledHeight;
-		Quaternion endRot = hopperStack.transform.rotation;
 		int pulled = flying.Count;
 
-		CoinStackFlight.FlyToWorld(
+		CoinSequentialPlace.IntoStack(
+			hopperStack,
 			flying,
 			startPos,
 			startRot,
-			seed,
-			endPos,
-			endRot,
-			duration,
+			playerDirected: false,
 			() => CompleteStoragePullFlight( hopperStack, flying, pulled ) );
 
 		return true;
@@ -1496,9 +1685,7 @@ public class CoinSortingStation : MonoBehaviour
 		if ( hopperStack == null )
 			return;
 
-		hopperStack.TryAppendDefinitions( flying );
 		PlayHopperCoinPlaceFeedback( hopperStack, flying );
-		CoinStackInteractSfx.PlayStackPlace( hopperStack.ContactPosition + Vector3.up * hopperStack.SettledHeight );
 		PublishHopperLoaded( flying.Count );
 	}
 
@@ -1508,7 +1695,7 @@ public class CoinSortingStation : MonoBehaviour
 			return;
 
 		CoinSortingStationDefinition def = ResolveDefinition();
-		if ( def == null || !def.RequiresCrank( StationLevel ) )
+		if ( def == null || !def.AllowsCrankBoost( StationLevel ) )
 		{
 			_reserveSeconds = 0f;
 			_reserveWasFull = false;
@@ -1525,13 +1712,13 @@ public class CoinSortingStation : MonoBehaviour
 				PlayGaugeFullFeedback();
 			_reserveWasFull = nowFull;
 		}
-		else if ( _reserveSeconds < max * 0.98f )
+		else
 		{
-			_reserveWasFull = false;
-		}
-
-		if ( IsProcessing )
+			if ( _reserveSeconds < max * 0.98f )
+				_reserveWasFull = false;
+			// Gauge drains when not cranking (visual only; sorting stays automatic).
 			_reserveSeconds = Mathf.Max( 0f, _reserveSeconds - dt );
+		}
 	}
 
 	void TickSortingShake()
@@ -1605,8 +1792,8 @@ public class CoinSortingStation : MonoBehaviour
 
 		CoinSortingStationDefinition def = ResolveDefinition();
 		float rate = def != null
-			? def.ResolveCoinsPerSecond( StationLevel )
-			: 4f;
+			? def.ResolveCoinsPerSecond( StationLevel, IsCranking )
+			: ( IsCranking ? 4f : 2f );
 
 		_processAccumulator += rate * dt;
 		GroundCoinStack hopperStack = EnsureHopperStack();
@@ -1653,33 +1840,41 @@ public class CoinSortingStation : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Remaining sort-seconds and gauge color for the on-machine world timer.
-	/// L1 shows crank reserve; automatic shows hopper time at the current process rate.
+	/// Remaining hopper sort-seconds and gauge color for the on-machine world timer.
+	/// Uses the current rate (manual while cranking, automatic otherwise).
 	/// </summary>
 	public bool TryGetWorldTimerDisplay( out float seconds, out Color color )
 	{
 		seconds = 0f;
 		color = Color.white;
 
+		if ( !IsUnlocked )
+			return false;
+
 		CoinSortingStationDefinition def = ResolveDefinition();
 		if ( def == null )
 			return false;
 
 		int level = StationLevel;
-		if ( def.RequiresCrank( level ) )
-		{
-			seconds = _reserveSeconds;
-			color = def.EvaluateGaugeColor( ReserveNormalized );
-			return true;
-		}
-
 		if ( !def.IsAutomatic( level ) || BufferedCount <= 0 )
 			return false;
 
-		float rate = def.ResolveCoinsPerSecond( level );
+		float rate = def.ResolveCoinsPerSecond( level, IsCranking );
 		seconds = BufferedCount / Mathf.Max( 0.01f, rate );
-		int capacity = Mathf.Max( 1, HopperCapacity );
-		color = def.EvaluateGaugeColor( Mathf.Clamp01( (float)BufferedCount / capacity ) );
+		GaugeStatus status = ResolveGaugeStatus();
+		switch ( status )
+		{
+			case GaugeStatus.Ready:
+				color = def.gaugeFullColor;
+				break;
+			case GaugeStatus.Blocked:
+				color = def.gaugeMidColor;
+				break;
+			default:
+				color = def.gaugeEmptyColor;
+				break;
+		}
+
 		return true;
 	}
 
@@ -1703,6 +1898,70 @@ public class CoinSortingStation : MonoBehaviour
 		if ( definition == null )
 			return false;
 
+		if ( outputStorage != null )
+			return EmitOneToOutputStorage( definition );
+
+		return EmitOneToChute( definition );
+	}
+
+	bool EmitOneToOutputStorage( TreasureDefinition definition )
+	{
+		if ( !CanAcceptOutputCoin( definition ) )
+			return false;
+
+		if ( !outputStorage.TryGetSortedCoinAcceptPose( definition, out Vector3 endPos, out Quaternion endRot, out _ ) )
+			return false;
+
+		Transform chuteHint = FindChute( definition );
+		Vector3 startPos = ResolveSortedOutputWorldPos( chuteHint );
+		Quaternion startRot = ResolveSortedOutputWorldRot();
+
+		CoinSortingStationDefinition def = ResolveDefinition();
+		float duration = def != null ? Mathf.Max( 0.05f, def.sortedCoinFlightDuration ) : 0.28f;
+		float arcHeight = def != null ? Mathf.Max( 0f, def.sortedCoinFlightArcHeight ) : 0.35f;
+
+		_pendingOutputStorageCount++;
+		TreasureDefinition captureDef = definition;
+		MixedDisplayTableInteractable captureStorage = outputStorage;
+		TreasureMotionHost.Run( FlySortedCoinRoutine(
+			captureDef,
+			startPos,
+			startRot,
+			endPos,
+			endRot,
+			duration,
+			arcHeight,
+			() => CompleteSortedStorageFlight( captureStorage, captureDef ) ) );
+
+		EventBus.Publish( new CoinSorterUsedEvent
+		{
+			Station = this,
+			Coin = definition
+		} );
+
+		PlaySortedFeedback();
+		return true;
+	}
+
+	void CompleteSortedStorageFlight( MixedDisplayTableInteractable storage, TreasureDefinition definition )
+	{
+		_pendingOutputStorageCount = Mathf.Max( 0, _pendingOutputStorageCount - 1 );
+		if ( definition == null )
+			return;
+
+		if ( storage != null && storage.TryAcceptSortedDefinition( definition ) )
+			return;
+
+		// Fallback: table filled during flight — drop a world coin at the sorted output.
+		Vector3 pos = ResolveSortedOutputWorldPos( null );
+		Quaternion rot = ResolveSortedOutputWorldRot();
+		TreasureItem item = TreasureItemFactory.SpawnFallback( definition, pos, rot, null );
+		if ( item != null )
+			item.EnterPhysics( pos, rot );
+	}
+
+	bool EmitOneToChute( TreasureDefinition definition )
+	{
 		Transform chute = FindChute( definition );
 		if ( chute == null )
 		{
@@ -2100,6 +2359,20 @@ public class CoinSortingStation : MonoBehaviour
 	public void EditorSetSortedOutput( Transform value )
 	{
 		sortedOutput = value;
+	}
+
+	public void EditorSetInputStorage( MixedDisplayTableInteractable value )
+	{
+		inputStorage = value;
+		if ( inputStorage != null )
+			inputStorage.ConfigureAsStationStorage();
+	}
+
+	public void EditorSetOutputStorage( MixedDisplayTableInteractable value )
+	{
+		outputStorage = value;
+		if ( outputStorage != null )
+			outputStorage.ConfigureAsStationStorage();
 	}
 #endif
 

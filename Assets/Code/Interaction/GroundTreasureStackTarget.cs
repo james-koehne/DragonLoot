@@ -11,8 +11,8 @@ using UnityEngine;
 public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 {
 	static readonly List<TreasureItem> SupportBuffer = new List<TreasureItem>();
-	static readonly Dictionary<int, float> PendingHeightByBottomId = new Dictionary<int, float>();
-	static int _previewBottomId;
+	static readonly Dictionary<EntityId, float> PendingHeightByBottomId = new Dictionary<EntityId, float>();
+	static EntityId _previewBottomId;
 	static float _previewReservedHeight;
 
 	/// <summary>
@@ -23,7 +23,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( columnBottom == null )
 			return 0f;
 
-		int id = columnBottom.GetInstanceID();
+		EntityId id = columnBottom.GetEntityId();
 		float height = 0f;
 		if ( PendingHeightByBottomId.TryGetValue( id, out float inFlight ) )
 			height += inFlight;
@@ -43,13 +43,13 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( columnBottom == null || height <= 0.0001f )
 			return;
 
-		_previewBottomId = columnBottom.GetInstanceID();
+		_previewBottomId = columnBottom.GetEntityId();
 		_previewReservedHeight = height;
 	}
 
 	public static void ClearPreviewReservation()
 	{
-		_previewBottomId = 0;
+		_previewBottomId = EntityId.None;
 		_previewReservedHeight = 0f;
 	}
 
@@ -362,7 +362,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( bottom == null || height <= 0.0001f )
 			return;
 
-		int id = bottom.GetInstanceID();
+		EntityId id = bottom.GetEntityId();
 		PendingHeightByBottomId.TryGetValue( id, out float current );
 		PendingHeightByBottomId[ id ] = current + height;
 	}
@@ -372,7 +372,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		if ( bottom == null || height <= 0.0001f )
 			return;
 
-		int id = bottom.GetInstanceID();
+		EntityId id = bottom.GetEntityId();
 		if ( !PendingHeightByBottomId.TryGetValue( id, out float current ) )
 			return;
 

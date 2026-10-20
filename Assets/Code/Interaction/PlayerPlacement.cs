@@ -155,7 +155,7 @@ public class PlayerPlacement : MonoBehaviour
 
 	static readonly Collider[] StackSnapOverlap = new Collider[ 48 ];
 	static readonly RaycastHit[] ConstellationRayHits = new RaycastHit[ 32 ];
-	static readonly HashSet<int> StackSnapColumnIds = new HashSet<int>();
+	static readonly HashSet<EntityId> StackSnapColumnIds = new HashSet<EntityId>();
 	static readonly List<TreasureItem> StackSnapColumnBuffer = new List<TreasureItem>( 32 );
 
 	public void Setup( PlayerController player, PlayerInteraction interaction )
@@ -348,7 +348,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( preview.GhostStyle == PlacementGhostStyle.Suppressed )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 			if ( _ghost != null )
 				_ghost.SetVisible( false );
 			return;
@@ -371,7 +371,7 @@ public class PlayerPlacement : MonoBehaviour
 		else if ( UsesWholeMeshPlacementOutline( target ) )
 			UpdatePlacementTargetOutline( target, preview.IsValid );
 		else
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 	}
 
 	static bool IsStackJoinTarget( ITreasurePlacementTarget target )
@@ -467,7 +467,7 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( renderers.Count == 0 )
 		{
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
+			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 			return;
 		}
 
@@ -475,7 +475,7 @@ public class PlayerPlacement : MonoBehaviour
 			HoverOutlineRegistrar.Owner.StackVolume,
 			renderers,
 			settings,
-			GetInstanceID() );
+			GetEntityId() );
 	}
 
 	HoverOutlineVisualSettings ResolveStackOutlineSettings( bool valid, bool join )
@@ -1956,7 +1956,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !TryGetLooseStackColumnBottom( item, held, out TreasureItem columnBottom ) )
 			return false;
 
-		int id = columnBottom.GetInstanceID();
+		EntityId id = columnBottom.GetEntityId();
 		if ( !StackSnapColumnIds.Add( id ) )
 			return false;
 
@@ -2113,7 +2113,7 @@ public class PlayerPlacement : MonoBehaviour
 		_hasPreview = false;
 		_activePreview = default;
 		_hasSmoothedPreview = false;
-		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetInstanceID() );
+		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
 	}

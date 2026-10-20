@@ -33,7 +33,9 @@ public enum TutorialTriggerType
 	/// <summary>Show while holdingCategory's pouch has items but is not the selected pouch.</summary>
 	UnselectedHoldingCategory = 21,
 	/// <summary>Show after the player has interacted with the world hammer prop (sticky until tutorial completes).</summary>
-	InteractWorldHammer = 22
+	InteractWorldHammer = 22,
+	/// <summary>Show after the objective id in volumeId completes (sticky until tutorial completes).</summary>
+	ObjectiveCompleted = 23
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -85,7 +87,9 @@ public enum TutorialTaskCompleteType
 	/// <summary>Player completed any buildable structure.</summary>
 	CompleteBuildable = 34,
 	/// <summary>Player placed treasure onto a mixed display / workshop storage table.</summary>
-	PlaceMixedStorage = 35
+	PlaceMixedStorage = 35,
+	/// <summary>Player placed treasure onto a specific mixed table. completeVolumeId = table persistence id.</summary>
+	PlaceMixedStorageOnTarget = 36
 }
 
 [Serializable]
@@ -100,7 +104,7 @@ public class TutorialTask
 
 	public TutorialTaskCompleteType completeTrigger;
 
-	[Tooltip( "When completeTrigger is EnterVolume: volume id that completes this task." )]
+	[Tooltip( "When completeTrigger is EnterVolume: volume id. When PlaceMixedStorageOnTarget: mixed table persistence id." )]
 	public string completeVolumeId;
 
 	[Tooltip( "When > 1, this task needs this many matching actions. Label shows current/required (e.g. 3/10). 0 or 1 = complete on the first match." )]
@@ -129,7 +133,7 @@ public class TutorialDefinition : ScriptableObject
 	[Tooltip( "When trigger is HoldingCategory: Active item in the selected pouch must match. When UnselectedHoldingCategory: that pouch has items but is not selected. Also used by SelectHoldingCategory tasks." )]
 	public TreasureCategory holdingCategory;
 
-	[Tooltip( "Volume id when trigger is EnterVolume, or optional fallback volume for any trigger." )]
+	[Tooltip( "Volume id when trigger is EnterVolume, objective id when trigger is ObjectiveCompleted, or optional fallback volume for any trigger." )]
 	public string volumeId;
 
 	[Tooltip( "When set, being inside this volume also counts as active show context (OR with primary trigger)." )]

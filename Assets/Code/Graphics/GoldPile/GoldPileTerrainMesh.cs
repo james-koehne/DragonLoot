@@ -30,8 +30,11 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	const HideFlags RuntimeMeshHideFlags = HideFlags.HideAndDontSave;
 	/// <summary>Emit a visual triangle only when all three corners are above ground (no ~0-height faces).</summary>
 	const int MinAboveCornersPerTriangle = 3;
-	/// <summary>Drop 4-connected above-ground components smaller than this many verts (stray islands).</summary>
-	const int MinIslandCells = 24;
+	/// <summary>
+	/// Drop only micro noise islands. Larger detached lobes stay visible so loot densify can
+	/// emit their last coin — a high threshold was silently eating multi-coin edge rings.
+	/// </summary>
+	const int MinIslandCells = 3;
 
 	[SerializeField]
 	[Min( 8 )]
@@ -744,9 +747,6 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 		bool[] emit = _vertEmitAboveGround;
 		for ( int i = 0; i < vertCount; i++ )
 			emit[ i ] = raw[ i ];
-
-		if ( MinIslandCells <= 1 )
-			return;
 
 		int resX = _visualResolutionX;
 		int resZ = _visualResolutionZ;

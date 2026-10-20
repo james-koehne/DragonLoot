@@ -175,7 +175,7 @@ public class TreasureGroundCoverageZone : MonoBehaviour
 
 		remaining += WorldTreasureStreamer.CountHiddenGoldBarsInBounds( bounds );
 
-		TreasureItem[] items = Object.FindObjectsByType<TreasureItem>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+		TreasureItem[] items = Object.FindObjectsByType<TreasureItem>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < items.Length; i++ )
 		{
 			TreasureItem item = items[ i ];
@@ -223,7 +223,7 @@ public class TreasureGroundCoverageZone : MonoBehaviour
 	{
 		if ( layoutSeed != 0 )
 			return layoutSeed;
-		return Mathf.Abs( GetInstanceID() );
+		return Mathf.Abs( GetEntityId().GetHashCode() );
 	}
 
 	public TreasureGroundCoveragePlacement.Request BuildPlacementRequest()

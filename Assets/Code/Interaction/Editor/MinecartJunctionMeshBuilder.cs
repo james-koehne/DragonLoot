@@ -470,7 +470,7 @@ public static class MinecartJunctionMeshBuilder
 				angleA = entryFrom.angle,
 				angleB = entryTo.angle,
 				meshable = true,
-				label = $"Through {a.track.name}"
+				label = MinecartJunctionCornerOption.FormatThroughLabel( a.track )
 			} );
 		}
 
@@ -526,14 +526,14 @@ public static class MinecartJunctionMeshBuilder
 				angleA = Mathf.Atan2( ( startPos - junction.worldPosition ).x, ( startPos - junction.worldPosition ).z ),
 				angleB = Mathf.Atan2( ( endPos - junction.worldPosition ).x, ( endPos - junction.worldPosition ).z ),
 				meshable = true,
-				label = $"Through {track.name}"
+				label = MinecartJunctionCornerOption.FormatThroughLabel( track )
 			} );
 		}
 	}
 
 	static string ThroughPortKey( MinecartTrack track, int portIndex )
 	{
-		int id = track != null ? track.GetInstanceID() : 0;
+		EntityId id = track != null ? track.GetEntityId() : EntityId.None;
 		return id.ToString() + ":" + portIndex.ToString();
 	}
 
@@ -611,8 +611,6 @@ public static class MinecartJunctionMeshBuilder
 				if ( inB.sqrMagnitude > 0.0001f )
 					end -= inB.normalized * pad;
 
-				string nameA = a.track.name;
-				string nameB = b.track.name;
 				into.Add( new ThroughCandidate
 				{
 					sameTrack = false,
@@ -626,7 +624,7 @@ public static class MinecartJunctionMeshBuilder
 					angleA = a.angle,
 					angleB = b.angle,
 					meshable = true,
-					label = $"Through {nameA} ↔ {nameB}"
+					label = MinecartJunctionCornerOption.FormatThroughLabel( a.track ) + " ↔ " + ( b.track != null ? b.track.name : "?" )
 				} );
 			}
 		}
@@ -718,7 +716,8 @@ public static class MinecartJunctionMeshBuilder
 
 			next.Add( new MinecartJunctionCornerOption
 			{
-				label = c.label,
+				label = string.IsNullOrEmpty( c.label ) ? MinecartJunctionCornerOption.FormatThroughLabel( trackA ) : c.label,
+				kind = MinecartJunctionConnectionKind.Through,
 				trackA = trackA,
 				trackB = trackB,
 				angleA = c.angleA,
@@ -1028,9 +1027,7 @@ public static class MinecartJunctionMeshBuilder
 		bool tooSharp = cornerAngle > 0.01f && cornerAngle < graph.MinCornerAngleDegrees;
 		bool meshable = !tooShort && !tooSharp && hasControl;
 
-		string trackAName = a.track != null ? a.track.name : "?";
-		string trackBName = b.track != null ? b.track.name : "?";
-		string label = $"{trackAName} ↔ {trackBName} ({cornerAngle:0}°)";
+		string label = MinecartJunctionCornerOption.FormatTurnLabel( a.track, b.track, cornerAngle );
 		if ( tooShort )
 			label += " [short]";
 		else if ( tooSharp )
@@ -1170,7 +1167,10 @@ public static class MinecartJunctionMeshBuilder
 
 			next.Add( new MinecartJunctionCornerOption
 			{
-				label = c.label,
+				label = string.IsNullOrEmpty( c.label )
+					? MinecartJunctionCornerOption.FormatTurnLabel( c.entryA.track, c.entryB.track, c.cornerAngleDegrees )
+					: c.label,
+				kind = MinecartJunctionConnectionKind.Turn,
 				trackA = c.entryA.track,
 				trackB = c.entryB.track,
 				angleA = c.entryA.angle,

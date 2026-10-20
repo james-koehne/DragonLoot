@@ -153,7 +153,7 @@ public class WorldEventDefinitionEditor : Editor
 	static CinematicPresentationController FindControllerInOpenScenes( string presentationId )
 	{
 		CinematicPresentationController[] controllers =
-			Object.FindObjectsByType<CinematicPresentationController>( FindObjectsInactive.Exclude, FindObjectsSortMode.None );
+			Object.FindObjectsByType<CinematicPresentationController>( FindObjectsInactive.Exclude );
 		for ( int i = 0; i < controllers.Length; i++ )
 		{
 			CinematicPresentationController controller = controllers[ i ];

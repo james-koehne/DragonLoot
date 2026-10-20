@@ -18,7 +18,7 @@ Mesh:
     vertexCount: 8
     localAABB:
       m_Center: {x: 0, y: 0.04, z: 0}
-      m_Extent: {x: 3.8713202, y: 0.04, z: 3.8713202}
+      m_Extent: {x: 3.3474689, y: 0.04, z: 3.3474689}
   m_Shapes:
     vertices: []
     shapes: []
@@ -32,10 +32,10 @@ Mesh:
     m_Data: 
   m_MeshCompression: 0
   m_IsReadable: 1
-  m_KeepVertices: 1
-  m_KeepIndices: 1
+  m_KeepVertices: 0
+  m_KeepIndices: 0
   m_IndexFormat: 0
-  m_IndexBuffer: 000003000200000002000100040005000600040006000700000001000500000005000400010002000600010006000500020003000700020007000600030000000400030004000700
+  m_IndexBuffer: 000003000200000002000100040005000600040006000700000001000500000005000400010002000600010006000500020003000700020007000600030000000400030004000700y
   m_VertexData:
     serializedVersion: 3
     m_VertexCount: 8
@@ -97,7 +97,7 @@ Mesh:
       format: 0
       dimension: 0
     m_DataSize: 192
-    _typelessdata: b6c377c000000000b6c377c04d46a9bba0fb7fbf4d4629bcb6c3774000000000b6c377c0a23da93c85ee7fbfa23d29bcb6c377400ad7a33db6c377c04d46a93ba0fb7f3f4d4629bcb6c377c00ad7a33db6c377c0a23da9bc85ee7f3fa23d29bcb6c377c000000000b6c37740b336a9bc08e47fbfb336a93cb6c3774000000000b6c377400a48a93b40fe7fbf0a48a93bb6c377400ad7a33db6c37740b336a93c08e47f3fb336a93cb6c377c00ad7a33db6c377400a48a9bb40fe7f3f0a48a93b
+    _typelessdata: ee3c56c000000000ee3c56c0a4c2c3bb28fa7fbfa4c243bcee3c564000000000ee3c56c03ab5c33c9de87fbf3ab543bcee3c56400ad7a33dee3c56c0a4c2c33b28fa7f3fa4c243bcee3c56c00ad7a33dee3c56c03ab5c3bc9de87f3f3ab543bcee3c56c000000000ee3c564082aac3bc9ada7fbf82aac33cee3c564000000000ee3c564053c5c33baafd7fbf53c5c33bee3c56400ad7a33dee3c564082aac33c9ada7f3f82aac33cee3c56c00ad7a33dee3c564053c5c3bbaafd7f3f53c5c33b
   m_CompressedMesh:
     m_Vertices:
       m_NumItems: 0
@@ -152,9 +152,10 @@ Mesh:
     m_UVInfo: 0
   m_LocalAABB:
     m_Center: {x: 0, y: 0.04, z: 0}
-    m_Extent: {x: 3.8713202, y: 0.04, z: 3.8713202}
-  m_MeshUsageFlags: 0
+    m_Extent: {x: 3.3474689, y: 0.04, z: 3.3474689}
   m_CookingOptions: 30
+  m_PreBakeConvexCollisionMesh: 0
+  m_PreBakeTriangleCollisionMesh: 0
   m_BakedConvexCollisionMesh: 
   m_BakedTriangleCollisionMesh: 
   'm_MeshMetrics[0]': 1

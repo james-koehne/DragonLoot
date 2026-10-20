@@ -465,6 +465,9 @@ public static class MinecartStationPrefabBuilder
 			Feedbacks onArrive = EnsureFeedbackChild( root.transform, "OnArriveFeedbacks" );
 			Feedbacks onIdle = EnsureFeedbackChild( root.transform, "OnIdleFeedbacks" );
 
+			if ( storage != null )
+				storage.ConfigureAsStationStorage();
+
 			MinecartStationBase stationBase = station as MinecartStationBase;
 			if ( stationBase != null )
 			{

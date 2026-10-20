@@ -13,10 +13,12 @@ MonoBehaviour:
   m_Name: CoinSortingStationDefinition
   m_EditorClassIdentifier: Assembly-CSharp::CoinSortingStationDefinition
   upgradeId: coin_sorting_station
-  baseHopperCapacity: 1000
+  baseHopperCapacity: 100
   level4HopperCapacity: 1000
-  baseCoinsPerSecond: 4
-  level3CoinsPerSecond: 10
+  manualCoinsPerSecond: 4
+  automaticCoinsPerSecond: 2
+  level3ManualCoinsPerSecond: 10
+  level3AutomaticCoinsPerSecond: 5
   crankHoldGrace: 0.2
   crankToSortMultiplier: 2
   maxReserveSeconds: 16
@@ -43,8 +45,9 @@ MonoBehaviour:
   sortPitchMax: 1.05
   sortPlayInterval: 1
   autoPullFromNearbyStorage: 1
-  storagePullRadius: 3
-  storagePullInterval: 0.35
+  storagePullSources: 2
+  storagePullRadius: 15
+  storagePullInterval: 0.2
   storagePullFlightDuration: 0.32
   fullStackLateralOffset: 0.35
   sortedCoinFlightDuration: 0.28

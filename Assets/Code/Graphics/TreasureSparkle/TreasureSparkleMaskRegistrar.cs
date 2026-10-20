@@ -29,7 +29,7 @@ public static class TreasureSparkleMaskRegistrar
 	}
 
 	static readonly List<RendererEntry> ActiveEntries = new List<RendererEntry>( 64 );
-	static readonly HashSet<int> ActiveIds = new HashSet<int>();
+	static readonly HashSet<EntityId> ActiveIds = new HashSet<EntityId>();
 	static readonly List<IInstanceMaskSource> InstanceSources = new List<IInstanceMaskSource>( 8 );
 	static int _revision;
 
@@ -68,12 +68,12 @@ public static class TreasureSparkleMaskRegistrar
 		if ( renderer == null )
 			return;
 
-		int id = renderer.GetInstanceID();
+		EntityId id = renderer.GetEntityId();
 		if ( !ActiveIds.Add( id ) )
 		{
 			for ( int i = 0; i < ActiveEntries.Count; i++ )
 			{
-				if ( ActiveEntries[ i ].Renderer != null && ActiveEntries[ i ].Renderer.GetInstanceID() == id )
+				if ( ActiveEntries[ i ].Renderer != null && ActiveEntries[ i ].Renderer.GetEntityId() == id )
 				{
 					RendererEntry updated = ActiveEntries[ i ];
 					updated.Kind = kind;
@@ -111,14 +111,14 @@ public static class TreasureSparkleMaskRegistrar
 		if ( renderer == null )
 			return;
 
-		int id = renderer.GetInstanceID();
+		EntityId id = renderer.GetEntityId();
 		if ( !ActiveIds.Remove( id ) )
 			return;
 
 		for ( int i = ActiveEntries.Count - 1; i >= 0; i-- )
 		{
 			Renderer existing = ActiveEntries[ i ].Renderer;
-			if ( existing == null || existing.GetInstanceID() == id )
+			if ( existing == null || existing.GetEntityId() == id )
 				ActiveEntries.RemoveAt( i );
 		}
 
@@ -182,7 +182,7 @@ public static class TreasureSparkleMaskRegistrar
 			{
 				Renderer r = ActiveEntries[ i ].Renderer;
 				if ( r != null )
-					ActiveIds.Add( r.GetInstanceID() );
+					ActiveIds.Add( r.GetEntityId() );
 			}
 
 			_revision++;
@@ -368,7 +368,7 @@ public static class TreasureSparkleMaskRegistrar
 		{
 			ActiveIds.Clear();
 			for ( int i = 0; i < ActiveEntries.Count; i++ )
-				ActiveIds.Add( ActiveEntries[ i ].Renderer.GetInstanceID() );
+				ActiveIds.Add( ActiveEntries[ i ].Renderer.GetEntityId() );
 		}
 
 		for ( int i = InstanceSources.Count - 1; i >= 0; i-- )

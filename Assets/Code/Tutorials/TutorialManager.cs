@@ -74,6 +74,7 @@ public class TutorialManager : MonoBehaviour
 	bool _walkWithoutSprintContext;
 	bool _driveMinecartContext;
 	bool _worldHammerInteracted;
+	readonly HashSet<string> _completedObjectiveTriggers = new HashSet<string>();
 
 	public static TutorialManager Instance => _instance;
 
@@ -153,15 +154,37 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintContext = false;
 		_driveMinecartContext = false;
 		_worldHammerInteracted = false;
+		_completedObjectiveTriggers.Clear();
 		_deferredUncheckedTaskIds.Clear();
 		_taskProgressCounts.Clear();
 		_completedUnscaledTimes.Clear();
 		_hadContextIds.Clear();
 		TutorialHud.ClearTutorialOverrideOutlineRoots();
 		HydrateCompletedFromSave();
+		HydrateObjectiveCompletedTriggers();
 		RefreshFromPlayerState();
 		EvaluateContext( force: true );
 		RefreshCycleHint();
+	}
+
+	void HydrateObjectiveCompletedTriggers()
+	{
+		_completedObjectiveTriggers.Clear();
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+
+		ObjectiveSystem objectives = ObjectiveSystem.Instance;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || def.trigger != TutorialTriggerType.ObjectiveCompleted )
+				continue;
+			if ( string.IsNullOrEmpty( def.volumeId ) )
+				continue;
+
+			if ( objectives != null && objectives.IsCompleted( def.volumeId ) )
+				_completedObjectiveTriggers.Add( def.volumeId );
+		}
 	}
 
 	void HydrateCompletedFromSave()
@@ -246,6 +269,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<WorldHammerInteractedEvent>( OnWorldHammerInteracted );
 		EventBus.Subscribe<BuildModeEnteredEvent>( OnBuildModeEntered );
 		EventBus.Subscribe<BuildableCompletedEvent>( OnBuildableCompleted );
+		EventBus.Subscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		_subscribed = true;
 	}
 
@@ -284,6 +308,7 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<WorldHammerInteractedEvent>( OnWorldHammerInteracted );
 		EventBus.Unsubscribe<BuildModeEnteredEvent>( OnBuildModeEntered );
 		EventBus.Unsubscribe<BuildableCompletedEvent>( OnBuildableCompleted );
+		EventBus.Unsubscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		_subscribed = false;
 	}
 
@@ -1059,6 +1084,23 @@ public class TutorialManager : MonoBehaviour
 
 		for ( int i = 0; i < added; i++ )
 			TryCompleteTask( TutorialTaskCompleteType.PlaceMixedStorage );
+
+		if ( evt.Table == null )
+			return;
+
+		string tableId = evt.Table.ResolvePersistenceId();
+		if ( string.IsNullOrEmpty( tableId ) )
+			return;
+
+		for ( int i = 0; i < added; i++ )
+			TryCompletePlaceMixedStorageOnTarget( tableId );
+	}
+
+	void TryCompletePlaceMixedStorageOnTarget( string tablePersistenceId )
+	{
+		int outcome = RecordMatchingTasks( TutorialTaskCompleteType.PlaceMixedStorageOnTarget, tablePersistenceId );
+		CompleteFinishedOpenTutorials();
+		ApplyActiveTaskRecord( outcome );
 	}
 
 	void OnConstellationChanged( GemConstellationChangedEvent evt )
@@ -1230,6 +1272,67 @@ public class TutorialManager : MonoBehaviour
 		_worldHammerInteracted = true;
 		NoteActivationForTrigger( TutorialTriggerType.InteractWorldHammer );
 		EvaluateContext( force: true );
+	}
+
+	void OnObjectiveCompleted( ObjectiveCompletedEvent evt )
+	{
+		if ( string.IsNullOrEmpty( evt.ObjectiveId ) )
+			return;
+
+		_completedObjectiveTriggers.Add( evt.ObjectiveId );
+		NoteActivationForObjectiveCompleted( evt.ObjectiveId );
+		EvaluateContext( force: true );
+		TryForceShowObjectiveCompletedTutorial( evt.ObjectiveId );
+	}
+
+	void NoteActivationForObjectiveCompleted( string objectiveId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null || string.IsNullOrEmpty( objectiveId ) )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.ObjectiveCompleted )
+				continue;
+			if ( def.volumeId != objectiveId )
+				continue;
+			if ( !IsContextActive( def ) )
+				continue;
+			MarkRecentlyActivated( def.id, force: true );
+		}
+	}
+
+	void TryForceShowObjectiveCompletedTutorial( string objectiveId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null || string.IsNullOrEmpty( objectiveId ) )
+			return;
+		if ( _popup == null || DebugDefinition.TutorialsDisabled )
+			return;
+		if ( CinematicPresentationController.IsAnyPlaying || _activeIsReplay )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.ObjectiveCompleted )
+				continue;
+			if ( def.volumeId != objectiveId )
+				continue;
+			if ( !IsContextActive( def ) || !IsShowDelayElapsed( def ) )
+				continue;
+			if ( _active != null && _active.id == def.id )
+				return;
+
+			// RequestShow will not replace an already-active tutorial; switch like cycle does.
+			_lastActivatedId = def.id;
+			ShowTutorialNow( def, isReplay: false );
+			return;
+		}
 	}
 
 	void OnBuildModeEntered( BuildModeEnteredEvent evt )
@@ -1570,6 +1673,9 @@ public class TutorialManager : MonoBehaviour
 				break;
 			case TutorialTriggerType.InteractWorldHammer:
 				primary = _worldHammerInteracted;
+				break;
+			case TutorialTriggerType.ObjectiveCompleted:
+				primary = !string.IsNullOrEmpty( def.volumeId ) && _completedObjectiveTriggers.Contains( def.volumeId );
 				break;
 			default:
 				primary = false;
@@ -2162,6 +2268,11 @@ public class TutorialManager : MonoBehaviour
 			if ( def == null || !IsEligible( def ) )
 				continue;
 
+			// ObjectiveCompleted tutorials (e.g. Auto Minecarts) must be open/showing before any
+			// task progress counts — otherwise visiting the output volume while building pre-completes it.
+			if ( def.trigger == TutorialTriggerType.ObjectiveCompleted && !IsTutorialOpen( def ) )
+				continue;
+
 			int outcome = RecordTasksOnDefinition( def, completeType, volumeId );
 			if ( outcome <= 0 )
 				continue;
@@ -2179,6 +2290,24 @@ public class TutorialManager : MonoBehaviour
 		return activeOutcome;
 	}
 
+	bool IsTutorialOpen( TutorialDefinition def )
+	{
+		if ( def == null || string.IsNullOrEmpty( def.id ) )
+			return false;
+
+		if ( _active != null && _active.id == def.id )
+			return true;
+
+		for ( int i = 0; i < _openTutorials.Count; i++ )
+		{
+			TutorialDefinition open = _openTutorials[ i ];
+			if ( open != null && open.id == def.id )
+				return true;
+		}
+
+		return false;
+	}
+
 	int RecordTasksOnDefinition( TutorialDefinition def, TutorialTaskCompleteType completeType, string volumeId )
 	{
 		if ( def == null || def.disabled || def.tasks == null || completeType == TutorialTaskCompleteType.None )
@@ -2192,7 +2321,8 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( string.IsNullOrEmpty( task.id ) )
 				continue;
-			if ( completeType == TutorialTaskCompleteType.EnterVolume )
+			if ( completeType == TutorialTaskCompleteType.EnterVolume
+			     || completeType == TutorialTaskCompleteType.PlaceMixedStorageOnTarget )
 			{
 				if ( string.IsNullOrEmpty( volumeId ) || task.completeVolumeId != volumeId )
 					continue;
@@ -2678,6 +2808,7 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintContext = false;
 		_driveMinecartContext = false;
 		_worldHammerInteracted = false;
+		_completedObjectiveTriggers.Clear();
 		_taskProgressCounts.Clear();
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();

@@ -18,7 +18,7 @@ namespace FeedbackSystem
 		Vector3 _basePosition;
 		Quaternion _baseRotation;
 		float _elapsed;
-		int _anchorId;
+		EntityId _anchorId;
 		bool _running;
 
 		public override void Play()

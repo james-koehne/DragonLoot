@@ -1012,6 +1012,54 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	/// <summary>Detaches one cargo item (top of a stack or top coin) for station transfer.</summary>
 	public bool TryExtractOneItem( out TreasureItem item )
 	{
+		return TryExtractOneMatchingItem( null, out item );
+	}
+
+	/// <summary>
+	/// True when any cargo definition matches <paramref name="match"/> (null match = any cargo).
+	/// </summary>
+	public bool HasCargoMatching( System.Predicate<TreasureDefinition> match )
+	{
+		if ( !CargoEnabled )
+			return false;
+
+		for ( int s = _stacks.Count - 1; s >= 0; s-- )
+		{
+			CargoStack stack = _stacks[ s ];
+			if ( stack == null )
+				continue;
+
+			if ( stack.CoinPile != null )
+			{
+				if ( !stack.CoinPile.TryPeekTopDefinition( out TreasureDefinition coinDef ) || coinDef == null )
+					continue;
+				if ( match == null || match( coinDef ) )
+					return true;
+				continue;
+			}
+
+			if ( stack.Items == null )
+				continue;
+
+			for ( int i = stack.Items.Count - 1; i >= 0; i-- )
+			{
+				TreasureItem candidate = stack.Items[ i ];
+				if ( candidate == null || candidate.Definition == null )
+					continue;
+				if ( match == null || match( candidate.Definition ) )
+					return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Detaches one cargo item whose definition matches <paramref name="match"/> (null = any).
+	/// Scans stacks top-down and can pull matching items below non-matching tops.
+	/// </summary>
+	public bool TryExtractOneMatchingItem( System.Predicate<TreasureDefinition> match, out TreasureItem item )
+	{
 		item = null;
 		if ( !CargoEnabled )
 			return false;
@@ -1024,6 +1072,11 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 			if ( stack.CoinPile != null )
 			{
+				if ( !stack.CoinPile.TryPeekTopDefinition( out TreasureDefinition coinDef ) || coinDef == null )
+					continue;
+				if ( match != null && !match( coinDef ) )
+					continue;
+
 				if ( !stack.CoinPile.TryExtractTopAsWorldItem( out item ) || item == null )
 					continue;
 
@@ -1038,27 +1091,35 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 				return true;
 			}
 
-			if ( stack.Items.Count <= 0 )
+			if ( stack.Items == null || stack.Items.Count <= 0 )
 				continue;
 
-			int last = stack.Items.Count - 1;
-			item = stack.Items[ last ];
-			stack.Items.RemoveAt( last );
-			_allItems.Remove( item );
-			PlayFeedback( onTakeOutFeedbacks );
-
-			if ( stack.Items.Count == 0 )
+			for ( int i = stack.Items.Count - 1; i >= 0; i-- )
 			{
-				ClearFootprint( stack );
-				_stacks.RemoveAt( s );
+				TreasureItem candidate = stack.Items[ i ];
+				if ( candidate == null || candidate.Definition == null )
+					continue;
+				if ( match != null && !match( candidate.Definition ) )
+					continue;
+
+				item = candidate;
+				stack.Items.RemoveAt( i );
+				_allItems.Remove( item );
+				PlayFeedback( onTakeOutFeedbacks );
+
+				if ( stack.Items.Count == 0 )
+				{
+					ClearFootprint( stack );
+					_stacks.RemoveAt( s );
+				}
+				else
+					RestackVisuals( stack );
+
+				if ( item != null )
+					item.transform.SetParent( null, true );
+
+				return item != null;
 			}
-			else
-				RestackVisuals( stack );
-
-			if ( item != null )
-				item.transform.SetParent( null, true );
-
-			return item != null;
 		}
 
 		return false;
@@ -2029,17 +2090,8 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	{
 		int sign = travelSign >= 0 ? 1 : -1;
 
-		// Incomplete junctions are hard stops — never commit a ride onto unfinished arms.
-		if ( !graph.IsJunctionVisuallyComplete( junctionIndex ) )
-		{
-			_committedJunctionId = junctionIndex;
-			_hasCommittedExit = false;
-			_committedExitTrack = null;
-			_committedExitDistance = 0f;
-			_committedExitTravelSign = sign;
-			return;
-		}
-
+		// BuildExits already skips unready ports. Incomplete junctions may still have a valid
+		// through/ready branch — only hard-stop when the buffer ends up empty below.
 		graph.BuildExits( junctionIndex, track, _distanceAlongTrack, sign, JunctionExitBuffer );
 
 		// Opposite-approach exits cover bake intoTravelSign skew. Auto always merges them;
@@ -2431,8 +2483,9 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		// (cut→cut across the mesh gap), board it like auto carts / the network pathfinder.
 		if ( !hasRide )
 		{
-			if ( _committedExitTrack == track
-			     && graph.IsSamePortExit( track, _committedJunctionId, _distanceAlongTrack, _committedExitDistance ) )
+			bool samePort = _committedExitTrack == track
+				&& graph.IsSamePortExit( track, _committedJunctionId, _distanceAlongTrack, _committedExitDistance );
+			if ( samePort )
 				return false;
 
 			return false;
@@ -2481,7 +2534,7 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	}
 
 	/// <summary>
-	/// When no legal exit is committed (disabled through / corners / incomplete junction),
+	/// When no legal exit is committed (no ready arms, or disabled through/corners),
 	/// stop short of the junction cut instead of rolling across.
 	/// </summary>
 	bool TryClampAtBlockedThrough( int travelSign, ref float remaining, out float traveled )
@@ -2498,9 +2551,9 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		if ( !graph.TryGetPortDistance( track, _committedJunctionId, _distanceAlongTrack, out junctionDistance ) )
 			return false;
 
-		bool incomplete = !graph.IsJunctionVisuallyComplete( _committedJunctionId );
-		// Same-track through is fine only on completed junctions.
-		if ( !incomplete && graph.IsSameTrackThroughAllowed( _committedJunctionId, track ) )
+		// Through on this track is open — do not clamp even if other arms are unbuilt.
+		bool throughAllowed = graph.IsSameTrackThroughAllowed( _committedJunctionId, track );
+		if ( throughAllowed )
 			return false;
 
 		float stopDistance = junctionDistance;
@@ -3114,10 +3167,6 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			return;
 
 		if ( !leg.ExitTrack.IsTravelReady )
-			return;
-
-		MinecartJunctionGraph graph = MinecartJunctionGraph.FindActive();
-		if ( graph != null && !graph.IsJunctionVisuallyComplete( leg.JunctionIndex ) )
 			return;
 
 		_autoForcedExitValid = true;
@@ -3925,16 +3974,21 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 			local = ( local + far ) * 0.5f;
 		}
 
+		local.y = 0f;
+		Vector3 planePoint = cargoRoot.TransformPoint( local );
+		worldRot = cargoRoot.rotation;
+
+		float stackHeight;
 		if ( CoinColumnCylinderBinder.IsCoin( def ) )
-			local.y = margin;
+			stackHeight = 0f;
 		else
 		{
 			float thickness = def != null ? def.GetStackThickness() : 0.04f;
-			local.y = margin + stackIndex * thickness;
+			stackHeight = stackIndex * thickness;
 		}
 
-		worldPos = cargoRoot.TransformPoint( local );
-		worldRot = cargoRoot.rotation;
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( cargoRoot, _ownCollider );
+		worldPos = TreasureStorageSeat.PlantWorldPosition( platform, planePoint, stackHeight, item, worldRot, cargoRoot.up );
 	}
 
 	void FinishInFlightSnaps()
@@ -4126,8 +4180,12 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 	void GetSlotContactPose( int ox, int oy, out Vector3 contact, out Quaternion rotation )
 	{
 		EnsureCargoRoot();
-		contact = cargoRoot.TransformPoint( GetSlotLocalBase( ox, oy ) );
+		Vector3 local = GetSlotLocalBase( ox, oy );
+		local.y = 0f;
+		Vector3 planePoint = cargoRoot.TransformPoint( local );
 		rotation = TreasureOrientation.FlattenUpright( cargoRoot.rotation );
+		Collider platform = TreasureStorageSeat.ResolvePlatformCollider( cargoRoot, _ownCollider );
+		contact = TreasureStorageSeat.PlantWorldPosition( platform, planePoint, 0f, null, rotation, cargoRoot.up );
 	}
 
 	GroundCoinStack FindCoinPile( int ox, int oy )
