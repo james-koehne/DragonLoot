@@ -5,13 +5,17 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Left-middle toast summarizing the selected pouch after a category switch
-/// or a direct pouch-button re-press of the already-selected pouch.
+/// Left-middle toast summarizing the selected pouch after a category switch,
+/// a direct pouch-button re-press, or contents added to the active pouch.
 /// Slides in from the left, holds, then slides back out. Wire <see cref="group"/>
 /// and <see cref="label"/> on the Interface prefab.
 /// </summary>
 public class PouchSummaryUI : MonoBehaviour
 {
+	const int TitleSize = 20;
+	const int ContentsSize = 16;
+	const string SeparatorLine = "<color=#FFFFFF55>────────</color>";
+
 	[SerializeField] CanvasGroup group;
 	[SerializeField] Text label;
 
@@ -23,6 +27,7 @@ public class PouchSummaryUI : MonoBehaviour
 	float _phaseElapsed;
 	float _slideIn = 0.2f;
 	float _hold = 2f;
+	float _holdOnAdd = 3.25f;
 	float _slideOut = 0.35f;
 	int _phase; // 0 hidden, 1 slide in, 2 hold, 3 slide out
 
@@ -129,15 +134,19 @@ public class PouchSummaryUI : MonoBehaviour
 		if ( carry == null )
 			return;
 
-		ResolveTimings();
+		ResolveTimings( evt.Reason );
 		CachePositions();
 		carry.BuildBucketSummary( evt.Bucket, _defs, _counts );
 
 		_builder.Length = 0;
 		int held = carry.GetBucketCount( evt.Bucket );
 		int limit = carry.GetSlotLimit( evt.Bucket );
+		_builder.Append( "<size=" ).Append( TitleSize ).Append( ">" );
 		_builder.Append( BucketTitle( evt.Bucket ) );
-		_builder.Append( " (" ).Append( held ).Append( "/" ).Append( limit ).AppendLine( ")" );
+		_builder.Append( " Pouch (" ).Append( held ).Append( "/" ).Append( limit ).Append( ")" );
+		_builder.AppendLine( "</size>" );
+		_builder.AppendLine( SeparatorLine );
+		_builder.Append( "<size=" ).Append( ContentsSize ).Append( ">" );
 		if ( _defs.Count == 0 )
 			_builder.Append( "(empty)" );
 		else
@@ -157,8 +166,21 @@ public class PouchSummaryUI : MonoBehaviour
 					_builder.AppendLine();
 			}
 		}
+		_builder.Append( "</size>" );
 
 		label.text = _builder.ToString();
+
+		// Contents added while already showing: refresh text and extend hold without re-sliding.
+		bool alreadyVisible = _phase == 1 || _phase == 2 || _phase == 3;
+		if ( alreadyVisible && evt.Reason == PouchChangeReason.ContentsAdded )
+		{
+			if ( _rect != null )
+				_rect.anchoredPosition = _shownPos;
+			SetVisible( true );
+			_phase = 2;
+			_phaseElapsed = 0f;
+			return;
+		}
 
 		// Restart from off-screen so rapid pouch switches re-slide cleanly.
 		if ( _rect != null )
@@ -216,10 +238,11 @@ public class PouchSummaryUI : MonoBehaviour
 		_hiddenPos = new Vector2( _shownPos.x - width - Mathf.Max( 0f, offscreenPadding ), _shownPos.y );
 	}
 
-	void ResolveTimings()
+	void ResolveTimings( PouchChangeReason reason )
 	{
 		_slideIn = 0.2f;
 		_hold = 2f;
+		_holdOnAdd = 3.25f;
 		_slideOut = 0.35f;
 
 		CarryDefinition resolved = null;
@@ -228,8 +251,12 @@ public class PouchSummaryUI : MonoBehaviour
 		{
 			_slideIn = resolved.pouchSummaryFadeIn;
 			_hold = resolved.pouchSummaryHold;
+			_holdOnAdd = resolved.pouchSummaryHoldOnAdd;
 			_slideOut = resolved.pouchSummaryFadeOut;
 		}
+
+		if ( reason == PouchChangeReason.ContentsAdded )
+			_hold = _holdOnAdd;
 	}
 
 	static string BucketTitle( CarryBucketKind kind )

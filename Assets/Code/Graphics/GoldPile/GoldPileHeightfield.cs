@@ -1841,25 +1841,46 @@ public sealed class GoldPileHeightfield
 		return false;
 	}
 
-	/// <summary>Scales all heights so average volume tracks remaining/total ratio.</summary>
-	public void RescaleToVolumeRatio( float ratio )
+	/// <summary>
+	/// Scales all heights so average volume tracks remaining/total ratio.
+	/// Returns false when already within tolerance (no full-field dirty).
+	/// </summary>
+	public bool RescaleToVolumeRatio( float ratio )
 	{
 		if ( _heights == null )
-			return;
+			return false;
 
 		ratio = Mathf.Clamp01( ratio );
 		float current = SumHeights();
 		if ( current < 0.0001f )
-			return;
+			return false;
 
 		float baseline = _initialVolume > 0.0001f ? _initialVolume : current;
 		float target = ratio * baseline;
 		float scale = target / current;
-		for ( int i = 0; i < _heights.Length; i++ )
-			_heights[ i ] = ClampHeight( _heights[ i ] * scale );
+		// Carve usually already removed the right share — skip O(n) rewrite + full dirty.
+		if ( Mathf.Abs( scale - 1f ) <= 1e-4f )
+			return false;
 
-		RecomputeMaxHeight();
+		float sum = 0f;
+		float max = 0f;
+		for ( int i = 0; i < _heights.Length; i++ )
+		{
+			float h = ClampHeight( _heights[ i ] * scale );
+			_heights[ i ] = h;
+			sum += h;
+			if ( h > max )
+				max = h;
+		}
+
+		// Avoid a second full scan via RecomputeMaxHeight. When locked, keep pack scale stable.
+		if ( !_lockMaxHeight )
+			_maxHeight = Mathf.Max( MinMaxHeight, max );
+
+		_cachedHeightSum = sum;
+		_heightSumValid = true;
 		MarkDirtyFull();
+		return true;
 	}
 
 	public float SampleNormalized( float localX, float localZ )
@@ -2179,6 +2200,7 @@ public sealed class GoldPileHeightfield
 		}
 
 		float invWeight = volumeToRemove / weightSum;
+		float actualRemoved = 0f;
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
@@ -2193,7 +2215,10 @@ public sealed class GoldPileHeightfield
 
 				float w = SoftFalloff( distSq, radiusSq, falloffSharpness );
 				int idx = Index( x, z );
-				_heights[ idx ] = Mathf.Max( 0f, _heights[ idx ] - invWeight * w );
+				float before = _heights[ idx ];
+				float after = Mathf.Max( 0f, before - invWeight * w );
+				_heights[ idx ] = after;
+				actualRemoved += before - after;
 			}
 		}
 
@@ -2205,10 +2230,11 @@ public sealed class GoldPileHeightfield
 		}
 
 		if ( _heightSumValid )
-			_cachedHeightSum = Mathf.Max( 0f, _cachedHeightSum - volumeToRemove );
+			_cachedHeightSum = Mathf.Max( 0f, _cachedHeightSum - actualRemoved );
 
 		int pad = ResolveCarveBlurPad( radius, cellX, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );
+		// Keep cache: blur is local and SyncVolume early-out stays O(1). Drift is corrected when rescale runs.
 		ExpandDirtyRect(
 			Mathf.Max( 0, minX - pad ),
 			Mathf.Min( _resolutionX - 1, maxX + pad ),
@@ -2372,6 +2398,7 @@ public sealed class GoldPileHeightfield
 			return;
 
 		float invWeight = volumeToAdd / weightSum;
+		float actualAdded = 0f;
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
 			for ( int x = minX; x <= maxX; x++ )
@@ -2386,12 +2413,15 @@ public sealed class GoldPileHeightfield
 
 				float w = SoftFalloff( distSq, radiusSq, falloffSharpness );
 				int idx = Index( x, z );
-				_heights[ idx ] = ClampHeight( _heights[ idx ] + invWeight * w );
+				float before = _heights[ idx ];
+				float after = ClampHeight( before + invWeight * w );
+				_heights[ idx ] = after;
+				actualAdded += after - before;
 			}
 		}
 
 		if ( _heightSumValid )
-			_cachedHeightSum += volumeToAdd;
+			_cachedHeightSum += actualAdded;
 
 		int pad = ResolveCarveBlurPad( radius, cellX, settings.blurPadCells );
 		ApplyCarveBlur( minX, maxX, minZ, maxZ, pad, settings.blurPasses, settings.blurStrength );

@@ -92,3 +92,23 @@ public struct TutorialCompletedEvent
 {
 	public string TutorialId;
 }
+
+/// <summary>Coffee machine finished one hold craft step (grind / tamp / lock / brew).</summary>
+public struct CoffeeCraftStepCompletedEvent
+{
+	public CoffeeMachineInteractable Machine;
+	public CoffeeMachineInteractable.CraftStep Step;
+}
+
+/// <summary>Player picked up the filled coffee cup from a machine.</summary>
+public struct CoffeeCupPickedUpEvent
+{
+	public CoffeeMachineInteractable Machine;
+	public TreasureItem Cup;
+}
+
+/// <summary>Player successfully sipped a held coffee cup.</summary>
+public struct CoffeeSipCompletedEvent
+{
+	public TreasureItem Cup;
+}

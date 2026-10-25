@@ -41,6 +41,10 @@ public abstract class MinecartStationBase : InteractableBase
 	[Tooltip( "Max autocarts this station keeps spawned idle on its bound track. 0 = never spawn. Waits until the station and track are built." )]
 	int autoCartLimit = 1;
 
+	[SerializeField]
+	[Tooltip( "Optional ordered station loop used by the Send to Next Station button." )]
+	MinecartStationLoop stationLoop;
+
 	readonly List<MinecartInteractable> _ownedAutoCarts = new List<MinecartInteractable>( 2 );
 
 	static readonly List<MinecartStationBase> All = new List<MinecartStationBase>( 8 );
@@ -180,8 +184,8 @@ public abstract class MinecartStationBase : InteractableBase
 	}
 
 	/// <summary>
-	/// Spawns owned idle autocarts on the bound travel-ready track. No-ops until the station
-	/// (and its track) are built; retries each frame while under <see cref="autoCartLimit"/>.
+	/// Spawns owned idle auto consists (drive lead + cargo follower) on the bound travel-ready track.
+	/// No-ops until the station (and its track) are built; retries each frame while under <see cref="autoCartLimit"/>.
 	/// </summary>
 	protected void EnsureAutoCarts()
 	{
@@ -199,20 +203,20 @@ public abstract class MinecartStationBase : InteractableBase
 		while ( _ownedAutoCarts.Count < autoCartLimit )
 		{
 			float along = TrackStopDistance;
-			if ( !MinecartConsistUtility.TrySpawnOnTrack( track, along, drive: false, out MinecartInteractable spawned ) )
+			if ( !MinecartConsistUtility.TrySpawnAutoConsist( track, along, out MinecartInteractable lead ) )
 				break;
 
-			if ( spawned == null )
+			if ( lead == null )
 				break;
 
-			MinecartAutoController auto = spawned.GetComponent<MinecartAutoController>();
+			MinecartAutoController auto = lead.GetComponent<MinecartAutoController>();
 			if ( auto == null )
-				auto = spawned.gameObject.AddComponent<MinecartAutoController>();
+				auto = lead.gameObject.AddComponent<MinecartAutoController>();
 
 			if ( this is MinecartInputStation input )
 				auto.SetHomeInput( input );
 
-			_ownedAutoCarts.Add( spawned );
+			_ownedAutoCarts.Add( lead );
 		}
 	}
 
@@ -245,11 +249,58 @@ public abstract class MinecartStationBase : InteractableBase
 		if ( DockedCart == null )
 			return;
 
-		MinecartAutoController auto = DockedCart.GetComponent<MinecartAutoController>();
+		MinecartAutoController auto = DockedCart.ResolveAutoController();
 		if ( auto == null )
 			return;
 
-		OnForcedOrIdleLeave( DockedCart, auto );
+		OnForcedOrIdleLeave( ResolveTransferCart( DockedCart ), auto );
+	}
+
+	/// <summary>True when a docked cart can be sent to the next station in <see cref="stationLoop"/>.</summary>
+	public bool CanDispatchDockedToNextInLoop()
+	{
+		if ( DockedCart == null || stationLoop == null )
+			return false;
+		if ( DockedCart.ResolveAutoController() == null )
+			return false;
+
+		MinecartStationBase next;
+		return stationLoop.TryGetNext( this, out next );
+	}
+
+	/// <summary>
+	/// Manual go/fast-forward: send the docked cart to the next station in the loop.
+	/// Does not globally resume automation.
+	/// </summary>
+	public bool TryDispatchDockedToNextInLoop()
+	{
+		if ( DockedCart == null || stationLoop == null )
+			return false;
+
+		MinecartStationBase next;
+		if ( !stationLoop.TryGetNext( this, out next ) )
+			return false;
+
+		MinecartAutoController auto = DockedCart.ResolveAutoController();
+		if ( auto == null )
+			return false;
+
+		auto.LeaveDockTo( next, requireAutomationEnabled: false );
+		return true;
+	}
+
+	public void EditorSetStationLoop( MinecartStationLoop loop )
+	{
+		stationLoop = loop;
+	}
+
+	static MinecartInteractable ResolveTransferCart( MinecartInteractable cart )
+	{
+		if ( cart == null )
+			return null;
+
+		MinecartInteractable cargo = cart.ResolveCargoCart();
+		return cargo != null ? cargo : cart;
 	}
 
 	/// <summary>Stop every automated cart immediately and ignore further automation until resumed.</summary>
@@ -296,7 +347,7 @@ public abstract class MinecartStationBase : InteractableBase
 	}
 
 	/// <summary>
-	/// Green button: if a cart is docked, force leave; otherwise dispatch the nearest available cart here.
+	/// If a cart is docked, force leave; otherwise dispatch the nearest available cart here.
 	/// </summary>
 	public virtual void RequestImmediateSend()
 	{
@@ -384,14 +435,15 @@ public abstract class MinecartStationBase : InteractableBase
 		if ( cart == null || HasDockedCart || HasInboundCart )
 			return false;
 
-		MinecartAutoController auto = cart.GetComponent<MinecartAutoController>();
+		MinecartInteractable lead = cart.ConsistLead;
+		MinecartAutoController auto = lead.ResolveAutoController();
 		if ( auto == null || !auto.IsAvailableForCall )
 			return false;
 
 		if ( !auto.TryDispatchTo( this ) )
 			return false;
 
-		InboundCart = cart;
+		InboundCart = lead;
 		_lampCalling = true;
 		ApplyCallingLamp();
 		PlayFeedbacks( onCallFeedbacks );
@@ -418,10 +470,7 @@ public abstract class MinecartStationBase : InteractableBase
 			if ( candidate == null || !candidate.IsConsistLead )
 				continue;
 
-			if ( candidate.IsDriveCart )
-				continue;
-
-			MinecartAutoController auto = candidate.GetComponent<MinecartAutoController>();
+			MinecartAutoController auto = candidate.ResolveAutoController();
 			if ( auto == null || !auto.IsAvailableForCall )
 				continue;
 
@@ -453,12 +502,14 @@ public abstract class MinecartStationBase : InteractableBase
 		if ( cart == null )
 			return;
 
-		MinecartAutoController auto = cart.GetComponent<MinecartAutoController>();
+		MinecartAutoController auto = cart.ResolveAutoController();
 		if ( auto == null || !auto.IsDockedAt( this ) )
 		{
 			DockedCart = null;
 			return;
 		}
+
+		MinecartInteractable transferCart = ResolveTransferCart( cart );
 
 		_transferTimer += Time.deltaTime;
 		_inactivityTimer += Time.deltaTime;
@@ -467,23 +518,23 @@ public abstract class MinecartStationBase : InteractableBase
 		if ( _jobCompleteWaiting )
 		{
 			if ( _inactivityTimer >= InactivitySeconds )
-				OnForcedOrIdleLeave( cart, auto );
+				OnForcedOrIdleLeave( transferCart, auto );
 			return;
 		}
 
 		if ( _inactivityTimer >= InactivitySeconds )
 		{
-			OnForcedOrIdleLeave( cart, auto );
+			OnForcedOrIdleLeave( transferCart, auto );
 			return;
 		}
 
-		if ( ShouldLeaveAfterTransfer( cart ) )
+		if ( ShouldLeaveAfterTransfer( transferCart ) )
 		{
 			BeginJobCompleteWait();
 			return;
 		}
 
-		if ( cart.HasTransferInFlight )
+		if ( transferCart != null && transferCart.HasTransferInFlight )
 			return;
 
 		MixedDisplayTableInteractable storage = Storage;
@@ -494,16 +545,16 @@ public abstract class MinecartStationBase : InteractableBase
 			return;
 
 		_transferTimer = 0f;
-		if ( TryTransferOnce( cart ) )
+		if ( TryTransferOnce( transferCart ) )
 		{
 			_inactivityTimer = 0f;
-			if ( ShouldLeaveAfterTransfer( cart ) )
+			if ( ShouldLeaveAfterTransfer( transferCart ) )
 				BeginJobCompleteWait();
 		}
-		else if ( ShouldLeaveAfterTransfer( cart ) )
+		else if ( ShouldLeaveAfterTransfer( transferCart ) )
 			BeginJobCompleteWait();
-		else if ( !CanTransferProgress( cart ) )
-			OnForcedOrIdleLeave( cart, auto );
+		else if ( !CanTransferProgress( transferCart ) )
+			OnForcedOrIdleLeave( transferCart, auto );
 	}
 
 	void BeginJobCompleteWait()

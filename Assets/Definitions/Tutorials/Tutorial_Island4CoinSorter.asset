@@ -19,9 +19,9 @@ MonoBehaviour:
   - sorter
   - island4
   disabled: 0
-  trigger: 13
+  trigger: 24
   holdingCategory: 0
-  volumeId: 
+  volumeId: island4_coin_sorter
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -32,11 +32,10 @@ MonoBehaviour:
   minHeightY: 30
   requiredAbilityId: 
   cinematicPresentationId: 
-  showDelaySeconds: 0.75
+  showDelaySeconds: 0.25
   walkSecondsToShow: 5
-  prerequisiteVolumeId: volume_island_4_coin_sorter
-  prerequisiteTutorialIds:
-  - tut_island4_artifacts
+  prerequisiteVolumeId: 
+  prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
   outlineTargetIds:

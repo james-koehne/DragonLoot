@@ -71,13 +71,12 @@ public static class CoinSortingStationSetup
 		{
 			definition = ScriptableObject.CreateInstance<CoinSortingStationDefinition>();
 			definition.name = "CoinSortingStationDefinition";
-			definition.upgradeId = CoinSortingStationDefinition.DefaultUpgradeId;
 			definition.baseHopperCapacity = 50;
-			definition.level4HopperCapacity = 150;
+			definition.largeHopperCapacity = 150;
 			definition.manualCoinsPerSecond = 4f;
 			definition.automaticCoinsPerSecond = 2f;
-			definition.level3ManualCoinsPerSecond = 10f;
-			definition.level3AutomaticCoinsPerSecond = 5f;
+			definition.speedLevel1Multiplier = 1.25f;
+			definition.speedLevel2Multiplier = 1.5f;
 			definition.crankHoldGrace = 0.2f;
 			definition.fullStackLateralOffset = 0.35f;
 			definition.autoPullFromNearbyStorage = true;
@@ -90,27 +89,45 @@ public static class CoinSortingStationSetup
 		else
 		{
 			definition.automaticCoinsPerSecond = Mathf.Max( 0.01f, definition.automaticCoinsPerSecond );
-			definition.level3AutomaticCoinsPerSecond = Mathf.Max( 0.01f, definition.level3AutomaticCoinsPerSecond );
+			definition.speedLevel1Multiplier = Mathf.Max( 1f, definition.speedLevel1Multiplier );
+			definition.speedLevel2Multiplier = Mathf.Max( 1f, definition.speedLevel2Multiplier );
 			if ( definition.storagePullSources == ( CoinSortingStoragePullSources.GroundStacks | CoinSortingStoragePullSources.MixedStorage ) )
 				definition.storagePullSources = CoinSortingStoragePullSources.StationMixedStorage;
 			EditorUtility.SetDirty( definition );
 		}
 
-		const string upgradePath = "Assets/Definitions/Upgrades/Upgrade_CoinSortingStation.asset";
-		UpgradeDefinition upgrade = AssetDatabase.LoadAssetAtPath<UpgradeDefinition>( upgradePath );
-		if ( upgrade == null )
-		{
-			upgrade = ScriptableObject.CreateInstance<UpgradeDefinition>();
-			upgrade.name = "Upgrade_CoinSortingStation";
-			AssetDatabase.CreateAsset( upgrade, upgradePath );
-		}
+		EnsureSplitCoinSorterUpgrades();
 
-		upgrade.id = CoinSortingStationDefinition.DefaultUpgradeId;
-		upgrade.displayName = "Coin Sorting Station";
-		upgrade.description = "Levels: 1 automatic sorting (crank boosts speed), 3 faster processing, 4 larger hopper.";
-		upgrade.maxLevel = 4;
-		upgrade.enabled = true;
-		EditorUtility.SetDirty( upgrade );
+		const string catalogPath = "Assets/Definitions/UpgradeCatalogDefinition.asset";
+		RegisterAddressable( defPath, "CoinSortingStationDefinition" );
+		RegisterAddressable( catalogPath, "UpgradeCatalogDefinition" );
+		AssetDatabase.SaveAssets();
+	}
+
+	static void EnsureSplitCoinSorterUpgrades()
+	{
+		const string folder = "Assets/Definitions/Upgrades";
+		UpgradeDefinition automatic = EnsureUpgradeAsset(
+			folder + "/Upgrade_CoinSorterAutomatic.asset",
+			UpgradeDefinition.CoinSorterAutomaticId,
+			"Automatic Sorting",
+			"Sorts coins unattended. Crank boosts speed.",
+			1,
+			new[] { "Automatic Sorting" } );
+		UpgradeDefinition speed = EnsureUpgradeAsset(
+			folder + "/Upgrade_CoinSorterSpeed.asset",
+			UpgradeDefinition.CoinSorterSpeedId,
+			"Coin Sorter Speed",
+			"Faster coin sorting.",
+			2,
+			new[] { "Coin Sorter +25% Speed", "Coin Sorter +50% Speed" } );
+		UpgradeDefinition hopper = EnsureUpgradeAsset(
+			folder + "/Upgrade_CoinSorterHopper.asset",
+			UpgradeDefinition.CoinSorterHopperId,
+			"Larger Hopper",
+			"Holds more coins in the sorter hopper.",
+			1,
+			new[] { "Larger Hopper" } );
 
 		const string catalogPath = "Assets/Definitions/UpgradeCatalogDefinition.asset";
 		UpgradeCatalogDefinition catalog = AssetDatabase.LoadAssetAtPath<UpgradeCatalogDefinition>( catalogPath );
@@ -123,13 +140,59 @@ public static class CoinSortingStationSetup
 
 		if ( catalog.upgrades == null )
 			catalog.upgrades = new List<UpgradeDefinition>();
-		if ( !catalog.upgrades.Contains( upgrade ) )
-			catalog.upgrades.Add( upgrade );
-		EditorUtility.SetDirty( catalog );
 
-		RegisterAddressable( defPath, "CoinSortingStationDefinition" );
-		RegisterAddressable( catalogPath, "UpgradeCatalogDefinition" );
-		AssetDatabase.SaveAssets();
+		RegisterUpgrade( catalog, automatic );
+		RegisterUpgrade( catalog, speed );
+		RegisterUpgrade( catalog, hopper );
+
+		UpgradeDefinition legacy = AssetDatabase.LoadAssetAtPath<UpgradeDefinition>( folder + "/Upgrade_CoinSortingStation.asset" );
+		if ( legacy != null )
+		{
+			for ( int i = catalog.upgrades.Count - 1; i >= 0; i-- )
+			{
+				UpgradeDefinition entry = catalog.upgrades[ i ];
+				if ( entry == legacy || ( entry != null && entry.id == UpgradeDefinition.LegacyCoinSortingStationId ) )
+					catalog.upgrades.RemoveAt( i );
+			}
+
+			legacy.enabled = false;
+			EditorUtility.SetDirty( legacy );
+		}
+
+		EditorUtility.SetDirty( catalog );
+	}
+
+	static UpgradeDefinition EnsureUpgradeAsset( string path, string id, string displayName, string description, int maxLevel, string[] labels )
+	{
+		UpgradeDefinition upgrade = AssetDatabase.LoadAssetAtPath<UpgradeDefinition>( path );
+		if ( upgrade == null )
+		{
+			upgrade = ScriptableObject.CreateInstance<UpgradeDefinition>();
+			AssetDatabase.CreateAsset( upgrade, path );
+		}
+
+		upgrade.id = id;
+		upgrade.displayName = displayName;
+		upgrade.description = description;
+		upgrade.maxLevel = maxLevel;
+		upgrade.enabled = true;
+		upgrade.levelUnlockLabels = labels;
+		EditorUtility.SetDirty( upgrade );
+		return upgrade;
+	}
+
+	static void RegisterUpgrade( UpgradeCatalogDefinition catalog, UpgradeDefinition upgrade )
+	{
+		if ( upgrade == null )
+			return;
+		for ( int i = 0; i < catalog.upgrades.Count; i++ )
+		{
+			UpgradeDefinition entry = catalog.upgrades[ i ];
+			if ( entry == upgrade || ( entry != null && entry.id == upgrade.id ) )
+				return;
+		}
+
+		catalog.upgrades.Add( upgrade );
 	}
 
 	static void RegisterAddressable( string assetPath, string address )

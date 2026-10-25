@@ -378,6 +378,11 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( _cinematicHidden )
 			return;
 
+		// If the HUD already advanced to the next objective (world-event refresh during
+		// CompleteObjective), do not run the hide ceremony on that new content.
+		if ( !IsObjectiveCurrentlyShown( evt.ObjectiveId ) )
+			return;
+
 		PaintObjectiveComplete( evt.ObjectiveId );
 		BeginCompleteSequence();
 	}
@@ -398,29 +403,77 @@ public class QuestObjectiveUI : MonoBehaviour
 		BindLayout();
 		string previousText = FormatRows( _lastHud );
 		string nextText = FormatRows( evt );
+		string previousStoryText = FormatRows( _lastHud, excludeGoldPiles: true );
+		string nextStoryText = FormatRows( evt, excludeGoldPiles: true );
 		StoreHud( evt, asPending: false );
 
 		bool wasShown = IsShown;
 		_wantVisible = !evt.Cleared && HasRows( evt );
-		string newKey = BuildObjectiveKey( evt );
-		bool sameObjective = !string.IsNullOrEmpty( newKey ) && newKey == _shownObjectiveKey;
+		// Gold pile digs are quiet — exclude them from the key so they do not retrigger show SFX.
+		string newKey = GoldPileObjectiveHandler.BuildStoryObjectiveKey( evt );
+		bool quietHud = GoldPileObjectiveHandler.IsQuietHud( evt );
+		bool sameObjective = newKey == _shownObjectiveKey;
+		float alphaBefore = group != null ? group.alpha : -1f;
 
 		if ( title != null )
-			title.text = string.IsNullOrEmpty( evt.Title ) ? "Nearby" : evt.Title;
+			title.text = string.IsNullOrEmpty( evt.Title ) ? "Tasks" : evt.Title;
 		_objectiveFormatted = nextText;
 		if ( objective != null )
 			objective.text = nextText;
 
 		RefreshLayout();
 
-		if ( IsShown && playShow && ( !wasShown || !sameObjective ) )
+		// After a complete ceremony the CanvasGroup may be at 0 even when the objective key
+		// matches — always replay show when invisible but we want to be visible.
+		bool needsShowReplay = IsShown && playShow && alphaBefore < 0.99f && !quietHud;
+		if ( IsShown && playShow && quietHud && ( !wasShown || alphaBefore < 0.99f ) )
+			ShowQuiet();
+		else if ( IsShown && playShow && ( !wasShown || !sameObjective || needsShowReplay ) )
 			PlayShowFeedback();
 		else if ( !IsShown )
 			HideImmediate();
-		else if ( wasShown && sameObjective && !_playingCompleteSequence )
+		else if ( wasShown && sameObjective && !_playingCompleteSequence && !quietHud && HasCountIncrease( previousStoryText, nextStoryText ) )
 			PlayTaskCountPop( previousText, nextText );
 
 		_shownObjectiveKey = newKey;
+	}
+
+	static bool HasCountIncrease( string previousText, string nextText )
+	{
+		UiCountChunkPop probe = new UiCountChunkPop();
+		bool increased = probe.Begin( previousText, nextText );
+		probe.Stop();
+		return increased;
+	}
+
+	bool IsObjectiveCurrentlyShown( string objectiveId )
+	{
+		if ( string.IsNullOrEmpty( objectiveId ) )
+			return false;
+
+		if ( !string.IsNullOrEmpty( _shownObjectiveKey ) )
+		{
+			string[] parts = _shownObjectiveKey.Split( '|' );
+			for ( int i = 0; i < parts.Length; i++ )
+			{
+				if ( parts[ i ] == objectiveId )
+					return true;
+			}
+		}
+
+		if ( _lastHud.Rows == null )
+			return false;
+
+		for ( int i = 0; i < _lastHud.Rows.Length; i++ )
+		{
+			TutorialHudRow row = _lastHud.Rows[ i ];
+			if ( row.Indent != 0 || string.IsNullOrEmpty( row.ObjectiveId ) )
+				continue;
+			if ( row.ObjectiveId == objectiveId )
+				return true;
+		}
+
+		return false;
 	}
 
 	void BindLayout()
@@ -480,6 +533,22 @@ public class QuestObjectiveUI : MonoBehaviour
 		if ( attentionGroup != null )
 			attentionGroup.alpha = 1f;
 		ScheduleHideAttentionGlow( AttentionSpinSeconds );
+	}
+
+	/// <summary>Show the Tasks panel without showFeedback SFX / attention ceremony (gold pile digs).</summary>
+	void ShowQuiet()
+	{
+		RestoreRestPose();
+		RestoreObjectiveTransform();
+		ResetAttentionChrome();
+		StopCountChunkPop( restore: true );
+		if ( showFeedback != null )
+			showFeedback.Stop();
+		SetAttentionGlowVisible( false );
+		if ( group != null )
+			group.alpha = 1f;
+		if ( attentionGroup != null )
+			attentionGroup.alpha = 0f;
 	}
 
 	void ScheduleHideAttentionGlow( float delaySeconds )
@@ -806,21 +875,36 @@ public class QuestObjectiveUI : MonoBehaviour
 		return !string.IsNullOrEmpty( evt.ObjectiveText );
 	}
 
-	string FormatRows( TutorialHudChangedEvent evt )
+	string FormatRows( TutorialHudChangedEvent evt, bool excludeGoldPiles = false )
 	{
 		if ( evt.Rows == null || evt.Rows.Length == 0 )
-			return evt.ObjectiveText ?? string.Empty;
+			return excludeGoldPiles ? string.Empty : ( evt.ObjectiveText ?? string.Empty );
 
 		int contextualFontSize = ResolveContextualFontSize();
 		StringBuilder sb = new StringBuilder();
 		bool wroteRow = false;
+		bool skippingGoldPileGroup = false;
 		for ( int i = 0; i < evt.Rows.Length; i++ )
 		{
 			TutorialHudRow row = evt.Rows[ i ];
+			if ( row.Indent == 0 )
+				skippingGoldPileGroup = excludeGoldPiles && IsGoldPileHudRow( row );
+			else if ( excludeGoldPiles && skippingGoldPileGroup )
+				continue;
+			if ( skippingGoldPileGroup )
+				continue;
+
 			if ( wroteRow )
 				sb.Append( '\n' );
-			if ( row.IsReward && wroteRow )
+			if ( row.Indent == 0 && wroteRow )
+			{
 				sb.Append( '\n' );
+				sb.Append( "<color=#ffffff40>────────</color>\n" );
+			}
+			else if ( row.IsReward && wroteRow )
+			{
+				sb.Append( '\n' );
+			}
 			for ( int n = 0; n < row.Indent; n++ )
 				sb.Append( "  " );
 
@@ -838,8 +922,10 @@ public class QuestObjectiveUI : MonoBehaviour
 
 			if ( isReward )
 				sb.Append( "★ " );
-			else
-				sb.Append( row.Complete ? "✓ " : "• " );
+			else if ( row.Complete )
+				sb.Append( "✓ " );
+			else if ( row.Indent != 0 )
+				sb.Append( "• " );
 			sb.Append( row.Text ?? string.Empty );
 			if ( row.Optional )
 				sb.Append( " (optional)" );
@@ -859,23 +945,18 @@ public class QuestObjectiveUI : MonoBehaviour
 		return sb.ToString();
 	}
 
+	static bool IsGoldPileHudRow( TutorialHudRow row )
+	{
+		if ( string.IsNullOrEmpty( row.ObjectiveId ) )
+			return false;
+		int slash = row.ObjectiveId.IndexOf( '/' );
+		string rootId = slash < 0 ? row.ObjectiveId : row.ObjectiveId.Substring( 0, slash );
+		return GoldPileObjectiveHandler.IsGoldPileObjectiveId( rootId );
+	}
+
 	static string BuildObjectiveKey( TutorialHudChangedEvent evt )
 	{
-		if ( evt.Cleared || evt.Rows == null || evt.Rows.Length == 0 )
-			return string.Empty;
-
-		StringBuilder sb = new StringBuilder();
-		for ( int i = 0; i < evt.Rows.Length; i++ )
-		{
-			TutorialHudRow row = evt.Rows[ i ];
-			if ( row.Indent != 0 )
-				continue;
-			if ( sb.Length > 0 )
-				sb.Append( '|' );
-			sb.Append( row.ObjectiveId );
-		}
-
-		return sb.ToString();
+		return GoldPileObjectiveHandler.BuildStoryObjectiveKey( evt );
 	}
 
 	int ResolveContextualFontSize()

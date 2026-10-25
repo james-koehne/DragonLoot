@@ -138,6 +138,7 @@ public class WorldEventSystem : MonoBehaviour
 		if ( _subscribed )
 			return;
 		EventBus.Subscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Subscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Subscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Subscribe<BuildableCompletedEvent>( OnBuildableCompleted );
@@ -149,6 +150,7 @@ public class WorldEventSystem : MonoBehaviour
 		if ( !_subscribed )
 			return;
 		EventBus.Unsubscribe<VolumeEnteredEvent>( OnVolumeEntered );
+		EventBus.Unsubscribe<VolumeExitedEvent>( OnVolumeExited );
 		EventBus.Unsubscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Unsubscribe<BuildableCompletedEvent>( OnBuildableCompleted );
@@ -164,6 +166,13 @@ public class WorldEventSystem : MonoBehaviour
 	{
 		if ( !string.IsNullOrEmpty( evt.VolumeId ) )
 			_enteredVolumes.Add( evt.VolumeId );
+		EvaluateAll();
+	}
+
+	void OnVolumeExited( VolumeExitedEvent evt )
+	{
+		if ( !string.IsNullOrEmpty( evt.VolumeId ) )
+			_enteredVolumes.Remove( evt.VolumeId );
 		EvaluateAll();
 	}
 
@@ -575,15 +584,15 @@ public class WorldEventSystem : MonoBehaviour
 				BeginDurationWait( sequence, action, Mathf.Max( 0f, action.playerBrakeDuration ) );
 				break;
 			case WorldEventActionType.StartFairyGuide:
-				StartFairyGuide( action );
+				StartFairyGuide( action, sequence );
 				break;
 			case WorldEventActionType.StartFairyDelivery:
-				StartFairyDelivery( action );
+				StartFairyDelivery( action, sequence );
 				break;
 		}
 	}
 
-	static void StartFairyGuide( WorldEventAction action )
+	void StartFairyGuide( WorldEventAction action, RunningActionSequence sequence )
 	{
 		if ( action == null || string.IsNullOrEmpty( action.markerTargetId ) )
 		{
@@ -591,10 +600,24 @@ public class WorldEventSystem : MonoBehaviour
 			return;
 		}
 
-		FairyHelper.StartGuideToMarker( action.markerTargetId );
+		if ( !action.waitUntilFinished || sequence == null )
+		{
+			FairyHelper.StartGuideToMarker( action.markerTargetId, action.fairySpeechLine, null );
+			return;
+		}
+
+		bool completedSync = false;
+		FairyHelper.StartGuideToMarker( action.markerTargetId, action.fairySpeechLine, () =>
+		{
+			completedSync = true;
+			CompleteCallbackWait( sequence );
+		} );
+		if ( completedSync )
+			return;
+		sequence.Phase = ActionSequencePhase.WaitingCallback;
 	}
 
-	static void StartFairyDelivery( WorldEventAction action )
+	void StartFairyDelivery( WorldEventAction action, RunningActionSequence sequence )
 	{
 		if ( action == null || string.IsNullOrEmpty( action.addressableKey ) )
 		{
@@ -602,7 +625,21 @@ public class WorldEventSystem : MonoBehaviour
 			return;
 		}
 
-		FairyHelper.StartDelivery( action.addressableKey );
+		if ( !action.waitUntilFinished || sequence == null )
+		{
+			FairyHelper.StartDelivery( action.addressableKey, action.fairySpeechLine, null );
+			return;
+		}
+
+		bool completedSync = false;
+		FairyHelper.StartDelivery( action.addressableKey, action.fairySpeechLine, () =>
+		{
+			completedSync = true;
+			CompleteCallbackWait( sequence );
+		} );
+		if ( completedSync )
+			return;
+		sequence.Phase = ActionSequencePhase.WaitingCallback;
 	}
 
 	void StartDialogueAction( WorldEventAction action, RunningActionSequence sequence )

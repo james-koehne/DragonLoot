@@ -17,29 +17,11 @@ public class DebugCoinSortingStationSection : DebugOverlaySection
 			UpgradeSystem.Ensure( player );
 
 		UpgradeSystem system = UpgradeSystem.Instance;
-		string upgradeId = CoinSortingStationDefinition.DefaultUpgradeId;
-		CoinSortingStationDefinition def = null;
-		def = RuntimeDefinition.Resolve( ref def );
-		if ( def != null )
-			upgradeId = def.ResolveUpgradeId();
-
-		GUILayout.Label( $"Upgrade: {upgradeId}" );
 		if ( system != null )
 		{
-			int level = system.GetUpgradeLevel( upgradeId );
-			int max = system.GetMaxLevel( upgradeId );
-			GUILayout.Label( $"Level: {level} / {max}" );
-
-			GUILayout.BeginHorizontal();
-			if ( GUILayout.Button( "L1" ) )
-				system.SetUpgradeLevel( upgradeId, 1 );
-			if ( GUILayout.Button( "L2" ) )
-				system.SetUpgradeLevel( upgradeId, 2 );
-			if ( GUILayout.Button( "L3" ) )
-				system.SetUpgradeLevel( upgradeId, 3 );
-			if ( GUILayout.Button( "L4" ) )
-				system.SetUpgradeLevel( upgradeId, 4 );
-			GUILayout.EndHorizontal();
+			DrawUpgradeToggle( system, UpgradeDefinition.CoinSorterAutomaticId, "Automatic" );
+			DrawSpeedButtons( system );
+			DrawUpgradeToggle( system, UpgradeDefinition.CoinSorterHopperId, "Larger Hopper" );
 		}
 		else
 		{
@@ -82,7 +64,7 @@ public class DebugCoinSortingStationSection : DebugOverlaySection
 			return;
 
 		CoinSortingStation station = s_stationList[ s_stationIndex ];
-		GUILayout.Label( $"Station level: {station.StationLevel}" );
+		GUILayout.Label( $"Auto: {station.HasAutomatic}  Speed L{station.SpeedLevel}  Hopper+: {station.HasLargerHopper}" );
 		GUILayout.Label( $"Hopper stack: {station.BufferedCount} / {station.HopperCapacity}" );
 		GUILayout.Label( $"Processing: {station.IsProcessing}  Crank: {station.IsCrankActive}" );
 		GUILayout.Label( $"Reserve: {station.ReserveSeconds:0.00}s  Fill: {station.ReserveNormalized:0.00}" );
@@ -90,5 +72,31 @@ public class DebugCoinSortingStationSection : DebugOverlaySection
 
 		if ( GUILayout.Button( "Force process one" ) )
 			station.DebugForceProcessOne();
+	}
+
+	static void DrawUpgradeToggle( UpgradeSystem system, string id, string label )
+	{
+		int level = system.GetUpgradeLevel( id );
+		GUILayout.BeginHorizontal();
+		GUILayout.Label( $"{label}: {( level >= 1 ? "ON" : "OFF" )}" );
+		if ( GUILayout.Button( "On" ) )
+			system.SetUpgradeLevel( id, 1 );
+		if ( GUILayout.Button( "Off" ) )
+			system.ResetUpgrade( id );
+		GUILayout.EndHorizontal();
+	}
+
+	static void DrawSpeedButtons( UpgradeSystem system )
+	{
+		int level = system.GetUpgradeLevel( UpgradeDefinition.CoinSorterSpeedId );
+		GUILayout.Label( $"Speed: L{level} (0 base / 1 +25% / 2 +50%)" );
+		GUILayout.BeginHorizontal();
+		if ( GUILayout.Button( "L0" ) )
+			system.ResetUpgrade( UpgradeDefinition.CoinSorterSpeedId );
+		if ( GUILayout.Button( "L1 +25%" ) )
+			system.SetUpgradeLevel( UpgradeDefinition.CoinSorterSpeedId, 1 );
+		if ( GUILayout.Button( "L2 +50%" ) )
+			system.SetUpgradeLevel( UpgradeDefinition.CoinSorterSpeedId, 2 );
+		GUILayout.EndHorizontal();
 	}
 }

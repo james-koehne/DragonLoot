@@ -812,15 +812,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 90a53d89c1eb82d4eb2c1eb4d5545308, type: 3}
-        VolumeMin: 0.62
-        VolumeMax: 0.62
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.62
+          VolumeMax: 0.62
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.62
+        _migrateVolumeMax: 0.62
+        _migratePitchMin: 0.95
+        _migratePitchMax: 1.05
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &1956008230814160276
 GameObject:
   m_ObjectHideFlags: 0
@@ -2319,15 +2333,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 0e812923ac7917b45902eb9068b35bc1, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 0.98
-        PitchMax: 1.02
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 0.98
+          PitchMax: 1.02
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 0.98
+        _migratePitchMax: 1.02
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
     - rid: 8923448809617096790
       type: {class: SequenceFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
@@ -2443,15 +2471,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 819afbcc8df8eac499eeedb4ab911548, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 0.98
-        PitchMax: 1.02
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 0.98
+          PitchMax: 1.02
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 0.98
+        _migratePitchMax: 1.02
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
     - rid: 8923448809617096788
       type: {class: ParallelFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
       data:
@@ -2771,6 +2813,8 @@ MonoBehaviour:
   m_FlexibleWidth: 1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+  m_MaxWidth: -1
+  m_MaxHeight: -1
 --- !u!1 &4896249538192227405
 GameObject:
   m_ObjectHideFlags: 0
@@ -3496,6 +3540,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 1
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -3869,15 +3914,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: a56f6eea915e6d1468e4727a532c1139, type: 3}
-        VolumeMin: 0.7
-        VolumeMax: 0.7
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.7
+          VolumeMax: 0.7
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.7
+        _migrateVolumeMax: 0.7
+        _migratePitchMin: 0.95
+        _migratePitchMax: 1.05
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &7101000000000000101
 GameObject:
   m_ObjectHideFlags: 0
@@ -4393,6 +4452,8 @@ MonoBehaviour:
   m_FlexibleWidth: 1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+  m_MaxWidth: -1
+  m_MaxHeight: -1
 --- !u!1 &7101000000000000221
 GameObject:
   m_ObjectHideFlags: 0
@@ -4559,6 +4620,8 @@ MonoBehaviour:
   m_FlexibleWidth: 0
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+  m_MaxWidth: -1
+  m_MaxHeight: -1
 --- !u!1 &7101000000000000255
 GameObject:
   m_ObjectHideFlags: 0
@@ -6990,15 +7053,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 9be77e0759833764783dbd7f769ac975, type: 3}
-        VolumeMin: 0.5
-        VolumeMax: 0.5
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.5
+          VolumeMax: 0.5
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.5
+        _migrateVolumeMax: 0.5
+        _migratePitchMin: 0.95
+        _migratePitchMax: 1.05
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &7101000000000000701
 GameObject:
   m_ObjectHideFlags: 0
@@ -7703,7 +7780,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 72, y: 0}
+  m_AnchoredPosition: {x: 20, y: 0}
   m_SizeDelta: {x: 560, y: 440}
   m_Pivot: {x: 0, y: 0.5}
 --- !u!225 &7101000000000000803
@@ -7808,7 +7885,7 @@ MonoBehaviour:
     m_MaxSize: 80
     m_Alignment: 3
     m_AlignByGeometry: 0
-    m_RichText: 0
+    m_RichText: 1
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
@@ -8424,15 +8501,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: c698c11d90f9f1a4581d30b84e15a24b, type: 3}
-        VolumeMin: 0.6
-        VolumeMax: 0.6
-        PitchMin: 0.95
-        PitchMax: 1.05
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.6
+          VolumeMax: 0.6
+          PitchMin: 0.95
+          PitchMax: 1.05
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.6
+        _migrateVolumeMax: 0.6
+        _migratePitchMin: 0.95
+        _migratePitchMax: 1.05
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &7101000000000000891
 GameObject:
   m_ObjectHideFlags: 0
@@ -13255,15 +13346,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 5fe3a552acde97149b017b0e6b101798, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 0.98
-        PitchMax: 1.02
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 0.98
+          PitchMax: 1.02
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 0.98
+        _migratePitchMax: 1.02
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
     - rid: 8923448766738202801
       type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
       data:
@@ -15329,15 +15434,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 5fe3a552acde97149b017b0e6b101798, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 0.98
-        PitchMax: 1.02
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 0.98
+          PitchMax: 1.02
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 0.98
+        _migratePitchMax: 1.02
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
     - rid: 8923448766738202801
       type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
       data:
@@ -17013,15 +17132,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 5fe3a552acde97149b017b0e6b101798, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 0.98
-        PitchMax: 1.02
-        SpatialBlend: 0
-        MinDistance: 1
-        MaxDistance: 20
-        FollowCallerTransform: 0
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 0.98
+          PitchMax: 1.02
+          SpatialBlend: 0
+          MinDistance: 1
+          MaxDistance: 20
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 0
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 0.98
+        _migratePitchMax: 1.02
+        _migrateSpatialBlend: 0
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 20
+        _migrateFollowCallerTransform: 0
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
     - rid: 8923448766738202801
       type: {class: UiGraphicColorPunchFeedback, ns: , asm: Assembly-CSharp}
       data:
@@ -18124,7 +18257,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7201000000000000102, guid: 81dabcf9cb7a45269dcfe4c9bc49a12c, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 150
+      value: 172
       objectReference: {fileID: 0}
     - target: {fileID: 7201000000000000102, guid: 81dabcf9cb7a45269dcfe4c9bc49a12c, type: 3}
       propertyPath: m_LocalPosition.x

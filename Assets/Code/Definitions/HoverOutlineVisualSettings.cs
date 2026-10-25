@@ -75,6 +75,17 @@ public class HoverOutlineVisualSettings
 		return settings;
 	}
 
+	public static HoverOutlineVisualSettings DefaultFullPouch()
+	{
+		HoverOutlineVisualSettings settings = DefaultPickable();
+		Color full = PlacementFeedbackColors.FullPouchHighlight;
+		settings.outlineColor = new Color( full.r * 1.15f, full.g * 1.05f, full.b * 1.05f, 1f );
+		settings.hdrBoost = 1.55f;
+		settings.pulseSpeed = 1.25f;
+		settings.pulseAmount = 0.14f;
+		return settings;
+	}
+
 	public static HoverOutlineVisualSettings DefaultStack()
 	{
 		HoverOutlineVisualSettings settings = new HoverOutlineVisualSettings();

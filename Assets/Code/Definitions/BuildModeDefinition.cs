@@ -26,7 +26,14 @@ public class BuildModeDefinition : ScriptableObject
 	[Tooltip( "Must be assigned so the ghost shader is included in player builds (Shader.Find is stripped otherwise)." )]
 	public Shader ghostShader;
 
+	[Tooltip( "Legacy single ghost tint. Prefer validGhostColor / invalidGhostColor for placement validity." )]
 	public Color ghostColor = new Color( 0.35f, 0.75f, 1f, 0.4f );
+
+	[Tooltip( "Ghost tint when the build footprint is clear of treasure piles." )]
+	public Color validGhostColor = new Color( 0.25f, 0.9f, 0.35f, 0.4f );
+
+	[Tooltip( "Ghost tint when a treasure pile overlaps the build footprint." )]
+	public Color invalidGhostColor = new Color( 0.95f, 0.2f, 0.2f, 0.4f );
 
 	[Range( 0.5f, 8f )]
 	public float ghostFresnelPower = 2.4f;

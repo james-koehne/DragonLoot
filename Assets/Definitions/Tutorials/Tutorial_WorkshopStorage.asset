@@ -18,7 +18,7 @@ MonoBehaviour:
   - workshop
   - storage
   - mixed
-  disabled: 0
+  disabled: 1
   trigger: 1
   holdingCategory: 0
   volumeId: volume_workshop

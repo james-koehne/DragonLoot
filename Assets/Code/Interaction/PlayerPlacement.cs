@@ -25,9 +25,11 @@ public class PlayerPlacement : MonoBehaviour
 	FloorPlacementTarget _floorTarget;
 	GroundTreasureStackTarget _groundStackTarget;
 	PlacementGhost _ghost;
+	StackJoinAimArrow _joinArrow;
 	ITreasurePlacementTarget _activeTarget;
 	PlacementPreview _activePreview;
 	bool _hasPreview;
+	bool _previewIndirectJoin;
 	bool _inputEnabled = true;
 	Vector3 _smoothedPreviewPos;
 	Quaternion _smoothedPreviewRot = Quaternion.identity;
@@ -57,9 +59,18 @@ public class PlayerPlacement : MonoBehaviour
 
 	/// <summary>True when the current secondary place preview joins an existing ground stack.</summary>
 	public bool IsJoiningStack => HasValidPlacement && IsStackJoinTarget( _activeTarget );
+
+	/// <summary>
+	/// True when the join preview came from aim-beside / along-ray (not a direct stack hit).
+	/// </summary>
+	public bool IsIndirectStackJoin => IsJoiningStack && _previewIndirectJoin;
+
 	public FloorPlacementTarget FloorTarget => _floorTarget;
 	public float PlacementArcHeight => RuntimeDefinition.Get( Definition, d => d.placementArcHeight, 0.12f );
 	public float CoinFlipSpeed => RuntimeDefinition.Get( Definition, d => d.coinFlipSpeed, 1f );
+
+	/// <summary>SO snap radius used by RMB and Hold-E nearby stack joins.</summary>
+	public float GroundStackJoinSnapRadius => GroundStackSnapRadius;
 
 	/// <summary>
 	/// What SecondaryInteract would do right now, without performing the action.
@@ -179,6 +190,12 @@ public class PlayerPlacement : MonoBehaviour
 			_ghost.Destroy();
 			_ghost = null;
 		}
+
+		if ( _joinArrow != null )
+		{
+			_joinArrow.Destroy();
+			_joinArrow = null;
+		}
 	}
 
 	void LateUpdate()
@@ -251,66 +268,60 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
-		if ( target == null )
-		{
-			PlacementQuery floorQuery = BuildFloorQuery();
-			EnsureFloorTarget();
-			if ( _floorTarget != null && floorQuery.HasHit
-				&& PlacementFloorSurface.IsValidWorldPlaceHit( in floorQuery.Hit ) )
-			{
-				target = _floorTarget;
-				query = floorQuery;
-			}
-			else if ( GroundCoinStack.IsGroundStackableCoin( item ) )
-			{
-				// Empty air / non-floor aim beside an airborne stack — join along the aim ray.
-				GroundCoinStack airNearby = FindNearbyGroundCoinStack( in query );
-				if ( airNearby == null )
-				{
-					ClearPreview();
-					return;
-				}
+		// ResolveTarget often returns a nearby GroundCoinStack on floor aims (snap). Re-classify
+		// direct stack hits vs floor-beside joins so the ghost can stay on the ground.
+		ITreasurePlacementTarget joinTarget = null;
+		ITreasurePlacementTarget placeTarget = target;
+		PlacementQuery poseQuery = query;
+		bool useFloorPose = false;
 
-				target = airNearby;
-			}
-			else
+		bool stackableHeld = GroundCoinStack.IsGroundStackableCoin( item ) || GoldBarStack.IsStackable( item );
+		bool worldStackOrFloorAim = target == null
+			|| target == _floorTarget
+			|| target is GroundCoinStack
+			|| target is GroundGoldBarStack
+			|| target == _groundStackTarget;
+
+		if ( stackableHeld && worldStackOrFloorAim )
+		{
+			if ( !TryResolveStackablePreview(
+				item,
+				in query,
+				ref target,
+				out placeTarget,
+				out joinTarget,
+				out poseQuery,
+				out useFloorPose ) )
 			{
 				ClearPreview();
 				return;
 			}
+		}
+		else if ( target == null )
+		{
+			ClearPreview();
+			return;
 		}
 		else if ( target == _floorTarget )
 		{
-			// Always seat floor preview on the dedicated surface hit, never a buried secondary hit.
-			query = BuildFloorQuery();
-			if ( !query.HasHit || !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
+			poseQuery = BuildFloorQuery();
+			if ( !poseQuery.HasHit || !PlacementFloorSurface.IsValidWorldPlaceHit( in poseQuery.Hit ) )
 			{
 				ClearPreview();
 				return;
 			}
 
-			// Coin / gold-bar floor deposits create/join owned stacks — prefer that target for ghost + place.
-			if ( GroundCoinStack.IsGroundStackableCoin( item ) )
-			{
-				GroundCoinStack nearby = FindNearbyGroundCoinStack( in query );
-				if ( nearby != null )
-					target = nearby;
-			}
-			else if ( GoldBarStack.IsStackable( item ) )
-			{
-				GroundGoldBarStack nearbyBars = FindNearbyGroundGoldBarStack( in query );
-				if ( nearbyBars != null )
-					target = nearbyBars;
-			}
+			query = poseQuery;
+			placeTarget = _floorTarget;
 		}
 
-		if ( ShouldSuppressPlacementGhost( target, in query ) )
+		if ( ShouldSuppressPlacementGhost( placeTarget, in query ) )
 		{
 			ClearPreview();
 			return;
 		}
 
-		if ( target is GroundCoinStack || target is GroundGoldBarStack || target == _groundStackTarget )
+		if ( placeTarget is GroundCoinStack || placeTarget is GroundGoldBarStack || placeTarget == _groundStackTarget )
 		{
 			if ( !ShowGroundStackPreview )
 			{
@@ -318,7 +329,7 @@ public class PlayerPlacement : MonoBehaviour
 				return;
 			}
 		}
-		else if ( target == _floorTarget
+		else if ( placeTarget == _floorTarget
 			&& ( GroundCoinStack.IsGroundStackableCoin( item ) || GoldBarStack.IsStackable( item ) ) )
 		{
 			if ( !ShowGroundStackPreview )
@@ -328,33 +339,42 @@ public class PlayerPlacement : MonoBehaviour
 			}
 		}
 
-		if ( target == _groundStackTarget )
+		if ( placeTarget == _groundStackTarget )
 			UpdateGroundStackPreviewReservation( item );
 
-		if ( !target.TryGetPlacementPreview( item, in query, out PlacementPreview preview ) )
+		// Indirect join: pose from floor aim; direct stack hit: pose on stack top.
+		ITreasurePlacementTarget poseSource = useFloorPose && _floorTarget != null ? _floorTarget : placeTarget;
+		if ( !poseSource.TryGetPlacementPreview( item, in poseQuery, out PlacementPreview preview ) )
 		{
 			ClearPreview();
 			return;
 		}
 
-		if ( !ItemAllowsTarget( item, target ) )
+		if ( !ItemAllowsTarget( item, placeTarget ) )
 			preview.IsValid = false;
+
+		bool indirectJoin = useFloorPose && joinTarget != null && IsStackJoinTarget( placeTarget );
+		// Snap pose when switching floor-beside join ↔ stack-top so the ghost does not lerp up the pile.
+		if ( indirectJoin != _previewIndirectJoin )
+			_hasSmoothedPreview = false;
 
 		preview = SmoothPreview( in preview );
 
-		_activeTarget = target;
+		_activeTarget = placeTarget;
 		_activePreview = preview;
 		_hasPreview = true;
+		_previewIndirectJoin = indirectJoin;
 
 		if ( preview.GhostStyle == PlacementGhostStyle.Suppressed )
 		{
 			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 			if ( _ghost != null )
 				_ghost.SetVisible( false );
+			HideJoinArrow();
 			return;
 		}
 
-		bool join = preview.IsValid && IsStackJoinTarget( target );
+		bool join = preview.IsValid && IsStackJoinTarget( placeTarget );
 
 		EnsureGhost();
 		ConfigureGhostVisuals( join );
@@ -365,13 +385,18 @@ public class PlayerPlacement : MonoBehaviour
 
 		if ( join )
 		{
-			UpdatePlacementTargetOutline( target, true, true );
+			UpdatePlacementTargetOutline( placeTarget, true, true );
 			_joinOutlineActive = HoverOutlineRegistrar.CurrentOwner == HoverOutlineRegistrar.Owner.StackVolume;
+			UpdateJoinArrow( join && _previewIndirectJoin, in preview, placeTarget );
 		}
-		else if ( UsesWholeMeshPlacementOutline( target ) )
-			UpdatePlacementTargetOutline( target, preview.IsValid );
 		else
-			HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
+		{
+			HideJoinArrow();
+			if ( UsesWholeMeshPlacementOutline( placeTarget ) )
+				UpdatePlacementTargetOutline( placeTarget, preview.IsValid );
+			else
+				HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
+		}
 	}
 
 	static bool IsStackJoinTarget( ITreasurePlacementTarget target )
@@ -400,15 +425,34 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 
 		PlayerWholeStackInteraction wholeStack = _player.WholeStack;
-		if ( wholeStack == null || !wholeStack.TryGetWholePlaceJoinTarget( out MonoBehaviour joinTarget ) )
+		if ( wholeStack == null
+			|| !wholeStack.TryGetWholePlaceJoinTarget( out MonoBehaviour joinTarget, out bool indirectJoin ) )
+		{
+			if ( !_hasPreview || !IsJoiningStack )
+				HideJoinArrow();
 			return;
+		}
 
 		ITreasurePlacementTarget target = joinTarget as ITreasurePlacementTarget;
 		if ( target == null )
+		{
+			if ( !_hasPreview || !IsJoiningStack )
+				HideJoinArrow();
 			return;
+		}
 
 		UpdatePlacementTargetOutline( target, true, true );
 		_joinOutlineActive = HoverOutlineRegistrar.CurrentOwner == HoverOutlineRegistrar.Owner.StackVolume;
+
+		if ( indirectJoin )
+		{
+			Vector3 from = target is MonoBehaviour mb ? mb.transform.position : Vector3.zero;
+			if ( _interaction != null && _interaction.TryGetLastHit( out RaycastHit hit ) )
+				from = hit.point;
+			UpdateJoinArrowToward( from, target );
+		}
+		else if ( !_hasPreview || !IsIndirectStackJoin )
+			HideJoinArrow();
 	}
 
 	static bool UsesWholeMeshPlacementOutline( ITreasurePlacementTarget target )
@@ -839,7 +883,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !GroundCoinStack.IsGroundStackableCoin( item ) )
 			return false;
 
-		GroundCoinStack nearby = FindNearbyGroundCoinStack( in query );
+		GroundCoinStack nearby = FindNearbyGroundCoinStack( in query, out _ );
 		if ( nearby == null )
 			return false;
 
@@ -950,11 +994,22 @@ public class PlayerPlacement : MonoBehaviour
 
 		ITreasurePlacementTarget target = _activeTarget;
 
-		// Floor coin / gold-bar ItemMesh ghost seeds/joins owned stacks, not FloorPlacementTarget.
+		// Floor ghost already decided "new pile" — seed at the preview pose; do not re-probe nearby.
 		if ( target == _floorTarget && GroundCoinStack.IsGroundStackableCoin( item ) )
-			return TryPlaceOnFloor();
+		{
+			PlacementQuery floorQuery = BuildFloorQuery();
+			if ( !CanPlaceCoinOnFloorSurface( item, in floorQuery ) )
+				return false;
+			return TryPlaceCreatingGroundCoinStackOnFloor( item, in floorQuery );
+		}
+
 		if ( target == _floorTarget && GoldBarStack.IsStackable( item ) )
-			return TryPlaceOnFloor();
+		{
+			PlacementQuery floorQuery = BuildFloorQuery();
+			if ( !CanPlaceCoinOnFloorSurface( item, in floorQuery ) )
+				return false;
+			return TryPlaceCreatingGroundGoldBarStackOnFloor( item, in floorQuery );
+		}
 
 		PlacementQuery query = target == _floorTarget ? BuildFloorQuery() : BuildQuery();
 		query.AutoFindValidSlot = true;
@@ -1020,11 +1075,11 @@ public class PlayerPlacement : MonoBehaviour
 			? interaction.GetSoftReleaseVelocity()
 			: interaction.GetReleaseVelocity( item );
 
-		// Always leave from the right-hand ActiveRoot, not mid-pickup / refill pose.
+		// Active must finish left→right refill before throw (IsActiveHoldReady via peek/consume).
 		Transform hand = carry.ActiveRoot;
 		Vector3 throwOrigin = hand != null ? hand.position : item.transform.position;
 
-		if ( !carry.TryRemoveBottomCluster( out System.Collections.Generic.List<TreasureItem> cluster, snapToHand: true )
+		if ( !carry.TryRemoveBottomCluster( out System.Collections.Generic.List<TreasureItem> cluster, snapToHand: false )
 			|| cluster == null
 			|| cluster.Count == 0 )
 			return false;
@@ -1046,8 +1101,7 @@ public class PlayerPlacement : MonoBehaviour
 			if ( member == null )
 				continue;
 
-			// Snap spam-interrupted hold motion so prediction + flight share the hand origin.
-			// Keep the snapped held rotation from consume; only force the hand position.
+			// Align to hand origin for ballistic prediction (consume only succeeds once refill settled).
 			member.transform.position = throwOrigin;
 			Vector3 start = throwOrigin;
 			Vector3 memberVelocity = throwVelocity;
@@ -1195,7 +1249,7 @@ public class PlayerPlacement : MonoBehaviour
 			if ( !CanPlaceCoinOnFloorSurface( item, in query ) )
 				return false;
 
-			GroundCoinStack nearby = FindNearbyGroundCoinStack( in query );
+			GroundCoinStack nearby = FindNearbyGroundCoinStack( in query, out _ );
 			if ( nearby != null )
 				return ExecutePlace( nearby, item, in query );
 
@@ -1207,7 +1261,7 @@ public class PlayerPlacement : MonoBehaviour
 			if ( !CanPlaceCoinOnFloorSurface( item, in query ) )
 				return false;
 
-			GroundGoldBarStack nearbyBars = FindNearbyGroundGoldBarStack( in query );
+			GroundGoldBarStack nearbyBars = FindNearbyGroundGoldBarStack( in query, out _ );
 			if ( nearbyBars != null )
 				return ExecutePlace( nearbyBars, item, in query );
 
@@ -1243,12 +1297,8 @@ public class PlayerPlacement : MonoBehaviour
 			|| cluster.Count == 0 )
 			return false;
 
-		// Prefer animating onto an existing nearby stack rather than seeding a new contact
-		// that would reverse-merge the old tower.
-		float joinRadius = Mathf.Max( GroundStackSnapRadius, GroundCoinStack.ResolveJoinRadius( item.Definition ) );
-		GroundCoinStack stack = GroundCoinStack.FindNearest( preview.Position, joinRadius );
-		if ( stack == null || stack.IsFull )
-			stack = GroundCoinStack.CreateAt( preview.Position, preview.Rotation );
+		// Caller already chose "new pile" (preview/place agreed). Do not re-join nearby.
+		GroundCoinStack stack = GroundCoinStack.CreateAt( preview.Position, preview.Rotation );
 
 		for ( int i = 0; i < cluster.Count; i++ )
 		{
@@ -1293,10 +1343,8 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !carry.TryConsumeActive( out TreasureItem one ) || one == null )
 			return false;
 
-		float joinRadius = Mathf.Max( GroundStackSnapRadius, GoldBarStack.ResolveJoinRadius( one.Definition ) );
-		GroundGoldBarStack stack = GroundGoldBarStack.FindNearest( preview.Position, joinRadius );
-		if ( stack == null || stack.IsFull || !stack.CanAccept( one.Definition ) )
-			stack = GroundGoldBarStack.CreateAt( preview.Position, preview.Rotation );
+		// Caller already chose "new pile" (preview/place agreed). Do not re-join nearby.
+		GroundGoldBarStack stack = GroundGoldBarStack.CreateAt( preview.Position, preview.Rotation );
 
 		if ( !stack.CanAccept( one.Definition ) )
 		{
@@ -1668,13 +1716,168 @@ public class PlayerPlacement : MonoBehaviour
 	}
 
 	/// <summary>
+	/// For coins/gold bars: decide place target + whether the ghost stays on the floor (indirect join).
+	/// ResolveTarget may already be a nearby stack; floor-beside aims must still pose on the floor.
+	/// </summary>
+	bool TryResolveStackablePreview(
+		TreasureItem item,
+		in PlacementQuery aimQuery,
+		ref ITreasurePlacementTarget resolvedTarget,
+		out ITreasurePlacementTarget placeTarget,
+		out ITreasurePlacementTarget joinTarget,
+		out PlacementQuery poseQuery,
+		out bool useFloorPose )
+	{
+		placeTarget = resolvedTarget;
+		joinTarget = null;
+		poseQuery = aimQuery;
+		useFloorPose = false;
+
+		bool coins = GroundCoinStack.IsGroundStackableCoin( item );
+		bool bars = GoldBarStack.IsStackable( item );
+		if ( !coins && !bars )
+			return false;
+
+		EnsureFloorTarget();
+		PlacementQuery floorQuery = BuildFloorQuery();
+		bool floorOk = _floorTarget != null
+			&& floorQuery.HasHit
+			&& PlacementFloorSurface.IsValidWorldPlaceHit( in floorQuery.Hit );
+
+		if ( coins && TryGetDirectCoinStackHit( in aimQuery, out GroundCoinStack directCoin )
+			&& !directCoin.IsFull
+			&& !directCoin.IsMachineBuffer )
+		{
+			placeTarget = directCoin;
+			poseQuery = aimQuery;
+			useFloorPose = false;
+			resolvedTarget = directCoin;
+			return true;
+		}
+
+		if ( bars && TryGetDirectGoldBarStackHit( in aimQuery, out GroundGoldBarStack directBars )
+			&& !directBars.IsFull )
+		{
+			placeTarget = directBars;
+			poseQuery = aimQuery;
+			useFloorPose = false;
+			resolvedTarget = directBars;
+			return true;
+		}
+
+		if ( floorOk )
+		{
+			poseQuery = floorQuery;
+			resolvedTarget = _floorTarget;
+
+			if ( coins )
+			{
+				GroundCoinStack nearby = FindNearbyGroundCoinStack( in floorQuery, out bool indirect );
+				if ( nearby != null && !nearby.IsMachineBuffer )
+				{
+					placeTarget = nearby;
+					if ( indirect || !IsDirectCoinStackHit( in aimQuery, nearby ) )
+					{
+						joinTarget = nearby;
+						useFloorPose = true;
+					}
+
+					return true;
+				}
+			}
+			else
+			{
+				GroundGoldBarStack nearbyBars = FindNearbyGroundGoldBarStack( in floorQuery, out bool indirect );
+				if ( nearbyBars != null )
+				{
+					placeTarget = nearbyBars;
+					if ( indirect || !IsDirectGoldBarStackHit( in aimQuery, nearbyBars ) )
+					{
+						joinTarget = nearbyBars;
+						useFloorPose = true;
+					}
+
+					return true;
+				}
+			}
+
+			placeTarget = _floorTarget;
+			useFloorPose = true;
+			return true;
+		}
+
+		// No valid floor — air / non-floor aim. Keep joining along the ray when possible.
+		if ( coins )
+		{
+			GroundCoinStack airNearby = FindNearbyGroundCoinStack( in aimQuery, out bool indirect );
+			if ( airNearby == null || airNearby.IsMachineBuffer )
+				return false;
+
+			placeTarget = airNearby;
+			joinTarget = indirect ? airNearby : null;
+			useFloorPose = false;
+			resolvedTarget = airNearby;
+			return true;
+		}
+
+		return resolvedTarget != null;
+	}
+
+	static bool TryGetDirectCoinStackHit( in PlacementQuery query, out GroundCoinStack stack )
+	{
+		stack = null;
+		if ( !query.HasHit || query.Hit.collider == null )
+			return false;
+
+		stack = query.Hit.collider.GetComponentInParent<GroundCoinStack>();
+		if ( stack != null )
+			return true;
+
+		TreasureItem loose = query.Hit.collider.GetComponentInParent<TreasureItem>();
+		if ( loose != null && GroundCoinStack.IsGroundStackableCoin( loose ) )
+		{
+			stack = loose.Owner as GroundCoinStack;
+			return stack != null;
+		}
+
+		return false;
+	}
+
+	static bool IsDirectCoinStackHit( in PlacementQuery query, GroundCoinStack stack )
+	{
+		if ( stack == null || !TryGetDirectCoinStackHit( in query, out GroundCoinStack hit ) )
+			return false;
+		return hit == stack;
+	}
+
+	static bool TryGetDirectGoldBarStackHit( in PlacementQuery query, out GroundGoldBarStack stack )
+	{
+		stack = null;
+		if ( !query.HasHit || query.Hit.collider == null )
+			return false;
+
+		stack = query.Hit.collider.GetComponentInParent<GroundGoldBarStack>();
+		return stack != null;
+	}
+
+	static bool IsDirectGoldBarStackHit( in PlacementQuery query, GroundGoldBarStack stack )
+	{
+		if ( stack == null || !TryGetDirectGoldBarStackHit( in query, out GroundGoldBarStack hit ) )
+			return false;
+		return hit == stack;
+	}
+
+	/// <summary>
 	/// Prefer an existing owned stack near the aim contact. Spam-clicking often hits floor beside
 	/// the capsule instead of the stack itself — without this, each click seeds a new loose coin.
 	/// When there is no valid floor (empty air / non-floor hit), snap along the aim ray so airborne
 	/// stacks can be joined the same way as ground-side stacks.
+	/// <paramref name="indirect"/> is true when the stack was found beside the aim (floor/ray),
+	/// not from a direct collider hit on that stack.
 	/// </summary>
-	GroundCoinStack FindNearbyGroundCoinStack( in PlacementQuery query )
+	GroundCoinStack FindNearbyGroundCoinStack( in PlacementQuery query, out bool indirect )
 	{
+		indirect = false;
 		float radius = ResolveCoinJoinRadius( in query );
 
 		if ( query.HasHit && query.Hit.collider != null )
@@ -1699,28 +1902,55 @@ public class PlayerPlacement : MonoBehaviour
 			{
 				GroundCoinStack nearest = GroundCoinStack.FindNearest( query.Hit.point, radius );
 				if ( nearest != null && !nearest.IsFull )
+				{
+					indirect = true;
 					return nearest;
+				}
 
 				return null;
 			}
 		}
 
-		return FindCoinStackAlongAimRay( radius );
+		GroundCoinStack alongRay = FindCoinStackAlongAimRay( radius );
+		if ( alongRay != null )
+			indirect = true;
+		return alongRay;
 	}
 
 	float ResolveCoinJoinRadius( in PlacementQuery query )
 	{
+		TreasureDefinition def = null;
+		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
+		if ( carry != null )
+		{
+			TreasureItem held = null;
+			carry.TryPeekActive( out held );
+			if ( held != null )
+				def = held.Definition;
+		}
+
+		return ResolveCoinJoinRadius( def );
+	}
+
+	/// <summary>Shared RMB / Hold-E coin join radius from placement SO + definition.</summary>
+	public float ResolveCoinJoinRadius( TreasureDefinition definition )
+	{
 		float radius = GroundStackSnapRadius;
 		if ( radius <= 0.0001f )
 			radius = GroundCoinStack.DefaultJoinRadius;
+		if ( definition != null )
+			radius = Mathf.Max( radius, GroundCoinStack.ResolveJoinRadius( definition ) );
+		return radius;
+	}
 
-		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
-		TreasureItem held = null;
-		if ( carry != null )
-			carry.TryPeekActive( out held );
-		if ( held != null && held.Definition != null )
-			radius = Mathf.Max( radius, GroundCoinStack.ResolveJoinRadius( held.Definition ) );
-
+	/// <summary>Shared RMB / Hold-E gold-bar join radius from placement SO + definition.</summary>
+	public float ResolveGoldBarJoinRadius( TreasureDefinition definition )
+	{
+		float radius = GroundStackSnapRadius;
+		if ( radius <= 0.0001f )
+			radius = GoldBarStackSettings.DefaultJoinRadius;
+		if ( definition != null )
+			radius = Mathf.Max( radius, GoldBarStack.ResolveJoinRadius( definition ) );
 		return radius;
 	}
 
@@ -1737,8 +1967,9 @@ public class PlayerPlacement : MonoBehaviour
 		return null;
 	}
 
-	GroundGoldBarStack FindNearbyGroundGoldBarStack( in PlacementQuery query )
+	GroundGoldBarStack FindNearbyGroundGoldBarStack( in PlacementQuery query, out bool indirect )
 	{
+		indirect = false;
 		if ( !query.HasHit || query.Hit.collider == null )
 			return null;
 
@@ -1749,20 +1980,23 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !PlacementFloorSurface.IsValidWorldPlaceHit( in query.Hit ) )
 			return null;
 
-		float radius = GroundStackSnapRadius;
-		if ( radius <= 0.0001f )
-			radius = GoldBarStackSettings.DefaultJoinRadius;
-
+		TreasureDefinition def = null;
 		PlayerCarry carry = query.Player != null ? query.Player.Carry : null;
-		TreasureItem held = null;
 		if ( carry != null )
+		{
+			TreasureItem held = null;
 			carry.TryPeekActive( out held );
-		if ( held != null && held.Definition != null )
-			radius = Mathf.Max( radius, GoldBarStack.ResolveJoinRadius( held.Definition ) );
+			if ( held != null )
+				def = held.Definition;
+		}
 
+		float radius = ResolveGoldBarJoinRadius( def );
 		GroundGoldBarStack nearest = GroundGoldBarStack.FindNearest( query.Hit.point, radius );
 		if ( nearest != null && !nearest.IsFull )
+		{
+			indirect = true;
 			return nearest;
+		}
 
 		return null;
 	}
@@ -1784,7 +2018,7 @@ public class PlayerPlacement : MonoBehaviour
 		Quaternion rot = baseItem.transform.rotation;
 
 		// Prefer any nearby owned stack (aim hit / snap), not only the base coin's owner.
-		GroundCoinStack stack = FindNearbyGroundCoinStack( in query );
+		GroundCoinStack stack = FindNearbyGroundCoinStack( in query, out _ );
 		if ( stack == null )
 			stack = GroundCoinStack.FindStackForLooseCoin( baseItem );
 
@@ -1854,7 +2088,7 @@ public class PlayerPlacement : MonoBehaviour
 		if ( !GroundCoinStack.IsGroundStackableCoin( held ) )
 			return null;
 
-		return FindNearbyGroundCoinStack( in query );
+		return FindNearbyGroundCoinStack( in query, out _ );
 	}
 
 	bool IsAimingLooseStackDeposit( in PlacementQuery query )
@@ -2111,11 +2345,13 @@ public class PlayerPlacement : MonoBehaviour
 		GroundTreasureStackTarget.ClearPreviewReservation();
 		_activeTarget = null;
 		_hasPreview = false;
+		_previewIndirectJoin = false;
 		_activePreview = default;
 		_hasSmoothedPreview = false;
 		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.StackVolume, GetEntityId() );
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
+		HideJoinArrow();
 	}
 
 	void ClearTreasurePreviewOnly()
@@ -2123,10 +2359,79 @@ public class PlayerPlacement : MonoBehaviour
 		GroundTreasureStackTarget.ClearPreviewReservation();
 		_activeTarget = null;
 		_hasPreview = false;
+		_previewIndirectJoin = false;
 		_activePreview = default;
 		_hasSmoothedPreview = false;
 		if ( _ghost != null )
 			_ghost.SetVisible( false );
+		HideJoinArrow();
+	}
+
+	void EnsureJoinArrow()
+	{
+		if ( _joinArrow == null )
+			_joinArrow = new StackJoinAimArrow();
+	}
+
+	void UpdateJoinArrow( bool show, in PlacementPreview preview, ITreasurePlacementTarget target )
+	{
+		if ( !show )
+		{
+			HideJoinArrow();
+			return;
+		}
+
+		UpdateJoinArrowToward( preview.Position, target );
+	}
+
+	void UpdateJoinArrowToward( Vector3 from, ITreasurePlacementTarget target )
+	{
+		if ( target == null )
+		{
+			HideJoinArrow();
+			return;
+		}
+
+		Vector3 toward = ResolveJoinArrowTarget( target );
+		EnsureJoinArrow();
+		_joinArrow.Show( from, toward, ResolveJoinGhostColor( Definition ) );
+	}
+
+	static Vector3 ResolveJoinArrowTarget( ITreasurePlacementTarget target )
+	{
+		GroundCoinStack coinStack = target as GroundCoinStack;
+		if ( coinStack != null )
+		{
+			// Next free slot sits on top of the settled pile.
+			return coinStack.GetSlotWorldPosition( coinStack.Count );
+		}
+
+		GroundGoldBarStack barStack = target as GroundGoldBarStack;
+		if ( barStack != null )
+		{
+			if ( GoldBarStackLattice.TryGetWorldPose(
+				barStack.Count,
+				null,
+				barStack.ContactPosition,
+				barStack.transform.rotation,
+				out Vector3 barTop,
+				out _ ) )
+				return barTop;
+
+			return barStack.ContactPosition + Vector3.up * 0.2f;
+		}
+
+		MonoBehaviour behaviour = target as MonoBehaviour;
+		if ( behaviour != null )
+			return behaviour.transform.position;
+
+		return Vector3.zero;
+	}
+
+	void HideJoinArrow()
+	{
+		if ( _joinArrow != null )
+			_joinArrow.Hide();
 	}
 
 	static void PublishFailed( ITreasurePlacementTarget target, TreasureItem item, PlacementFailReason reason )

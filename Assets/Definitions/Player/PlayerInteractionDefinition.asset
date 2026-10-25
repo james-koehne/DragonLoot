@@ -32,6 +32,7 @@ MonoBehaviour:
   throwPlaceRepeatInterval: 0.1
   crosshairIdleColor: {r: 1, g: 1, b: 1, a: 1}
   crosshairFocusedColor: {r: 1.2, g: 1.02, b: 0.35, a: 1}
+  crosshairFullPouchColor: {r: 1, g: 0.48584908, b: 0.51892316, a: 1}
   pickableOutline:
     outlineColor: {r: 1.2, g: 1.02, b: 0.35, a: 1}
     outlineIntensity: 1
@@ -46,6 +47,20 @@ MonoBehaviour:
     pulseSpeed: 1.1
     pulseAmount: 0.1
     respectSceneDepth: 1
+  fullPouchOutline:
+    outlineColor: {r: 1.0925, g: 0.294, b: 0.33599997, a: 1}
+    outlineIntensity: 1
+    hdrBoost: 1.55
+    scalePixels: 3
+    maskDilatePixels: 2
+    depthThreshold: 1.5
+    normalThreshold: 0.4
+    depthNormalThreshold: 0.5
+    depthNormalThresholdScale: 7
+    normalEdgeWeight: 1
+    pulseSpeed: 1.25
+    pulseAmount: 0.14
+    respectSceneDepth: 0
   questOutline:
     outlineColor: {r: 0.23, g: 1.14, b: 1.25, a: 1}
     outlineIntensity: 1

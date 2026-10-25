@@ -24,6 +24,7 @@ public class DebugOverlay : MonoBehaviour
 	const string VSyncPrefsKey = "DragonLoot.Debug.VSync";
 	const string ShowFpsPrefsKey = "DragonLoot.Debug.ShowFps";
 	const string PanelWidthPrefsKey = "DragonLoot.Debug.PanelWidth";
+	const string UiScalePrefsKey = "DragonLoot.Debug.UiScale";
 	const string FavoritesOnlyPrefsKey = "DragonLoot.Debug.FavoritesOnly";
 	const string RecentTeleportPrefsPrefix = "DragonLoot.Debug.RecentTeleport.";
 	const int RecentTeleportSlots = 3;
@@ -31,6 +32,11 @@ public class DebugOverlay : MonoBehaviour
 	const float FpsRedAt = 60f;
 	const float FpsGreenAt = 120f;
 	const int FpsHistorySize = 180;
+	const float DefaultUiScale = 1.25f;
+	const float MinUiScale = 1f;
+	const float MaxUiScale = 1.75f;
+	const float UiScaleStep = 0.1f;
+	static readonly Color PanelBackgroundColor = new Color( 0.08f, 0.08f, 0.1f, 0.9f );
 
 	static DebugOverlay s_instance;
 
@@ -64,6 +70,7 @@ public class DebugOverlay : MonoBehaviour
 	bool _settingsOpen = true;
 	Vector2 _scroll;
 	float _panelWidth = DefaultPanelWidth;
+	float _uiScale = DefaultUiScale;
 	float _overlayHideTime = -1f;
 	float _displayedSensitivity;
 	float _smoothedFps;
@@ -81,6 +88,9 @@ public class DebugOverlay : MonoBehaviour
 	GUIStyle _fpsStyle;
 	GUIStyle _fpsUnitStyle;
 	GUIStyle _fpsStatStyle;
+	GUISkin _scaledSkin;
+	float _scaledSkinForScale = -1f;
+	Texture2D _panelBackground;
 
 	public static bool IsOpen => s_instance != null && s_instance._open;
 
@@ -135,6 +145,7 @@ public class DebugOverlay : MonoBehaviour
 		ApplyVSync( PlayerPrefs.GetInt( VSyncPrefsKey, 1 ) != 0, persist: false );
 		_showFps = PlayerPrefs.GetInt( ShowFpsPrefsKey, 0 ) != 0;
 		_panelWidth = Mathf.Clamp( PlayerPrefs.GetFloat( PanelWidthPrefsKey, DefaultPanelWidth ), MinPanelWidth, MaxPanelWidth );
+		_uiScale = Mathf.Clamp( PlayerPrefs.GetFloat( UiScalePrefsKey, DefaultUiScale ), MinUiScale, MaxUiScale );
 		_favoritesOnly = PlayerPrefs.GetInt( FavoritesOnlyPrefsKey, 0 ) != 0;
 		_settingsOpen = LoadFoldoutOpen( "Settings", defaultOpen: true );
 		BuildSections();
@@ -148,7 +159,20 @@ public class DebugOverlay : MonoBehaviour
 		if ( _open )
 			SetOpen( false );
 
+		DebugFlyCamera.ExitIfActive();
 		AudioMaster.FlushPersist();
+
+		if ( _panelBackground != null )
+		{
+			Destroy( _panelBackground );
+			_panelBackground = null;
+		}
+
+		if ( _scaledSkin != null )
+		{
+			Destroy( _scaledSkin );
+			_scaledSkin = null;
+		}
 	}
 
 	void BuildSections()
@@ -242,9 +266,12 @@ public class DebugOverlay : MonoBehaviour
 
 		if ( keyboard[ quitKey ].wasPressedThisFrame )
 		{
-			// Escape closes the debug panel when open. Game pause / quit is owned by PauseMenuUI.
+			// Escape closes the debug panel when open; otherwise exits fly cam.
+			// Game pause / quit is owned by PauseMenuUI.
 			if ( _open )
 				SetOpen( false );
+			else if ( DebugFlyCamera.IsActive )
+				DebugFlyCamera.ExitIfActive();
 		}
 
 		if ( keyboard[ quickSaveKey ].wasPressedThisFrame )
@@ -375,10 +402,21 @@ public class DebugOverlay : MonoBehaviour
 
 	void DrawPanel()
 	{
-		Rect panel = new Rect( PanelPad, PanelPad, _panelWidth, Screen.height - PanelPad * 2f );
+		float scale = _uiScale;
+		float panelWidth = _panelWidth * scale;
+		Rect panel = new Rect( PanelPad, PanelPad, panelWidth, Screen.height - PanelPad * 2f );
+
+		EnsurePanelBackground();
+		Color oldColor = GUI.color;
+		GUI.color = PanelBackgroundColor;
+		GUI.DrawTexture( panel, _panelBackground );
+		GUI.color = oldColor;
 		GUI.Box( panel, GUIContent.none );
 
-		GUILayout.BeginArea( new Rect( panel.x + 6f, panel.y + 6f, panel.width - 12f, panel.height - 12f ) );
+		GUISkin previousSkin = GUI.skin;
+		GUI.skin = GetScaledSkin( scale );
+
+		GUILayout.BeginArea( new Rect( panel.x + 6f * scale, panel.y + 6f * scale, panel.width - 12f * scale, panel.height - 12f * scale ) );
 		DrawHeader();
 		DrawQuickActions();
 		DrawNavToolbar();
@@ -388,18 +426,93 @@ public class DebugOverlay : MonoBehaviour
 		DrawSections();
 		GUILayout.EndScrollView();
 		GUILayout.EndArea();
+
+		GUI.skin = previousSkin;
 	}
 
 	void DrawHeader()
 	{
 		GUILayout.BeginHorizontal();
 		GUILayout.Label( "DragonLoot Debug", GUILayout.ExpandWidth( true ) );
+		if ( GUILayout.Button( "A-", GUILayout.Width( 28f ) ) )
+			SetUiScale( _uiScale - UiScaleStep );
+		if ( GUILayout.Button( "A+", GUILayout.Width( 28f ) ) )
+			SetUiScale( _uiScale + UiScaleStep );
 		if ( GUILayout.Button( "-", GUILayout.Width( 24f ) ) )
 			SetPanelWidth( _panelWidth - WidthStep );
 		if ( GUILayout.Button( "+", GUILayout.Width( 24f ) ) )
 			SetPanelWidth( _panelWidth + WidthStep );
 		GUILayout.EndHorizontal();
-		GUILayout.Label( "` / Esc close  W:" + Mathf.RoundToInt( _panelWidth ) );
+		GUILayout.Label( "` / Esc close  W:" + Mathf.RoundToInt( _panelWidth ) + "  A:" + _uiScale.ToString( "0.00" ) );
+	}
+
+	void EnsurePanelBackground()
+	{
+		if ( _panelBackground != null )
+			return;
+
+		_panelBackground = new Texture2D( 1, 1, TextureFormat.RGBA32, false );
+		_panelBackground.SetPixel( 0, 0, Color.white );
+		_panelBackground.Apply( false, true );
+		_panelBackground.hideFlags = HideFlags.HideAndDontSave;
+	}
+
+	GUISkin GetScaledSkin( float scale )
+	{
+		if ( _scaledSkin != null && Mathf.Approximately( _scaledSkinForScale, scale ) )
+			return _scaledSkin;
+
+		if ( _scaledSkin == null )
+			_scaledSkin = ScriptableObject.CreateInstance<GUISkin>();
+
+		GUISkin source = GUI.skin;
+		_scaledSkin.font = source.font;
+		_scaledSkin.box = ScaleStyle( source.box, scale );
+		_scaledSkin.label = ScaleStyle( source.label, scale );
+		_scaledSkin.button = ScaleStyle( source.button, scale );
+		_scaledSkin.toggle = ScaleStyle( source.toggle, scale );
+		_scaledSkin.textField = ScaleStyle( source.textField, scale );
+		_scaledSkin.textArea = ScaleStyle( source.textArea, scale );
+		_scaledSkin.horizontalSlider = ScaleStyle( source.horizontalSlider, scale );
+		_scaledSkin.horizontalSliderThumb = ScaleStyle( source.horizontalSliderThumb, scale );
+		_scaledSkin.verticalScrollbar = ScaleStyle( source.verticalScrollbar, scale );
+		_scaledSkin.verticalScrollbarThumb = ScaleStyle( source.verticalScrollbarThumb, scale );
+		_scaledSkin.scrollView = ScaleStyle( source.scrollView, scale );
+		_scaledSkinForScale = scale;
+		return _scaledSkin;
+	}
+
+	static GUIStyle ScaleStyle( GUIStyle source, float scale )
+	{
+		GUIStyle style = new GUIStyle( source );
+		int baseSize = source.fontSize > 0 ? source.fontSize : 12;
+		style.fontSize = Mathf.Max( 1, Mathf.RoundToInt( baseSize * scale ) );
+		style.fixedHeight = source.fixedHeight > 0f ? source.fixedHeight * scale : 0f;
+		style.fixedWidth = source.fixedWidth > 0f ? source.fixedWidth * scale : 0f;
+		style.padding = ScaleRectOffset( source.padding, scale );
+		style.margin = ScaleRectOffset( source.margin, scale );
+		return style;
+	}
+
+	static RectOffset ScaleRectOffset( RectOffset source, float scale )
+	{
+		if ( source == null )
+			return new RectOffset();
+		return new RectOffset(
+			Mathf.RoundToInt( source.left * scale ),
+			Mathf.RoundToInt( source.right * scale ),
+			Mathf.RoundToInt( source.top * scale ),
+			Mathf.RoundToInt( source.bottom * scale ) );
+	}
+
+	void SetUiScale( float scale )
+	{
+		float next = Mathf.Clamp( scale, MinUiScale, MaxUiScale );
+		if ( Mathf.Approximately( next, _uiScale ) )
+			return;
+		_uiScale = next;
+		PlayerPrefs.SetFloat( UiScalePrefsKey, _uiScale );
+		PlayerPrefs.Save();
 	}
 
 	void DrawQuickActions()
@@ -430,11 +543,11 @@ public class DebugOverlay : MonoBehaviour
 			DoorProgress.SetUnlockAllDoors( next );
 			SetLastAction( next ? "Unlock all doors ON" : "Unlock all doors OFF" );
 		}
-		if ( GUILayout.Button( IsTutorialsDisabled() ? "Tutorials: OFF" : "Skip Tutorials" ) )
+		if ( GUILayout.Button( IsTutorialsDisabled() ? "Tutorials: OFF" : "Tutorials: ON" ) )
 		{
 			bool next = !IsTutorialsDisabled();
 			SetTutorialsDisabled( next );
-			SetLastAction( next ? "Tutorials disabled" : "Tutorials enabled" );
+			SetLastAction( next ? "Tutorials: OFF" : "Tutorials: ON" );
 		}
 		GUILayout.EndHorizontal();
 
@@ -771,7 +884,12 @@ public class DebugOverlay : MonoBehaviour
 		}
 		else if ( !PauseMenuUI.IsOpen && !MapUI.IsOpen )
 		{
-			if ( player != null )
+			if ( DebugFlyCamera.IsActive )
+			{
+				Cursor.lockState = CursorLockMode.Locked;
+				Cursor.visible = false;
+			}
+			else if ( player != null )
 				player.SetGameplayInputEnabled( true );
 			else
 			{

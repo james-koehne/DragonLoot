@@ -4,6 +4,10 @@ using UnityEngine;
 public class UpgradeDefinition : ScriptableObject
 {
 	public const string DigPickupSpeedId = "dig_pickup_speed";
+	public const string CoinSorterAutomaticId = "coin_sorter_automatic";
+	public const string CoinSorterSpeedId = "coin_sorter_speed";
+	public const string CoinSorterHopperId = "coin_sorter_hopper";
+	public const string LegacyCoinSortingStationId = "coin_sorting_station";
 
 	[Header( "Identity" )]
 	public string id;
@@ -18,6 +22,9 @@ public class UpgradeDefinition : ScriptableObject
 	[Header( "Progression" )]
 	[Min( 1 )]
 	public int maxLevel = 1;
+
+	[Tooltip( "Optional per-level unlock toast titles (index 0 = level 1). Empty slot falls back to displayName." )]
+	public string[] levelUnlockLabels;
 
 	[Tooltip( "Designer kill-switch. Disabled upgrades stay locked to gameplay consumers." )]
 	public bool enabled = true;
@@ -34,6 +41,19 @@ public class UpgradeDefinition : ScriptableObject
 		if ( !string.IsNullOrEmpty( id ) )
 			return id;
 		return name;
+	}
+
+	/// <summary>Toast title for unlocking/reaching <paramref name="level"/> (1-based).</summary>
+	public string ResolveUnlockToastTitle( int level )
+	{
+		if ( levelUnlockLabels != null && level >= 1 && level <= levelUnlockLabels.Length )
+		{
+			string label = levelUnlockLabels[ level - 1 ];
+			if ( !string.IsNullOrEmpty( label ) )
+				return label;
+		}
+
+		return ResolveDisplayName();
 	}
 
 	public int ResolveMaxLevel()

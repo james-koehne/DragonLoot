@@ -43,6 +43,9 @@ public class PlayerBuildMode : MonoBehaviour
 	bool _active;
 	float _charge;
 	BuildableObject _aimed;
+	BuildableObject _scriptedBuildable;
+	float _scriptedCharge;
+	readonly bool[] _scriptedSwingHitPlayed = new bool[ MaxSwingHits ];
 	Vector3 _aimHitPoint;
 	bool _hasAimHitPoint;
 	HoverOutlineVisualSettings _cachedBuildOutline;
@@ -92,6 +95,26 @@ public class PlayerBuildMode : MonoBehaviour
 	}
 
 	public bool IsCharging => _active && _aimed != null && _charge > 0.001f;
+	public bool IsScriptedBuilding => _scriptedBuildable != null;
+
+	/// <summary>
+	/// Plays the same hammer hit/complete SFX timing as a player hold, then Completes the buildable.
+	/// Does not enter build mode or equip the held hammer.
+	/// </summary>
+	public bool TryBeginScriptedBuild( BuildableObject buildable )
+	{
+		if ( buildable == null || buildable.IsBuilt || buildable.IsCompleting )
+			return false;
+		if ( _scriptedBuildable != null )
+			return false;
+
+		_scriptedBuildable = buildable;
+		_scriptedCharge = 0f;
+		ResetSwingHits( _scriptedSwingHitPlayed );
+		buildable.SetGhostVisible( true );
+		PlayBuildStartFeedback( buildable );
+		return true;
+	}
 
 	public void Setup( PlayerController player, PlayerInteraction interaction, FirstPersonCameraController cameraLook )
 	{
@@ -115,6 +138,8 @@ public class PlayerBuildMode : MonoBehaviour
 
 	void Update()
 	{
+		TickScriptedBuild();
+
 		if ( !_inputEnabled || _player == null || !_player.GameplayInputEnabled )
 		{
 			if ( _active || _equipPhase == EquipPhase.Holstering )
@@ -168,6 +193,7 @@ public class PlayerBuildMode : MonoBehaviour
 
 	void OnDestroy()
 	{
+		ClearScriptedBuild();
 		ClearBuildOutline();
 		ConsumeTakenWorldHammer();
 		ReleaseHammer();
@@ -368,7 +394,9 @@ public class PlayerBuildMode : MonoBehaviour
 
 			// Active when within fadeEnd of the bounds (nearest point) so long tracks show from either end.
 			// Objective-outlined buildables stay visible even outside build fade / when far, but still use normal ghost fade.
-			bool show = buildable.ObjectiveOutlineRequested || buildable.IsEligibleToShow( playerPos, fadeEnd );
+			bool show = buildable == _scriptedBuildable
+				|| buildable.ObjectiveOutlineRequested
+				|| buildable.IsEligibleToShow( playerPos, fadeEnd );
 			bool wasVisible = buildable.IsGhostVisible;
 			buildable.SetGhostVisible( show );
 			if ( show )
@@ -393,18 +421,25 @@ public class PlayerBuildMode : MonoBehaviour
 			if ( buildable == null )
 				continue;
 
-			// Keep quest-objective ghosts visible after leaving build mode.
-			buildable.SetGhostVisible( buildable.ObjectiveOutlineRequested );
+			// Keep quest-objective / scripted-build ghosts visible after leaving build mode.
+			buildable.SetGhostVisible( buildable == _scriptedBuildable || buildable.ObjectiveOutlineRequested );
 		}
 	}
 
 	void TickAimAndCharge( GameInput input )
 	{
+		if ( _scriptedBuildable != null )
+		{
+			CancelCharge();
+			_aimed = null;
+			return;
+		}
+
 		BuildableObject aimed = ResolveAimedBuildable();
 		if ( aimed != _aimed )
 		{
 			StopBuildStartFeedback();
-			ResetSwingHits();
+			ResetSwingHits( _swingHitPlayed );
 			_aimed = aimed;
 			_charge = 0f;
 		}
@@ -418,14 +453,20 @@ public class PlayerBuildMode : MonoBehaviour
 			return;
 		}
 
+		if ( _aimed.IsBlockedByTreasurePile() )
+		{
+			CancelCharge();
+			return;
+		}
+
 		if ( _charge <= 0f )
 		{
-			ResetSwingHits();
+			ResetSwingHits( _swingHitPlayed );
 			PlayBuildStartFeedback( _aimed );
 		}
 
 		_charge += Time.deltaTime;
-		TickSwingHits( _aimed );
+		TickSwingHits( _aimed, _charge, _swingHitPlayed );
 		if ( _charge < GetHoldSeconds() )
 			return;
 
@@ -440,15 +481,67 @@ public class PlayerBuildMode : MonoBehaviour
 		}
 	}
 
+	void TickScriptedBuild()
+	{
+		BuildableObject buildable = _scriptedBuildable;
+		if ( buildable == null )
+			return;
+
+		if ( buildable.IsBuilt || buildable.IsCompleting )
+		{
+			ClearScriptedBuild();
+			return;
+		}
+
+		buildable.SetGhostVisible( true );
+		_scriptedCharge += Time.deltaTime;
+		TickSwingHits( buildable, _scriptedCharge, _scriptedSwingHitPlayed );
+		UpdateBuildOutlineFor( buildable );
+
+		if ( _scriptedCharge < GetHoldSeconds() )
+			return;
+
+		ClearScriptedBuild();
+		PlayBuildCompleteFeedback( buildable );
+		buildable.Complete();
+	}
+
+	void ClearScriptedBuild()
+	{
+		StopBuildStartFeedback();
+		_scriptedBuildable = null;
+		_scriptedCharge = 0f;
+		ResetSwingHits( _scriptedSwingHitPlayed );
+		if ( !_active || _aimed == null )
+			ClearBuildOutline();
+	}
+
 	void UpdateBuildOutline()
 	{
+		if ( _scriptedBuildable != null )
+		{
+			UpdateBuildOutlineFor( _scriptedBuildable );
+			return;
+		}
+
 		if ( !_active || _aimed == null || _aimed.IsCompleting )
 		{
 			ClearBuildOutline();
 			return;
 		}
 
-		IReadOnlyList<Renderer> renderers = _aimed.GetGhostOutlineRenderers();
+		UpdateBuildOutlineFor( _aimed );
+	}
+
+	void UpdateBuildOutlineFor( BuildableObject buildable )
+	{
+		if ( buildable == null || buildable.IsCompleting )
+		{
+			ClearBuildOutline();
+			return;
+		}
+
+		IReadOnlyList<Renderer> renderers = buildable.GetGhostOutlineRenderers();
 		_outlineScratch.Clear();
 		if ( renderers != null )
 		{
@@ -466,7 +559,7 @@ public class PlayerBuildMode : MonoBehaviour
 			return;
 		}
 
-		HoverOutlineVisualSettings settings = ResolveBuildOutlineSettings();
+		HoverOutlineVisualSettings settings = ResolveBuildOutlineSettings( buildable );
 		HoverOutlineRegistrar.SetTarget(
 			HoverOutlineRegistrar.Owner.BuildMode,
 			_outlineScratch,
@@ -479,17 +572,17 @@ public class PlayerBuildMode : MonoBehaviour
 		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.BuildMode, GetEntityId() );
 	}
 
-	HoverOutlineVisualSettings ResolveBuildOutlineSettings()
+	HoverOutlineVisualSettings ResolveBuildOutlineSettings( BuildableObject buildable )
 	{
 		BuildModeDefinition def = Definition;
 		if ( def != null && def.buildOutline != null )
-		{
 			_cachedBuildOutline = def.buildOutline.Clone();
-			_cachedBuildOutline.Validate();
-			return _cachedBuildOutline;
-		}
+		else
+			_cachedBuildOutline = HoverOutlineVisualSettings.DefaultPickable();
 
-		_cachedBuildOutline = HoverOutlineVisualSettings.DefaultPickable();
+		bool blocked = buildable != null && buildable.IsBlockedByTreasurePile();
+		Color validity = blocked ? PlacementFeedbackColors.InvalidRgb : PlacementFeedbackColors.ValidRgb;
+		_cachedBuildOutline.outlineColor = new Color( validity.r * 1.2f, validity.g * 1.15f, validity.b, 1f );
 		_cachedBuildOutline.Validate();
 		return _cachedBuildOutline;
 	}
@@ -746,18 +839,23 @@ public class PlayerBuildMode : MonoBehaviour
 	void CancelCharge()
 	{
 		_charge = 0f;
-		ResetSwingHits();
+		ResetSwingHits( _swingHitPlayed );
 		StopBuildStartFeedback();
 	}
 
-	void ResetSwingHits()
+	static void ResetSwingHits( bool[] hitPlayed )
 	{
-		for ( int i = 0; i < _swingHitPlayed.Length; i++ )
-			_swingHitPlayed[ i ] = false;
+		if ( hitPlayed == null )
+			return;
+		for ( int i = 0; i < hitPlayed.Length; i++ )
+			hitPlayed[ i ] = false;
 	}
 
-	void TickSwingHits( BuildableObject buildable )
+	void TickSwingHits( BuildableObject buildable, float charge, bool[] hitPlayed )
 	{
+		if ( hitPlayed == null )
+			return;
+
 		BuildModeDefinition def = Definition;
 		int swingCount = def != null ? Mathf.Clamp( def.hammerSwingCount, 1, MaxSwingHits ) : 3;
 		float hitNorm = def != null ? def.hammerSwingHitNormalized : 0.55f;
@@ -766,14 +864,14 @@ public class PlayerBuildMode : MonoBehaviour
 
 		for ( int i = 0; i < swingCount; i++ )
 		{
-			if ( _swingHitPlayed[ i ] )
+			if ( hitPlayed[ i ] )
 				continue;
 
 			float hitTime = ( i + hitNorm ) * swingDur;
-			if ( _charge < hitTime )
+			if ( charge < hitTime )
 				break;
 
-			_swingHitPlayed[ i ] = true;
+			hitPlayed[ i ] = true;
 			PlayBuildHitFeedback( buildable );
 		}
 	}

@@ -105,12 +105,18 @@ public class UnlockRewardToastUI : MonoBehaviour
 
 	public static void NotifyUnlock( UpgradeDefinition definition )
 	{
+		NotifyUnlock( definition, level: 1 );
+	}
+
+	public static void NotifyUnlock( UpgradeDefinition definition, int level )
+	{
 		if ( definition == null )
 			return;
 
+		int toastLevel = Mathf.Max( 1, level );
 		EnqueueStatic( new ToastEntry
 		{
-			Message = "Unlocked: " + definition.ResolveDisplayName(),
+			Message = "Unlocked: " + definition.ResolveUnlockToastTitle( toastLevel ),
 			Description = TrimDescription( definition.description ),
 			Icon = definition.icon,
 			Tier = ToastStackUI.ToastTier.Unlock

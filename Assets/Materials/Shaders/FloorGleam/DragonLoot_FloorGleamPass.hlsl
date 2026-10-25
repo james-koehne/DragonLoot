@@ -8,13 +8,18 @@ CBUFFER_START(UnityPerMaterial)
 	half4 _Color;
 	half _Exposure;
 	half _Alpha;
+	half _AreaGlow;
+	half _AreaGlowMul;
+	float4 _GleamOrigin;
+	float4 _GleamAxis;
+	half _GleamSpan;
 	half _GleamT;
-	half _ScreenAngle;
 	half _BandWidth;
 	half _BandSoftness;
 	half _EdgeFade;
 	half _LineCount;
 	half _LineSpacing;
+	half _BandMul;
 	half _FogInfluence;
 CBUFFER_END
 
@@ -27,7 +32,8 @@ struct FloorGleamAttributes
 struct FloorGleamVaryings
 {
 	float4 positionCS : SV_POSITION;
-	half fogFactor : TEXCOORD0;
+	float3 positionWS : TEXCOORD0;
+	half fogFactor : TEXCOORD1;
 	UNITY_VERTEX_INPUT_INSTANCE_ID
 	UNITY_VERTEX_OUTPUT_STEREO
 };
@@ -41,6 +47,7 @@ FloorGleamVaryings FloorGleamVert(FloorGleamAttributes input)
 
 	VertexPositionInputs posInputs = GetVertexPositionInputs(input.positionOS.xyz);
 	output.positionCS = posInputs.positionCS;
+	output.positionWS = posInputs.positionWS;
 	output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
 	return output;
 }
@@ -51,26 +58,13 @@ half FloorGleamBand(half t01, half bandCenter, half halfWidth, half soft)
 	return 1.0h - smoothstep(halfWidth, halfWidth + soft, dist);
 }
 
-// Full-viewport UV, top-left origin. Mesh is the draw mask only — no footprint remap.
-float2 FloorGleamScreenUV(float4 positionCS)
+half FloorGleamSwipe(float3 positionWS)
 {
-	float2 viewport = GetNormalizedScreenSpaceUV(positionCS);
-	// GetNormalizedScreenSpaceUV: (0,0) = bottom-left. Flip Y so (0,0) = top-left.
-	return float2(viewport.x, 1.0 - viewport.y);
-}
-
-half4 FloorGleamFrag(FloorGleamVaryings input) : SV_Target
-{
-	UNITY_SETUP_INSTANCE_ID(input);
-	UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-
-	float2 uv = FloorGleamScreenUV(input.positionCS);
-
-	// 45° with TL origin → axis (1,1) → top-left toward bottom-right of the viewport.
-	float angleRad = radians((float)_ScreenAngle);
-	float2 axis = float2(cos(angleRad), sin(angleRad));
-	float span = max(abs(axis.x) + abs(axis.y), 0.01);
-	float t01 = saturate(dot(uv, axis) / span);
+	float3 origin = _GleamOrigin.xyz;
+	float3 axis = normalize(_GleamAxis.xyz + float3(1e-5, 0.0, 0.0));
+	float span = max((float)_GleamSpan, 0.01);
+	float along = dot(positionWS - origin, axis);
+	float t01 = saturate(along / span);
 
 	half bandCenter = (half)_GleamT * 1.4h - 0.2h;
 	half halfWidth = max((half)_BandWidth * 0.5h, 0.001h);
@@ -90,11 +84,19 @@ half4 FloorGleamFrag(FloorGleamVaryings input) : SV_Target
 	}
 
 	band = saturate(band);
-
 	half edge = saturate(min((half)t01, 1.0h - (half)t01) / max((half)_EdgeFade, 0.001h));
-	band *= edge;
+	return band * edge;
+}
 
-	half intensity = band * (half)_Exposure * (half)_Alpha;
+half4 FloorGleamFrag(FloorGleamVaryings input) : SV_Target
+{
+	UNITY_SETUP_INSTANCE_ID(input);
+	UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+	half area = saturate((half)_AreaGlow) * max((half)_AreaGlowMul, 0.0h);
+	half swipe = FloorGleamSwipe(input.positionWS) * max((half)_BandMul, 0.0h);
+	half intensity = (area + swipe) * (half)_Exposure * (half)_Alpha;
+
 	half3 rgb = _Color.rgb * intensity;
 	half alpha = saturate(intensity * _Color.a);
 

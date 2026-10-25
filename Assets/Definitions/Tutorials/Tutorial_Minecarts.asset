@@ -17,6 +17,7 @@ MonoBehaviour:
   tags:
   - minecart
   - movement
+  disabled: 1
   trigger: 15
   holdingCategory: 0
   volumeId: 
@@ -37,12 +38,10 @@ MonoBehaviour:
   - tut_movement
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Tap to shove a cart along the track. Hold to push or pull it with you. Place
-    treasure into cargo carts to haul it around. Drive carts have a seat — look at
-    the side to ride. Call posts summon carts; unload stations dump cargo.
-  keybindHint: '[{ContextualInteract}] Tap to shove  Hold [{ContextualInteract}] Push
-    [{SecondaryInteract}] Place in cart'
+  body: "Tap to shove a cart along the track. Hold to push or pull it with you. Place treasure into cargo carts to haul it around. Drive carts have a seat \u2014 look at the side to ride. Call posts summon carts; unload stations dump cargo."
+  keybindHint: '[{ContextualInteract}] Tap to shove  Hold [{ContextualInteract}] Push [{SecondaryInteract}] Place in cart'
   tasks:
   - id: shove_cart
     label: Tap to shove the cart

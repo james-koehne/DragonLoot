@@ -12,7 +12,10 @@ public class ObjectiveSystem : MonoBehaviour
 	const int NearbyCap = 3;
 	const float DefaultShowRadius = 40f;
 	const float LastTaskToCompleteDelay = 1.75f;
-	const float NextObjectiveShowDelay = 2f;
+	/// <summary>Breathing room after completion / unlock toasts finish before the next objective appears.</summary>
+	const float PostToastObjectiveDelay = 2f;
+	/// <summary>Short beat after toasts clear before the next completion-ceremony stage.</summary>
+	const float CompletionStageBeat = 0.75f;
 
 	const string LegacyWorkshopObjectiveId = "obj_workshop";
 	const string WorkshopAccessObjectiveId = "obj_workshop_access";
@@ -37,7 +40,10 @@ public class ObjectiveSystem : MonoBehaviour
 	readonly HashSet<string> _announcedNewObjectiveIds = new HashSet<string>();
 	readonly HashSet<string> _pendingHudRevealIds = new HashSet<string>();
 	readonly Queue<string> _pendingHudRevealQueue = new Queue<string>( 8 );
+	readonly Queue<ObjectiveDefinition> _completionCeremonyQueue = new Queue<ObjectiveDefinition>( 4 );
 	readonly List<NearbyCandidate> _nearbyScratch = new List<NearbyCandidate>( 16 );
+	readonly List<NearbyCandidate> _alwaysShowScratch = new List<NearbyCandidate>( 8 );
+	readonly List<NearbyCandidate> _proximityScratch = new List<NearbyCandidate>( 16 );
 	readonly List<Transform> _outlineScratch = new List<Transform>( 8 );
 	readonly List<TutorialHudRow> _rowScratch = new List<TutorialHudRow>( 32 );
 
@@ -48,6 +54,7 @@ public class ObjectiveSystem : MonoBehaviour
 	float _nextNearbyRefreshUnscaled;
 	string _lastHudFingerprint;
 	Coroutine _pendingHudRevealRoutine;
+	Coroutine _completionCeremonyRoutine;
 
 	public static ObjectiveSystem Instance => _instance;
 
@@ -116,9 +123,11 @@ public class ObjectiveSystem : MonoBehaviour
 		_lastHudFingerprint = null;
 		_announcedNewObjectiveIds.Clear();
 		ClearPendingHudReveals();
+		ClearCompletionCeremonies();
 		TryCompleteCountSubs();
 		CatchUpWorldEventSubs();
 		CatchUpBuildableSubs();
+		Island4CoinSorterUnlock.CatchUp( this );
 		CompleteObjectivesWithAllSubsDone();
 		FireCompletedObjectiveWorldEvents();
 		_seedHudAnnouncements = true;
@@ -318,19 +327,46 @@ public class ObjectiveSystem : MonoBehaviour
 			CompleteObjective( definition, ignoreWorldState: true );
 	}
 
+	const string TutorialIslandVolumeId = "volume_island_1";
+	const string TutorialIslandIdPrefix = "obj_island_1_";
+
 	/// <summary>
 	/// Marks every catalog objective and sub complete, grants their rewards, and fires completion world events.
 	/// Skips the per-island completion toast so a debug skip can surface ability/upgrade rewards instead.
 	/// </summary>
 	public void DebugCompleteAll()
 	{
-		if ( _catalog == null || _catalog.objectives == null )
+		DebugCompleteWhere( _ => true );
+	}
+
+	/// <summary>
+	/// Completes Island 1 / tutorial-island objectives only (for Post Tutorial debug spawn).
+	/// </summary>
+	public void DebugCompleteTutorialIsland()
+	{
+		DebugCompleteWhere( IsTutorialIslandObjective );
+	}
+
+	static bool IsTutorialIslandObjective( ObjectiveDefinition definition )
+	{
+		if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+			return false;
+		if ( definition.showVolumeId == TutorialIslandVolumeId )
+			return true;
+		return definition.id.StartsWith( TutorialIslandIdPrefix, System.StringComparison.Ordinal );
+	}
+
+	void DebugCompleteWhere( System.Func<ObjectiveDefinition, bool> match )
+	{
+		if ( _catalog == null || _catalog.objectives == null || match == null )
 			return;
 
 		for ( int i = 0; i < _catalog.objectives.Count; i++ )
 		{
 			ObjectiveDefinition definition = _catalog.objectives[ i ];
 			if ( definition == null || string.IsNullOrEmpty( definition.id ) )
+				continue;
+			if ( !match( definition ) )
 				continue;
 
 			if ( definition.subs != null )
@@ -355,6 +391,7 @@ public class ObjectiveSystem : MonoBehaviour
 		}
 
 		ClearPendingHudReveals();
+		ClearCompletionCeremonies();
 		RefreshNearbyHud( force: true );
 	}
 
@@ -368,6 +405,8 @@ public class ObjectiveSystem : MonoBehaviour
 		_pendingHudRevealIds.Clear();
 		_pendingHudRevealQueue.Clear();
 		_pendingHudRevealRoutine = null;
+		_completionCeremonyQueue.Clear();
+		_completionCeremonyRoutine = null;
 
 		ProfileSaveData save = GetSave();
 		if ( save != null )
@@ -765,6 +804,8 @@ public class ObjectiveSystem : MonoBehaviour
 			SubId = subId
 		} );
 
+		Island4CoinSorterUnlock.TryUnlockFromSub( definition.id, subId );
+
 		if ( AreAllSubsComplete( definition ) && !IsPendingHudReveal( definition.id ) )
 			ScheduleCompleteObjective( definition );
 		RefreshNearbyHud( force: true );
@@ -914,24 +955,100 @@ public class ObjectiveSystem : MonoBehaviour
 		_completedObjectives.Add( definition.id );
 		PersistObjective( definition.id );
 
-		if ( announce && !string.IsNullOrEmpty( definition.completionToast ) )
-			UnlockRewardToastUI.NotifyMessage( definition.completionToast, null, ToastStackUI.ToastTier.Milestone );
-
-		GrantRewards( definition );
-		FireWorldEvents( definition );
-
+		// Notify UI while the completed objective is still the HUD content, so the complete
+		// ceremony can run before world-event / unlock refreshes swap in the next objective.
 		EventBus.Publish( new ObjectiveCompletedEvent
 		{
 			ObjectiveId = definition.id,
 			Definition = definition
 		} );
 
-		// Enqueue first so catch-up cannot silently finish newly unlocked objectives
-		// during the HUD delay (e.g. Auto Minecarts when stations are already built).
+		// Hold newly unlocked objectives before world-event refreshes can publish them early.
 		EnqueueNewlyUnlockedForDelayedHud( definition.id );
+
+		if ( announce )
+		{
+			EnqueueCompletionCeremony( definition );
+			return;
+		}
+
+		GrantRewards( definition );
+		FireWorldEvents( definition );
 		CatchUpBuildableSubs();
 		CompleteObjectivesWithAllSubsDone();
 		RefreshNearbyHud( force: true );
+	}
+
+	void EnqueueCompletionCeremony( ObjectiveDefinition definition )
+	{
+		if ( definition == null )
+			return;
+
+		_completionCeremonyQueue.Enqueue( definition );
+		if ( _completionCeremonyRoutine == null )
+			_completionCeremonyRoutine = StartCoroutine( RunCompletionCeremonies() );
+	}
+
+	IEnumerator RunCompletionCeremonies()
+	{
+		while ( _completionCeremonyQueue.Count > 0 )
+		{
+			ObjectiveDefinition definition = _completionCeremonyQueue.Dequeue();
+			if ( definition == null )
+				continue;
+
+			yield return RunCompletionCeremony( definition );
+		}
+
+		_completionCeremonyRoutine = null;
+	}
+
+	IEnumerator RunCompletionCeremony( ObjectiveDefinition definition )
+	{
+		if ( !string.IsNullOrEmpty( definition.completionToast ) )
+			UnlockRewardToastUI.NotifyMessage( definition.completionToast, null, ToastStackUI.ToastTier.Milestone );
+
+		yield return WaitToastsIdlePlusBeat();
+
+		GrantRewards( definition );
+
+		yield return WaitToastsIdlePlusBeat();
+
+		FireWorldEvents( definition );
+		CatchUpBuildableSubs();
+		CompleteObjectivesWithAllSubsDone();
+		RefreshNearbyHud( force: true );
+	}
+
+	IEnumerator WaitToastsIdlePlusBeat()
+	{
+		while ( AreObjectiveToastsBusy() )
+			yield return null;
+
+		float elapsed = 0f;
+		while ( elapsed < CompletionStageBeat )
+		{
+			if ( AreObjectiveToastsBusy() )
+			{
+				elapsed = 0f;
+				while ( AreObjectiveToastsBusy() )
+					yield return null;
+				continue;
+			}
+
+			elapsed += Time.unscaledDeltaTime;
+			yield return null;
+		}
+	}
+
+	void ClearCompletionCeremonies()
+	{
+		_completionCeremonyQueue.Clear();
+		if ( _completionCeremonyRoutine != null )
+		{
+			StopCoroutine( _completionCeremonyRoutine );
+			_completionCeremonyRoutine = null;
+		}
 	}
 
 	bool IsPendingHudReveal( string objectiveId )
@@ -940,8 +1057,8 @@ public class ObjectiveSystem : MonoBehaviour
 	}
 
 	/// <summary>
-	/// Hold objectives that just became eligible (and would show on the left HUD) for
-	/// <see cref="NextObjectiveShowDelay"/> so completion toasts land first; reveal one at a time.
+	/// Hold objectives that just became eligible off the left HUD until completion / unlock
+	/// toasts clear, plus <see cref="PostToastObjectiveDelay"/>, then reveal one at a time.
 	/// </summary>
 	void EnqueueNewlyUnlockedForDelayedHud( string completedObjectiveId )
 	{
@@ -953,11 +1070,12 @@ public class ObjectiveSystem : MonoBehaviour
 			ObjectiveDefinition next = _catalog.objectives[ i ];
 			if ( next == null || string.IsNullOrEmpty( next.id ) )
 				continue;
+			if ( !PrerequisiteListContains( next.prerequisiteObjectiveIds, completedObjectiveId ) )
+				continue;
+
 			if ( IsCompleted( next.id ) )
 				continue;
 			if ( !ArePrerequisitesMet( next ) )
-				continue;
-			if ( !PrerequisiteListContains( next.prerequisiteObjectiveIds, completedObjectiveId ) )
 				continue;
 			if ( !IsInShowContext( next ) )
 				continue;
@@ -977,9 +1095,20 @@ public class ObjectiveSystem : MonoBehaviour
 	{
 		while ( _pendingHudRevealQueue.Count > 0 )
 		{
+			while ( AreObjectiveToastsBusy() )
+				yield return null;
+
 			float elapsed = 0f;
-			while ( elapsed < NextObjectiveShowDelay )
+			while ( elapsed < PostToastObjectiveDelay )
 			{
+				if ( AreObjectiveToastsBusy() )
+				{
+					elapsed = 0f;
+					while ( AreObjectiveToastsBusy() )
+						yield return null;
+					continue;
+				}
+
 				elapsed += Time.unscaledDeltaTime;
 				yield return null;
 			}
@@ -1012,6 +1141,16 @@ public class ObjectiveSystem : MonoBehaviour
 		}
 
 		_pendingHudRevealRoutine = null;
+	}
+
+	static bool AreObjectiveToastsBusy()
+	{
+		ToastStackUI stack = ToastStackUI.Instance;
+		if ( stack != null && stack.IsBusy )
+			return true;
+
+		UnlockRewardToastUI unlock = UnlockRewardToastUI.Instance;
+		return unlock != null && unlock.IsBusy;
 	}
 
 	void ClearPendingHudReveals()
@@ -1070,13 +1209,22 @@ public class ObjectiveSystem : MonoBehaviour
 			UpgradeDefinition upgradeDef = null;
 			upgrades.TryGetDefinition( reward.upgradeId, out upgradeDef );
 
+			int grantedLevel = 1;
 			if ( reward.upgradeLevel > 0 )
-				upgrades.SetUpgradeLevel( reward.upgradeId, reward.upgradeLevel );
+			{
+				int current = upgrades.GetUpgradeLevel( reward.upgradeId );
+				int target = reward.upgradeLevel;
+				grantedLevel = Mathf.Max( current, target );
+				if ( target > current || !upgrades.IsUnlocked( reward.upgradeId ) )
+					upgrades.SetUpgradeLevel( reward.upgradeId, grantedLevel );
+				else
+					grantedLevel = current > 0 ? current : target;
+			}
 			else
 				upgrades.UnlockUpgrade( reward.upgradeId );
 
 			if ( upgradeDef != null )
-				UnlockRewardToastUI.NotifyUnlock( upgradeDef );
+				UnlockRewardToastUI.NotifyUnlock( upgradeDef, grantedLevel );
 			else
 				UnlockRewardToastUI.NotifyMessage( "Unlocked: " + reward.upgradeId );
 		}
@@ -1206,9 +1354,9 @@ public class ObjectiveSystem : MonoBehaviour
 			}
 		}
 
-		_nearbyScratch.Sort( CompareNearby );
+		SelectNearbyHudCandidates();
 
-		int count = Mathf.Min( NearbyCap, _nearbyScratch.Count );
+		int count = _nearbyScratch.Count;
 		string fingerprint = BuildFingerprint( count );
 		if ( !force && fingerprint == _lastHudFingerprint )
 			return;
@@ -1284,7 +1432,8 @@ public class ObjectiveSystem : MonoBehaviour
 				}
 			}
 
-			CollectIncompleteSubOutlines( definition, _outlineScratch );
+			if ( GoldPileObjectiveHandler.ShouldContributeOutline( definition ) )
+				CollectIncompleteSubOutlines( definition, _outlineScratch );
 
 			if ( !hasMarker && !string.IsNullOrEmpty( candidate.MarkerTargetId ) )
 			{
@@ -1298,7 +1447,7 @@ public class ObjectiveSystem : MonoBehaviour
 		TutorialHud.SetOutlineRoots( _outlineScratch );
 		TutorialHud.Publish( new TutorialHudChangedEvent
 		{
-			Title = "Nearby",
+			Title = "Tasks",
 			ObjectiveText = string.Empty,
 			Rows = _rowScratch.ToArray(),
 			HasMarker = hasMarker,
@@ -1323,6 +1472,8 @@ public class ObjectiveSystem : MonoBehaviour
 			if ( !_announcedNewObjectiveIds.Add( definition.id ) )
 				continue;
 			if ( _seedHudAnnouncements )
+				continue;
+			if ( !GoldPileObjectiveHandler.ShouldAnnounceOnHud( definition ) )
 				continue;
 
 			string title = definition.ResolveTitle();
@@ -1407,10 +1558,93 @@ public class ObjectiveSystem : MonoBehaviour
 			return _enteredVolumes.Contains( definition.showVolumeId );
 
 		if ( !TryResolveNearbyAnchor( definition, out _, out Vector3 markerPos, out float distance ) )
-			return false;
+			return IsPlayerOnPileForObjective( definition );
 
 		float radius = definition.showRadius > 0f ? definition.showRadius : DefaultShowRadius;
-		return distance <= radius;
+		if ( distance <= radius )
+			return true;
+
+		return IsPlayerOnPileForObjective( definition );
+	}
+
+	bool IsPlayerOnPileForObjective( ObjectiveDefinition definition )
+	{
+		if ( definition == null || definition.subs == null )
+			return false;
+		if ( GameMode.Instance == null || GameMode.Instance.Player == null )
+			return false;
+
+		Vector3 playerPos = GameMode.Instance.Player.transform.position;
+		for ( int i = 0; i < definition.subs.Length; i++ )
+		{
+			ObjectiveSubDefinition sub = definition.subs[ i ];
+			if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+				continue;
+			if ( sub.completeType != ObjectiveSubCompleteType.PileEmptied )
+				continue;
+			if ( IsSubCompleted( definition.id, sub.id ) )
+				continue;
+
+			TreasurePileInteractable pile = null;
+			if ( !string.IsNullOrEmpty( sub.targetId ) &&
+			     EventTargetRegistry.TryGetTarget( sub.targetId, out QuestTarget target ) &&
+			     target != null )
+			{
+				pile = target.GetComponent<TreasurePileInteractable>();
+				if ( pile == null )
+					pile = target.GetComponentInParent<TreasurePileInteractable>();
+				if ( pile == null )
+					pile = target.GetComponentInChildren<TreasurePileInteractable>( true );
+			}
+
+			if ( pile == null )
+				continue;
+
+			TreasurePileVisual visual = pile.PileVisual;
+			if ( visual == null )
+				visual = pile.GetComponent<TreasurePileVisual>();
+			if ( visual == null )
+				continue;
+
+			if ( visual.ContainsWorldPointXZ( playerPos ) || visual.HasPileSurfaceAt( playerPos ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Pins alwaysShow story objectives, but reserves at least one HUD slot for proximity
+	/// objectives (e.g. nearby pile digs) when any are eligible.
+	/// </summary>
+	void SelectNearbyHudCandidates()
+	{
+		_alwaysShowScratch.Clear();
+		_proximityScratch.Clear();
+
+		for ( int i = 0; i < _nearbyScratch.Count; i++ )
+		{
+			NearbyCandidate candidate = _nearbyScratch[ i ];
+			if ( candidate.Definition != null && candidate.Definition.alwaysShow )
+				_alwaysShowScratch.Add( candidate );
+			else
+				_proximityScratch.Add( candidate );
+		}
+
+		_alwaysShowScratch.Sort( CompareNearby );
+		_proximityScratch.Sort( CompareNearby );
+
+		bool hasProximity = _proximityScratch.Count > 0;
+		int alwaysTake = hasProximity
+			? Mathf.Min( _alwaysShowScratch.Count, NearbyCap - 1 )
+			: Mathf.Min( _alwaysShowScratch.Count, NearbyCap );
+		int proxTake = Mathf.Min( _proximityScratch.Count, NearbyCap - alwaysTake );
+
+		_nearbyScratch.Clear();
+		for ( int i = 0; i < alwaysTake; i++ )
+			_nearbyScratch.Add( _alwaysShowScratch[ i ] );
+		for ( int i = 0; i < proxTake; i++ )
+			_nearbyScratch.Add( _proximityScratch[ i ] );
 	}
 
 	static int CompareNearby( NearbyCandidate a, NearbyCandidate b )
@@ -1419,6 +1653,11 @@ public class ObjectiveSystem : MonoBehaviour
 		bool bAlways = b.Definition != null && b.Definition.alwaysShow;
 		if ( aAlways != bAlways )
 			return aAlways ? -1 : 1;
+
+		bool aPile = GoldPileObjectiveHandler.IsGoldPileObjective( a.Definition );
+		bool bPile = GoldPileObjectiveHandler.IsGoldPileObjective( b.Definition );
+		if ( aPile != bPile )
+			return aPile ? 1 : -1;
 
 		int cmp = a.Distance.CompareTo( b.Distance );
 		if ( cmp != 0 )
@@ -1494,6 +1733,19 @@ public class ObjectiveSystem : MonoBehaviour
 				continue;
 			if ( IsSubCompleted( definition.id, sub.id ) )
 				continue;
+
+			// Prefer the BuildableObject root for BuildableCompleted so outline sync can force the ghost on.
+			if ( sub.completeType == ObjectiveSubCompleteType.BuildableCompleted
+			     && TryResolveBuildableAnchor( sub.targetId, out _, out Transform buildableOutline )
+			     && buildableOutline != null )
+			{
+				BuildableObject buildable = buildableOutline.GetComponentInParent<BuildableObject>();
+				Transform root = buildable != null ? buildable.transform : buildableOutline;
+				if ( !destination.Contains( root ) )
+					destination.Add( root );
+				continue;
+			}
+
 			if ( !TryResolveSubAnchor( sub, out _, out _, out Transform outline ) )
 				continue;
 			if ( outline == null )

@@ -164,6 +164,10 @@ public class WorldEventAction
 	[Tooltip( "Seconds to interpolate planar velocity to zero when type is BrakePlayerMovement. 0 = instant stop." )]
 	[Min( 0f )]
 	public float playerBrakeDuration = 1f;
+
+	[TextArea( 1, 4 )]
+	[Tooltip( "Optional fairy bubble line when type is StartFairyDelivery (offer) or StartFairyGuide (follow). Empty = prefab default." )]
+	public string fairySpeechLine;
 }
 
 /// <summary>

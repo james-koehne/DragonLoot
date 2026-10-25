@@ -218,6 +218,48 @@ public sealed class TreasureSurfaceSimulator
 		}
 	}
 
+	/// <summary>
+	/// Stops surface motion at the current transform — no seat snap, auto-stack, or pyramid join.
+	/// Used while charging a non-coin pickup hold so falling loot freezes in place.
+	/// </summary>
+	public void FreezeInPlace( TreasureItem item )
+	{
+		if ( item == null )
+			return;
+
+		for ( int i = 0; i < _bodies.Count; i++ )
+		{
+			SimBody body = _bodies[ i ];
+			if ( body.Item != item )
+				continue;
+
+			body.Sleeping = true;
+			body.RestTimer = 0f;
+			body.Velocity = Vector3.zero;
+			body.VerticalVelocity = 0f;
+			body.BouncesRemaining = 0;
+			body.AngularVelocity = Vector3.zero;
+
+			// Keep HeightAboveSurface consistent with the frozen pose so a later wake/settle
+			// does not invent a hop from a zeroed height while the transform is still airborne.
+			if ( _world != null
+				&& _world.Sampler != null
+				&& _world.Sampler.TrySample( item.transform.position, out TreasureSurfaceSample sample )
+				&& sample.Valid
+				&& sample.Traversable )
+			{
+				float contactY = sample.Height + body.SeatLift;
+				body.HeightAboveSurface = Mathf.Max( 0f, item.transform.position.y - contactY );
+				body.HasLastValidPosition = true;
+				body.LastValidPosition = item.transform.position;
+				body.LastValidSample = sample;
+			}
+
+			_bodies[ i ] = body;
+			return;
+		}
+	}
+
 	public void Tick( float dt )
 	{
 		if ( _world == null || !_world.IsInitialized || dt <= 0f )

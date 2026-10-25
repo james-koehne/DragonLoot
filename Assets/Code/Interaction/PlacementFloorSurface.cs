@@ -9,6 +9,8 @@ public static class PlacementFloorSurface
 	/// <summary>Minimum upright alignment for a surface to count as placeable floor (vs wall/ceiling).</summary>
 	public const float MinFloorUpDot = 0.35f;
 
+	static readonly Collider[] OverlapScratch = new Collider[ 64 ];
+
 	public static bool IsFloorCollider( Collider collider )
 	{
 		if ( collider == null )
@@ -104,5 +106,84 @@ public static class PlacementFloorSurface
 	public static bool IsHeightfieldPilePlacementTarget( ITreasurePlacementTarget target )
 	{
 		return target is TreasurePileInteractable;
+	}
+
+	/// <summary>
+	/// True when a world AABB overlaps a heightfield treasure pile (mesh tiles or corner samples).
+	/// Used by build ghosts and similar footprint checks.
+	/// </summary>
+	public static bool WorldBoundsOverlapsHeightfieldPile( Bounds worldBounds )
+	{
+		Vector3 halfExtents = worldBounds.extents;
+		if ( halfExtents.x < 0.01f )
+			halfExtents.x = 0.01f;
+		if ( halfExtents.y < 0.01f )
+			halfExtents.y = 0.01f;
+		if ( halfExtents.z < 0.01f )
+			halfExtents.z = 0.01f;
+
+		Vector3 center = worldBounds.center;
+		int hits = Physics.OverlapBoxNonAlloc(
+			center,
+			halfExtents,
+			OverlapScratch,
+			Quaternion.identity,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Collide );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider other = OverlapScratch[ i ];
+			if ( other == null )
+				continue;
+
+			if ( IsHeightfieldPileCollider( other ) )
+				return true;
+
+			TreasurePileVisual pile = other.GetComponentInParent<TreasurePileVisual>();
+			if ( pile != null
+				&& ( pile.ContainsWorldPointXZ( center ) || pile.HasPileSurfaceAt( center ) ) )
+				return true;
+		}
+
+		Vector3 min = worldBounds.min;
+		Vector3 max = worldBounds.max;
+		Vector3[] samples =
+		{
+			center,
+			new Vector3( min.x, min.y, min.z ),
+			new Vector3( max.x, min.y, min.z ),
+			new Vector3( min.x, min.y, max.z ),
+			new Vector3( max.x, min.y, max.z ),
+		};
+
+		for ( int s = 0; s < samples.Length; s++ )
+		{
+			if ( SampleHitsHeightfieldPile( samples[ s ] ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	static bool SampleHitsHeightfieldPile( Vector3 world )
+	{
+		int hits = Physics.OverlapSphereNonAlloc(
+			world,
+			0.08f,
+			OverlapScratch,
+			Physics.DefaultRaycastLayers,
+			QueryTriggerInteraction.Collide );
+
+		for ( int i = 0; i < hits; i++ )
+		{
+			Collider other = OverlapScratch[ i ];
+			if ( other == null )
+				continue;
+			if ( IsHeightfieldPileCollider( other ) )
+				return true;
+		}
+
+		return false;
 	}
 }

@@ -92,4 +92,36 @@ public static class MinecartConsistUtility
 		spawned.BindToTrack( track, along, tangent );
 		return true;
 	}
+
+	/// <summary>
+	/// Spawn a drive lead with a cargo follower for station auto fleets.
+	/// AutoController stays on the drive lead only.
+	/// </summary>
+	public static bool TrySpawnAutoConsist( MinecartTrack track, float along, out MinecartInteractable lead )
+	{
+		lead = null;
+		if ( !TrySpawnOnTrack( track, along, drive: true, out lead ) || lead == null )
+			return false;
+
+		MinecartInteractable cargo;
+		if ( !TryAddCar( lead, drive: false, out cargo ) || cargo == null )
+		{
+			Addressables.ReleaseInstance( lead.gameObject );
+			lead = null;
+			return false;
+		}
+
+		StripFollowerAutoController( cargo );
+		return true;
+	}
+
+	static void StripFollowerAutoController( MinecartInteractable follower )
+	{
+		if ( follower == null )
+			return;
+
+		MinecartAutoController auto = follower.GetComponent<MinecartAutoController>();
+		if ( auto != null )
+			Object.Destroy( auto );
+	}
 }

@@ -14,6 +14,8 @@ public class PouchFullHintUI : MonoBehaviour
 {
 	public static PouchFullHintUI Instance { get; private set; }
 
+	const float HintAnchoredY = 160f;
+
 	[SerializeField] CanvasGroup group;
 	[SerializeField] Text label;
 	[SerializeField] RectTransform punchTarget;
@@ -22,6 +24,7 @@ public class PouchFullHintUI : MonoBehaviour
 	[SerializeField] float fadeOutDuration = 0.25f;
 
 	bool _ready;
+	bool _baseScaleCaptured;
 	Coroutine _hideRoutine;
 	Vector3 _baseScale = Vector3.one;
 
@@ -95,7 +98,10 @@ public class PouchFullHintUI : MonoBehaviour
 
 		EnsureUi();
 		if ( label != null )
+		{
 			label.text = message;
+			ApplyGlobalFont( label );
+		}
 
 		if ( group != null )
 		{
@@ -103,6 +109,9 @@ public class PouchFullHintUI : MonoBehaviour
 			group.blocksRaycasts = false;
 			group.interactable = false;
 		}
+
+		if ( showFeedback != null )
+			showFeedback.Stop();
 
 		if ( punchTarget != null )
 			punchTarget.localScale = _baseScale;
@@ -138,6 +147,9 @@ public class PouchFullHintUI : MonoBehaviour
 
 	void HideImmediate()
 	{
+		if ( showFeedback != null )
+			showFeedback.Stop();
+
 		if ( group != null )
 		{
 			group.alpha = 0f;
@@ -158,7 +170,7 @@ public class PouchFullHintUI : MonoBehaviour
 		root.anchorMin = new Vector2( 0.5f, 0.5f );
 		root.anchorMax = new Vector2( 0.5f, 0.5f );
 		root.pivot = new Vector2( 0.5f, 0.5f );
-		root.anchoredPosition = new Vector2( 0f, 36f );
+		root.anchoredPosition = new Vector2( 0f, HintAnchoredY );
 		root.sizeDelta = new Vector2( 520f, 64f );
 
 		if ( group == null )
@@ -169,7 +181,13 @@ public class PouchFullHintUI : MonoBehaviour
 		if ( punchTarget == null )
 			punchTarget = root;
 
-		_baseScale = punchTarget.localScale;
+		if ( !_baseScaleCaptured && punchTarget != null )
+		{
+			_baseScale = punchTarget.localScale;
+			if ( _baseScale.sqrMagnitude < 0.0001f )
+				_baseScale = Vector3.one;
+			_baseScaleCaptured = true;
+		}
 
 		if ( label == null )
 		{
@@ -194,18 +212,14 @@ public class PouchFullHintUI : MonoBehaviour
 			label.horizontalOverflow = HorizontalWrapMode.Wrap;
 			label.verticalOverflow = VerticalWrapMode.Overflow;
 
-			Font font = Resources.GetBuiltinResource<Font>( "LegacyRuntime.ttf" );
-			if ( font == null )
-				font = Resources.GetBuiltinResource<Font>( "Arial.ttf" );
-			if ( font != null )
-				label.font = font;
-
 			Outline outline = labelGo.GetComponent<Outline>();
 			if ( outline == null )
 				outline = labelGo.AddComponent<Outline>();
 			outline.effectColor = new Color( 0f, 0f, 0f, 0.85f );
 			outline.effectDistance = new Vector2( 1.5f, -1.5f );
 		}
+
+		ApplyGlobalFont( label );
 
 		if ( showFeedback == null )
 		{
@@ -247,5 +261,56 @@ public class PouchFullHintUI : MonoBehaviour
 		punch.Punch = new Vector3( 0.18f, 0.18f, 0f );
 		punch.Duration = 0.28f;
 		punch.UseUnscaledTime = true;
+	}
+
+	static void ApplyGlobalFont( Text text )
+	{
+		if ( text == null )
+			return;
+
+		Font font = ResolveGlobalFont( text );
+		if ( font != null )
+			text.font = font;
+	}
+
+	static Font ResolveGlobalFont( Text self )
+	{
+		DiscoveryToastUI discovery = DiscoveryToastUI.Instance;
+		if ( discovery != null )
+		{
+			Text discoveryLabel = discovery.GetComponentInChildren<Text>( true );
+			if ( discoveryLabel != null && discoveryLabel.font != null )
+				return discoveryLabel.font;
+		}
+
+		ToastStackUI stack = ToastStackUI.Instance;
+		if ( stack != null )
+		{
+			Text stackLabel = stack.GetComponentInChildren<Text>( true );
+			if ( stackLabel != null && stackLabel.font != null )
+				return stackLabel.font;
+		}
+
+		Transform parent = self != null ? self.transform.parent : null;
+		Transform canvasRoot = parent != null ? parent.parent : null;
+		if ( canvasRoot == null && parent != null )
+			canvasRoot = parent;
+
+		if ( canvasRoot != null )
+		{
+			Text[] texts = canvasRoot.GetComponentsInChildren<Text>( true );
+			for ( int i = 0; i < texts.Length; i++ )
+			{
+				Text candidate = texts[ i ];
+				if ( candidate == null || candidate == self || candidate.font == null )
+					continue;
+				return candidate.font;
+			}
+		}
+
+		Font builtin = Resources.GetBuiltinResource<Font>( "LegacyRuntime.ttf" );
+		if ( builtin == null )
+			builtin = Resources.GetBuiltinResource<Font>( "Arial.ttf" );
+		return builtin;
 	}
 }

@@ -109,6 +109,7 @@ public class PlayerCoffeeSip : MonoBehaviour
 			yield break;
 		}
 
+		EventBus.Publish( new CoffeeSipCompletedEvent { Cup = item } );
 		PlaySipFeedback();
 
 		CoffeeMachineDefinition def = ResolvedDefinition;

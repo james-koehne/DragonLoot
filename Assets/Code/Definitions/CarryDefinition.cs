@@ -174,9 +174,13 @@ public class CarryDefinition : ScriptableObject
 	[Min( 0f )]
 	public float pouchSummaryFadeIn = 0.2f;
 
-	[Tooltip( "Seconds the pouch summary stays fully visible." )]
+	[Tooltip( "Seconds the pouch summary stays fully visible after a pouch switch or reselect." )]
 	[Min( 0f )]
 	public float pouchSummaryHold = 2f;
+
+	[Tooltip( "Seconds the pouch summary stays fully visible after loot is added to a pouch." )]
+	[Min( 0f )]
+	public float pouchSummaryHoldOnAdd = 3.25f;
 
 	[Tooltip( "Seconds to slide the pouch summary back out to the left." )]
 	[Min( 0f )]
@@ -224,6 +228,14 @@ public class CarryDefinition : ScriptableObject
 	[Tooltip( "How quickly the next item pulls from left-hand bottom into the right hand." )]
 	[Min( 0.05f )]
 	public float activeRefillTweenDuration = 0.22f;
+
+	[Tooltip( "World meters per second for hand-transfer arcs (cycle / promote / demote). Duration is max(minDuration, distance / speed)." )]
+	[Min( 0.05f )]
+	public float handTransferSpeed = 1.35f;
+
+	[Tooltip( "Hard cap on distance-scaled hand-transfer duration." )]
+	[Min( 0.05f )]
+	public float handTransferMaxDuration = 0.85f;
 
 	[Tooltip( "Delay between starting each gold-pile multi-steal coin flight." )]
 	[Min( 0f )]
@@ -418,6 +430,7 @@ public class CarryDefinition : ScriptableObject
 		categorySwapDuration = Mathf.Max( 0.05f, categorySwapDuration );
 		pouchSummaryFadeIn = Mathf.Max( 0f, pouchSummaryFadeIn );
 		pouchSummaryHold = Mathf.Max( 0f, pouchSummaryHold );
+		pouchSummaryHoldOnAdd = Mathf.Max( 0f, pouchSummaryHoldOnAdd );
 		pouchSummaryFadeOut = Mathf.Max( 0f, pouchSummaryFadeOut );
 		heldVisualMaxCoins = Mathf.Max( 1, heldVisualMaxCoins );
 		heldReflectionFloor = Mathf.Clamp01( heldReflectionFloor );
@@ -426,6 +439,8 @@ public class CarryDefinition : ScriptableObject
 		wholeStackProgressRingSize = Mathf.Max( 8f, wholeStackProgressRingSize );
 		wholeStackAbsorbTweenDuration = Mathf.Max( 0.05f, wholeStackAbsorbTweenDuration );
 		activeRefillTweenDuration = Mathf.Max( 0.05f, activeRefillTweenDuration );
+		handTransferSpeed = Mathf.Max( 0.05f, handTransferSpeed );
+		handTransferMaxDuration = Mathf.Max( 0.05f, handTransferMaxDuration );
 		pileStealStaggerSeconds = Mathf.Max( 0f, pileStealStaggerSeconds );
 		coinVisualPoolSize = Mathf.Max( 4, coinVisualPoolSize );
 		stackHandLandPickupMaxCount = Mathf.Max( 1, stackHandLandPickupMaxCount );

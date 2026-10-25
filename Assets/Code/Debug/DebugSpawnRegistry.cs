@@ -49,6 +49,10 @@ public static class DebugSpawnRegistry
 	}
 #endif
 
+	/// <summary>
+	/// Spawn used on play/respawn. Read-only from <see cref="DebugDefinition.debugSpawnId"/> —
+	/// set it on the DebugDefinition asset, not via the debug overlay.
+	/// </summary>
 	public static string SelectedSpawnId
 	{
 		get
@@ -57,17 +61,6 @@ public static class DebugSpawnRegistry
 			if ( def == null || string.IsNullOrEmpty( def.debugSpawnId ) )
 				return string.Empty;
 			return def.debugSpawnId;
-		}
-		set
-		{
-			DebugDefinition def = GetDebugDefinition();
-			if ( def == null )
-				return;
-
-			string id = value;
-			if ( id == null )
-				id = string.Empty;
-			def.debugSpawnId = id;
 		}
 	}
 
@@ -238,7 +231,7 @@ public static class DebugSpawnRegistry
 		{
 			if ( objectives.Catalog == null )
 				objectives.StartCatalog();
-			objectives.DebugCompleteAll();
+			objectives.DebugCompleteTutorialIsland();
 		}
 
 		TutorialManager tutorials = TutorialManager.Instance;

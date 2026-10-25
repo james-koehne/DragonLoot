@@ -259,6 +259,7 @@ public class CoffeeMachineInteractable : InteractableBase, ITreasureOwner
 			return;
 
 		_pickupCup = null;
+		EventBus.Publish( new CoffeeCupPickedUpEvent { Machine = this, Cup = item } );
 		if ( _step == CraftStep.CupReady && !_resetQueued )
 			BeginResetAfterCupTaken();
 	}
@@ -284,19 +285,23 @@ public class CoffeeMachineInteractable : InteractableBase, ITreasureOwner
 		{
 			case CraftStep.Grind:
 				yield return GrindRoutine();
+				PublishCraftStepCompleted( CraftStep.Grind );
 				SetStep( CraftStep.Tamp );
 				break;
 			case CraftStep.Tamp:
 				yield return TampRoutine();
+				PublishCraftStepCompleted( CraftStep.Tamp );
 				SetStep( CraftStep.LockAndCup );
 				break;
 			case CraftStep.LockAndCup:
 				yield return LockAndCupRoutine();
+				PublishCraftStepCompleted( CraftStep.LockAndCup );
 				SetStep( CraftStep.Brew );
 				break;
 			case CraftStep.Brew:
 				yield return BrewRoutine();
 				yield return SpawnFilledCupAndDeliverRoutine();
+				PublishCraftStepCompleted( CraftStep.Brew );
 				SetStep( CraftStep.CupReady );
 				break;
 		}
@@ -305,6 +310,11 @@ public class CoffeeMachineInteractable : InteractableBase, ITreasureOwner
 		_routine = null;
 		_activeFeedback = null;
 		RefreshInteractionName();
+	}
+
+	void PublishCraftStepCompleted( CraftStep step )
+	{
+		EventBus.Publish( new CoffeeCraftStepCompletedEvent { Machine = this, Step = step } );
 	}
 
 	IEnumerator GrindRoutine()

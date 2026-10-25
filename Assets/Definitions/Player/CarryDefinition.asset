@@ -53,9 +53,10 @@ MonoBehaviour:
   categoryRestOffset: {x: 0, y: -0.35, z: -0.2}
   categoryRestEuler: {x: 25, y: 0, z: 0}
   categorySwapDuration: 0.35
-  autoSwitchPouchOnPickup: 0
+  autoSwitchPouchOnPickup: 1
   pouchSummaryFadeIn: 0.2
-  pouchSummaryHold: 2
+  pouchSummaryHold: 3
+  pouchSummaryHoldOnAdd: 3.25
   pouchSummaryFadeOut: 0.35
   pouchNewItemAcknowledgeSeconds: 1.5
   heldVisualMaxCoins: 128
@@ -89,6 +90,8 @@ MonoBehaviour:
   wholeStackProgressRingSize: 96
   wholeStackAbsorbTweenDuration: 0.28
   activeRefillTweenDuration: 0.22
+  handTransferSpeed: 2.7
+  handTransferMaxDuration: 0.05
   pileStealStaggerSeconds: 0.06
   coinVisualPoolSize: 32
   coinStackPickupClips:

@@ -130,7 +130,13 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 	/// </summary>
 	public bool TryGetWholePlaceJoinTarget( out MonoBehaviour target )
 	{
+		return TryGetWholePlaceJoinTarget( out target, out _ );
+	}
+
+	public bool TryGetWholePlaceJoinTarget( out MonoBehaviour target, out bool indirectJoin )
+	{
 		target = null;
+		indirectJoin = false;
 		if ( !_inputEnabled )
 			return false;
 
@@ -146,7 +152,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		if ( CanOfferWholeStackPickup || HasBlockingContextualFocus() )
 			return false;
 
-		if ( !TryResolveWholePlace( out _, out _, out bool valid, out GroundCoinStack coinTarget, out GroundGoldBarStack barTarget, out _, out _, out _, out MinecartInteractable cartPlace, out _ ) )
+		if ( !TryResolveWholePlace( out _, out _, out bool valid, out GroundCoinStack coinTarget, out GroundGoldBarStack barTarget, out _, out _, out _, out MinecartInteractable cartPlace, out indirectJoin ) )
 			return false;
 
 		if ( !valid || cartPlace != null )
@@ -485,9 +491,6 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		UnityEngine.InputSystem.InputAction action = input.CategorySlots[ index ];
 		if ( action == null || !action.WasPressedThisFrame() )
-			return;
-
-		if ( carry.GetBucketCount( kind ) <= 0 )
 			return;
 
 		if ( !carry.TrySetSelectedBucket( kind ) )
@@ -1863,7 +1866,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		{
 			TreasureDefinition def = null;
 			carry.TryPeekActive( out def );
-			float radius = Mathf.Max( 0.42f, GroundCoinStack.ResolveJoinRadius( def ) );
+			float radius = ResolveCoinJoinRadius( def );
 			coinTarget = GroundCoinStack.FindNearest( position, radius );
 			if ( coinTarget != null )
 			{
@@ -1880,12 +1883,13 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		{
 			TreasureDefinition def = null;
 			carry.TryPeekActive( out def );
-			float radius = Mathf.Max( 0.42f, GoldBarStack.ResolveJoinRadius( def ) );
+			float radius = ResolveGoldBarJoinRadius( def );
 			barTarget = GroundGoldBarStack.FindNearest( position, radius );
 			if ( barTarget != null )
 			{
 				position = barTarget.transform.position;
 				rotation = barTarget.transform.rotation;
+				indirectJoin = true;
 			}
 
 			valid = true;
@@ -1914,7 +1918,7 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 		TreasureDefinition def = null;
 		carry.TryPeekActive( out def );
-		float radius = Mathf.Max( 0.42f, GroundCoinStack.ResolveJoinRadius( def ) );
+		float radius = ResolveCoinJoinRadius( def );
 		GroundCoinStack nearest = GroundCoinStack.FindNearestAlongRay( ray, radius, _interaction.PlacementAimRange );
 		if ( nearest == null || nearest.IsFull || nearest.IsMachineBuffer )
 			return false;
@@ -1923,6 +1927,28 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 		position = nearest.transform.position;
 		rotation = nearest.transform.rotation;
 		return true;
+	}
+
+	float ResolveCoinJoinRadius( TreasureDefinition definition )
+	{
+		if ( _placement != null )
+			return _placement.ResolveCoinJoinRadius( definition );
+
+		float radius = 0.42f;
+		if ( definition != null )
+			radius = Mathf.Max( radius, GroundCoinStack.ResolveJoinRadius( definition ) );
+		return radius;
+	}
+
+	float ResolveGoldBarJoinRadius( TreasureDefinition definition )
+	{
+		if ( _placement != null )
+			return _placement.ResolveGoldBarJoinRadius( definition );
+
+		float radius = 0.42f;
+		if ( definition != null )
+			radius = Mathf.Max( radius, GoldBarStack.ResolveJoinRadius( definition ) );
+		return radius;
 	}
 
 	bool TryResolveDisplayCoinPlace(

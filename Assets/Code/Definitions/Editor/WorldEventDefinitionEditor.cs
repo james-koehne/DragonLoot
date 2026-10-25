@@ -209,10 +209,14 @@ public class WorldEventActionDrawer : PropertyDrawer
 				height += line;
 				break;
 			case WorldEventActionType.StartFairyGuide:
-				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
+				height += line;
+				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "fairySpeechLine" ), true ) + 2f;
+				height += EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
 			case WorldEventActionType.StartFairyDelivery:
-				height += line + EditorGUIUtility.singleLineHeight * 2f + 4f;
+				height += line;
+				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "fairySpeechLine" ), true ) + 2f;
+				height += EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
 		}
 
@@ -319,20 +323,22 @@ public class WorldEventActionDrawer : PropertyDrawer
 				break;
 			case WorldEventActionType.StartFairyGuide:
 				row = DrawRelative( row, property, "markerTargetId" );
+				row = DrawRelative( row, property, "fairySpeechLine", true );
 				{
 					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
 					EditorGUI.HelpBox( help,
-						"Spawns a guide fairy near the player that leads to this marker/volume id (e.g. volume_workshop).",
+						"Spawns a guide fairy near the player that leads to this marker/volume id (e.g. minecart_input_station). Optional fairySpeechLine overrides the prefab follow bubble.",
 						MessageType.Info );
 					row.y += help.height + 2f;
 				}
 				break;
 			case WorldEventActionType.StartFairyDelivery:
 				row = DrawRelative( row, property, "addressableKey" );
+				row = DrawRelative( row, property, "fairySpeechLine", true );
 				{
 					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
 					EditorGUI.HelpBox( help,
-						"Spawns a fairy near the player with this Addressable takeable item underneath (e.g. Assets/Prefabs/Build/WorldHammer.prefab).",
+						"Spawns a fairy near the player with this Addressable takeable item underneath (e.g. Assets/Prefabs/Build/WorldHammer.prefab). Optional fairySpeechLine overrides the prefab offer bubble.",
 						MessageType.Info );
 					row.y += help.height + 2f;
 				}

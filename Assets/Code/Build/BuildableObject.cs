@@ -72,6 +72,11 @@ public class BuildableObject : MonoBehaviour
 	bool _hasCachedWorldBounds;
 
 	bool _objectiveOutlineRequested;
+	bool _pileBlockedCached;
+	float _pileBlockedCheckedAt = -999f;
+
+	const float PileBlockedCacheSeconds = 0.18f;
+	const float PileSampleStep = 0.65f;
 
 	public bool IsBuilt => _isBuilt;
 	public bool IsCompleting => _completing;
@@ -107,9 +112,10 @@ public class BuildableObject : MonoBehaviour
 		BuildModeDefinition def = GameInstance.GetDefinition<BuildModeDefinition>();
 		EnsureGhostMaterial( def );
 
+		// Keep objective ghosts fully readable at any distance (outline + ghost mesh).
 		PlayerController player = GameMode.Instance != null ? GameMode.Instance.Player : null;
 		Vector3 playerPos = player != null ? player.transform.position : transform.position;
-		UpdateGhostFade( playerPos, def );
+		ApplyGhostMaterialParams( def, playerPos, completeGlow: 0f, alphaMul: 1f, fadeStart: 9999f, fadeEnd: 10000f );
 	}
 
 	public string ResolvePersistenceId()
@@ -257,6 +263,204 @@ public class BuildableObject : MonoBehaviour
 		return true;
 	}
 
+	/// <summary>
+	/// True when a treasure pile's heightfield intersects this buildable's ghost mesh colliders.
+	/// Result is cached briefly; aimed buildables always refresh.
+	/// </summary>
+	public bool IsBlockedByTreasurePile()
+	{
+		if ( _isBuilt || _completing )
+			return false;
+
+		bool aimed = IsCurrentlyAimedBuildable();
+		float now = Time.unscaledTime;
+		if ( !aimed && now - _pileBlockedCheckedAt < PileBlockedCacheSeconds )
+			return _pileBlockedCached;
+
+		_pileBlockedCached = EvaluateBlockedByTreasurePile();
+		_pileBlockedCheckedAt = now;
+		return _pileBlockedCached;
+	}
+
+	bool IsCurrentlyAimedBuildable()
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.Player == null )
+			return false;
+		PlayerBuildMode buildMode = GameMode.Instance.Player.BuildMode;
+		return buildMode != null && buildMode.AimedBuildable == this;
+	}
+
+	bool EvaluateBlockedByTreasurePile()
+	{
+		EnsureAimCollidersForPileCheck();
+		if ( _aimMeshColliders.Count == 0 )
+		{
+			if ( !TryGetWorldBounds( out Bounds bounds ) )
+				bounds = new Bounds( transform.position, Vector3.one );
+			return PlacementFloorSurface.WorldBoundsOverlapsHeightfieldPile( bounds );
+		}
+
+		IReadOnlyList<TreasurePileInteractable> piles = TreasurePileInteractable.ActivePiles;
+		if ( piles == null || piles.Count == 0 )
+			return false;
+
+		if ( !TryGetWorldBounds( out Bounds ghostBounds ) )
+			ghostBounds = new Bounds( transform.position, Vector3.one );
+
+		for ( int p = 0; p < piles.Count; p++ )
+		{
+			TreasurePileInteractable pile = piles[ p ];
+			if ( pile == null )
+				continue;
+
+			TreasurePileVisual visual = pile.PileVisual;
+			if ( visual == null )
+				continue;
+
+			if ( !TryGetPileWorldBounds( visual, out Bounds pileBounds ) )
+				continue;
+			if ( !ghostBounds.Intersects( pileBounds ) )
+				continue;
+
+			for ( int c = 0; c < _aimMeshColliders.Count; c++ )
+			{
+				MeshCollider meshCol = _aimMeshColliders[ c ];
+				if ( meshCol == null || !meshCol.enabled )
+					continue;
+
+				Bounds meshBounds = meshCol.bounds;
+				if ( !meshBounds.Intersects( pileBounds ) )
+					continue;
+				if ( AimMeshIntersectsPileHeightfield( meshCol, meshBounds, pileBounds, visual ) )
+					return true;
+			}
+		}
+
+		return false;
+	}
+
+	void EnsureAimCollidersForPileCheck()
+	{
+		if ( _ghostRoot == null )
+			return;
+		if ( _aimMeshColliders.Count > 0 )
+			return;
+
+		bool wasActive = _ghostRoot.gameObject.activeSelf;
+		if ( !wasActive )
+			_ghostRoot.gameObject.SetActive( true );
+
+		EnsureAimColliders();
+
+		if ( !wasActive && !_ghostVisible )
+			_ghostRoot.gameObject.SetActive( false );
+	}
+
+	static bool TryGetPileWorldBounds( TreasurePileVisual pile, out Bounds bounds )
+	{
+		bounds = default;
+		if ( pile == null )
+			return false;
+
+		GoldPileHeightfield heightfield = pile.Heightfield;
+		float sizeX;
+		float sizeZ;
+		if ( heightfield != null && heightfield.IsInitialized )
+		{
+			sizeX = heightfield.WorldSizeX;
+			sizeZ = heightfield.WorldSizeZ;
+		}
+		else
+		{
+			sizeX = pile.AuthoredWorldSizeX;
+			sizeZ = pile.AuthoredWorldSizeZ;
+		}
+
+		if ( sizeX < 0.1f )
+			sizeX = 4f;
+		if ( sizeZ < 0.1f )
+			sizeZ = 4f;
+
+		Transform root = pile.transform;
+		Vector3 center = root.position + Vector3.up * ( sizeX + sizeZ ) * 0.08f;
+		Vector3 size = new Vector3( sizeX, Mathf.Max( 2f, Mathf.Max( sizeX, sizeZ ) * 0.35f ), sizeZ );
+		bounds = new Bounds( center, size );
+		return true;
+	}
+
+	static bool AimMeshIntersectsPileHeightfield(
+		MeshCollider meshCol,
+		Bounds meshBounds,
+		Bounds pileBounds,
+		TreasurePileVisual pile )
+	{
+		if ( meshCol == null || pile == null )
+			return false;
+
+		GoldPileHeightfield heightfield = pile.Heightfield;
+		if ( heightfield == null || !heightfield.IsInitialized )
+			return false;
+
+		float minX = Mathf.Max( meshBounds.min.x, pileBounds.min.x );
+		float maxX = Mathf.Min( meshBounds.max.x, pileBounds.max.x );
+		float minZ = Mathf.Max( meshBounds.min.z, pileBounds.min.z );
+		float maxZ = Mathf.Min( meshBounds.max.z, pileBounds.max.z );
+		if ( minX > maxX || minZ > maxZ )
+			return false;
+
+		float maxRay = meshBounds.size.y + 2f;
+		float step = PileSampleStep;
+
+		// Corners + center of the overlap region first (cheap early outs).
+		if ( SampleColumnAgainstPile( meshCol, meshBounds, pile, heightfield, minX, minZ, maxRay )
+			|| SampleColumnAgainstPile( meshCol, meshBounds, pile, heightfield, maxX, minZ, maxRay )
+			|| SampleColumnAgainstPile( meshCol, meshBounds, pile, heightfield, minX, maxZ, maxRay )
+			|| SampleColumnAgainstPile( meshCol, meshBounds, pile, heightfield, maxX, maxZ, maxRay )
+			|| SampleColumnAgainstPile( meshCol, meshBounds, pile, heightfield, ( minX + maxX ) * 0.5f, ( minZ + maxZ ) * 0.5f, maxRay ) )
+			return true;
+
+		for ( float x = minX; x <= maxX + 0.001f; x += step )
+		{
+			for ( float z = minZ; z <= maxZ + 0.001f; z += step )
+			{
+				if ( SampleColumnAgainstPile( meshCol, meshBounds, pile, heightfield, x, z, maxRay ) )
+					return true;
+			}
+		}
+
+		return false;
+	}
+
+	static bool SampleColumnAgainstPile(
+		MeshCollider meshCol,
+		Bounds meshBounds,
+		TreasurePileVisual pile,
+		GoldPileHeightfield heightfield,
+		float x,
+		float z,
+		float maxRay )
+	{
+		Ray ray = new Ray( new Vector3( x, meshBounds.max.y + 0.5f, z ), Vector3.down );
+		if ( !meshCol.Raycast( ray, out RaycastHit hit, maxRay ) )
+			return false;
+
+		Vector3 topHit = hit.point;
+		if ( pile.IsPointBuried( topHit ) )
+			return true;
+
+		Vector3 mid = new Vector3( x, Mathf.Lerp( meshBounds.min.y, topHit.y, 0.5f ), z );
+		if ( pile.IsPointBuried( mid ) )
+			return true;
+
+		if ( !pile.ContainsWorldPointXZ( topHit ) )
+			return false;
+
+		float surfaceLocalY = heightfield.SampleWorldHeight( topHit, pile.transform );
+		Vector3 local = pile.transform.InverseTransformPoint( topHit );
+		Vector3 surfaceWorld = pile.transform.TransformPoint( new Vector3( local.x, surfaceLocalY, local.z ) );
+		return surfaceWorld.y >= meshBounds.min.y - 0.02f && surfaceWorld.y <= topHit.y + 0.02f;
+	}
+
 	public bool IsEligibleToShow( Vector3 playerPosition, float fadeEnd )
 	{
 		if ( _isBuilt || _completing || !_setupComplete )
@@ -334,6 +538,12 @@ public class BuildableObject : MonoBehaviour
 		if ( !_ghostVisible || _completing )
 			return;
 
+		if ( _objectiveOutlineRequested )
+		{
+			EnsureObjectiveGhostLook();
+			return;
+		}
+
 		if ( _ghostMaterial == null )
 			EnsureGhostMaterial( def );
 
@@ -362,9 +572,45 @@ public class BuildableObject : MonoBehaviour
 		return _outlineRendererScratch;
 	}
 
+	/// <summary>Finds an active buildable by persistence id.</summary>
+	public static bool TryFindByPersistenceId( string persistenceId, out BuildableObject buildable )
+	{
+		buildable = null;
+		if ( string.IsNullOrEmpty( persistenceId ) )
+			return false;
+
+		for ( int i = 0; i < ActiveBuildables.Count; i++ )
+		{
+			BuildableObject candidate = ActiveBuildables[ i ];
+			if ( candidate == null )
+				continue;
+			if ( candidate.ResolvePersistenceId() != persistenceId )
+				continue;
+
+			buildable = candidate;
+			return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>Finds an active buildable by persistence id and completes it (live Complete VFX/events).</summary>
+	public static bool TryCompleteByPersistenceId( string persistenceId )
+	{
+		if ( !TryFindByPersistenceId( persistenceId, out BuildableObject buildable ) )
+			return false;
+		if ( buildable.IsBuilt || buildable.IsCompleting )
+			return false;
+
+		buildable.Complete();
+		return true;
+	}
+
 	public void Complete()
 	{
 		if ( _isBuilt || _completing )
+			return;
+		if ( IsBlockedByTreasurePile() )
 			return;
 
 		_isBuilt = true;
@@ -822,6 +1068,29 @@ public class BuildableObject : MonoBehaviour
 		}
 	}
 
+	Color ResolveGhostTint( BuildModeDefinition def, float completeGlow )
+	{
+		// During complete reveal the yellow flash owns the look; keep a neutral base tint.
+		if ( _completing || completeGlow > 0.001f )
+		{
+			if ( def != null )
+				return def.ghostColor;
+			return new Color( 0.35f, 0.75f, 1f, 0.4f );
+		}
+
+		bool blocked = IsBlockedByTreasurePile();
+		if ( blocked )
+		{
+			if ( def != null )
+				return def.invalidGhostColor;
+			return PlacementFeedbackColors.InvalidGhost;
+		}
+
+		if ( def != null )
+			return def.validGhostColor;
+		return PlacementFeedbackColors.ValidGhost;
+	}
+
 	void ApplyGhostMaterialParams(
 		BuildModeDefinition def,
 		Vector3 playerWorldPos,
@@ -837,7 +1106,7 @@ public class BuildableObject : MonoBehaviour
 
 		EnsurePropertyBlock();
 
-		Color tint = def != null ? def.ghostColor : new Color( 0.35f, 0.75f, 1f, 0.4f );
+		Color tint = ResolveGhostTint( def, completeGlow );
 		Color rim = Color.Lerp( tint, Color.white, 0.35f );
 		rim.a = 1f;
 		Color core = tint * 0.35f;

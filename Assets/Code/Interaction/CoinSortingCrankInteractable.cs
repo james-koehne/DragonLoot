@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Optional crank boost for the coin sorter. Hold ContextualInteract (E) or Interact (LMB)
-/// to sort at the manual rate (100% faster than automatic by default).
+/// Crank for the coin sorter. Hold ContextualInteract (E) or Interact (LMB)
+/// to sort at L0–L1, or boost automatic sorting at L2+.
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 public class CoinSortingCrankInteractable : InteractableBase
@@ -37,7 +37,7 @@ public class CoinSortingCrankInteractable : InteractableBase
 			return false;
 
 		CoinSortingStationDefinition def = station.Definition;
-		return def != null && def.AllowsCrankBoost( station.StationLevel );
+		return def != null && def.AllowsCrank();
 	}
 
 	public override void Interact( PlayerController player )

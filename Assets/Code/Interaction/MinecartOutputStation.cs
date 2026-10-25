@@ -106,13 +106,19 @@ public class MinecartOutputStation : MinecartStationBase
 		if ( auto == null )
 			return;
 
-		if ( !MinecartStationBase.AutomationEnabled || cart == null || cart.ItemCount <= 0 )
+		MinecartInteractable cargo = cart != null ? cart.ResolveCargoCart() : null;
+		if ( cargo == null )
+			cargo = cart;
+
+		MinecartInteractable routeCart = auto.Cart != null ? auto.Cart : cart;
+
+		if ( !MinecartStationBase.AutomationEnabled || cargo == null || cargo.ItemCount <= 0 )
 		{
 			auto.LeaveDock( null );
 			return;
 		}
 
-		MinecartOutputStation next = MinecartAutoController.FindBestOutputForCart( cart, exclude: this );
+		MinecartOutputStation next = MinecartAutoController.FindBestOutputForCart( routeCart, exclude: this );
 		if ( next != null )
 		{
 			auto.LeaveDock( next );
@@ -121,7 +127,7 @@ public class MinecartOutputStation : MinecartStationBase
 
 		MinecartInputStation home = auto.HomeInput;
 		if ( home == null )
-			home = MinecartAutoController.FindNearestInput( cart );
+			home = MinecartAutoController.FindNearestInput( routeCart );
 
 		auto.LeaveDock( home );
 	}

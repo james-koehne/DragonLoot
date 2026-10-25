@@ -7,18 +7,23 @@ using UnityEngine.UI;
 /// </summary>
 public class BuildableHoverUI : MonoBehaviour
 {
+	const string ClearTreasurePileNote = "Clear the treasure pile";
+
 	[SerializeField] CanvasGroup _group;
 	[SerializeField] Text _nameText;
 	[SerializeField] Text _descriptionText;
+	[SerializeField] Text _statusText;
 	[SerializeField] Text _costText;
 
 	bool _ready;
 	BuildableObject _shown;
+	bool _shownBlocked;
 
 	public void Setup()
 	{
 		_ready = true;
 		_shown = null;
+		_shownBlocked = false;
 		SetVisible( false );
 		ClearLabels();
 	}
@@ -53,10 +58,18 @@ public class BuildableHoverUI : MonoBehaviour
 			return;
 		}
 
+		bool blocked = aimed.IsBlockedByTreasurePile();
 		if ( aimed != _shown )
 		{
 			_shown = aimed;
 			ApplyLabels( aimed );
+			ApplyStatus( blocked );
+			_shownBlocked = blocked;
+		}
+		else if ( blocked != _shownBlocked )
+		{
+			ApplyStatus( blocked );
+			_shownBlocked = blocked;
 		}
 
 		SetVisible( true );
@@ -81,6 +94,23 @@ public class BuildableHoverUI : MonoBehaviour
 		}
 	}
 
+	void ApplyStatus( bool blocked )
+	{
+		if ( _statusText == null )
+			return;
+
+		if ( blocked )
+		{
+			_statusText.text = ClearTreasurePileNote;
+			_statusText.gameObject.SetActive( true );
+		}
+		else
+		{
+			_statusText.text = string.Empty;
+			_statusText.gameObject.SetActive( false );
+		}
+	}
+
 	void ClearLabels()
 	{
 		if ( _nameText != null )
@@ -90,13 +120,20 @@ public class BuildableHoverUI : MonoBehaviour
 			_descriptionText.text = string.Empty;
 			_descriptionText.gameObject.SetActive( false );
 		}
+		if ( _statusText != null )
+		{
+			_statusText.text = string.Empty;
+			_statusText.gameObject.SetActive( false );
+		}
 		if ( _costText != null )
 			_costText.text = string.Empty;
+		_shownBlocked = false;
 	}
 
 	void Hide()
 	{
 		_shown = null;
+		_shownBlocked = false;
 		SetVisible( false );
 	}
 

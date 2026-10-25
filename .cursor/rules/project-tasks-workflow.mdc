@@ -1,8 +1,6 @@
 ---
-description: Markdown Project Tasks workflow — Inbox/Features/Archive via Unity capture and Cursor sort/plan/archive
-alwaysApply: true
+alwaysApply: false
 ---
-
 # Markdown Project Tasks Workflow
 
 Markdown under the configured **Project Tasks** workspace root is the single source of truth for outstanding work. Unity captures tasks; Cursor sorts, plans, and archives; humans confirm gameplay logic and review quality.

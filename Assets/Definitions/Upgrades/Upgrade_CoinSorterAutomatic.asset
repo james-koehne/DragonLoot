@@ -10,11 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c7b0e4bb49bf5d645ac46f76ed68088b, type: 3}
-  m_Name: Upgrade_PlaceholderAlpha
+  m_Name: Upgrade_CoinSorterAutomatic
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeDefinition
-  id: placeholder_upgrade_alpha
-  displayName: Placeholder Upgrade Alpha
-  description: Debug placeholder upgrade used to verify unlock and level progression.
+  id: coin_sorter_automatic
+  displayName: Automatic Sorting
+  description: Sorts coins unattended. Cranking now boosts speed.
   icon: {fileID: 0}
-  maxLevel: 3
+  maxLevel: 1
+  levelUnlockLabels:
+  - Automatic Sorting
   enabled: 1
+  digPickupSpeedMultiplier: 1

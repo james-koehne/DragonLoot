@@ -21,39 +21,36 @@ public enum CoinSortingStoragePullSources
 [CreateAssetMenu( fileName = "CoinSortingStationDefinition", menuName = "Definitions/CoinSortingStationDefinition" )]
 public class CoinSortingStationDefinition : ScriptableObject
 {
-	public const string DefaultUpgradeId = "coin_sorting_station";
-
-	[Header( "Upgrade" )]
-	[Tooltip( "UpgradeDefinition.id driving L1–L4 station capabilities." )]
-	public string upgradeId = DefaultUpgradeId;
-
 	[Header( "Hopper Capacity" )]
-	[Tooltip( "Max buffered coins at levels 1–3." )]
+	[Tooltip( "Max buffered coins without the larger-hopper upgrade." )]
 	[Min( 1 )]
 	public int baseHopperCapacity = 50;
 
-	[Tooltip( "Max buffered coins at level 4+." )]
+	[Tooltip( "Max buffered coins with the larger-hopper upgrade." )]
+	[FormerlySerializedAs( "level4HopperCapacity" )]
+	[FormerlySerializedAs( "level3HopperCapacity" )]
 	[Min( 1 )]
-	public int level4HopperCapacity = 150;
+	public int largeHopperCapacity = 150;
 
 	[Header( "Process Rate" )]
-	[Tooltip( "Coins per second while the player is cranking (manual boost rate)." )]
+	[Tooltip( "Coins per second while the player is cranking (manual / boost rate) at base speed." )]
 	[FormerlySerializedAs( "baseCoinsPerSecond" )]
 	[Min( 0.01f )]
 	public float manualCoinsPerSecond = 4f;
 
-	[Tooltip( "Coins per second while sorting unattended. Default is 50% of manual." )]
+	[Tooltip( "Coins per second while sorting unattended (automatic upgrade). Default is 50% of manual." )]
 	[Min( 0.01f )]
 	public float automaticCoinsPerSecond = 2f;
 
-	[Tooltip( "Manual (crank) coins per second at level 3+." )]
-	[FormerlySerializedAs( "level3CoinsPerSecond" )]
-	[Min( 0.01f )]
-	public float level3ManualCoinsPerSecond = 10f;
+	[Tooltip( "Overall speed multiplier at coin_sorter_speed level 1 (e.g. 1.25 = 25% faster)." )]
+	[FormerlySerializedAs( "level1SpeedMultiplier" )]
+	[Min( 1f )]
+	public float speedLevel1Multiplier = 1.25f;
 
-	[Tooltip( "Automatic coins per second at level 3+. Default is 50% of level-3 manual." )]
-	[Min( 0.01f )]
-	public float level3AutomaticCoinsPerSecond = 5f;
+	[Tooltip( "Overall speed multiplier at coin_sorter_speed level 2 (e.g. 1.5 = 50% faster). Replaces level 1." )]
+	[FormerlySerializedAs( "level4SpeedMultiplier" )]
+	[Min( 1f )]
+	public float speedLevel2Multiplier = 1.5f;
 
 	[Header( "Crank" )]
 	[Tooltip( "Seconds after an Interact pulse that still counts as cranking (covers hold-repeat gaps)." )]
@@ -257,52 +254,53 @@ public class CoinSortingStationDefinition : ScriptableObject
 	[Range( 0f, 1f )]
 	public float surfaceAlignStrength = 0.25f;
 
-	public string ResolveUpgradeId()
+	public int ResolveHopperCapacity( bool largerHopper )
 	{
-		if ( !string.IsNullOrEmpty( upgradeId ) )
-			return upgradeId;
-		return DefaultUpgradeId;
-	}
-
-	public int ResolveHopperCapacity( int level )
-	{
-		if ( level >= 4 )
-			return Mathf.Max( 1, level4HopperCapacity );
+		if ( largerHopper )
+			return Mathf.Max( 1, largeHopperCapacity );
 		return Mathf.Max( 1, baseHopperCapacity );
 	}
 
-	public float ResolveCoinsPerSecond( int level, bool crankBoost )
+	/// <summary>Speed level from <see cref="CoinSorterUpgrades.SpeedLevel"/> (0 / 1 / 2).</summary>
+	public float ResolveSpeedMultiplier( int speedLevel )
 	{
-		if ( level >= 3 )
-		{
-			return Mathf.Max( 0.01f, crankBoost ? level3ManualCoinsPerSecond : level3AutomaticCoinsPerSecond );
-		}
-
-		return Mathf.Max( 0.01f, crankBoost ? manualCoinsPerSecond : automaticCoinsPerSecond );
+		if ( speedLevel >= 2 )
+			return Mathf.Max( 1f, speedLevel2Multiplier );
+		if ( speedLevel >= 1 )
+			return Mathf.Max( 1f, speedLevel1Multiplier );
+		return 1f;
 	}
 
-	/// <summary>Legacy overload — automatic rate (no crank boost).</summary>
-	public float ResolveCoinsPerSecond( int level )
+	public float ResolveCoinsPerSecond( bool automatic, int speedLevel, bool crankBoost )
 	{
-		return ResolveCoinsPerSecond( level, crankBoost: false );
+		float baseRate = crankBoost || !automatic
+			? manualCoinsPerSecond
+			: automaticCoinsPerSecond;
+		return Mathf.Max( 0.01f, baseRate * ResolveSpeedMultiplier( speedLevel ) );
 	}
 
-	/// <summary>Workshop sorter always sorts unattended; crank only boosts rate.</summary>
-	public bool IsAutomatic( int level )
+	/// <summary>Automatic upgrade: sorts unattended; crank only boosts rate.</summary>
+	public bool IsAutomatic( bool hasAutomatic )
 	{
-		return level >= 1;
+		return hasAutomatic;
 	}
 
-	/// <summary>Crank is never required to process; it only boosts speed.</summary>
-	public bool RequiresCrank( int level )
+	/// <summary>Without automatic: crank required to process.</summary>
+	public bool RequiresCrank( bool hasAutomatic )
 	{
-		return false;
+		return !hasAutomatic;
 	}
 
-	/// <summary>Crank remains available as a 100% speed boost over automatic rate.</summary>
-	public bool AllowsCrankBoost( int level )
+	/// <summary>With automatic: crank available as a speed boost over automatic rate.</summary>
+	public bool AllowsCrankBoost( bool hasAutomatic )
 	{
-		return level >= 1;
+		return hasAutomatic;
+	}
+
+	/// <summary>Crank can drive or boost sorting whenever the station is unlocked.</summary>
+	public bool AllowsCrank()
+	{
+		return true;
 	}
 
 	public float ResolveMaxReserveSeconds()

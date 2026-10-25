@@ -86,7 +86,7 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 			return;
 
 		CoinSortingStationDefinition def = station.Definition;
-		bool show = def != null && station.IsUnlocked && def.IsAutomatic( station.StationLevel );
+		bool show = def != null && station.IsUnlocked;
 		if ( well != null && well.gameObject.activeSelf != show )
 			well.gameObject.SetActive( show );
 		if ( fill != null && fill.gameObject.activeSelf != show )
@@ -94,9 +94,11 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 		if ( !show )
 			return;
 
-		// Status gauge is always full; color encodes hopper / output state.
-		ApplyFillHeight( 1f );
-		ApplyStatusColor( station.ResolveGaugeStatus() );
+		// Charge: reserve fill while manual; always full green when automatic.
+		bool automatic = station.HasAutomatic;
+		float fill01 = automatic ? 1f : station.ReserveNormalized;
+		ApplyFillHeight( fill01 );
+		ApplyChargeColor( automatic, fill01 );
 		ApplyWellPunch();
 
 		if ( _flashRemaining > 0f )
@@ -166,27 +168,17 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 		fill.localPosition = pos;
 	}
 
-	void ApplyStatusColor( CoinSortingStation.GaugeStatus status )
+	void ApplyChargeColor( bool automatic, float normalized )
 	{
 		if ( fillRenderer == null )
 			return;
 
 		CoinSortingStationDefinition def = station != null ? station.Definition : null;
-		Color color;
-		switch ( status )
-		{
-			case CoinSortingStation.GaugeStatus.Ready:
-				color = def != null ? def.gaugeFullColor : new Color( 0.18f, 0.92f, 0.28f, 1f );
-				break;
-			case CoinSortingStation.GaugeStatus.Blocked:
-				color = def != null ? def.gaugeMidColor : new Color( 1f, 0.55f, 0.08f, 1f );
-				break;
-			default:
-				color = def != null ? def.gaugeEmptyColor : new Color( 0.92f, 0.12f, 0.1f, 1f );
-				break;
-		}
+		Color empty = def != null ? def.gaugeEmptyColor : new Color( 0.92f, 0.12f, 0.1f, 1f );
+		Color full = def != null ? def.gaugeFullColor : new Color( 0.18f, 0.92f, 0.28f, 1f );
+		Color color = automatic ? full : Color.Lerp( empty, full, Mathf.Clamp01( normalized ) );
 
-		if ( status == CoinSortingStation.GaugeStatus.Empty )
+		if ( !automatic && normalized <= ( def != null ? def.gaugeEmptyWarningNormalized : 0.15f ) )
 		{
 			float flicker = 0.7f + 0.3f * Mathf.Abs( Mathf.Sin( Time.time * 10f ) );
 			color *= flicker;
@@ -196,9 +188,16 @@ public class CoinSortingEnergyGauge : MonoBehaviour
 		if ( _flashRemaining > 0f )
 		{
 			float flash = Mathf.Clamp01( _flashRemaining / 0.28f );
-			Color full = def != null ? def.gaugeFullColor : Color.green;
 			color = Color.Lerp( color, full * 1.8f, flash );
 		}
+
+		ApplyFillColor( color );
+	}
+
+	void ApplyFillColor( Color color )
+	{
+		if ( fillRenderer == null )
+			return;
 
 		if ( _block == null )
 			_block = new MaterialPropertyBlock();

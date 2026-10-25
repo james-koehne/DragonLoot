@@ -310,23 +310,48 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 
 	public bool CargoEnabled => !IsDriveCart;
 
-	/// <summary>Unattached cargo lead that can be summoned by stations.</summary>
+	/// <summary>
+	/// Consist lead that can be summoned by stations. Drive-led auto consists with a cargo car are eligible
+	/// while the player is not seated / drive-powered.
+	/// </summary>
 	public bool IsAutoEligible
 	{
 		get
 		{
-			if ( !CargoEnabled || !IsConsistLead || IsHoldPushing || _drivePowered )
+			if ( !IsConsistLead )
+				return ConsistLead.IsAutoEligible;
+
+			if ( IsHoldPushing || _drivePowered )
 				return false;
 
-			for ( int i = 0; i < _followers.Count; i++ )
-			{
-				MinecartInteractable follower = _followers[ i ];
-				if ( follower != null && follower.IsDriveCart )
-					return false;
-			}
+			if ( GetComponent<MinecartAutoController>() == null )
+				return false;
 
-			return true;
+			return ResolveCargoCart() != null;
 		}
+	}
+
+	/// <summary>Cargo car used for station load/unload. Lead if cargo-enabled; otherwise first cargo follower.</summary>
+	public MinecartInteractable ResolveCargoCart()
+	{
+		MinecartInteractable lead = ConsistLead;
+		if ( lead.CargoEnabled )
+			return lead;
+
+		for ( int i = 0; i < lead._followers.Count; i++ )
+		{
+			MinecartInteractable follower = lead._followers[ i ];
+			if ( follower != null && follower.CargoEnabled )
+				return follower;
+		}
+
+		return null;
+	}
+
+	/// <summary>Auto controller lives on the consist lead.</summary>
+	public MinecartAutoController ResolveAutoController()
+	{
+		return ConsistLead.GetComponent<MinecartAutoController>();
 	}
 
 	/// <summary>Cargo-only consist — player cannot shove / hold-push; interact sends the cart.</summary>

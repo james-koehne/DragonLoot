@@ -16,6 +16,7 @@ using UnityEngine.UI;
 public class PouchBarUI : MonoBehaviour
 {
 	const float UnselectedAlpha = 0.4f;
+	const float EmptyRevealedAlpha = 0.22f;
 	static readonly Color NewItemStarColor = new Color( 1f, 0.84f, 0.2f, 1f );
 	static readonly Color NewItemCountColor = new Color( 1f, 0.95f, 0.55f, 1f );
 	static readonly Vector2 NewItemStarSize = new Vector2( 24f, 24f );
@@ -284,7 +285,8 @@ public class PouchBarUI : MonoBehaviour
 		CarryBucketKind kind = (CarryBucketKind)index;
 		int held = carry != null ? carry.GetBucketCount( kind ) : 0;
 		int limit = carry != null ? carry.GetSlotLimit( kind ) : 0;
-		bool visible = held > 0;
+		bool everHeld = carry != null && carry.HasEverHeld( kind );
+		bool visible = held > 0 || everHeld;
 		if ( slot.root.gameObject.activeSelf != visible )
 			slot.root.gameObject.SetActive( visible );
 
@@ -298,7 +300,12 @@ public class PouchBarUI : MonoBehaviour
 		}
 
 		bool isSelected = selected == kind;
-		slot.root.alpha = isSelected ? 1f : UnselectedAlpha;
+		if ( isSelected )
+			slot.root.alpha = 1f;
+		else if ( held <= 0 )
+			slot.root.alpha = EmptyRevealedAlpha;
+		else
+			slot.root.alpha = UnselectedAlpha;
 		slot.root.blocksRaycasts = false;
 		slot.root.interactable = false;
 

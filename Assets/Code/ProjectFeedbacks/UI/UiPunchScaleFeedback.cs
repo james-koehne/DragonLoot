@@ -22,7 +22,8 @@ public class UiPunchScaleFeedback : Feedback, IFeedbackTick
 
 	public bool UseUnscaledTime = true;
 
-	Vector3 _baseScale;
+	Vector3 _restScale = Vector3.one;
+	bool _hasRestScale;
 	float _elapsed;
 	bool _running;
 
@@ -32,7 +33,8 @@ public class UiPunchScaleFeedback : Feedback, IFeedbackTick
 			return;
 
 		Cancel();
-		_baseScale = Target.localScale;
+		CaptureRestScaleIfNeeded();
+		Target.localScale = _restScale;
 		_elapsed = 0f;
 		_running = true;
 		RegisterTick( this );
@@ -46,6 +48,7 @@ public class UiPunchScaleFeedback : Feedback, IFeedbackTick
 	public override void Reset()
 	{
 		Cancel();
+		_hasRestScale = false;
 	}
 
 	public bool Tick( float deltaTime )
@@ -61,20 +64,20 @@ public class UiPunchScaleFeedback : Feedback, IFeedbackTick
 		float t = Duration > 0f ? _elapsed / Duration : 1f;
 		if ( t >= 1f )
 		{
-			Target.localScale = _baseScale;
+			Target.localScale = _restScale;
 			_running = false;
 			return false;
 		}
 
 		float curve = Curve != null ? Curve.Evaluate( t ) : Mathf.Sin( t * Mathf.PI );
-		Target.localScale = _baseScale + Punch * curve;
+		Target.localScale = _restScale + Punch * curve;
 		return true;
 	}
 
 	public void Cancel()
 	{
 		if ( _running && Target != null )
-			Target.localScale = _baseScale;
+			Target.localScale = _restScale;
 
 		_running = false;
 		UnregisterTick( this );
@@ -83,5 +86,16 @@ public class UiPunchScaleFeedback : Feedback, IFeedbackTick
 	public override float GetHoldDuration()
 	{
 		return Duration;
+	}
+
+	void CaptureRestScaleIfNeeded()
+	{
+		if ( _hasRestScale || Target == null )
+			return;
+
+		_restScale = Target.localScale;
+		if ( _restScale.sqrMagnitude < 0.0001f )
+			_restScale = Vector3.one;
+		_hasRestScale = true;
 	}
 }

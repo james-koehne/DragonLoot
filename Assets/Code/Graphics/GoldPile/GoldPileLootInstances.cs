@@ -312,13 +312,19 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	const int MaxIslandMergesPerDig = 4;
 	/// <summary>How far (cells) to search for a solid column when merging a remnant island.</summary>
 	const int RemnantMergeSearchRadiusCells = 24;
+	/// <summary>Soft deposit radius in cells when growing the merge destination (avoids spikes).</summary>
+	const float RemnantDepositRadiusCells = 2.5f;
 	/// <summary>
 	/// Densify uses carveRadius×2.5; island flush stays near the dig core so the pile perimeter
 	/// is never scanned as a ring of false remnants.
 	/// </summary>
 	const float SpillRadiusVsDensify = 0.35f;
 	bool _clearedHeightfieldThisDensify;
+	/// <summary>After remnant merge, densify stick/top-up must cover destinations this far from dig local.</summary>
+	float _remnantMergeSeatExpandRadius;
 	int[] _spillClearScratch;
+	int[] _islandExcludeSerial;
+	int _islandExcludeStamp;
 	TreasurePileVisual _owner;
 
 	/// <summary>True when the last densify spill zeroed heightfield cells (mesh should refresh after loot).</summary>
@@ -1227,10 +1233,15 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			MarkStreamDrawCacheDirty();
 		int scanned = 0;
 
+		// Remnant merges can land outside the dig brush — expand seat refresh to cover dests.
+		float seatRadius = radius;
+		if ( _clearedHeightfieldThisDensify && _remnantMergeSeatExpandRadius > seatRadius )
+			seatRadius = _remnantMergeSeatExpandRadius;
+
 		if ( UseSurfaceDecorSeats() )
 		{
 			System.Diagnostics.Stopwatch stickSw = GoldPileEditTiming.StartWatchIfEnabled();
-			int stuck = StickSurfaceDecorCoinsNear( local, radius );
+			int stuck = StickSurfaceDecorCoinsNear( local, seatRadius );
 
 			if ( stickSw != null )
 			{
@@ -1242,7 +1253,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			}
 
 			System.Diagnostics.Stopwatch promoteSw = GoldPileEditTiming.StartWatchIfEnabled();
-			int promoted = HideOrPromoteSurfaceDecorNearDig( local, radius );
+			int promoted = HideOrPromoteSurfaceDecorNearDig( local, seatRadius );
 			if ( promoteSw != null )
 			{
 				promoteSw.Stop();
@@ -1254,7 +1265,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		}
 		else
 		{
-			ForEachSlotIndexNearLocal( local, radius, slotIndex =>
+			ForEachSlotIndexNearLocal( local, seatRadius, slotIndex =>
 			{
 				Slot slot = _slots[ slotIndex ];
 				if ( slot.Taken )
@@ -1280,7 +1291,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			phaseSw.Stop();
 
 		// Throttled refill so digs keep near-surface density without hitching the carve frame.
-		float topUpRadius = Mathf.Max( radius * 1.5f, _pickRadius * 4f );
+		float topUpRadius = Mathf.Max( seatRadius * 1.5f, _pickRadius * 4f );
 		Vector3 topUpLocal = local;
 		int topUpMax = streamSettings != null ? streamSettings.digDecorTopUpMax : 10;
 		// Hard cap + time budget: spawning seats is the remaining dig hitch after spill/promote fixes.
@@ -1500,12 +1511,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 	}
 
 	/// <summary>
-	/// After a dig, merge tiny disconnected remnant islands into the nearest solid column
-	/// (height + reserve transfer, no world coins). Returns 0 world spawns always.
+	/// After a dig, merge tiny disconnected remnant islands into a random nearby solid column
+	/// via soft deposit (no world coins). Returns 0 world spawns always.
 	/// </summary>
 	int SpawnColumnInventorySpillNear( Vector3 localCenter, float radius, int carveUnits = 1 )
 	{
 		_clearedHeightfieldThisDensify = false;
+		_remnantMergeSeatExpandRadius = 0f;
 		if ( _heightfield == null || _pileRoot == null || _remaining == null || _columnCoinReserve == null )
 			return 0;
 
@@ -1526,18 +1538,18 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int minZ = Mathf.Clamp( Mathf.FloorToInt( ( localCenter.z - spillRadius + halfZ ) / cellSizeZ ), 0, resZ - 1 );
 		int maxZ = Mathf.Clamp( Mathf.CeilToInt( ( localCenter.z + spillRadius + halfZ ) / cellSizeZ ), 0, resZ - 1 );
 
-		int merged = FlushSmallIslandsNear( minX, maxX, minZ, maxZ );
+		int merged = FlushSmallIslandsNear( minX, maxX, minZ, maxZ, localCenter );
 		if ( merged > 0 || _clearedHeightfieldThisDensify )
 			HideNearGroundCoinVisualsNear( localCenter, spillRadius );
-		// No world coins — remnant volume/reserve moves into a nearby solid column.
+		// No world coins — remnant volume moves into a nearby solid column via soft deposit.
 		return 0;
 	}
 
 	/// <summary>
-	/// Finds tiny disconnected remnant islands and merges their height + coin reserve into the
-	/// richest nearby solid column (grows that column). Inventory stays in the pile — no world spawn.
+	/// Finds tiny disconnected remnant islands and soft-deposits their height into a random nearby
+	/// solid column. Inventory stays in the pile — no world spawn.
 	/// </summary>
-	int FlushSmallIslandsNear( int minX, int maxX, int minZ, int maxZ )
+	int FlushSmallIslandsNear( int minX, int maxX, int minZ, int maxZ, Vector3 digLocal )
 	{
 		float islandCoinBudget = Mathf.Min( 1f, _columnNearEmptyReserve );
 		float[] reserves = _columnCoinReserve;
@@ -1545,6 +1557,13 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		int merged = 0;
 		int resX = _heightfield.ResolutionX;
 		float ground = _heightfield.GroundLevel;
+		float cell = Mathf.Max( _heightfield.LocalCellSizeX, _heightfield.LocalCellSizeZ );
+		float depositRadius = cell * RemnantDepositRadiusCells;
+		GoldPileCarveSettings softDeposit = GoldPileCarveSettings.Default;
+		softDeposit.blurPadCells = 2;
+		softDeposit.blurPasses = 1;
+		softDeposit.blurStrength = 0.65f;
+		softDeposit.falloffSharpness = 2f;
 
 		_heightfield.BeginSmallIslandScan( minX, maxX, minZ, maxZ, MinIslandCellsForFlush );
 		while ( _heightfield.TryFindNextSmallIsland( reserves, islandCoinBudget ) )
@@ -1580,7 +1599,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			int seedIdx = cells[ 0 ];
 			int seedX = seedIdx % resX;
 			int seedZ = seedIdx / resX;
-			if ( !TryFindRichestSolidColumnNearby( seedX, seedZ, cells, size, ground, reserves, reserveLen, out int destX, out int destZ, out int destIdx ) )
+			if ( !TryPickRandomSolidColumnNearby( seedX, seedZ, cells, size, ground, out int destX, out int destZ ) )
 				continue;
 
 			EnsureSpillClearScratch( size );
@@ -1595,51 +1614,70 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			float removed = _heightfield.ClearCells( _spillClearScratch, size );
 			if ( removed > 0f )
 			{
-				_heightfield.AddCellHeight( destX, destZ, removed );
+				_heightfield.CellCenterLocal( destX, destZ, out float destLx, out float destLz );
+				_heightfield.DepositAtLocal( destLx, destLz, depositRadius, removed, softDeposit );
 				_clearedHeightfieldThisDensify = true;
-			}
 
-			if ( ( uint )destIdx < ( uint )reserveLen && islandReserve > 0f )
-				reserves[ destIdx ] += islandReserve;
+				float destDist = Vector2.Distance( new Vector2( destLx, destLz ), new Vector2( digLocal.x, digLocal.z ) );
+				float cover = destDist + depositRadius + cell * 2f;
+				if ( cover > _remnantMergeSeatExpandRadius )
+					_remnantMergeSeatExpandRadius = cover;
+			}
 
 			merged++;
 		}
+
+		// One reserve rebuild covering dig + all deposit destinations (avoids N× SumHeights).
+		if ( merged > 0 )
+			RebuildColumnCoinReservesNear( digLocal, Mathf.Max( depositRadius * 4f, _remnantMergeSeatExpandRadius ) );
 
 		return merged;
 	}
 
 	/// <summary>
-	/// Within <see cref="RemnantMergeSearchRadiusCells"/>, pick the solid column with the most
-	/// coin reserve (tie-break: taller, then nearer). Skips the remnant island itself.
+	/// Uniform random solid column within <see cref="RemnantMergeSearchRadiusCells"/> (reservoir sample).
+	/// Skips the remnant island and stub-height cells.
 	/// </summary>
-	bool TryFindRichestSolidColumnNearby(
+	bool TryPickRandomSolidColumnNearby(
 		int seedX,
 		int seedZ,
 		int[] islandCells,
 		int islandSize,
 		float ground,
-		float[] reserves,
-		int reserveLen,
 		out int destX,
-		out int destZ,
-		out int destIdx )
+		out int destZ )
 	{
 		destX = seedX;
 		destZ = seedZ;
-		destIdx = -1;
 		int resX = _heightfield.ResolutionX;
 		int resZ = _heightfield.ResolutionZ;
-		float bestReserve = -1f;
-		float bestH = -1f;
-		int bestSq = int.MaxValue;
-		bool found = false;
 		int radius = RemnantMergeSearchRadiusCells;
 		int radiusSq = radius * radius;
+		int eligible = 0;
+		bool found = false;
 
 		int minX = Mathf.Max( 0, seedX - radius );
 		int maxX = Mathf.Min( resX - 1, seedX + radius );
 		int minZ = Mathf.Max( 0, seedZ - radius );
 		int maxZ = Mathf.Min( resZ - 1, seedZ + radius );
+
+		// Stamp island cells for O(1) membership during the search.
+		EnsureIslandExcludeStamp( resX * resZ );
+		int stamp = ++_islandExcludeStamp;
+		if ( stamp == int.MaxValue )
+		{
+			System.Array.Clear( _islandExcludeSerial, 0, _islandExcludeSerial.Length );
+			stamp = _islandExcludeStamp = 1;
+		}
+		if ( islandCells != null )
+		{
+			for ( int i = 0; i < islandSize; i++ )
+			{
+				int islandIdx = islandCells[ i ];
+				if ( ( uint )islandIdx < ( uint )_islandExcludeSerial.Length )
+					_islandExcludeSerial[ islandIdx ] = stamp;
+			}
+		}
 
 		for ( int z = minZ; z <= maxZ; z++ )
 		{
@@ -1647,53 +1685,36 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			{
 				int dx = x - seedX;
 				int dz = z - seedZ;
-				int distSq = dx * dx + dz * dz;
-				if ( distSq > radiusSq )
+				if ( dx * dx + dz * dz > radiusSq )
 					continue;
 
 				int idx = z * resX + x;
-				if ( IsIndexInIsland( idx, islandCells, islandSize ) )
+				if ( _islandExcludeSerial[ idx ] == stamp )
 					continue;
 
 				float h = _heightfield.GetCellHeight( x, z );
-				// Must be a real column with coins/volume — not another remnant stub.
 				if ( h < ground || h <= MaxRemnantFlushHeightMeters )
 					continue;
 
-				float reserved = ( uint )idx < ( uint )reserveLen ? reserves[ idx ] : 0f;
-				if ( reserved < bestReserve )
-					continue;
-				if ( reserved == bestReserve )
+				eligible++;
+				// Reservoir sample with pile hash — uniform among eligible so far.
+				float u = GoldPileTreasurePlacement.Hash01( _pileLootSeed, _digPhysicalSerial * 19 + eligible * 7 + seedX * 3 + seedZ );
+				if ( u * eligible < 1f )
 				{
-					if ( h < bestH )
-						continue;
-					if ( h == bestH && distSq >= bestSq )
-						continue;
+					destX = x;
+					destZ = z;
+					found = true;
 				}
-
-				bestReserve = reserved;
-				bestH = h;
-				bestSq = distSq;
-				destX = x;
-				destZ = z;
-				destIdx = idx;
-				found = true;
 			}
 		}
 
 		return found;
 	}
 
-	static bool IsIndexInIsland( int idx, int[] islandCells, int islandSize )
+	void EnsureIslandExcludeStamp( int cellCount )
 	{
-		if ( islandCells == null )
-			return false;
-		for ( int i = 0; i < islandSize; i++ )
-		{
-			if ( islandCells[ i ] == idx )
-				return true;
-		}
-		return false;
+		if ( _islandExcludeSerial == null || _islandExcludeSerial.Length != cellCount )
+			_islandExcludeSerial = new int[ cellCount ];
 	}
 
 	void EnsureSpillClearScratch( int needed )

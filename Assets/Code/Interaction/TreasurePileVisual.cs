@@ -450,6 +450,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	Vector3 _lastInteractPoint;
 	bool _hasInteractPoint;
 	int _totalUnits = 1;
+	/// <summary>Coin count at bind used as volume-ratio baseline (remaining / bindTotal).</summary>
+	int _bindTotalCoins = 1;
 	GoldPileCarveSettings _carveSettings = GoldPileCarveSettings.Default;
 	int _lastCarveUnits = 1;
 
@@ -759,6 +761,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		SetLastInteractPoint( worldPos );
 		for ( int i = 0; i < amount; i++ )
 			DepositForUnitReturned( worldPos, refresh: false, settings );
+		SyncVolumeToRemainingCoins();
+		NotifySurfaceHeightChanged( worldPos, ResolveStampRadius( ResolveCarveSettings( settings ) ) );
 		RefreshVisuals( worldPos );
 		return true;
 	}
@@ -944,6 +948,9 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 		if ( _pile != null )
 			_pile.SyncRemainingFromVisual();
+
+		// Saved heights already match remaining inventory — baseline to current remaining, not authored full.
+		CaptureBindTotalCoins( useAuthoredCeiling: false );
 	}
 
 	async void WireSystemsAsync()
@@ -1007,6 +1014,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 			_pendingSaveApply = null;
 			ApplySaveNow( pending );
 		}
+		else
+			CaptureBindTotalCoins( useAuthoredCeiling: true );
 	}
 
 	public void ReleaseTreasure( TreasureItem item )
@@ -1152,6 +1161,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		// Live mound volume / remaining coins — each dig removes that share × units.
 		float volume = volumePerUnit * units;
 		_heightfield.CarveAtWorld( worldPos, transform, resolved.radius, volume, resolved );
+		SyncVolumeToRemainingCoins();
 
 		System.Diagnostics.Stopwatch phaseSw = GoldPileEditTiming.StartWatchIfEnabled();
 		NotifySurfaceHeightChanged( worldPos, ResolveStampRadius( resolved ) );
@@ -1202,9 +1212,13 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		int coinCount = Mathf.Max( 1, ResolveRemainingCoinCount() );
 		float volumePerUnit = _heightfield.VolumePerCoin( coinCount );
 		_heightfield.DepositAtWorld( worldPos, transform, resolved.radius, volumePerUnit, resolved );
-		NotifySurfaceHeightChanged( worldPos, ResolveStampRadius( resolved ) );
+		// Batch deposits (refresh:false) sync once before RefreshVisuals — avoid N full-field rescales.
 		if ( refresh )
+		{
+			SyncVolumeToRemainingCoins();
+			NotifySurfaceHeightChanged( worldPos, ResolveStampRadius( resolved ) );
 			RefreshVisuals( worldPos );
+		}
 	}
 
 	/// <summary>
@@ -1254,6 +1268,35 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 	{
 		// Inventory already lost these units; include them so volume = SumHeights / preDigCoins.
 		return Mathf.Max( 1, ResolveRemainingCoinCount() + Mathf.Max( 0, unitsBeingCarved ) );
+	}
+
+	/// <summary>
+	/// Snapshot coin baseline for <see cref="SyncVolumeToRemainingCoins"/>.
+	/// Fresh piles use max(authored, live); save restore uses live remaining only.
+	/// </summary>
+	void CaptureBindTotalCoins( bool useAuthoredCeiling )
+	{
+		int live = ResolveRemainingCoinCount();
+		if ( useAuthoredCeiling )
+		{
+			int authoredOrDef = ResolveAuthoredOrDefinitionCoinTotal();
+			_bindTotalCoins = Mathf.Max( 1, Mathf.Max( authoredOrDef, live ) );
+		}
+		else
+			_bindTotalCoins = Mathf.Max( 1, live );
+	}
+
+	/// <summary>
+	/// Uniformly scale mound volume so SumHeights ≈ (remaining / bindTotal) * initialVolume,
+	/// preserving dig-hole shape while tracking inventory. No-ops when already matched.
+	/// </summary>
+	void SyncVolumeToRemainingCoins()
+	{
+		if ( _heightfield == null || !_heightfield.IsInitialized || _bindTotalCoins <= 0 )
+			return;
+
+		float ratio = Mathf.Clamp01( ResolveRemainingCoinCount() / (float)_bindTotalCoins );
+		_heightfield.RescaleToVolumeRatio( ratio );
 	}
 
 	public bool TryDepositTreasure(
@@ -1535,6 +1578,8 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		_totalUnits = def != null
 			? Mathf.Max( 1, def.TotalCoinUnits() )
 			: Mathf.Max( 1, _pile != null ? _pile.TotalCount : 1 );
+		// Provisional until loot bind finishes; WireSystemsAsync refines with live remaining.
+		_bindTotalCoins = Mathf.Max( 1, ResolveAuthoredOrDefinitionCoinTotal() );
 	}
 
 	void ResolveLayout( out int resX, out int resZ, out float sizeX, out float sizeZ )

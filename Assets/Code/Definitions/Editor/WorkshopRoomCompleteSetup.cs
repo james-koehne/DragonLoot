@@ -19,7 +19,7 @@ public static class WorkshopRoomCompleteSetup
 	const string ObjectivePath = "Assets/Definitions/Objectives/Objective_WorkshopClear.asset";
 	const string MatPath = "Assets/Materials/Shaders/FloorGleam/M_FloorGleam.mat";
 	const string EventId = "workshop_room_complete";
-	const string HammerEventId = "workshop_clear_hammer_delivery";
+	const string HammerEventId = "workshop_access_hammer_delivery";
 	const string LanternGroup = "workshop_lanterns";
 	const string VolumeId = "volume_workshop";
 	const string RootName = "WorkshopRoomComplete";
@@ -86,9 +86,9 @@ public static class WorkshopRoomCompleteSetup
 			if ( objective.onCompleteWorldEventIds != null )
 				ids.AddRange( objective.onCompleteWorldEventIds );
 
+			// Hammer delivery is condition-driven (Access + enter workshop), not Clear complete.
 			ids.RemoveAll( id => id == EventId || id == HammerEventId );
 			ids.Insert( 0, EventId );
-			ids.Add( HammerEventId );
 			objective.onCompleteWorldEventIds = ids.ToArray();
 			EditorUtility.SetDirty( objective );
 		}

@@ -1,4 +1,4 @@
-// Floor Gleam — additive shine on a floor mesh; full-viewport screen wipe (TL→BR), mesh is draw mask only.
+// Floor Gleam — whole-mesh area glow + world-space multi-line swipe on a floor overlay.
 Shader "DragonLoot/FloorGleam"
 {
 	Properties
@@ -8,11 +8,16 @@ Shader "DragonLoot/FloorGleam"
 		_Exposure("Exposure", Range(0, 8)) = 1.75
 		_Alpha("Alpha", Range(0, 2)) = 1
 
-		[Header(Sweep Driven By Controller)]
-		_GleamT("Gleam T", Range(0, 1)) = 0
+		[Header(Area Glow Driven By Controller)]
+		_AreaGlow("Area Glow", Range(0, 1)) = 0
+		_AreaGlowMul("Area Glow Mul", Range(0, 4)) = 0.55
 
-		[Header(Screen Space)]
-		_ScreenAngle("Screen Angle Deg (45=TL to BR)", Range(-180, 180)) = 45
+		[Header(Swipe Driven By Controller)]
+		_GleamOrigin("Gleam Origin", Vector) = (0, 0, 0, 0)
+		_GleamAxis("Gleam Axis", Vector) = (1, 0, 0, 0)
+		_GleamSpan("Gleam Span", Float) = 10
+		_GleamT("Gleam T", Range(0, 1)) = 0
+		_BandMul("Band Mul", Range(0, 4)) = 1.25
 
 		[Header(Band)]
 		_BandWidth("Band Width", Range(0.005, 0.4)) = 0.08
@@ -20,8 +25,8 @@ Shader "DragonLoot/FloorGleam"
 		_EdgeFade("Edge Fade", Range(0.01, 0.4)) = 0.08
 
 		[Header(Multiple Lines)]
-		_LineCount("Line Count", Range(1, 8)) = 1
-		_LineSpacing("Line Spacing", Range(0, 0.35)) = 0.08
+		_LineCount("Line Count", Range(1, 8)) = 3
+		_LineSpacing("Line Spacing", Range(0, 0.35)) = 0.07
 
 		[Header(Render)]
 		[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend("Src Blend", Float) = 5

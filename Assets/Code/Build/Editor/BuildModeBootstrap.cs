@@ -110,6 +110,8 @@ public static class BuildModeBootstrap
 		def.aimMaxDistance = 0f;
 		def.ghostShader = shader;
 		def.ghostColor = new Color( 0.35f, 0.75f, 1f, 0.4f );
+		def.validGhostColor = new Color( 0.25f, 0.9f, 0.35f, 0.4f );
+		def.invalidGhostColor = new Color( 0.95f, 0.2f, 0.2f, 0.4f );
 		def.ghostFresnelPower = 2.4f;
 		def.ghostFresnelBoost = 0.7f;
 		def.ghostPulseAmount = 0.12f;

@@ -53,14 +53,60 @@ public sealed class UpgradeSystem
 
 	void Initialize()
 	{
+		if ( _catalog == null )
+			_catalog = GameInstance.GetDefinition<UpgradeCatalogDefinition>();
+
 		if ( !_initialized )
 		{
 			LoadFromProfile();
+			MigrateLegacyCoinSortingStation();
 			_initialized = true;
 		}
+	}
 
-		if ( _catalog == null )
-			_catalog = GameInstance.GetDefinition<UpgradeCatalogDefinition>();
+	/// <summary>
+	/// One-shot: old monolithic <c>coin_sorting_station</c> levels → automatic / speed / hopper.
+	/// Current semantics before split: L1 +25%, L2 auto, L3 hopper, L4 +50%.
+	/// </summary>
+	public void MigrateLegacyCoinSortingStation()
+	{
+		const string legacyId = UpgradeDefinition.LegacyCoinSortingStationId;
+		bool hadLegacy = IsUnlocked( legacyId ) || _levels.ContainsKey( legacyId );
+		if ( !hadLegacy )
+			return;
+
+		int oldLevel = 0;
+		if ( _levels.TryGetValue( legacyId, out int stored ) )
+			oldLevel = stored;
+		else if ( IsUnlocked( legacyId ) )
+			oldLevel = 1;
+
+		if ( oldLevel >= 2 )
+			ApplyLevelWithoutPersist( UpgradeDefinition.CoinSorterAutomaticId, 1 );
+		if ( oldLevel >= 4 )
+			ApplyLevelWithoutPersist( UpgradeDefinition.CoinSorterSpeedId, 2 );
+		else if ( oldLevel >= 1 )
+			ApplyLevelWithoutPersist( UpgradeDefinition.CoinSorterSpeedId, 1 );
+		if ( oldLevel >= 3 )
+			ApplyLevelWithoutPersist( UpgradeDefinition.CoinSorterHopperId, 1 );
+
+		_unlocked.Remove( legacyId );
+		_levels.Remove( legacyId );
+		PersistProgress();
+	}
+
+	void ApplyLevelWithoutPersist( string id, int level )
+	{
+		if ( string.IsNullOrEmpty( id ) )
+			return;
+		if ( !TryGetDefinition( id, out UpgradeDefinition definition ) )
+			return;
+
+		int max = definition.ResolveMaxLevel();
+		int clamped = Mathf.Clamp( level, 0, max );
+		_unlocked[ id ] = true;
+		if ( !_levels.TryGetValue( id, out int existing ) || existing < clamped )
+			_levels[ id ] = clamped;
 	}
 
 	public IReadOnlyList<UpgradeDefinition> GetCatalogUpgrades()
@@ -188,15 +234,14 @@ public sealed class UpgradeSystem
 		return true;
 	}
 
-	/// <summary>Unlocked upgrade level, floored to <paramref name="fallback"/> when locked or below 1.</summary>
-	public static int ResolveStationLevel( string upgradeId, int fallback = 1 )
+	/// <summary>Upgrade level, or <paramref name="fallback"/> when the system is missing. Locked / unset returns 0 (not floored to 1).</summary>
+	public static int ResolveStationLevel( string upgradeId, int fallback = 0 )
 	{
 		UpgradeSystem system = Instance;
 		if ( system == null )
 			return fallback;
 
-		int level = system.GetUpgradeLevel( upgradeId );
-		return level < 1 ? fallback : level;
+		return system.GetUpgradeLevel( upgradeId );
 	}
 
 	/// <summary>Unlocks if needed, clamps to <c>0..maxLevel</c>, and persists.</summary>

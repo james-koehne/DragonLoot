@@ -26,10 +26,18 @@ MonoBehaviour:
     completeType: 2
     targetId: workshop_pile
     requiredCount: 0
-  rewards: []
-  rewardLabel: Workshop Machines
+  - id: fill_displays
+    label: Complete displays
+    completeType: 1
+    targetId: 
+    requiredCount: 0
+  rewards:
+  - type: 1
+    abilityId: 
+    upgradeId: coin_sorter_automatic
+    upgradeLevel: 1
+  rewardLabel: Workshop machines + auto sorter
   showReward: 1
   completionToast: Workshop machines activated
   onCompleteWorldEventIds:
   - workshop_room_complete
-  - workshop_clear_hammer_delivery

@@ -5,6 +5,7 @@ public class CrosshairUI : MonoBehaviour
 {
 	static readonly Color DefaultIdleColor = Color.white;
 	static readonly Color DefaultFocusedColor = new Color( 1f, 0.85f, 0.2f, 1f );
+	static readonly Color DefaultFullPouchColor = new Color( 0.95f, 0.28f, 0.32f, 1f );
 
 	static CrosshairUI _instance;
 
@@ -84,6 +85,7 @@ public class CrosshairUI : MonoBehaviour
 
 		bool focused = false;
 		bool contextual = false;
+		bool fullPouch = false;
 		if ( GameMode.Instance != null && GameMode.Instance.Player != null )
 		{
 			PlayerInteraction interaction = GameMode.Instance.Player.Interaction;
@@ -91,30 +93,39 @@ public class CrosshairUI : MonoBehaviour
 			{
 				focused = interaction.HasInteractableFocus;
 				contextual = interaction.HasContextualInteractFocus;
+				fullPouch = interaction.HasFullPouchPickableFocus;
 			}
 		}
 
-		ApplyState( focused, contextual );
+		ApplyState( focused, contextual, fullPouch );
 	}
 
-	void ApplyState( bool focused, bool contextual )
+	void ApplyState( bool focused, bool contextual, bool fullPouch = false )
 	{
 		Color idle = DefaultIdleColor;
 		Color focusedColor = DefaultFocusedColor;
+		Color fullPouchColor = DefaultFullPouchColor;
 		PlayerInteractionDefinition def = Definition;
 		if ( def != null )
 		{
 			idle = def.crosshairIdleColor;
 			focusedColor = def.crosshairFocusedColor;
+			fullPouchColor = def.crosshairFullPouchColor;
 		}
 
+		Color active = idle;
+		if ( fullPouch )
+			active = fullPouchColor;
+		else if ( focused )
+			active = focusedColor;
+
 		if ( _image != null )
-			_image.color = focused ? focusedColor : idle;
+			_image.color = active;
 
 		if ( _contextualRing == null )
 			return;
 
-		_contextualRing.color = focusedColor;
+		_contextualRing.color = fullPouch ? fullPouchColor : focusedColor;
 		_contextualRing.enabled = _visible && contextual;
 	}
 }

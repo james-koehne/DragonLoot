@@ -10,11 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c7b0e4bb49bf5d645ac46f76ed68088b, type: 3}
-  m_Name: Upgrade_PlaceholderBeta
+  m_Name: Upgrade_CoinSorterHopper
   m_EditorClassIdentifier: Assembly-CSharp::UpgradeDefinition
-  id: placeholder_upgrade_beta
-  displayName: Placeholder Upgrade Beta
-  description: Second debug upgrade left locked by default for unlock testing.
+  id: coin_sorter_hopper
+  displayName: Larger Hopper
+  description: Holds more coins in the sorter hopper.
   icon: {fileID: 0}
-  maxLevel: 5
+  maxLevel: 1
+  levelUnlockLabels:
+  - Larger Hopper
   enabled: 1
+  digPickupSpeedMultiplier: 1

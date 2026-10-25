@@ -12,13 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 399d64c0bcdfb434483178497b41791f, type: 3}
   m_Name: CoinSortingStationDefinition
   m_EditorClassIdentifier: Assembly-CSharp::CoinSortingStationDefinition
-  upgradeId: coin_sorting_station
   baseHopperCapacity: 100
-  level4HopperCapacity: 1000
+  largeHopperCapacity: 1000
   manualCoinsPerSecond: 4
   automaticCoinsPerSecond: 2
-  level3ManualCoinsPerSecond: 10
-  level3AutomaticCoinsPerSecond: 5
+  speedLevel1Multiplier: 1.25
+  speedLevel2Multiplier: 1.5
   crankHoldGrace: 0.2
   crankToSortMultiplier: 2
   maxReserveSeconds: 16

@@ -57,9 +57,16 @@ public class PlayerInteraction : MonoBehaviour
 	int _nonCoinPickupKey;
 	TreasureItem _frozenPickupItem;
 	HoverOutlineVisualSettings _cachedPickableOutline = HoverOutlineVisualSettings.DefaultPickable();
+	HoverOutlineVisualSettings _cachedFullPouchOutline = HoverOutlineVisualSettings.DefaultFullPouch();
+	bool _fullPouchPickableFocus;
 
 	public IInteractable Current => _current;
 	public bool HasInteractableFocus => _current != null;
+
+	/// <summary>
+	/// True when focus is a pouch pickup whose matching category pouch has no remaining slots.
+	/// </summary>
+	public bool HasFullPouchPickableFocus => _fullPouchPickableFocus;
 
 	/// <summary>
 	/// True when ContextualInteract (E) currently does something: look-at use, hold-stack, or an active E action.
@@ -559,6 +566,11 @@ public class PlayerInteraction : MonoBehaviour
 			? def.pickableOutline.Clone()
 			: HoverOutlineVisualSettings.DefaultPickable();
 		_cachedPickableOutline.Validate();
+
+		_cachedFullPouchOutline = def != null && def.fullPouchOutline != null
+			? def.fullPouchOutline.Clone()
+			: HoverOutlineVisualSettings.DefaultFullPouch();
+		_cachedFullPouchOutline.Validate();
 	}
 
 	void EnsureInteractMask()
@@ -963,7 +975,13 @@ public class PlayerInteraction : MonoBehaviour
 		if ( interactable is CoinSortingCrankInteractable )
 			return interactable;
 
+		if ( interactable is CoinSortingIndicatorInteractable )
+			return interactable;
+
 		if ( collider.GetComponentInParent<CoinSortingCrankInteractable>() != null )
+			return interactable;
+
+		if ( collider.GetComponentInParent<CoinSortingIndicatorInteractable>() != null )
 			return interactable;
 
 		CoinSortingStation station = collider.GetComponentInParent<CoinSortingStation>();
@@ -1005,6 +1023,14 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( candidate is CoinSortingStationMoveInteractable
 			&& currentBest is CoinSortingCrankInteractable )
+			return candidateDist + crankPreferSlack < bestDist;
+
+		if ( candidate is CoinSortingIndicatorInteractable
+			&& currentBest is CoinSortingStationMoveInteractable )
+			return candidateDist <= bestDist + crankPreferSlack;
+
+		if ( candidate is CoinSortingStationMoveInteractable
+			&& currentBest is CoinSortingIndicatorInteractable )
 			return candidateDist + crankPreferSlack < bestDist;
 
 		return candidateDist < bestDist;
@@ -1208,7 +1234,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( _frozenPickupItem == item )
 			return;
 
-		item.SettlePhysicsInPlace();
+		item.FreezeMotionInPlace();
 		_frozenPickupItem = item;
 	}
 
@@ -1758,6 +1784,13 @@ public class PlayerInteraction : MonoBehaviour
 	{
 		EnsurePickableOutlineSettings();
 
+		bool fullPouch = IsFullPouchPickable( _current );
+		bool coinFocus = IsCoinCategoryPickable( _current );
+		// Coins: red crosshair when pouch is full, but never red outline (placement join/valid must stay).
+		// While placement owns the stack outline, skip the red crosshair so place feedback is not overridden.
+		_fullPouchPickableFocus = fullPouch
+			&& !( coinFocus && _placement != null && _placement.HasActivePlacementOutline );
+
 		if ( _placement != null && _placement.HasActivePlacementOutline )
 			return;
 
@@ -1774,16 +1807,105 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
+		HoverOutlineVisualSettings settings = _cachedPickableOutline;
+		if ( fullPouch && !coinFocus )
+			settings = _cachedFullPouchOutline;
+
 		HoverOutlineRegistrar.SetTarget(
 			HoverOutlineRegistrar.Owner.Pickable,
 			renderers,
-			_cachedPickableOutline,
+			settings,
 			GetEntityId() );
 	}
 
 	void ClearPickableIndicator()
 	{
+		_fullPouchPickableFocus = false;
 		HoverOutlineRegistrar.ClearIfOwner( HoverOutlineRegistrar.Owner.Pickable, GetEntityId() );
+	}
+
+	bool IsFullPouchPickable( IInteractable focus )
+	{
+		if ( focus == null || _player == null )
+			return false;
+
+		PlayerCarry carry = _player.Carry;
+		if ( carry == null )
+			return false;
+
+		if ( !TryGetPickableTreasureDefinition( focus, out TreasureDefinition definition ) || definition == null )
+			return false;
+
+		CarryBucketKind bucket = PlayerCarry.ResolveBucket( definition );
+		return !carry.HasSlotRoom( bucket );
+	}
+
+	static bool IsCoinCategoryPickable( IInteractable focus )
+	{
+		if ( focus is GroundCoinStack || focus is CoinStackInteractable )
+			return true;
+
+		if ( !TryGetPickableTreasureDefinition( focus, out TreasureDefinition definition ) || definition == null )
+			return false;
+
+		return PlayerCarry.ResolveBucket( definition ) == CarryBucketKind.Coin
+			|| GroundCoinStack.IsGroundStackableCoin( definition );
+	}
+
+	static bool TryGetPickableTreasureDefinition( IInteractable focus, out TreasureDefinition definition )
+	{
+		definition = null;
+		if ( focus == null )
+			return false;
+
+		TreasureItemInteractable itemFocus = focus as TreasureItemInteractable;
+		if ( itemFocus != null )
+		{
+			TreasureItem item = itemFocus.Item;
+			definition = item != null ? item.Definition : null;
+			return definition != null;
+		}
+
+		ChestInteractable chest = focus as ChestInteractable;
+		if ( chest != null )
+		{
+			TreasureItem chestItem = chest.Item;
+			definition = chestItem != null ? chestItem.Definition : null;
+			return definition != null;
+		}
+
+		GroundCoinStack coinStack = focus as GroundCoinStack;
+		if ( coinStack != null )
+			return coinStack.TryPeekTopDefinition( out definition ) && definition != null;
+
+		GroundGoldBarStack barStack = focus as GroundGoldBarStack;
+		if ( barStack != null )
+		{
+			definition = barStack.StackDefinition;
+			if ( definition == null && barStack.Count > 0 )
+			{
+				TreasureItem top = barStack.Items[ barStack.Count - 1 ];
+				definition = top != null ? top.Definition : null;
+			}
+
+			return definition != null;
+		}
+
+		CoinStackInteractable shopStack = focus as CoinStackInteractable;
+		if ( shopStack != null )
+		{
+			definition = shopStack.Treasure;
+			return definition != null;
+		}
+
+		PickupInteractable pickup = focus as PickupInteractable;
+		if ( pickup != null )
+		{
+			definition = pickup.Treasure;
+			return definition != null;
+		}
+
+		return false;
 	}
 
 	static GameInput GetGameInput()

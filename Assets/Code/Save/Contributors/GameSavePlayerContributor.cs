@@ -35,6 +35,7 @@ public sealed class GameSavePlayerContributor : IGameSaveContributor
 			return;
 
 		playerData.selectedBucket = (int)carry.SelectedBucket;
+		playerData.pouchEverHeldMask = carry.CaptureEverHeldMask();
 		carry.CaptureDefinitionIds(
 			playerData.coinIds,
 			playerData.gemIds,
@@ -83,7 +84,8 @@ public sealed class GameSavePlayerContributor : IGameSaveContributor
 			playerData.artifactIds,
 			playerData.resourceIds,
 			playerData.generalIds,
-			playerData.junkIds );
+			playerData.junkIds,
+			playerData.pouchEverHeldMask );
 
 		AbilitySystem abilities = AbilitySystem.Ensure( player );
 		if ( abilities != null )

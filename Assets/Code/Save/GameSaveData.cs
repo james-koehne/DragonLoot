@@ -28,6 +28,8 @@ public class GameSavePlayerData
 	public float yaw;
 	public float cameraPitch;
 	public int selectedBucket;
+	/// <summary>Bitmask of pouches that have ever held an item (CarryBucketKind index).</summary>
+	public int pouchEverHeldMask;
 	public List<string> coinIds = new List<string>();
 	public List<string> gemIds = new List<string>();
 	public List<string> artifactIds = new List<string>();

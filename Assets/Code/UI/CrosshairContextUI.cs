@@ -78,6 +78,13 @@ public class CrosshairContextUI : MonoBehaviour
 			return;
 
 		_builder.Length = 0;
+		if ( TryAppendCoinSorterIndicator( player, _builder ) )
+		{
+			_lookLabel.text = _builder.ToString();
+			SetLookVisible( true );
+			return;
+		}
+
 		if ( showCoinStackCount )
 			TryAppendCoinStack( player, _builder );
 		_displayRequirements.TryAppendSummary( player, _builder );
@@ -107,6 +114,27 @@ public class CrosshairContextUI : MonoBehaviour
 		}
 
 		SetMovementVisible( false, null );
+	}
+
+	static bool TryAppendCoinSorterIndicator( PlayerController player, StringBuilder builder )
+	{
+		if ( player == null || builder == null )
+			return false;
+
+		PlayerInteraction interaction = player.Interaction;
+		if ( interaction == null )
+			return false;
+
+		CoinSortingIndicatorInteractable indicator = interaction.Current as CoinSortingIndicatorInteractable;
+		if ( indicator == null || !indicator.CanOutlineFocus( player ) )
+			return false;
+
+		string description = indicator.BuildLookDescription();
+		if ( string.IsNullOrEmpty( description ) )
+			return false;
+
+		AppendLine( builder, description );
+		return true;
 	}
 
 	static bool TryAppendCoinStack( PlayerController player, StringBuilder builder )

@@ -67,11 +67,13 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	readonly int[] _simCount = new int[ BucketCount ];
 	readonly int[] _insertCursor = new int[ BucketCount ];
 	readonly bool[] _bucketTouched = new bool[ BucketCount ];
+	readonly bool[] _bucketEverHeld = new bool[ BucketCount ];
 
 	CarryDefinition _definition;
 	PlayerController _player;
 	FirstPersonCameraController _cameraLook;
 	Transform _carryRigs;
+	bool _suppressPouchNotify;
 	bool _cinematicHidden;
 	bool _minecartDriveHidden;
 	bool _buildModeHidden;
@@ -198,6 +200,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	public bool TrySetSelectedBucket( CarryBucketKind kind )
 	{
+		return TrySetSelectedBucket( kind, PouchChangeReason.Switched );
+	}
+
+	bool TrySetSelectedBucket( CarryBucketKind kind, PouchChangeReason reason )
+	{
 		EnsureBuckets();
 		if ( _selected == kind )
 			return false;
@@ -213,7 +220,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 
 		RestackPoses();
-		PublishPouchChanged();
+		PublishPouchChanged( reason );
 		PublishHeldCategoryChanged();
 		return true;
 	}
@@ -225,16 +232,57 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	public void NotifyPouchReselected()
 	{
 		EnsureBuckets();
-		PublishPouchChanged();
+		PublishPouchChanged( PouchChangeReason.Reselected );
 	}
 
-	void PublishPouchChanged()
+	void PublishPouchChanged( PouchChangeReason reason )
 	{
+		if ( _suppressPouchNotify )
+			return;
+
 		EventBus.Publish( new PouchChangedEvent
 		{
 			Bucket = _selected,
-			Carry = this
+			Carry = this,
+			Reason = reason
 		} );
+	}
+
+	/// <summary>True if this pouch has ever held at least one item this run / save.</summary>
+	public bool HasEverHeld( CarryBucketKind kind )
+	{
+		int index = (int)kind;
+		if ( index < 0 || index >= BucketCount )
+			return false;
+		return _bucketEverHeld[ index ];
+	}
+
+	public int CaptureEverHeldMask()
+	{
+		int mask = 0;
+		for ( int i = 0; i < BucketCount; i++ )
+		{
+			if ( _bucketEverHeld[ i ] )
+				mask |= 1 << i;
+		}
+		return mask;
+	}
+
+	public void ApplyEverHeldMask( int mask )
+	{
+		for ( int i = 0; i < BucketCount; i++ )
+		{
+			if ( ( mask & ( 1 << i ) ) != 0 )
+				_bucketEverHeld[ i ] = true;
+		}
+	}
+
+	void MarkBucketEverHeld( CarryBucketKind kind )
+	{
+		int index = (int)kind;
+		if ( index < 0 || index >= BucketCount )
+			return;
+		_bucketEverHeld[ index ] = true;
 	}
 
 	public bool CycleSelectedBucket()
@@ -601,7 +649,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	void LateUpdate()
 	{
 		EnsureBuckets();
-		EnsureSelectedPouchValid();
 		TickNewItemDwell();
 		if ( _carryRigs == null )
 			return;
@@ -678,7 +725,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	/// <summary>
 	/// Rotates which item of the selected category is Active. Relative ring order is preserved.
-	/// For coins, demoted Active meshes merge into the left-hand definition stack.
+	/// For coins, demoted Active meshes fly into the left-hand stack (top or bottom) before merging.
 	/// </summary>
 	public bool CycleActive( int direction )
 	{
@@ -698,6 +745,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( steps == 0 )
 			return false;
 
+		CarriedEntry demoted = _cycleBuffer[ 0 ];
 		CarriedEntry newActive = _cycleBuffer[ steps ];
 		bucket.Held.Clear();
 		for ( int i = 1; i < n; i++ )
@@ -710,15 +758,26 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		bucket.HasActive = true;
 
 		bool promoteFromHeldTop = direction < 0;
+		int demotedHeldIndex = promoteFromHeldTop ? 0 : bucket.Held.Count - 1;
+
+		// Demote flight before compact so the live mesh is not folded into the cylinder.
+		if ( demoted.Item != null && demoted.Token != newActive.Token )
+		{
+			demoted.PoseSettled = false;
+			if ( demotedHeldIndex >= 0 && demotedHeldIndex < bucket.Held.Count )
+				bucket.Held[ demotedHeldIndex ] = demoted;
+
+			demoted.Item.SetMeshVisible( true );
+			StartHandTransferTween( demoted.Item, demoted.Token, bucket, active: false, demotedHeldIndex );
+		}
+
 		if ( bucket.Kind == CarryBucketKind.Coin )
 			CompactCoinHeldToDefinitions( bucket );
 
 		if ( bucket.HasActive && bucket.Active.Item != null )
 		{
 			bucket.Active.Item.SetMeshVisible( true );
-			CarryDefinition def = Definition;
-			float duration = def != null ? def.activeRefillTweenDuration : 0.22f;
-			StartHoldTween( bucket.Active.Item, bucket.Active.Token, duration );
+			StartHandTransferTween( bucket.Active.Item, bucket.Active.Token, bucket, active: true, heldIndex: -1 );
 		}
 		else if ( bucket.HasActive && bucket.Active.Definition != null )
 		{
@@ -745,9 +804,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 					active.Item = rented;
 					bucket.Active = active;
 					rented.transform.SetParent( bucket.ActiveRoot, true );
-					CarryDefinition def = Definition;
-					float duration = def != null ? def.activeRefillTweenDuration : 0.22f;
-					StartHoldTween( rented, active.Token, duration );
+					StartHandTransferTween( rented, active.Token, bucket, active: true, heldIndex: -1 );
 				}
 				else
 				{
@@ -1156,8 +1213,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		if ( flightInProgress )
 		{
-			// Keep the live mesh + token so HoldTweenRoutine soft-retargets to HoldRoot
-			// and finishes the full pickup flight instead of cutting off.
+			// Keep the live mesh + token so HoldTweenRoutine finishes its locked leg,
+			// then chains a follow-up flight into HoldRoot instead of cutting off.
 			active.PoseSettled = false;
 			InsertEntry( bucket, active, 0, allowActive: false );
 			return;
@@ -1562,6 +1619,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		EnsureBuckets();
 		int added = 0;
+		CategoryBucket lastBucket = null;
 		for ( int i = 0; i < definitions.Count; i++ )
 		{
 			TreasureDefinition treasure = definitions[ i ];
@@ -1576,12 +1634,14 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			if ( !AddDefinitionEntry( treasure ) )
 				break;
 
+			lastBucket = GetBucketFor( treasure );
 			added++;
 		}
 
 		if ( added <= 0 )
 			return 0;
 
+		AutoSelectIfIdle( lastBucket );
 		SpawnPendingActives();
 		RestackPoses();
 		return added;
@@ -1611,6 +1671,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( added <= 0 )
 			return 0;
 
+		AutoSelectIfIdle( GetBucketFor( treasure ) );
 		SpawnPendingActives();
 		RestackPoses();
 		return added;
@@ -1636,7 +1697,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		InsertEntry( bucket, entry, 0, allowActive: true );
 		NotifyIfNewlyDiscovered( treasure );
-		AutoSelectIfIdle( bucket );
+		MarkBucketEverHeld( bucket.Kind );
 		return true;
 	}
 
@@ -1714,12 +1775,10 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( active.Item == null )
 			return;
 
-		CarryDefinition def = Definition;
-		float duration = def != null ? def.activeRefillTweenDuration : 0.22f;
 		if ( !_holdTweens.ContainsKey( active.Token ) )
 		{
 			active.Item.transform.SetParent( bucket.HoldRoot, true );
-			StartHoldTween( active.Item, active.Token, duration );
+			StartHandTransferTween( active.Item, active.Token, bucket, active: false, heldIndex: 0 );
 		}
 	}
 
@@ -2021,23 +2080,6 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		DiscoveryToastUI.NotifyNewTreasure( definition );
 	}
 
-	/// <summary>If the selected pouch is empty, snap to another pouch that still has items.</summary>
-	void EnsureSelectedPouchValid()
-	{
-		if ( GetBucketCount( _selected ) > 0 )
-			return;
-
-		for ( int i = 0; i < BucketCount; i++ )
-		{
-			CarryBucketKind kind = (CarryBucketKind)i;
-			if ( kind == _selected || GetBucketCount( kind ) <= 0 )
-				continue;
-
-			TrySetSelectedBucket( kind );
-			return;
-		}
-	}
-
 	float GetHeldCoinCylinderHeight( CategoryBucket bucket )
 	{
 		if ( bucket == null || bucket.Held.Count == 0 )
@@ -2053,20 +2095,31 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 	}
 
 	/// <summary>
-	/// Selects the destination pouch after a pickup. Always switches when
-	/// <see cref="CarryDefinition.autoSwitchPouchOnPickup"/> is on; otherwise only if the current pouch is empty.
+	/// After a deposit: mark the pouch as ever-used, refresh the summary when it is
+	/// already selected, and optionally switch to it when auto-switch is on (or the
+	/// current pouch is empty). Emptying never calls this.
 	/// </summary>
 	void AutoSelectIfIdle( CategoryBucket bucket )
 	{
-		if ( bucket == null || bucket.Kind == _selected || bucket.Count == 0 )
+		if ( bucket == null || bucket.Count == 0 )
 			return;
+
+		MarkBucketEverHeld( bucket.Kind );
+		if ( _suppressPouchNotify )
+			return;
+
+		if ( bucket.Kind == _selected )
+		{
+			PublishPouchChanged( PouchChangeReason.ContentsAdded );
+			return;
+		}
 
 		CarryDefinition def = Definition;
 		bool alwaysSwitch = def != null && def.autoSwitchPouchOnPickup;
 		if ( !alwaysSwitch && GetBucket( _selected ).Count > 0 )
 			return;
 
-		TrySetSelectedBucket( bucket.Kind );
+		TrySetSelectedBucket( bucket.Kind, PouchChangeReason.ContentsAdded );
 	}
 
 	void PromoteFromHeld( CategoryBucket bucket )
@@ -2104,10 +2157,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				entry.Item = rented;
 				bucket.Active = entry;
 				rented.transform.SetParent( bucket.ActiveRoot, true );
-
-				CarryDefinition def = Definition;
-				float duration = def != null ? def.activeRefillTweenDuration : 0.22f;
-				StartHoldTween( rented, entry.Token, duration );
+				StartHandTransferTween( rented, entry.Token, bucket, active: true, heldIndex: -1 );
 				return;
 			}
 
@@ -2117,10 +2167,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		// Cylinder-covered coins hide their own mesh while in the left hand.
 		entry.Item.SetMeshVisible( true );
-
-		CarryDefinition carryDef = Definition;
-		float tweenDuration = carryDef != null ? carryDef.activeRefillTweenDuration : 0.22f;
-		StartHoldTween( entry.Item, entry.Token, tweenDuration );
+		StartHandTransferTween( entry.Item, entry.Token, bucket, active: true, heldIndex: -1 );
 	}
 
 	public bool TryPeekActive( out TreasureDefinition definition )
@@ -2138,17 +2185,30 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		definition = null;
 		item = null;
 
+		if ( !IsActiveHoldReady )
+			return false;
+
 		CategoryBucket bucket = GetBucket( _selected );
-		if ( !bucket.HasActive )
-			return false;
-
-		// Pending async spawns reserve capacity but are not placeable until bound.
-		if ( bucket.Active.Item == null )
-			return false;
-
 		definition = bucket.Active.Definition;
 		item = bucket.Active.Item;
 		return true;
+	}
+
+	/// <summary>
+	/// True when Active has a bound mesh and is not mid hand-transfer / hold tween.
+	/// Place and throw wait for this so left→right refill completes first.
+	/// </summary>
+	public bool IsActiveHoldReady
+	{
+		get
+		{
+			CategoryBucket bucket = GetBucket( _selected );
+			if ( !bucket.HasActive || bucket.Active.Item == null )
+				return false;
+			if ( _holdTweens.ContainsKey( bucket.Active.Token ) )
+				return false;
+			return true;
+		}
 	}
 
 	/// <summary>Legacy alias — placeable item is Active, not stack bottom.</summary>
@@ -2204,7 +2264,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	/// <param name="snapToHand">
 	/// When true, abort any in-flight hold tween / pose ease and snap to the right-hand
-	/// Active pose before detaching (used for throw so spam releases always leave from the hand).
+	/// Active pose before detaching. Refilling Active cannot be consumed — wait for
+	/// <see cref="IsActiveHoldReady"/> (place/throw peek already gates on that).
 	/// </param>
 	public bool TryConsumeActive( out TreasureItem item, bool snapToHand )
 	{
@@ -2215,6 +2276,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return false;
 
 		CarriedEntry entry = bucket.Active;
+		if ( _holdTweens.ContainsKey( entry.Token ) )
+			return false;
+
 		item = ResolveLiveItem( bucket, entry, activeParent: true );
 		if ( item == null )
 			return false;
@@ -2464,6 +2528,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			bucket.Held.Clear();
 			bucket.CylinderBuffer.Clear();
 			CoinColumnCylinderBinder.ClearAndDestroy( ref bucket.HeldCylinder, null );
+			_bucketEverHeld[ b ] = false;
 		}
 
 	}
@@ -2492,9 +2557,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		List<string> artifactIds,
 		List<string> resourceIds,
 		List<string> generalIds,
-		List<string> junkIds )
+		List<string> junkIds,
+		int everHeldMask = 0 )
 	{
 		Clear();
+		_suppressPouchNotify = true;
 		RestoreBucketIds( coinIds );
 		RestoreBucketIds( gemIds );
 		RestoreBucketIds( artifactIds );
@@ -2502,9 +2569,18 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		RestoreBucketIds( generalIds );
 		RestoreBucketIds( junkIds );
 
+		ApplyEverHeldMask( everHeldMask );
+		for ( int i = 0; i < BucketCount; i++ )
+		{
+			if ( GetBucketCount( (CarryBucketKind)i ) > 0 )
+				_bucketEverHeld[ i ] = true;
+		}
+
 		CarryBucketKind kind = (CarryBucketKind)Mathf.Clamp( selectedBucket, 0, BucketCount - 1 );
-		TrySetSelectedBucket( kind );
+		if ( !TrySetSelectedBucket( kind ) )
+			_selected = kind;
 		RestackPoses();
+		_suppressPouchNotify = false;
 	}
 
 	void CaptureBucketIds( CarryBucketKind kind, List<string> into )
@@ -2619,10 +2695,41 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		RestackPoses();
 	}
 
+	void StartHandTransferTween( TreasureItem item, int token, CategoryBucket bucket, bool active, int heldIndex )
+	{
+		if ( item == null || bucket == null )
+			return;
+
+		CarryDefinition def = Definition;
+		float minDuration = def != null ? def.activeRefillTweenDuration : 0.22f;
+		Transform parent = GetItemParent( bucket, active );
+		Vector3 endLocal = GetLocalPose( bucket, active, heldIndex );
+		float duration = ResolveHandTransferDuration( item, parent, endLocal, minDuration );
+		StartHoldTween( item, token, duration );
+	}
+
+	float ResolveHandTransferDuration( TreasureItem item, Transform parent, Vector3 endLocalPos, float minDuration )
+	{
+		CarryDefinition def = Definition;
+		minDuration = Mathf.Max( 0.05f, minDuration );
+		float speed = def != null ? def.handTransferSpeed : 1.35f;
+		float maxDuration = def != null ? def.handTransferMaxDuration : 0.85f;
+		maxDuration = Mathf.Max( minDuration, maxDuration );
+
+		if ( item == null || parent == null || speed < 0.05f )
+			return minDuration;
+
+		Vector3 endWorld = parent.TransformPoint( endLocalPos );
+		float distance = Vector3.Distance( item.transform.position, endWorld );
+		float scaled = distance / speed;
+		return Mathf.Clamp( Mathf.Max( minDuration, scaled ), minDuration, maxDuration );
+	}
+
 	void StartHoldTween( TreasureItem item, int token, float durationOverride, bool playPickupFeedback = false )
 	{
+		// Already flying — finish the locked leg; HoldTweenRoutine chains if the destination changed.
 		if ( _holdTweens.TryGetValue( token, out Coroutine existing ) && existing != null )
-			StopCoroutine( existing );
+			return;
 
 		if ( item != null )
 			item.BeginFlight();
@@ -2739,10 +2846,16 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		CarriedEntry entry = isActive ? bucket.Active : bucket.Held[ heldIndex ];
 		bool keepWorldScale = entry.IsClusterAnchor || entry.ClusterId != 0;
-		Vector3 endLocalPos = crossPouch
+		// Lock this leg's destination — role changes queue a follow-up leg after arrival.
+		Vector3 lockedEndLocalPos = crossPouch
 			? ( def != null ? def.crossPouchPickupOffset : new Vector3( 0f, -0.05f, 0.55f ) )
 			: GetLocalPose( bucket, isActive, heldIndex );
+		Quaternion lockedEndLocalRot = crossPouch
+			? Quaternion.identity
+			: item.GetHeldLocalRotation( isActive );
 		Vector3 endLocalScale = keepWorldScale ? item.GetWorldScale() : item.GetHeldScale();
+		Transform lockedParent = flightParent;
+		bool lockedIsActive = isActive;
 
 		bool hasOverride = durationOverride > 0.0001f;
 		// Pickup flights always use the full coin flip; hand refills use a short arc.
@@ -2782,65 +2895,28 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			duration = Mathf.Max( 0.05f, PlayerDigPickupSpeed.ScaleDuration( duration ) );
 
 		float elapsed = 0f;
-		float originalDuration = duration;
 
 		while ( elapsed < duration )
 		{
-			if ( !TryFindEntry( token, out bucket, out isActive, out heldIndex ) )
+			if ( !TryFindEntry( token, out bucket, out _, out _ ) )
 			{
 				// Still flying into hand — do not EndFlight; place/consume owns the item.
 				_holdTweens.Remove( token );
 				yield break;
 			}
 
-			if ( !crossPouch )
-			{
-				Transform desiredParent = GetItemParent( bucket, isActive );
-				if ( desiredParent != null && t.parent != desiredParent )
-				{
-					// Soft retarget between hands — keep remaining flight time so pickups aren't cut short.
-					t.SetParent( desiredParent, true );
-					startLocalPos = t.localPosition;
-					startLocalRot = t.localRotation;
-					startLocalScale = t.localScale;
-					float remaining = Mathf.Max( 0.05f, originalDuration - elapsed );
-					duration = remaining;
-					elapsed = 0f;
-					originalDuration = duration;
-					if ( CoinFlipMotion.IsCoin( item ) && playPickupFeedback )
-					{
-						flipCoin = true;
-						arcHeight = def != null ? def.coinFlipArcHeight : CoinFlipMotion.DefaultArcHeight;
-						spins = def != null ? def.coinFlipSpins : CoinFlipMotion.DefaultSpins;
-					}
-					else
-					{
-						flipCoin = false;
-						float itemArc = def != null ? def.itemArcHeight : CoinFlipMotion.DefaultItemArcHeight;
-						arcHeight = Mathf.Min( arcHeight, itemArc );
-					}
-				}
-
-				endLocalPos = GetLocalPose( bucket, isActive, heldIndex );
-			}
-
 			elapsed += Time.deltaTime;
 			float u = Mathf.Clamp01( elapsed / duration );
 
-			entry = isActive ? bucket.Active : bucket.Held[ heldIndex ];
-			keepWorldScale = entry.IsClusterAnchor || entry.ClusterId != 0;
 			endLocalScale = keepWorldScale ? item.GetWorldScale() : item.GetHeldScale();
-			Quaternion endLocalRot = crossPouch
-				? Quaternion.identity
-				: item.GetHeldLocalRotation( isActive );
 
 			if ( flipCoin )
 			{
 				CoinFlipMotion.EvaluateLocalFlip(
 					startLocalPos,
 					startLocalRot,
-					endLocalPos,
-					endLocalRot,
+					lockedEndLocalPos,
+					lockedEndLocalRot,
 					u,
 					arcHeight,
 					spins,
@@ -2851,8 +2927,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			}
 			else
 			{
-				t.localPosition = CoinFlipMotion.EvaluateLocalArc( startLocalPos, endLocalPos, u, arcHeight );
-				t.localRotation = Quaternion.Slerp( startLocalRot, endLocalRot, CoinFlipMotion.SmoothStep( u ) );
+				t.localPosition = CoinFlipMotion.EvaluateLocalArc( startLocalPos, lockedEndLocalPos, u, arcHeight );
+				t.localRotation = Quaternion.Slerp( startLocalRot, lockedEndLocalRot, CoinFlipMotion.SmoothStep( u ) );
 			}
 
 			float scaleEase = CoinFlipMotion.SmoothStep( u );
@@ -2865,6 +2941,28 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		if ( !TryFindEntry( token, out bucket, out isActive, out heldIndex ) )
 			yield break;
+
+		Transform desiredParent = GetItemParent( bucket, isActive );
+		if ( desiredParent == null )
+		{
+			item.EndFlight();
+			yield break;
+		}
+
+		Vector3 desiredEndLocal = GetLocalPose( bucket, isActive, heldIndex );
+		bool parentMismatch = !crossPouch && desiredParent != lockedParent;
+		bool poseMismatch = !crossPouch
+			&& ( desiredEndLocal - lockedEndLocalPos ).sqrMagnitude > 0.0004f;
+		bool roleMismatch = isActive != lockedIsActive;
+
+		// Finish the locked path first; only then fly toward the new hand / slot.
+		if ( parentMismatch || poseMismatch || roleMismatch )
+		{
+			float minDuration = def != null ? def.activeRefillTweenDuration : 0.22f;
+			float nextDuration = ResolveHandTransferDuration( item, desiredParent, desiredEndLocal, minDuration );
+			StartHoldTween( item, token, nextDuration, playPickupFeedback: false );
+			yield break;
+		}
 
 		item.EndFlight();
 
@@ -3194,9 +3292,12 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		List<TreasureDefinition> defs = new List<TreasureDefinition>( limit );
 		for ( int i = 0; i < limit; i++ )
 		{
-			TreasureDefinition slotDef = coins.Held[ i ].Definition;
-			if ( slotDef != null )
-				defs.Add( slotDef );
+			CarriedEntry slot = coins.Held[ i ];
+			// Live / in-flight meshes are not part of the cylinder until they arrive and collapse.
+			if ( slot.Item != null )
+				continue;
+			if ( slot.Definition != null )
+				defs.Add( slot.Definition );
 		}
 
 		if ( defs.Count >= CoinColumnCylinderBinder.MinCountForCylinder )

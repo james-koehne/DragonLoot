@@ -645,6 +645,24 @@ public class TreasureItem : MonoBehaviour
 		_distanceForcedSleep = false;
 	}
 
+	/// <summary>
+	/// Stops falling / rolling at the current world pose for pickup-hold charge.
+	/// Unlike <see cref="SettlePhysicsInPlace"/>, does not seat, auto-stack, or pyramid-join.
+	/// </summary>
+	public void FreezeMotionInPlace()
+	{
+		if ( _state == TreasureItemState.SurfaceRolling )
+		{
+			TreasureSurfaceWorld world = TreasureSurfaceWorld.Instance;
+			if ( world != null && world.Simulator != null )
+				world.Simulator.FreezeInPlace( this );
+			ForceSleep();
+			return;
+		}
+
+		SettlePhysicsInPlace();
+	}
+
 	public void EnterDisplayed( ITreasureOwner displayOwner, Vector3 worldPosition, Quaternion worldRotation )
 	{
 		EnterDisplayed( displayOwner, null, worldPosition, worldRotation );

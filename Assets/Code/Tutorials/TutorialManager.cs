@@ -14,6 +14,7 @@ public class TutorialManager : MonoBehaviour
 	const float TutorialCompleteDwellSeconds = 1.1f;
 	const float PostHideGapSeconds = 0.55f;
 	const float PrecompletedRevealSeconds = 0.55f;
+	const float SkipHoldSeconds = 1f;
 	const string JumpTutorialId = "tut_jumping";
 
 	enum CeremonyPhase
@@ -75,6 +76,9 @@ public class TutorialManager : MonoBehaviour
 	bool _driveMinecartContext;
 	bool _worldHammerInteracted;
 	readonly HashSet<string> _completedObjectiveTriggers = new HashSet<string>();
+	readonly HashSet<string> _completedBuildableTriggers = new HashSet<string>();
+	readonly HashSet<string> _stickyAimBuildableIds = new HashSet<string>();
+	float _skipHoldSeconds;
 
 	public static TutorialManager Instance => _instance;
 
@@ -154,14 +158,18 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintContext = false;
 		_driveMinecartContext = false;
 		_worldHammerInteracted = false;
+		_stickyAimBuildableIds.Clear();
 		_completedObjectiveTriggers.Clear();
+		_completedBuildableTriggers.Clear();
 		_deferredUncheckedTaskIds.Clear();
 		_taskProgressCounts.Clear();
 		_completedUnscaledTimes.Clear();
 		_hadContextIds.Clear();
+		_skipHoldSeconds = 0f;
 		TutorialHud.ClearTutorialOverrideOutlineRoots();
 		HydrateCompletedFromSave();
 		HydrateObjectiveCompletedTriggers();
+		HydrateBuildableCompletedTriggers();
 		RefreshFromPlayerState();
 		EvaluateContext( force: true );
 		RefreshCycleHint();
@@ -185,6 +193,43 @@ public class TutorialManager : MonoBehaviour
 			if ( objectives != null && objectives.IsCompleted( def.volumeId ) )
 				_completedObjectiveTriggers.Add( def.volumeId );
 		}
+	}
+
+	void HydrateBuildableCompletedTriggers()
+	{
+		_completedBuildableTriggers.Clear();
+		if ( _catalog == null || _catalog.tutorials == null )
+			return;
+
+		IReadOnlyList<BuildableObject> buildables = BuildableObject.Active;
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || def.trigger != TutorialTriggerType.BuildableCompleted )
+				continue;
+			if ( string.IsNullOrEmpty( def.volumeId ) )
+				continue;
+
+			if ( IsBuildableAlreadyBuilt( def.volumeId, buildables ) )
+				_completedBuildableTriggers.Add( def.volumeId );
+		}
+	}
+
+	static bool IsBuildableAlreadyBuilt( string persistenceId, IReadOnlyList<BuildableObject> buildables )
+	{
+		if ( string.IsNullOrEmpty( persistenceId ) || buildables == null )
+			return false;
+
+		for ( int i = 0; i < buildables.Count; i++ )
+		{
+			BuildableObject buildable = buildables[ i ];
+			if ( buildable == null || !buildable.IsBuilt )
+				continue;
+			if ( buildable.ResolvePersistenceId() == persistenceId )
+				return true;
+		}
+
+		return false;
 	}
 
 	void HydrateCompletedFromSave()
@@ -270,6 +315,9 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Subscribe<BuildModeEnteredEvent>( OnBuildModeEntered );
 		EventBus.Subscribe<BuildableCompletedEvent>( OnBuildableCompleted );
 		EventBus.Subscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
+		EventBus.Subscribe<CoffeeCraftStepCompletedEvent>( OnCoffeeCraftStepCompleted );
+		EventBus.Subscribe<CoffeeCupPickedUpEvent>( OnCoffeeCupPickedUp );
+		EventBus.Subscribe<CoffeeSipCompletedEvent>( OnCoffeeSipCompleted );
 		_subscribed = true;
 	}
 
@@ -309,6 +357,9 @@ public class TutorialManager : MonoBehaviour
 		EventBus.Unsubscribe<BuildModeEnteredEvent>( OnBuildModeEntered );
 		EventBus.Unsubscribe<BuildableCompletedEvent>( OnBuildableCompleted );
 		EventBus.Unsubscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
+		EventBus.Unsubscribe<CoffeeCraftStepCompletedEvent>( OnCoffeeCraftStepCompleted );
+		EventBus.Unsubscribe<CoffeeCupPickedUpEvent>( OnCoffeeCupPickedUp );
+		EventBus.Unsubscribe<CoffeeSipCompletedEvent>( OnCoffeeSipCompleted );
 		_subscribed = false;
 	}
 
@@ -321,6 +372,7 @@ public class TutorialManager : MonoBehaviour
 			return;
 
 		TickCeremony();
+		PollTutorialSkip();
 
 		if ( _activeIsReplay )
 			return;
@@ -438,10 +490,84 @@ public class TutorialManager : MonoBehaviour
 		PlayerMinecartDrive drive = player != null ? player.MinecartDrive : null;
 		_drivingMinecart = drive != null && drive.IsDriving;
 
+		TickAimBuildable( player );
+
 		bool above = player != null && IsPlayerAboveAnyHeightTrigger( player.transform.position.y );
 		if ( above && !_playerAboveHeight )
 			NoteActivationForAboveHeight();
 		_playerAboveHeight = above;
+	}
+
+	void TickAimBuildable( PlayerController player )
+	{
+		if ( player == null || player.BuildMode == null || !player.BuildMode.IsActive )
+			return;
+
+		BuildableObject aimed = player.BuildMode.AimedBuildable;
+		if ( aimed == null )
+			return;
+
+		string persistenceId = aimed.ResolvePersistenceId();
+		if ( string.IsNullOrEmpty( persistenceId ) )
+			return;
+
+		if ( !_stickyAimBuildableIds.Add( persistenceId ) )
+			return;
+
+		NoteActivationForAimBuildable( persistenceId );
+		EvaluateContext( force: true );
+	}
+
+	void NoteActivationForAimBuildable( string persistenceId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null || string.IsNullOrEmpty( persistenceId ) )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.AimBuildable )
+				continue;
+			if ( !AimBuildableIdsMatch( def, persistenceId ) )
+				continue;
+			MarkRecentlyActivated( def.id, force: true );
+		}
+	}
+
+	static bool AimBuildableIdsMatch( TutorialDefinition def, string persistenceId )
+	{
+		if ( def == null || string.IsNullOrEmpty( persistenceId ) )
+			return false;
+		if ( def.aimBuildableIds == null || def.aimBuildableIds.Length == 0 )
+			return true;
+
+		for ( int i = 0; i < def.aimBuildableIds.Length; i++ )
+		{
+			string id = def.aimBuildableIds[ i ];
+			if ( !string.IsNullOrEmpty( id ) && id == persistenceId )
+				return true;
+		}
+
+		return false;
+	}
+
+	bool IsAimBuildableContext( TutorialDefinition def )
+	{
+		if ( def == null )
+			return false;
+		if ( def.aimBuildableIds == null || def.aimBuildableIds.Length == 0 )
+			return _stickyAimBuildableIds.Count > 0;
+
+		for ( int i = 0; i < def.aimBuildableIds.Length; i++ )
+		{
+			string id = def.aimBuildableIds[ i ];
+			if ( !string.IsNullOrEmpty( id ) && _stickyAimBuildableIds.Contains( id ) )
+				return true;
+		}
+
+		return false;
 	}
 
 	bool IsPlayerAboveAnyHeightTrigger( float playerY )
@@ -550,6 +676,74 @@ public class TutorialManager : MonoBehaviour
 		TryCycleNextTutorial();
 	}
 
+	bool CanPollTutorialSkip()
+	{
+		if ( _active == null || _popup == null || !_popup.IsVisible )
+			return false;
+		if ( CinematicPresentationController.IsAnyPlaying )
+			return false;
+		if ( PauseMenuUI.IsOpen || MapUI.IsOpen || DebugOverlay.IsOpen )
+			return false;
+		if ( _phase == CeremonyPhase.TutorialComplete
+		     || _phase == CeremonyPhase.Hiding
+		     || _phase == CeremonyPhase.Cooldown )
+			return false;
+		return true;
+	}
+
+	void PollTutorialSkip()
+	{
+		if ( !CanPollTutorialSkip() )
+		{
+			ResetSkipHold();
+			return;
+		}
+
+		Keyboard keyboard = Keyboard.current;
+		bool holding = keyboard != null && keyboard.tKey.isPressed;
+		if ( !holding )
+		{
+			ResetSkipHold();
+			return;
+		}
+
+		_skipHoldSeconds += Time.unscaledDeltaTime;
+		float progress = Mathf.Clamp01( _skipHoldSeconds / SkipHoldSeconds );
+		_popup.SetSkipHoldProgress( progress );
+		if ( progress < 1f )
+			return;
+
+		ResetSkipHold();
+		SkipActiveTutorial();
+	}
+
+	void ResetSkipHold()
+	{
+		_skipHoldSeconds = 0f;
+		if ( _popup != null )
+			_popup.SetSkipHoldProgress( 0f );
+	}
+
+	void SkipActiveTutorial()
+	{
+		if ( _active == null || _popup == null )
+			return;
+		if ( _phase == CeremonyPhase.TutorialComplete
+		     || _phase == CeremonyPhase.Hiding
+		     || _phase == CeremonyPhase.Cooldown )
+			return;
+
+		if ( _activeIsReplay )
+		{
+			RequestHide( complete: false );
+			return;
+		}
+
+		_deferredUncheckedTaskIds.Clear();
+		_phase = CeremonyPhase.None;
+		ForceCompleteAllRemainingTasks();
+	}
+
 	void TryCycleNextTutorial()
 	{
 		CollectCycleCandidates( _cycleScratch );
@@ -604,6 +798,7 @@ public class TutorialManager : MonoBehaviour
 		}
 
 		_openTutorials.Add( def );
+		CatchUpCompleteBuildableTasks( def );
 	}
 
 	void RemoveOpen( TutorialDefinition def )
@@ -694,6 +889,11 @@ public class TutorialManager : MonoBehaviour
 		CollectCycleCandidates( _cycleScratch );
 		bool canCycle = _popup.IsVisible && !_activeIsReplay && _cycleScratch.Count > 1;
 		_popup.SetCycleHint( canCycle, "[Tab]", "Switch" );
+		bool canSkip = _popup.IsVisible && _active != null
+			&& _phase != CeremonyPhase.TutorialComplete
+			&& _phase != CeremonyPhase.Hiding
+			&& _phase != CeremonyPhase.Cooldown;
+		_popup.SetSkipHint( canSkip );
 		if ( addedMinimized )
 			_popup.PlayStackAdd();
 	}
@@ -1342,7 +1542,101 @@ public class TutorialManager : MonoBehaviour
 
 	void OnBuildableCompleted( BuildableCompletedEvent evt )
 	{
-		TryCompleteTask( TutorialTaskCompleteType.CompleteBuildable );
+		string persistenceId = evt.Buildable != null ? evt.Buildable.ResolvePersistenceId() : null;
+		TryCompleteCompleteBuildable( persistenceId );
+
+		if ( string.IsNullOrEmpty( persistenceId ) )
+			return;
+
+		_completedBuildableTriggers.Add( persistenceId );
+		NoteActivationForBuildableCompleted( persistenceId );
+		EvaluateContext( force: true );
+		TryForceShowBuildableCompletedTutorial( persistenceId );
+	}
+
+	void TryCompleteCompleteBuildable( string persistenceId )
+	{
+		int outcome = RecordMatchingTasks( TutorialTaskCompleteType.CompleteBuildable, persistenceId );
+		CompleteFinishedOpenTutorials();
+		ApplyActiveTaskRecord( outcome );
+	}
+
+	void NoteActivationForBuildableCompleted( string persistenceId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null || string.IsNullOrEmpty( persistenceId ) )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.BuildableCompleted )
+				continue;
+			if ( def.volumeId != persistenceId )
+				continue;
+			if ( !IsContextActive( def ) )
+				continue;
+			MarkRecentlyActivated( def.id, force: true );
+		}
+	}
+
+	void TryForceShowBuildableCompletedTutorial( string persistenceId )
+	{
+		if ( _catalog == null || _catalog.tutorials == null || string.IsNullOrEmpty( persistenceId ) )
+			return;
+		if ( _popup == null || DebugDefinition.TutorialsDisabled )
+			return;
+		if ( CinematicPresentationController.IsAnyPlaying || _activeIsReplay )
+			return;
+
+		for ( int i = 0; i < _catalog.tutorials.Count; i++ )
+		{
+			TutorialDefinition def = _catalog.tutorials[ i ];
+			if ( def == null || !IsEligible( def ) )
+				continue;
+			if ( def.trigger != TutorialTriggerType.BuildableCompleted )
+				continue;
+			if ( def.volumeId != persistenceId )
+				continue;
+			if ( !IsContextActive( def ) || !IsShowDelayElapsed( def ) )
+				continue;
+			if ( _active != null && _active.id == def.id )
+				return;
+
+			_lastActivatedId = def.id;
+			ShowTutorialNow( def, isReplay: false );
+			return;
+		}
+	}
+
+	void OnCoffeeCraftStepCompleted( CoffeeCraftStepCompletedEvent evt )
+	{
+		switch ( evt.Step )
+		{
+			case CoffeeMachineInteractable.CraftStep.Grind:
+				TryCompleteTask( TutorialTaskCompleteType.CoffeeGrind );
+				break;
+			case CoffeeMachineInteractable.CraftStep.Tamp:
+				TryCompleteTask( TutorialTaskCompleteType.CoffeeTamp );
+				break;
+			case CoffeeMachineInteractable.CraftStep.LockAndCup:
+				TryCompleteTask( TutorialTaskCompleteType.CoffeeLock );
+				break;
+			case CoffeeMachineInteractable.CraftStep.Brew:
+				TryCompleteTask( TutorialTaskCompleteType.CoffeeBrew );
+				break;
+		}
+	}
+
+	void OnCoffeeCupPickedUp( CoffeeCupPickedUpEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.CoffeePickupCup );
+	}
+
+	void OnCoffeeSipCompleted( CoffeeSipCompletedEvent evt )
+	{
+		TryCompleteTask( TutorialTaskCompleteType.CoffeeSip );
 	}
 
 	void NoteActivationForTrigger( TutorialTriggerType trigger )
@@ -1677,6 +1971,12 @@ public class TutorialManager : MonoBehaviour
 			case TutorialTriggerType.ObjectiveCompleted:
 				primary = !string.IsNullOrEmpty( def.volumeId ) && _completedObjectiveTriggers.Contains( def.volumeId );
 				break;
+			case TutorialTriggerType.BuildableCompleted:
+				primary = !string.IsNullOrEmpty( def.volumeId ) && _completedBuildableTriggers.Contains( def.volumeId );
+				break;
+			case TutorialTriggerType.AimBuildable:
+				primary = IsAimBuildableContext( def );
+				break;
 			default:
 				primary = false;
 				break;
@@ -1944,7 +2244,10 @@ public class TutorialManager : MonoBehaviour
 			MarkDiscovered( def.id );
 
 		if ( !isReplay )
+		{
+			CatchUpCompleteBuildableTasks( def );
 			CollectDeferredUncheckedTasks( def );
+		}
 
 		ApplyMapHighlight( def );
 		ApplyTutorialOutlineOverride( def );
@@ -2024,6 +2327,51 @@ public class TutorialManager : MonoBehaviour
 		}
 	}
 
+	/// <summary>
+	/// Marks CompleteBuildable tasks done when matching buildables are already built (save / pre-build catch-up).
+	/// </summary>
+	void CatchUpCompleteBuildableTasks( TutorialDefinition def )
+	{
+		if ( def == null || def.disabled || def.tasks == null || IsCompleted( def.id ) )
+			return;
+
+		IReadOnlyList<BuildableObject> buildables = BuildableObject.Active;
+		if ( buildables == null || buildables.Count <= 0 )
+			return;
+
+		bool any = false;
+		for ( int i = 0; i < def.tasks.Length; i++ )
+		{
+			TutorialTask task = def.tasks[ i ];
+			if ( task == null || string.IsNullOrEmpty( task.id ) )
+				continue;
+			if ( task.completeTrigger != TutorialTaskCompleteType.CompleteBuildable )
+				continue;
+			if ( IsTaskCompleted( def.id, task.id ) )
+				continue;
+
+			for ( int b = 0; b < buildables.Count; b++ )
+			{
+				BuildableObject buildable = buildables[ b ];
+				if ( buildable == null || !buildable.IsBuilt )
+					continue;
+
+				string persistenceId = buildable.ResolvePersistenceId();
+				if ( string.IsNullOrEmpty( persistenceId ) )
+					continue;
+				if ( !string.IsNullOrEmpty( task.completeVolumeId ) && task.completeVolumeId != persistenceId )
+					continue;
+
+				MarkTaskCompleted( def.id, task.id );
+				any = true;
+				break;
+			}
+		}
+
+		if ( any )
+			CompleteFinishedOpenTutorials();
+	}
+
 	void ApplyMapHighlight( TutorialDefinition def )
 	{
 		MapOverlayRegistrar.ClearHighlightedLabels();
@@ -2046,10 +2394,14 @@ public class TutorialManager : MonoBehaviour
 				string id = def.outlineTargetIds[ i ];
 				if ( string.IsNullOrEmpty( id ) )
 					continue;
-				if ( !EventTargetRegistry.TryGetTarget( id, out QuestTarget target ) || target == null )
-					continue;
 
-				Transform root = target.ResolveOutlineRoot();
+				// Prefer BuildableObject meshes (ghost/built) over empty QuestTarget markers.
+				Transform root = null;
+				if ( BuildableObject.TryFindByPersistenceId( id, out BuildableObject buildable ) && buildable != null )
+					root = buildable.transform;
+				else if ( EventTargetRegistry.TryGetTarget( id, out QuestTarget target ) && target != null )
+					root = target.ResolveOutlineRoot();
+
 				if ( root == null )
 					continue;
 				if ( _outlineRootScratch.Contains( root ) )
@@ -2268,9 +2620,10 @@ public class TutorialManager : MonoBehaviour
 			if ( def == null || !IsEligible( def ) )
 				continue;
 
-			// ObjectiveCompleted tutorials (e.g. Auto Minecarts) must be open/showing before any
-			// task progress counts — otherwise visiting the output volume while building pre-completes it.
-			if ( def.trigger == TutorialTriggerType.ObjectiveCompleted && !IsTutorialOpen( def ) )
+			// Sticky post-build tutorials must be open/showing before any task progress counts —
+			// otherwise actions during/after the build can pre-complete them.
+			if ( ( def.trigger == TutorialTriggerType.ObjectiveCompleted || def.trigger == TutorialTriggerType.BuildableCompleted )
+				&& !IsTutorialOpen( def ) )
 				continue;
 
 			int outcome = RecordTasksOnDefinition( def, completeType, volumeId );
@@ -2323,6 +2676,13 @@ public class TutorialManager : MonoBehaviour
 				continue;
 			if ( completeType == TutorialTaskCompleteType.EnterVolume
 			     || completeType == TutorialTaskCompleteType.PlaceMixedStorageOnTarget )
+			{
+				if ( string.IsNullOrEmpty( volumeId ) || task.completeVolumeId != volumeId )
+					continue;
+			}
+
+			if ( completeType == TutorialTaskCompleteType.CompleteBuildable
+			     && !string.IsNullOrEmpty( task.completeVolumeId ) )
 			{
 				if ( string.IsNullOrEmpty( volumeId ) || task.completeVolumeId != volumeId )
 					continue;
@@ -2808,8 +3168,11 @@ public class TutorialManager : MonoBehaviour
 		_walkWithoutSprintContext = false;
 		_driveMinecartContext = false;
 		_worldHammerInteracted = false;
+		_stickyAimBuildableIds.Clear();
 		_completedObjectiveTriggers.Clear();
+		_completedBuildableTriggers.Clear();
 		_taskProgressCounts.Clear();
+		_skipHoldSeconds = 0f;
 		MapOverlayRegistrar.ClearHighlightedLabels();
 		MapOverlayRegistrar.ClearTempMarkers();
 		ClearTutorialOutlineOverride();
@@ -2832,6 +3195,21 @@ public class TutorialManager : MonoBehaviour
 	public void DebugForceShow( string tutorialId )
 	{
 		Replay( tutorialId );
+	}
+
+	/// <summary>
+	/// Arms BuildableCompleted tutorial context when a buildable is already built (save catch-up)
+	/// without replaying Complete VFX.
+	/// </summary>
+	public void NotifyBuildableAlreadyComplete( string persistenceId )
+	{
+		if ( string.IsNullOrEmpty( persistenceId ) )
+			return;
+
+		_completedBuildableTriggers.Add( persistenceId );
+		NoteActivationForBuildableCompleted( persistenceId );
+		EvaluateContext( force: true );
+		TryForceShowBuildableCompletedTutorial( persistenceId );
 	}
 }
 

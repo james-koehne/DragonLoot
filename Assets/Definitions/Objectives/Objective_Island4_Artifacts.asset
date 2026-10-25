@@ -14,10 +14,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
   id: obj_island_4_artifacts
   title: Display the Artifacts
+  alwaysShow: 0
   showVolumeId: volume_island_4
   showRadius: 40
   prerequisiteObjectiveIds:
   - obj_island_3_constellation
+  prerequisiteWorldEventIds: []
   subs:
   - id: present_artifacts
     label: Display artifacts

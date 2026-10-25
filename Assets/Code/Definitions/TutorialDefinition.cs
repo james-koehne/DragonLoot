@@ -35,7 +35,11 @@ public enum TutorialTriggerType
 	/// <summary>Show after the player has interacted with the world hammer prop (sticky until tutorial completes).</summary>
 	InteractWorldHammer = 22,
 	/// <summary>Show after the objective id in volumeId completes (sticky until tutorial completes).</summary>
-	ObjectiveCompleted = 23
+	ObjectiveCompleted = 23,
+	/// <summary>Show after the buildable persistence id in volumeId completes (sticky until tutorial completes).</summary>
+	BuildableCompleted = 24,
+	/// <summary>Show after aiming a buildable ghost whose persistence id is listed in aimBuildableIds (sticky until tutorial completes). Empty aimBuildableIds = any buildable.</summary>
+	AimBuildable = 25
 }
 
 /// <summary>Gameplay action that ticks off one tutorial task.</summary>
@@ -84,12 +88,24 @@ public enum TutorialTaskCompleteType
 	WholeStackPlaceNearby = 32,
 	/// <summary>Player entered build mode (F).</summary>
 	EnterBuildMode = 33,
-	/// <summary>Player completed any buildable structure.</summary>
+	/// <summary>Player completed a buildable. Empty completeVolumeId = any; otherwise persistence id must match.</summary>
 	CompleteBuildable = 34,
 	/// <summary>Player placed treasure onto a mixed display / workshop storage table.</summary>
 	PlaceMixedStorage = 35,
 	/// <summary>Player placed treasure onto a specific mixed table. completeVolumeId = table persistence id.</summary>
-	PlaceMixedStorageOnTarget = 36
+	PlaceMixedStorageOnTarget = 36,
+	/// <summary>Coffee machine grind hold step finished.</summary>
+	CoffeeGrind = 37,
+	/// <summary>Coffee machine tamp hold step finished.</summary>
+	CoffeeTamp = 38,
+	/// <summary>Coffee machine lock hold step finished.</summary>
+	CoffeeLock = 39,
+	/// <summary>Coffee machine brew hold step finished.</summary>
+	CoffeeBrew = 40,
+	/// <summary>Player picked up a filled coffee cup from the machine.</summary>
+	CoffeePickupCup = 41,
+	/// <summary>Player sipped a held coffee cup.</summary>
+	CoffeeSip = 42
 }
 
 [Serializable]
@@ -104,7 +120,7 @@ public class TutorialTask
 
 	public TutorialTaskCompleteType completeTrigger;
 
-	[Tooltip( "When completeTrigger is EnterVolume: volume id. When PlaceMixedStorageOnTarget: mixed table persistence id." )]
+	[Tooltip( "When completeTrigger is EnterVolume: volume id. When PlaceMixedStorageOnTarget: mixed table persistence id. When CompleteBuildable: buildable persistence id (empty = any)." )]
 	public string completeVolumeId;
 
 	[Tooltip( "When > 1, this task needs this many matching actions. Label shows current/required (e.g. 3/10). 0 or 1 = complete on the first match." )]
@@ -133,8 +149,11 @@ public class TutorialDefinition : ScriptableObject
 	[Tooltip( "When trigger is HoldingCategory: Active item in the selected pouch must match. When UnselectedHoldingCategory: that pouch has items but is not selected. Also used by SelectHoldingCategory tasks." )]
 	public TreasureCategory holdingCategory;
 
-	[Tooltip( "Volume id when trigger is EnterVolume, objective id when trigger is ObjectiveCompleted, or optional fallback volume for any trigger." )]
+	[Tooltip( "Volume id when trigger is EnterVolume, objective id when ObjectiveCompleted, buildable persistence id when BuildableCompleted, or optional fallback volume for any trigger." )]
 	public string volumeId;
+
+	[Tooltip( "When trigger is AimBuildable: persistence ids that activate the sticky show context. Empty = any aimed buildable." )]
+	public string[] aimBuildableIds;
 
 	[Tooltip( "When set, being inside this volume also counts as active show context (OR with primary trigger)." )]
 	public string fallbackVolumeId;

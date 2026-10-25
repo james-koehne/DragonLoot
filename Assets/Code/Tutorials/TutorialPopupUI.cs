@@ -27,6 +27,10 @@ public class TutorialPopupUI : MonoBehaviour
 	const float CycleControlWidth = 168f;
 	const float CycleControlHeight = 48f;
 	const float CycleControlGap = 14f;
+	const float SkipControlWidth = 72f;
+	const float SkipControlHeight = 84f;
+	const float SkipControlGap = 14f;
+	const float SkipRingSize = 44f;
 	const float CompleteGlowExtra = 5f;
 
 	static readonly Color CardBackgroundColor = new Color( 0.1372549f, 0.1411765f, 0.1294118f, 1f );
@@ -63,6 +67,8 @@ public class TutorialPopupUI : MonoBehaviour
 	float _popupWidth = DefaultPopupWidth;
 	float _activeCardHeight;
 	bool _cycleVisible;
+	bool _skipVisible;
+	float _skipHoldProgress;
 	RectTransform _backgroundRect;
 	RectTransform _glowRect;
 	RectTransform _activeCardRect;
@@ -73,6 +79,11 @@ public class TutorialPopupUI : MonoBehaviour
 	RectTransform _cycleRoot;
 	Text _cycleBinding;
 	Text _cycleLabel;
+	RectTransform _skipRoot;
+	Text _skipBinding;
+	Text _skipLabel;
+	Image _skipRingTrack;
+	Image _skipRingFill;
 	readonly List<MinimizedRow> _minimizedRows = new List<MinimizedRow>();
 	readonly List<string> _minimizedTitles = new List<string>();
 
@@ -140,6 +151,7 @@ public class TutorialPopupUI : MonoBehaviour
 		HideLegacyCycleHint();
 		EnsureMinimizedRoot();
 		EnsureCycleControl();
+		EnsureSkipControl();
 
 		HideImmediate();
 		_ready = true;
@@ -527,6 +539,126 @@ public class TutorialPopupUI : MonoBehaviour
 		go.SetActive( false );
 	}
 
+	void EnsureSkipControl()
+	{
+		if ( _skipRoot != null )
+			return;
+
+		Transform existing = transform.Find( "SkipControl" );
+		GameObject go = existing != null
+			? existing.gameObject
+			: new GameObject( "SkipControl", typeof( RectTransform ) );
+		if ( existing == null )
+			go.transform.SetParent( transform, false );
+
+		_skipRoot = go.GetComponent<RectTransform>();
+		_skipRoot.anchorMin = new Vector2( 1f, 1f );
+		_skipRoot.anchorMax = new Vector2( 1f, 1f );
+		_skipRoot.pivot = new Vector2( 1f, 1f );
+		_skipRoot.sizeDelta = new Vector2( SkipControlWidth, SkipControlHeight );
+
+		Sprite ringSprite = ResolveRingSprite();
+
+		_skipRingTrack = FindOrCreateFilledImage( go.transform, "RingTrack", ringSprite );
+		ConfigureSkipRingImage( _skipRingTrack, SkipRingSize + 4f, new Color( 0.45f, 0.5f, 0.58f, 0.35f ) );
+		_skipRingTrack.fillAmount = 1f;
+
+		_skipRingFill = FindOrCreateFilledImage( go.transform, "RingFill", ringSprite );
+		ConfigureSkipRingImage( _skipRingFill, SkipRingSize, new Color( 0.82f, 0.92f, 0.55f, 0.95f ) );
+		_skipRingFill.fillAmount = 0f;
+
+		_skipBinding = FindOrCreateText( go.transform, "Binding", "T", 18 );
+		_skipBinding.alignment = TextAnchor.MiddleCenter;
+		_skipBinding.color = new Color( 0.88f, 0.92f, 0.98f, 0.95f );
+		RectTransform bindRect = _skipBinding.rectTransform;
+		bindRect.anchorMin = new Vector2( 0.5f, 0.5f );
+		bindRect.anchorMax = new Vector2( 0.5f, 0.5f );
+		bindRect.pivot = new Vector2( 0.5f, 0.5f );
+		bindRect.sizeDelta = new Vector2( SkipRingSize, SkipRingSize );
+		bindRect.anchoredPosition = new Vector2( 0f, 10f );
+
+		_skipLabel = FindOrCreateText( go.transform, "Label", "Skip", 14 );
+		_skipLabel.alignment = TextAnchor.MiddleCenter;
+		_skipLabel.color = new Color( 0.75f, 0.82f, 0.95f, 0.9f );
+		RectTransform labelRect = _skipLabel.rectTransform;
+		labelRect.anchorMin = new Vector2( 0f, 0f );
+		labelRect.anchorMax = new Vector2( 1f, 0f );
+		labelRect.pivot = new Vector2( 0.5f, 0f );
+		labelRect.sizeDelta = new Vector2( 0f, 22f );
+		labelRect.anchoredPosition = new Vector2( 0f, 2f );
+
+		ApplySkipRingProgress();
+		go.SetActive( false );
+	}
+
+	static Image FindOrCreateFilledImage( Transform parent, string name, Sprite sprite )
+	{
+		Transform existing = parent.Find( name );
+		GameObject go = existing != null
+			? existing.gameObject
+			: new GameObject( name, typeof( RectTransform ), typeof( CanvasRenderer ), typeof( Image ) );
+		if ( existing == null )
+			go.transform.SetParent( parent, false );
+
+		Image image = go.GetComponent<Image>();
+		if ( image == null )
+			image = go.AddComponent<Image>();
+		image.sprite = sprite;
+		image.type = Image.Type.Filled;
+		image.fillMethod = Image.FillMethod.Radial360;
+		image.fillOrigin = (int)Image.Origin360.Top;
+		image.fillClockwise = true;
+		image.raycastTarget = false;
+		image.preserveAspect = true;
+		return image;
+	}
+
+	static void ConfigureSkipRingImage( Image image, float size, Color color )
+	{
+		if ( image == null )
+			return;
+		image.color = color;
+		RectTransform rect = image.rectTransform;
+		rect.anchorMin = new Vector2( 0.5f, 0.5f );
+		rect.anchorMax = new Vector2( 0.5f, 0.5f );
+		rect.pivot = new Vector2( 0.5f, 0.5f );
+		rect.sizeDelta = new Vector2( size, size );
+		rect.anchoredPosition = new Vector2( 0f, 10f );
+	}
+
+	Sprite ResolveRingSprite()
+	{
+		Transform searchRoot = transform.root != null ? transform.root : transform;
+		InteractionProgressRingUI progress = searchRoot.GetComponentInChildren<InteractionProgressRingUI>( true );
+		if ( progress != null )
+		{
+			Image[] images = progress.GetComponentsInChildren<Image>( true );
+			for ( int i = 0; i < images.Length; i++ )
+			{
+				Image image = images[ i ];
+				if ( image != null && image.type == Image.Type.Filled && image.sprite != null )
+					return image.sprite;
+			}
+		}
+
+		if ( _backgroundImage != null && _backgroundImage.sprite != null )
+			return _backgroundImage.sprite;
+		return null;
+	}
+
+	void ApplySkipRingProgress()
+	{
+		if ( _skipRingFill == null )
+			return;
+
+		float amount = _skipVisible ? Mathf.Clamp01( _skipHoldProgress ) : 0f;
+		_skipRingFill.fillAmount = amount;
+		_skipRingFill.enabled = amount > 0.001f;
+
+		if ( _skipRingTrack != null )
+			_skipRingTrack.enabled = _skipVisible;
+	}
+
 	Text FindOrCreateText( Transform parent, string name, string value, int fontSize )
 	{
 		Transform existing = parent.Find( name );
@@ -651,6 +783,27 @@ public class TutorialPopupUI : MonoBehaviour
 			LayoutContent();
 	}
 
+	public void SetSkipHint( bool visible )
+	{
+		if ( _skipVisible == visible )
+			return;
+		_skipVisible = visible;
+		if ( !visible )
+			_skipHoldProgress = 0f;
+		ApplySkipRingProgress();
+		if ( _visible )
+			LayoutContent();
+	}
+
+	public void SetSkipHoldProgress( float progress01 )
+	{
+		float clamped = Mathf.Clamp01( progress01 );
+		if ( Mathf.Abs( _skipHoldProgress - clamped ) < 0.001f )
+			return;
+		_skipHoldProgress = clamped;
+		ApplySkipRingProgress();
+	}
+
 	public bool SetMinimizedTutorials( List<string> titles )
 	{
 		int previousCount = _minimizedTitles.Count;
@@ -733,6 +886,8 @@ public class TutorialPopupUI : MonoBehaviour
 		_visible = false;
 		_minimizedTitles.Clear();
 		_cycleVisible = false;
+		_skipVisible = false;
+		_skipHoldProgress = 0f;
 		HideStackExtras();
 		if ( showFeedback != null )
 			showFeedback.Stop();
@@ -807,6 +962,8 @@ public class TutorialPopupUI : MonoBehaviour
 		HideStackExtras();
 		_minimizedTitles.Clear();
 		_cycleVisible = false;
+		_skipVisible = false;
+		_skipHoldProgress = 0f;
 
 		if ( _activeCardGroup != null )
 			_activeCardGroup.alpha = 0f;
@@ -842,6 +999,9 @@ public class TutorialPopupUI : MonoBehaviour
 			_minimizedRoot.gameObject.SetActive( false );
 		if ( _cycleRoot != null )
 			_cycleRoot.gameObject.SetActive( false );
+		if ( _skipRoot != null )
+			_skipRoot.gameObject.SetActive( false );
+		ApplySkipRingProgress();
 	}
 
 	void StopAllFeedbacksExcept( Feedbacks keep )
@@ -997,6 +1157,7 @@ public class TutorialPopupUI : MonoBehaviour
 		float stackY = -_activeCardHeight;
 		stackY = LayoutMinimized( width, stackY );
 		stackY = LayoutCycleControl( stackY );
+		stackY = LayoutSkipControl( stackY );
 
 		float height = Mathf.Max( _activeCardHeight, -stackY );
 		root.SetSizeWithCurrentAnchors( RectTransform.Axis.Vertical, height );
@@ -1113,6 +1274,19 @@ public class TutorialPopupUI : MonoBehaviour
 
 		_cycleRoot.anchoredPosition = new Vector2( 0f, yFromTop - CycleControlGap );
 		return yFromTop - CycleControlGap - CycleControlHeight;
+	}
+
+	float LayoutSkipControl( float yFromTop )
+	{
+		EnsureSkipControl();
+		bool show = _visible && _skipVisible;
+		_skipRoot.gameObject.SetActive( show );
+		if ( !show )
+			return yFromTop;
+
+		_skipRoot.anchoredPosition = new Vector2( 0f, yFromTop - SkipControlGap );
+		ApplySkipRingProgress();
+		return yFromTop - SkipControlGap - SkipControlHeight;
 	}
 
 	float PlaceTextBlock( Text text, float contentWidth, float yFromTop, float gapAfter )

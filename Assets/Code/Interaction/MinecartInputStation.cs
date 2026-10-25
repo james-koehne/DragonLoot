@@ -120,9 +120,13 @@ public class MinecartInputStation : MinecartStationBase
 
 		RememberHome( cart );
 
-		if ( cart != null && cart.ItemCount > 0 && MinecartStationBase.AutomationEnabled )
+		MinecartInteractable cargo = cart != null ? cart.ResolveCargoCart() : null;
+		if ( cargo == null )
+			cargo = cart;
+
+		if ( cargo != null && cargo.ItemCount > 0 && MinecartStationBase.AutomationEnabled )
 		{
-			MinecartOutputStation output = MinecartAutoController.FindBestOutputForCart( cart );
+			MinecartOutputStation output = MinecartAutoController.FindBestOutputForCart( auto.Cart != null ? auto.Cart : cart );
 			if ( output != null )
 			{
 				auto.LeaveDock( output );
@@ -139,7 +143,7 @@ public class MinecartInputStation : MinecartStationBase
 		if ( cart == null )
 			return;
 
-		MinecartAutoController auto = cart.GetComponent<MinecartAutoController>();
+		MinecartAutoController auto = cart.ResolveAutoController();
 		if ( auto != null )
 			auto.SetHomeInput( this );
 	}

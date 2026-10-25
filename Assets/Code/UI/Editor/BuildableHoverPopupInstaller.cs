@@ -23,10 +23,11 @@ public static class BuildableHoverPopupInstaller
 	static readonly Color TitleColor = new Color( 0.369f, 0.784f, 1f, 1f );
 	static readonly Color BodyColor = new Color( 0.55f, 0.82f, 0.95f, 0.82f );
 	static readonly Color CostColor = new Color( 0.45f, 0.7f, 0.82f, 0.7f );
+	static readonly Color StatusColor = new Color( 0.95f, 0.35f, 0.3f, 0.95f );
 	static readonly Color CornerColor = new Color( 0.369f, 0.784f, 1f, 0.9f );
 
 	const float PopupWidth = 400f;
-	const float PopupHeight = 150f;
+	const float PopupHeight = 172f;
 
 	[MenuItem( DragonLootMenus.UiInstallBuildableHover )]
 	public static void InstallFromMenu()
@@ -185,13 +186,24 @@ public static class BuildableHoverPopupInstaller
 		descRect.anchorMin = new Vector2( 0f, 0f );
 		descRect.anchorMax = new Vector2( 1f, 1f );
 		descRect.pivot = new Vector2( 0.5f, 0.5f );
-		descRect.anchoredPosition = new Vector2( 0f, -5f );
-		descRect.sizeDelta = new Vector2( -36f, -82f );
+		descRect.anchoredPosition = new Vector2( 0f, 4f );
+		descRect.sizeDelta = new Vector2( -36f, -100f );
 		descriptionText.alignment = TextAnchor.UpperLeft;
 		descriptionText.horizontalOverflow = HorizontalWrapMode.Wrap;
 		descriptionText.verticalOverflow = VerticalWrapMode.Truncate;
 		descriptionText.text = string.Empty;
 		descriptionText.gameObject.SetActive( false );
+
+		Text statusText = CreateLabel( panel, "Status", 14, FontStyle.Bold, StatusColor );
+		RectTransform statusRect = statusText.rectTransform;
+		statusRect.anchorMin = new Vector2( 0f, 0f );
+		statusRect.anchorMax = new Vector2( 1f, 0f );
+		statusRect.pivot = new Vector2( 0.5f, 0f );
+		statusRect.anchoredPosition = new Vector2( 0f, 34f );
+		statusRect.sizeDelta = new Vector2( -36f, 20f );
+		statusText.alignment = TextAnchor.LowerLeft;
+		statusText.text = string.Empty;
+		statusText.gameObject.SetActive( false );
 
 		Text costText = CreateLabel( panel, "Cost", 14, FontStyle.Bold, CostColor );
 		RectTransform costRect = costText.rectTransform;
@@ -207,6 +219,7 @@ public static class BuildableHoverPopupInstaller
 		so.FindProperty( "_group" ).objectReferenceValue = group;
 		so.FindProperty( "_nameText" ).objectReferenceValue = nameText;
 		so.FindProperty( "_descriptionText" ).objectReferenceValue = descriptionText;
+		so.FindProperty( "_statusText" ).objectReferenceValue = statusText;
 		so.FindProperty( "_costText" ).objectReferenceValue = costText;
 		so.ApplyModifiedPropertiesWithoutUndo();
 	}

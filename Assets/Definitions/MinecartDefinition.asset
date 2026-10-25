@@ -28,7 +28,7 @@ MonoBehaviour:
   riderSpeedMultiplier: 2
   recallSpeed: 8
   recallStopDistance: 0.2
-  driveMaxSpeed: 10
+  driveMaxSpeed: 6
   driveAcceleration: 12
   driveBrake: 18
   gridColumns: 4

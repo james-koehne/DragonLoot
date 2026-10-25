@@ -12,11 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 01449b8dcbcb86042a2df930c3e785bd, type: 3}
   m_Name: WorldEvent_WorkshopClearHammerDelivery
   m_EditorClassIdentifier: Assembly-CSharp::WorldEventDefinition
-  id: workshop_clear_hammer_delivery
+  id: workshop_access_hammer_delivery
   tags:
   - workshop
   - fairy
-  conditions: []
+  conditions:
+  - type: 7
+    targetId: obj_workshop_access
+    requiredTreasure: {fileID: 0}
+    filterByCategory: 0
+    requiredCategory: 0
+    excludeGoldBars: 0
+    requireGoldBars: 0
+    delaySeconds: 2
+  - type: 1
+    targetId: volume_workshop
+    requiredTreasure: {fileID: 0}
+    filterByCategory: 0
+    requiredCategory: 0
+    excludeGoldBars: 0
+    requireGoldBars: 0
+    delaySeconds: 2
   actions:
   - type: 10
     delayBefore: 0.35
@@ -46,5 +62,6 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: 
     playerBrakeDuration: 1
+    fairySpeechLine: You'll need a caffeine boost to get through these treasure piles, good luck!
   sessionOnly: 0
-  manualOnly: 1
+  manualOnly: 0

@@ -147,6 +147,10 @@ public class PlayerMinecartDrive : MonoBehaviour
 		cart.SetDriveBraking( false );
 		cart.PlayDriveEnterFeedback();
 
+		MinecartAutoController auto = cart.ResolveAutoController();
+		if ( auto != null )
+			auto.ForceHaltToIdle();
+
 		if ( _player != null )
 			_player.SnapToWorldPosition( cart.ResolveSeatWorldPosition() );
 

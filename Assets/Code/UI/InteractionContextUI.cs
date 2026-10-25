@@ -73,7 +73,10 @@ public class InteractionContextUI : MonoBehaviour
 		PlayerBuildMode buildMode = player.BuildMode;
 		if ( buildMode != null && buildMode.IsActive )
 		{
-			if ( buildMode.AimedBuildable != null )
+			BuildableObject aimed = buildMode.AimedBuildable;
+			if ( aimed != null && aimed.IsBlockedByTreasurePile() )
+				AppendPlain( "Clear the treasure pile" );
+			else if ( aimed != null )
 				AppendDualBound( gameInput.ContextualInteract, gameInput.Interact, "Hold to build" );
 			else
 				AppendPlain( "Aim at a ghost structure" );

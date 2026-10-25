@@ -32,11 +32,15 @@ public static class HoverOutlineTargetUtility
 
 		CoinSortingCrankInteractable crank = interactable as CoinSortingCrankInteractable;
 		if ( crank != null )
-			return CanOutlineCrank( crank );
+			return crank.CanInteract( player );
 
 		CoinSortingStationMoveInteractable move = interactable as CoinSortingStationMoveInteractable;
 		if ( move != null )
 			return move.CanInteract( player );
+
+		CoinSortingIndicatorInteractable indicator = interactable as CoinSortingIndicatorInteractable;
+		if ( indicator != null )
+			return indicator.CanOutlineFocus( player );
 
 		DoorInteractable door = interactable as DoorInteractable;
 		if ( door != null )
@@ -50,24 +54,15 @@ public static class HoverOutlineTargetUtility
 		if ( callPost != null )
 			return callPost.CanInteract( player );
 
+		MinecartStationAutomationButton stationButton = interactable as MinecartStationAutomationButton;
+		if ( stationButton != null )
+			return stationButton.IsAvailable;
+
 		FairyInteractable fairy = interactable as FairyInteractable;
 		if ( fairy != null )
 			return fairy.CanInteract( player );
 
 		return false;
-	}
-
-	public static bool CanOutlineCrank( CoinSortingCrankInteractable crank )
-	{
-		if ( crank == null || !crank.isActiveAndEnabled )
-			return false;
-
-		CoinSortingStation station = crank.GetComponentInParent<CoinSortingStation>();
-		if ( station == null )
-			return false;
-
-		CoinSortingStationDefinition def = station.Definition;
-		return def != null && def.AllowsCrankBoost( station.StationLevel );
 	}
 
 	public static bool CanOutlineChest( ChestInteractable chest )
@@ -170,6 +165,10 @@ public static class HoverOutlineTargetUtility
 			return CollectFromBehaviour( move );
 		}
 
+		CoinSortingIndicatorInteractable indicator = focus as CoinSortingIndicatorInteractable;
+		if ( indicator != null )
+			return CollectFromBehaviour( indicator );
+
 		DoorInteractable door = focus as DoorInteractable;
 		if ( door != null )
 			return CollectFromBehaviour( door );
@@ -185,6 +184,10 @@ public static class HoverOutlineTargetUtility
 		MinecartCallPost callPost = focus as MinecartCallPost;
 		if ( callPost != null )
 			return CollectFromBehaviour( callPost );
+
+		MinecartStationAutomationButton stationButton = focus as MinecartStationAutomationButton;
+		if ( stationButton != null )
+			return CollectFromBehaviour( stationButton );
 
 		FairyInteractable fairy = focus as FairyInteractable;
 		if ( fairy != null )
@@ -209,6 +212,12 @@ public static class HoverOutlineTargetUtility
 			if ( renderer.sharedMaterial == null )
 				continue;
 			if ( renderer.GetComponentInParent<CoinSortingCrankInteractable>() != null )
+				continue;
+			if ( renderer.GetComponentInParent<CoinSortingIndicatorInteractable>() != null )
+				continue;
+			if ( renderer.GetComponentInParent<CoinSortingEnergyGauge>() != null )
+				continue;
+			if ( renderer.GetComponentInParent<CoinSortingBooleanIndicator>() != null )
 				continue;
 			if ( renderer.GetComponentInParent<GroundCoinStack>() != null )
 				continue;

@@ -73,6 +73,12 @@ public class CoinSortingStation : MonoBehaviour
 	CoinSortingEnergyGauge energyGauge;
 
 	[SerializeField]
+	CoinSortingBooleanIndicator hopperIndicator;
+
+	[SerializeField]
+	CoinSortingBooleanIndicator outputIndicator;
+
+	[SerializeField]
 	CoinSortingStationWorldTimer worldTimer;
 
 	[SerializeField]
@@ -113,7 +119,6 @@ public class CoinSortingStation : MonoBehaviour
 	float _crankActiveUntil;
 	float _reserveSeconds;
 	bool _reserveWasFull;
-	bool _defaultLevelEnsured;
 	bool _isRepositioning;
 	bool _loggedMissingGauge;
 	bool _loggedMissingCrankSpin;
@@ -128,7 +133,11 @@ public class CoinSortingStation : MonoBehaviour
 
 	public int BufferedCount => _hopperStack != null ? _hopperStack.Count : 0;
 
-	public int StationLevel => ResolveStationLevel();
+	public bool HasAutomatic => CoinSorterUpgrades.HasAutomatic();
+
+	public int SpeedLevel => CoinSorterUpgrades.SpeedLevel();
+
+	public bool HasLargerHopper => CoinSorterUpgrades.HasLargerHopper();
 
 	public bool IsRepositioning => _isRepositioning;
 
@@ -158,7 +167,7 @@ public class CoinSortingStation : MonoBehaviour
 			CoinSortingStationDefinition def = ResolveDefinition();
 			if ( def == null )
 				return 50;
-			return def.ResolveHopperCapacity( StationLevel );
+			return def.ResolveHopperCapacity( HasLargerHopper );
 		}
 	}
 
@@ -194,7 +203,7 @@ public class CoinSortingStation : MonoBehaviour
 		get
 		{
 			CoinSortingStationDefinition def = ResolveDefinition();
-			return def != null && def.AllowsCrankBoost( StationLevel ) && IsCrankActive;
+			return def != null && def.AllowsCrank() && IsCrankActive;
 		}
 	}
 
@@ -215,15 +224,21 @@ public class CoinSortingStation : MonoBehaviour
 			if ( !IsUnlocked )
 				return false;
 
-			int level = StationLevel;
-			if ( level < 1 || BufferedCount <= 0 )
+			if ( BufferedCount <= 0 )
 				return false;
 
 			CoinSortingStationDefinition def = ResolveDefinition();
-			if ( def == null || !def.IsAutomatic( level ) )
+			if ( def == null )
 				return false;
 
-			return CanEmitToOutput();
+			bool automatic = HasAutomatic;
+			if ( def.IsAutomatic( automatic ) )
+				return CanEmitToOutput();
+
+			if ( def.RequiresCrank( automatic ) && ( IsCrankActive || _reserveSeconds > 0.0001f ) )
+				return CanEmitToOutput();
+
+			return false;
 		}
 	}
 
@@ -291,24 +306,20 @@ public class CoinSortingStation : MonoBehaviour
 
 	void Start()
 	{
-		EnsureDefaultUpgradeLevel();
 		EnsureHopperStack();
 		RebindChuteOutputStacks();
 	}
 
 	void Update()
 	{
-		EnsureDefaultUpgradeLevel();
 		SyncHopperStackCapacity();
 		if ( !_isRepositioning && IsUnlocked )
 		{
-			// Automatic sorting needs no power/reserve — reserve only tracks optional crank-boost juice.
+			// Manual: charge while cranking, spend reserve to keep sorting after release.
+			// Automatic: process unattended; reserve tracks optional crank-boost juice.
 			TickProcess( Time.deltaTime );
 			TickStoragePull();
-			if ( IsCranking )
-				TickReserve( Time.deltaTime );
-			else
-				_reserveSeconds = 0f;
+			TickReserve( Time.deltaTime );
 		}
 		else if ( !IsUnlocked )
 		{
@@ -424,6 +435,8 @@ public class CoinSortingStation : MonoBehaviour
 
 	void BindVisuals()
 	{
+		if ( energyGauge == null )
+			energyGauge = GetComponentInChildren<CoinSortingEnergyGauge>( true );
 		if ( energyGauge != null )
 			energyGauge.BindStation( this );
 		else if ( !_loggedMissingGauge )
@@ -431,6 +444,26 @@ public class CoinSortingStation : MonoBehaviour
 			_loggedMissingGauge = true;
 			Debug.LogWarning( $"CoinSortingStation '{name}': EnergyGauge is missing on the prefab.", this );
 		}
+
+		if ( hopperIndicator == null || outputIndicator == null )
+		{
+			CoinSortingBooleanIndicator[] indicators = GetComponentsInChildren<CoinSortingBooleanIndicator>( true );
+			for ( int i = 0; i < indicators.Length; i++ )
+			{
+				CoinSortingBooleanIndicator indicator = indicators[ i ];
+				if ( indicator == null )
+					continue;
+				if ( hopperIndicator == null && indicator.name == "HopperIndicator" )
+					hopperIndicator = indicator;
+				else if ( outputIndicator == null && indicator.name == "OutputIndicator" )
+					outputIndicator = indicator;
+			}
+		}
+
+		if ( hopperIndicator != null )
+			hopperIndicator.BindStation( this );
+		if ( outputIndicator != null )
+			outputIndicator.BindStation( this );
 
 		if ( crankSpin != null )
 			crankSpin.BindStation( this );
@@ -452,11 +485,20 @@ public class CoinSortingStation : MonoBehaviour
 			onSortingClipSfxFeedback.Initialize();
 	}
 
+	bool AllowsCrank()
+	{
+		CoinSortingStationDefinition def = ResolveDefinition();
+		return def != null && def.AllowsCrank();
+	}
+
 	bool AllowsCrankBoost()
 	{
 		CoinSortingStationDefinition def = ResolveDefinition();
-		return def != null && def.AllowsCrankBoost( StationLevel );
+		return def != null && def.AllowsCrankBoost( HasAutomatic );
 	}
+
+	/// <summary>True when the sorter cannot emit (output storage full / unavailable).</summary>
+	public bool IsOutputBlocked => !CanEmitToOutput();
 
 	bool CanEmitToOutput()
 	{
@@ -683,6 +725,12 @@ public class CoinSortingStation : MonoBehaviour
 				continue;
 
 			if ( renderer.GetComponentInParent<CoinSortingEnergyGauge>() != null )
+				continue;
+
+			if ( renderer.GetComponentInParent<CoinSortingBooleanIndicator>() != null )
+				continue;
+
+			if ( renderer.GetComponentInParent<CoinSortingIndicatorInteractable>() != null )
 				continue;
 
 			if ( renderer.GetComponentInParent<CoinSortingStationWorldTimer>() != null )
@@ -1109,25 +1157,6 @@ public class CoinSortingStation : MonoBehaviour
 		return RuntimeDefinition.Resolve( ref _definition );
 	}
 
-	void EnsureDefaultUpgradeLevel()
-	{
-		CoinSortingStationDefinition def = ResolveDefinition();
-		string id = def != null
-			? def.ResolveUpgradeId()
-			: CoinSortingStationDefinition.DefaultUpgradeId;
-		UpgradeSystem.TryEnsureDefaultStationLevel( id, 1, ref _defaultLevelEnsured );
-	}
-
-	int ResolveStationLevel()
-	{
-		EnsureDefaultUpgradeLevel();
-		CoinSortingStationDefinition def = ResolveDefinition();
-		string id = def != null
-			? def.ResolveUpgradeId()
-			: CoinSortingStationDefinition.DefaultUpgradeId;
-		return UpgradeSystem.ResolveStationLevel( id, 1 );
-	}
-
 	public void NotifyCrankPulse()
 	{
 		if ( _isRepositioning )
@@ -1147,7 +1176,7 @@ public class CoinSortingStation : MonoBehaviour
 
 	public void NotifyCrankClick()
 	{
-		if ( _isRepositioning || !AllowsCrankBoost() )
+		if ( _isRepositioning || !AllowsCrank() )
 			return;
 
 		if ( onCrankClickFeedback != null )
@@ -1695,7 +1724,7 @@ public class CoinSortingStation : MonoBehaviour
 			return;
 
 		CoinSortingStationDefinition def = ResolveDefinition();
-		if ( def == null || !def.AllowsCrankBoost( StationLevel ) )
+		if ( def == null || !def.AllowsCrank() )
 		{
 			_reserveSeconds = 0f;
 			_reserveWasFull = false;
@@ -1716,8 +1745,17 @@ public class CoinSortingStation : MonoBehaviour
 		{
 			if ( _reserveSeconds < max * 0.98f )
 				_reserveWasFull = false;
-			// Gauge drains when not cranking (visual only; sorting stays automatic).
-			_reserveSeconds = Mathf.Max( 0f, _reserveSeconds - dt );
+
+			if ( HasAutomatic )
+			{
+				// Gauge drains when not cranking (visual only; sorting stays automatic).
+				_reserveSeconds = Mathf.Max( 0f, _reserveSeconds - dt );
+			}
+			else if ( BufferedCount > 0 && CanEmitToOutput() && _reserveSeconds > 0.0001f )
+			{
+				// Manual fuel: spend reserve only while sorting from stored energy.
+				_reserveSeconds = Mathf.Max( 0f, _reserveSeconds - dt );
+			}
 		}
 	}
 
@@ -1792,7 +1830,7 @@ public class CoinSortingStation : MonoBehaviour
 
 		CoinSortingStationDefinition def = ResolveDefinition();
 		float rate = def != null
-			? def.ResolveCoinsPerSecond( StationLevel, IsCranking )
+			? def.ResolveCoinsPerSecond( HasAutomatic, SpeedLevel, IsCranking && HasAutomatic )
 			: ( IsCranking ? 4f : 2f );
 
 		_processAccumulator += rate * dt;
@@ -1855,11 +1893,10 @@ public class CoinSortingStation : MonoBehaviour
 		if ( def == null )
 			return false;
 
-		int level = StationLevel;
-		if ( !def.IsAutomatic( level ) || BufferedCount <= 0 )
+		if ( !def.IsAutomatic( HasAutomatic ) || BufferedCount <= 0 )
 			return false;
 
-		float rate = def.ResolveCoinsPerSecond( level, IsCranking );
+		float rate = def.ResolveCoinsPerSecond( HasAutomatic, SpeedLevel, IsCranking && HasAutomatic );
 		seconds = BufferedCount / Mathf.Max( 0.01f, rate );
 		GaugeStatus status = ResolveGaugeStatus();
 		switch ( status )

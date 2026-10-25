@@ -26,19 +26,24 @@ Material:
     m_Ints: []
     m_Floats:
     - _Alpha: 1
+    - _AreaGlow: 0
+    - _AreaGlowMul: 0.55
+    - _BandMul: 1.25
     - _BandSoftness: 0.04
     - _BandWidth: 0.08
     - _Cull: 2
     - _DstBlend: 1
-    - _EdgeFade: 0.01
+    - _EdgeFade: 0.08
     - _Exposure: 1.75
     - _FogInfluence: 0.25
-    - _GleamT: 0.954
+    - _GleamSpan: 10
+    - _GleamT: 0
     - _LineCount: 3
     - _LineSpacing: 0.07
-    - _ScreenAngle: 45
     - _SrcBlend: 5
     m_Colors:
     - _Color: {r: 1.35, g: 0.95, b: 0.45, a: 1}
+    - _GleamAxis: {r: 1, g: 0, b: 0, a: 0}
+    - _GleamOrigin: {r: 0, g: 0, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

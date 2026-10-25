@@ -73,9 +73,13 @@ public class PlayerInteractionDefinition : ScriptableObject
 	[Header( "Crosshair" )]
 	public Color crosshairIdleColor = Color.white;
 	public Color crosshairFocusedColor = new Color( 1f, 0.85f, 0.2f, 1f );
+	[Tooltip( "When aiming at a pickable whose matching pouch is full." )]
+	public Color crosshairFullPouchColor = new Color( 0.95f, 0.28f, 0.32f, 1f );
 
 	[Header( "Pickable Focus Outline" )]
 	public HoverOutlineVisualSettings pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
+	[Tooltip( "Outline when aiming at a pickable whose matching pouch is full." )]
+	public HoverOutlineVisualSettings fullPouchOutline = HoverOutlineVisualSettings.DefaultFullPouch();
 
 	[Header( "Quest Objective Outline" )]
 	public HoverOutlineVisualSettings questOutline = HoverOutlineVisualSettings.DefaultQuest();
@@ -108,6 +112,10 @@ public class PlayerInteractionDefinition : ScriptableObject
 			pickableOutline = HoverOutlineVisualSettings.DefaultPickable();
 		else
 			pickableOutline.Validate();
+		if ( fullPouchOutline == null )
+			fullPouchOutline = HoverOutlineVisualSettings.DefaultFullPouch();
+		else
+			fullPouchOutline.Validate();
 		if ( questOutline == null )
 			questOutline = HoverOutlineVisualSettings.DefaultQuest();
 		else

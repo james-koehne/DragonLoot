@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using FeedbackSystem;
 
@@ -270,38 +271,84 @@ public class FairyHelper : MonoBehaviour
 
 	public static void StartGuide( Vector3 destination, Action onFinished = null )
 	{
-		StartGuideInternal( destination, null, onFinished );
+		StartGuideInternal( destination, null, null, onFinished );
 	}
 
 	public static void StartGuide( Transform destination, Action onFinished = null )
 	{
+		StartGuide( destination, null, onFinished );
+	}
+
+	/// <summary>
+	/// Spawns a guide fairy. When <paramref name="followLineOverride"/> is non-empty it replaces the prefab follow line.
+	/// </summary>
+	public static void StartGuide( Transform destination, string followLineOverride, Action onFinished = null )
+	{
 		if ( destination == null )
 		{
 			Debug.LogWarning( "FairyHelper.StartGuide: destination transform is null." );
+			if ( onFinished != null )
+				onFinished();
 			return;
 		}
 
-		StartGuideInternal( destination.position, destination, onFinished );
+		StartGuideInternal( destination.position, destination, followLineOverride, onFinished );
 	}
 
 	public static void StartGuideToMarker( string markerId, Action onFinished = null )
 	{
+		StartGuideToMarker( markerId, null, onFinished );
+	}
+
+	/// <summary>
+	/// Guides to a marker/volume/spawn id, or a <see cref="BuildableObject"/> persistence id.
+	/// When <paramref name="followLineOverride"/> is non-empty it replaces the prefab follow line.
+	/// </summary>
+	public static void StartGuideToMarker( string markerId, string followLineOverride, Action onFinished = null )
+	{
 		if ( string.IsNullOrEmpty( markerId ) )
 		{
 			Debug.LogWarning( "FairyHelper.StartGuideToMarker: marker id is empty." );
+			if ( onFinished != null )
+				onFinished();
 			return;
 		}
 
-		if ( !EventTargetRegistry.TryGetMarkerTransform( markerId, out Transform marker ) || marker == null )
+		Transform marker = null;
+		if ( !EventTargetRegistry.TryGetMarkerTransform( markerId, out marker ) || marker == null )
+			marker = ResolveBuildableMarker( markerId );
+
+		if ( marker == null )
 		{
-			Debug.LogWarning( "FairyHelper.StartGuideToMarker: no marker/volume for id '" + markerId + "'." );
+			Debug.LogWarning( "FairyHelper.StartGuideToMarker: no marker/volume/buildable for id '" + markerId + "'." );
+			if ( onFinished != null )
+				onFinished();
 			return;
 		}
 
-		StartGuide( marker, onFinished );
+		StartGuide( marker, followLineOverride, onFinished );
 	}
 
-	static void StartGuideInternal( Vector3 destination, Transform destinationTransform, Action onFinished )
+	static Transform ResolveBuildableMarker( string persistenceId )
+	{
+		if ( string.IsNullOrEmpty( persistenceId ) )
+			return null;
+
+		IReadOnlyList<BuildableObject> active = BuildableObject.Active;
+		for ( int i = 0; i < active.Count; i++ )
+		{
+			BuildableObject buildable = active[ i ];
+			if ( buildable == null )
+				continue;
+			if ( buildable.ResolvePersistenceId() != persistenceId )
+				continue;
+			return buildable.transform;
+		}
+
+		return null;
+	}
+
+	static void StartGuideInternal( Vector3 destination, Transform destinationTransform, string followLineOverride, Action onFinished )
 	{
 		int generation = ++_guideSpawnGeneration;
 		if ( ActiveGuide != null )
@@ -313,6 +360,8 @@ public class FairyHelper : MonoBehaviour
 		if ( player == null )
 		{
 			Debug.LogWarning( "FairyHelper.StartGuide: no player available." );
+			if ( onFinished != null )
+				onFinished();
 			return;
 		}
 
@@ -331,6 +380,8 @@ public class FairyHelper : MonoBehaviour
 			if ( op.Status != AsyncOperationStatus.Succeeded || op.Result == null )
 			{
 				Debug.LogWarning( "FairyHelper.StartGuide: failed to spawn '" + AddressableKey + "'." );
+				if ( onFinished != null )
+					onFinished();
 				return;
 			}
 
@@ -339,12 +390,14 @@ public class FairyHelper : MonoBehaviour
 			{
 				Addressables.ReleaseInstance( op.Result );
 				Debug.LogWarning( "FairyHelper.StartGuide: spawned prefab missing FairyHelper." );
+				if ( onFinished != null )
+					onFinished();
 				return;
 			}
 
 			fairy._addressableOwned = true;
 			fairy.ApplyGuideSpawnOffset( player );
-			fairy.BeginGuide( destination, destinationTransform, onFinished );
+			fairy.BeginGuide( destination, destinationTransform, followLineOverride, onFinished );
 		};
 	}
 
@@ -353,6 +406,14 @@ public class FairyHelper : MonoBehaviour
 	/// Farewells and despawns once the cargo is taken (deactivated).
 	/// </summary>
 	public static void StartDelivery( string itemAddressableKey, Action onFinished = null )
+	{
+		StartDelivery( itemAddressableKey, null, onFinished );
+	}
+
+	/// <summary>
+	/// Spawns a delivery fairy. When <paramref name="offerLineOverride"/> is non-empty it replaces the prefab offer line.
+	/// </summary>
+	public static void StartDelivery( string itemAddressableKey, string offerLineOverride, Action onFinished = null )
 	{
 		if ( string.IsNullOrEmpty( itemAddressableKey ) )
 		{
@@ -408,7 +469,7 @@ public class FairyHelper : MonoBehaviour
 
 			fairy._addressableOwned = true;
 			fairy.ApplyDeliverySpawnOffset( player );
-			fairy.BeginDelivery( itemAddressableKey, onFinished );
+			fairy.BeginDelivery( itemAddressableKey, offerLineOverride, onFinished );
 		};
 	}
 
@@ -452,10 +513,15 @@ public class FairyHelper : MonoBehaviour
 
 	public void BeginGuide( Vector3 destination, Action onFinished = null )
 	{
-		BeginGuide( destination, null, onFinished );
+		BeginGuide( destination, null, null, onFinished );
 	}
 
 	public void BeginGuide( Vector3 destination, Transform destinationTransform, Action onFinished )
+	{
+		BeginGuide( destination, destinationTransform, null, onFinished );
+	}
+
+	public void BeginGuide( Vector3 destination, Transform destinationTransform, string followLineOverride, Action onFinished )
 	{
 		mode = FairyMode.Guide;
 		_guideDestination = destination;
@@ -471,7 +537,10 @@ public class FairyHelper : MonoBehaviour
 
 		PlayInteractFeedback();
 		NotifyTalkStarted();
-		Say( string.IsNullOrEmpty( guideFollowLine ) ? "Follow me!" : guideFollowLine );
+		string followLine = !string.IsNullOrEmpty( followLineOverride )
+			? followLineOverride
+			: ( string.IsNullOrEmpty( guideFollowLine ) ? "Follow me!" : guideFollowLine );
+		Say( followLine );
 		CancelInvoke( nameof( EndGuideIntroTalk ) );
 		Invoke( nameof( EndGuideIntroTalk ), 1.6f );
 	}
@@ -498,7 +567,7 @@ public class FairyHelper : MonoBehaviour
 		DespawnSelf();
 	}
 
-	void BeginDelivery( string itemAddressableKey, Action onFinished )
+	void BeginDelivery( string itemAddressableKey, string offerLineOverride, Action onFinished )
 	{
 		mode = FairyMode.Delivery;
 		_deliveryOnFinished = onFinished;
@@ -514,7 +583,10 @@ public class FairyHelper : MonoBehaviour
 
 		PlayInteractFeedback();
 		NotifyTalkStarted();
-		Say( string.IsNullOrEmpty( deliveryOfferLine ) ? "A gift for you!" : deliveryOfferLine );
+		string offerLine = !string.IsNullOrEmpty( offerLineOverride )
+			? offerLineOverride
+			: ( string.IsNullOrEmpty( deliveryOfferLine ) ? "A gift for you!" : deliveryOfferLine );
+		Say( offerLine );
 		CancelInvoke( nameof( EndDeliveryIntroTalk ) );
 		Invoke( nameof( EndDeliveryIntroTalk ), 1.6f );
 

@@ -33,6 +33,20 @@ public class MinecartAutoController : MonoBehaviour
 
 	public MinecartInteractable Cart => _cart != null ? _cart : ( _cart = GetComponent<MinecartInteractable>() );
 
+	/// <summary>Cargo car for load/unload / routing decisions. Falls back to the lead cart.</summary>
+	public MinecartInteractable CargoCart
+	{
+		get
+		{
+			MinecartInteractable cart = Cart;
+			if ( cart == null )
+				return null;
+
+			MinecartInteractable cargo = cart.ResolveCargoCart();
+			return cargo != null ? cargo : cart;
+		}
+	}
+
 	public MinecartStationBase TargetStation => _targetStation;
 
 	public MinecartInputStation HomeInput => _homeInput;
@@ -140,10 +154,20 @@ public class MinecartAutoController : MonoBehaviour
 
 	public void LeaveDock( MinecartStationBase continueTo )
 	{
+		LeaveDockTo( continueTo, requireAutomationEnabled: true );
+	}
+
+	/// <summary>
+	/// Undock and optionally dispatch to <paramref name="continueTo"/>.
+	/// When <paramref name="requireAutomationEnabled"/> is false, manual go still dispatches while automation is paused.
+	/// </summary>
+	public void LeaveDockTo( MinecartStationBase continueTo, bool requireAutomationEnabled )
+	{
 		MinecartInteractable cart = Cart;
 		ClearDock( notifyStation: true );
 
-		if ( continueTo != null && cart != null && cart.IsAutoEligible && MinecartStationBase.AutomationEnabled )
+		bool automationOk = !requireAutomationEnabled || MinecartStationBase.AutomationEnabled;
+		if ( continueTo != null && cart != null && cart.IsAutoEligible && automationOk )
 		{
 			// Prefer station claim so inbound reservation / lamps stay consistent.
 			if ( continueTo.TryDispatchCart( cart ) )
@@ -194,7 +218,7 @@ public class MinecartAutoController : MonoBehaviour
 	/// </summary>
 	public void NotifyPlayerCargoAdded()
 	{
-		MinecartInteractable cart = Cart;
+		MinecartInteractable cart = CargoCart;
 		if ( cart == null || !cart.CargoEnabled )
 			return;
 
@@ -272,10 +296,12 @@ public class MinecartAutoController : MonoBehaviour
 		_state = AutoState.Idle;
 	}
 
-	/// <summary>Closest output that accepts any cargo currently on the cart.</summary>
+	/// <summary>Closest output that accepts any cargo currently on the cart (or its cargo car).</summary>
 	public static MinecartOutputStation FindBestOutputForCart( MinecartInteractable cart, MinecartStationBase exclude = null )
 	{
-		if ( cart == null || cart.BoundTrack == null || cart.ItemCount <= 0 )
+		MinecartInteractable routeCart = ResolveRouteCart( cart );
+		MinecartInteractable cargo = ResolveCargoForRouting( cart );
+		if ( routeCart == null || routeCart.BoundTrack == null || cargo == null || cargo.ItemCount <= 0 )
 			return null;
 
 		float best = float.MaxValue;
@@ -287,7 +313,7 @@ public class MinecartAutoController : MonoBehaviour
 			if ( output == null || output == exclude || !output.isActiveAndEnabled )
 				continue;
 
-			if ( !output.AcceptsAnyCargoOn( cart ) )
+			if ( !output.AcceptsAnyCargoOn( cargo ) )
 				continue;
 
 			if ( !output.EnsureBoundTrackPublic() || output.BoundTrack == null )
@@ -295,8 +321,8 @@ public class MinecartAutoController : MonoBehaviour
 
 			float cost;
 			if ( !MinecartNetworkPathfinder.TryEstimateCost(
-				    cart.BoundTrack,
-				    cart.DistanceAlongTrack,
+				    routeCart.BoundTrack,
+				    routeCart.DistanceAlongTrack,
 				    output.BoundTrack,
 				    output.TrackStopDistance,
 				    out cost ) )
@@ -314,7 +340,8 @@ public class MinecartAutoController : MonoBehaviour
 
 	public static MinecartInputStation FindNearestInput( MinecartInteractable cart )
 	{
-		if ( cart == null || cart.BoundTrack == null )
+		MinecartInteractable routeCart = ResolveRouteCart( cart );
+		if ( routeCart == null || routeCart.BoundTrack == null )
 			return null;
 
 		float best = float.MaxValue;
@@ -331,8 +358,8 @@ public class MinecartAutoController : MonoBehaviour
 
 			float cost;
 			if ( !MinecartNetworkPathfinder.TryEstimateCost(
-				    cart.BoundTrack,
-				    cart.DistanceAlongTrack,
+				    routeCart.BoundTrack,
+				    routeCart.DistanceAlongTrack,
 				    input.BoundTrack,
 				    input.TrackStopDistance,
 				    out cost ) )
@@ -346,6 +373,20 @@ public class MinecartAutoController : MonoBehaviour
 		}
 
 		return bestStation;
+	}
+
+	static MinecartInteractable ResolveRouteCart( MinecartInteractable cart )
+	{
+		return cart != null ? cart.ConsistLead : null;
+	}
+
+	static MinecartInteractable ResolveCargoForRouting( MinecartInteractable cart )
+	{
+		if ( cart == null )
+			return null;
+
+		MinecartInteractable cargo = cart.ResolveCargoCart();
+		return cargo != null ? cargo : cart;
 	}
 
 	void ClearDock( bool notifyStation )
@@ -431,11 +472,13 @@ public class MinecartAutoController : MonoBehaviour
 	bool TryDispatchToNearestUsefulStation()
 	{
 		MinecartInteractable cart = Cart;
+		MinecartInteractable cargo = CargoCart;
 		if ( cart == null || !IsAvailableForCall )
 			return false;
 
 		MinecartStationBase best = null;
-		if ( cart.ItemCount > 0 )
+		int cargoCount = cargo != null ? cargo.ItemCount : 0;
+		if ( cargoCount > 0 )
 		{
 			best = FindBestOutputForCart( cart );
 			if ( best == null )
@@ -459,6 +502,7 @@ public class MinecartAutoController : MonoBehaviour
 	MinecartStationBase FindNearestStation( bool wantOutput )
 	{
 		MinecartInteractable cart = Cart;
+		MinecartInteractable cargo = CargoCart;
 		if ( cart == null || cart.BoundTrack == null )
 			return null;
 
@@ -478,7 +522,8 @@ public class MinecartAutoController : MonoBehaviour
 			if ( wantOutput )
 			{
 				MinecartOutputStation output = station as MinecartOutputStation;
-				if ( output != null && cart.ItemCount > 0 && !output.AcceptsAnyCargoOn( cart ) )
+				int cargoCount = cargo != null ? cargo.ItemCount : 0;
+				if ( output != null && cargoCount > 0 && !output.AcceptsAnyCargoOn( cargo ) )
 					continue;
 			}
 

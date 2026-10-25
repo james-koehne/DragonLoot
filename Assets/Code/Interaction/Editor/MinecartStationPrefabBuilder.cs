@@ -22,6 +22,7 @@ public static class MinecartStationPrefabBuilder
 	const string MixedTablePrefabPath = "Assets/Addressables/Tables/MixedDisplayTable.prefab";
 	const string StationLampMaterialPath = "Assets/Materials/Minecart/M_MinecartStationLamp.mat";
 	const string StationPoleMaterialPath = "Assets/Materials/Minecart/M_MinecartStationPole.mat";
+	const string GoButtonMeshPath = Folder + "/Meshes/MinecartStationGoButton.asset";
 
 	[MenuItem( DragonLootMenus.MinecartBuildStations )]
 	public static void BuildFromMenu()
@@ -89,13 +90,19 @@ public static class MinecartStationPrefabBuilder
 				station,
 				"StopButton",
 				MinecartStationAutomationButton.ButtonMode.Stop,
-				new Vector3( -0.55f, 1.35f, 0.7f ) );
+				new Vector3( -0.7f, 1.35f, 0.7f ) );
 			changed |= EnsureAutomationButton(
 				root.transform,
 				station,
 				"ResumeButton",
-				MinecartStationAutomationButton.ButtonMode.ResumeAndSend,
-				new Vector3( 0.55f, 1.35f, 0.7f ) );
+				MinecartStationAutomationButton.ButtonMode.Resume,
+				new Vector3( 0f, 1.35f, 0.7f ) );
+			changed |= EnsureAutomationButton(
+				root.transform,
+				station,
+				"GoButton",
+				MinecartStationAutomationButton.ButtonMode.GoNext,
+				new Vector3( 0.7f, 1.35f, 0.7f ) );
 
 			if ( changed )
 				PrefabUtility.SaveAsPrefabAsset( root, path );
@@ -130,6 +137,7 @@ public static class MinecartStationPrefabBuilder
 			changed |= EnsureChildUsesMaterial( root.transform, "Pole", StationPoleMaterialPath );
 			changed |= EnsureChildUsesLampMaterial( root.transform, "StopButton" );
 			changed |= EnsureChildUsesLampMaterial( root.transform, "ResumeButton" );
+			changed |= EnsureChildUsesLampMaterial( root.transform, "GoButton" );
 			changed |= EnsureDockPoint( root.transform, station );
 
 			string expectedName = isInput ? "Send loaded cart" : "Dismiss cart";
@@ -151,6 +159,15 @@ public static class MinecartStationPrefabBuilder
 		}
 
 		return changed;
+	}
+
+	static string ResolveButtonInteractionName( MinecartStationAutomationButton.ButtonMode mode )
+	{
+		if ( mode == MinecartStationAutomationButton.ButtonMode.Stop )
+			return "Stop Automation";
+		if ( mode == MinecartStationAutomationButton.ButtonMode.Resume )
+			return "Resume Automation";
+		return "Send to Next Station";
 	}
 
 	static bool EnsureAutomationButton(
@@ -177,7 +194,12 @@ public static class MinecartStationPrefabBuilder
 
 		go.transform.localPosition = localPosition;
 		go.transform.localRotation = Quaternion.identity;
-		go.transform.localScale = new Vector3( 0.22f, 0.22f, 0.12f );
+		go.transform.localScale = mode == MinecartStationAutomationButton.ButtonMode.GoNext
+			? new Vector3( 0.28f, 0.26f, 0.12f )
+			: new Vector3( 0.22f, 0.22f, 0.12f );
+
+		bool changed = created;
+		changed |= EnsureButtonMesh( go, mode );
 
 		BoxCollider col = go.GetComponent<BoxCollider>();
 		if ( col == null )
@@ -197,7 +219,6 @@ public static class MinecartStationPrefabBuilder
 		SerializedProperty modeProp = so.FindProperty( "mode" );
 		SerializedProperty stationProp = so.FindProperty( "station" );
 		SerializedProperty nameProp = so.FindProperty( "interactionName" );
-		bool changed = created;
 		if ( modeProp != null && modeProp.enumValueIndex != (int)mode )
 		{
 			modeProp.enumValueIndex = (int)mode;
@@ -210,9 +231,7 @@ public static class MinecartStationPrefabBuilder
 			changed = true;
 		}
 
-		string expectedName = mode == MinecartStationAutomationButton.ButtonMode.Stop
-			? "Stop Automation"
-			: "Resume & Send";
+		string expectedName = ResolveButtonInteractionName( mode );
 		if ( nameProp != null && nameProp.stringValue != expectedName )
 		{
 			nameProp.stringValue = expectedName;
@@ -224,6 +243,98 @@ public static class MinecartStationPrefabBuilder
 
 		changed |= AssignStationLampMaterial( go );
 		return changed || created;
+	}
+
+	static bool EnsureButtonMesh( GameObject go, MinecartStationAutomationButton.ButtonMode mode )
+	{
+		if ( go == null )
+			return false;
+
+		MeshFilter filter = go.GetComponent<MeshFilter>();
+		if ( filter == null )
+			filter = go.AddComponent<MeshFilter>();
+
+		Mesh expected = mode == MinecartStationAutomationButton.ButtonMode.GoNext
+			? EnsureGoButtonTriangleMesh()
+			: GetBuiltinCubeMesh();
+
+		if ( expected == null || filter.sharedMesh == expected )
+			return false;
+
+		filter.sharedMesh = expected;
+		return true;
+	}
+
+	static Mesh GetBuiltinCubeMesh()
+	{
+		GameObject temp = GameObject.CreatePrimitive( PrimitiveType.Cube );
+		Mesh mesh = temp.GetComponent<MeshFilter>().sharedMesh;
+		Object.DestroyImmediate( temp );
+		return mesh;
+	}
+
+	/// <summary>
+	/// Play/go triangle prism in local XY (tip +X), thin in Z — reads as a fast-forward control.
+	/// </summary>
+	static Mesh EnsureGoButtonTriangleMesh()
+	{
+		Mesh existing = AssetDatabase.LoadAssetAtPath<Mesh>( GoButtonMeshPath );
+		if ( existing != null )
+			return existing;
+
+		string folder = Folder + "/Meshes";
+		if ( !AssetDatabase.IsValidFolder( folder ) )
+		{
+			if ( !AssetDatabase.IsValidFolder( Folder ) )
+				AssetDatabase.CreateFolder( "Assets/Addressables", "Minecart" );
+			AssetDatabase.CreateFolder( Folder, "Meshes" );
+		}
+
+		Mesh mesh = BuildGoButtonTriangleMesh();
+		AssetDatabase.CreateAsset( mesh, GoButtonMeshPath );
+		return mesh;
+	}
+
+	static Mesh BuildGoButtonTriangleMesh()
+	{
+		const float halfDepth = 0.5f;
+		// Tip points +X (forward/go). Base along -X.
+		Vector3 tipFront = new Vector3( 0.5f, 0f, halfDepth );
+		Vector3 topFront = new Vector3( -0.5f, 0.5f, halfDepth );
+		Vector3 botFront = new Vector3( -0.5f, -0.5f, halfDepth );
+		Vector3 tipBack = new Vector3( 0.5f, 0f, -halfDepth );
+		Vector3 topBack = new Vector3( -0.5f, 0.5f, -halfDepth );
+		Vector3 botBack = new Vector3( -0.5f, -0.5f, -halfDepth );
+
+		Vector3[] vertices =
+		{
+			tipFront, topFront, botFront,
+			tipBack, topBack, botBack
+		};
+
+		int[] triangles =
+		{
+			// Front face
+			0, 1, 2,
+			// Back face
+			3, 5, 4,
+			// Top edge
+			0, 3, 4,
+			0, 4, 1,
+			// Bottom edge
+			0, 2, 5,
+			0, 5, 3,
+			// Base
+			1, 4, 5,
+			1, 5, 2
+		};
+
+		Mesh mesh = new Mesh { name = "MinecartStationGoButton" };
+		mesh.vertices = vertices;
+		mesh.triangles = triangles;
+		mesh.RecalculateNormals();
+		mesh.RecalculateBounds();
+		return mesh;
 	}
 
 	static bool RemoveRoleArrow( Transform root )
@@ -488,13 +599,19 @@ public static class MinecartStationPrefabBuilder
 					stationBase,
 					"StopButton",
 					MinecartStationAutomationButton.ButtonMode.Stop,
-					new Vector3( -0.55f, 1.35f, 0.7f ) );
+					new Vector3( -0.7f, 1.35f, 0.7f ) );
 				EnsureAutomationButton(
 					root.transform,
 					stationBase,
 					"ResumeButton",
-					MinecartStationAutomationButton.ButtonMode.ResumeAndSend,
-					new Vector3( 0.55f, 1.35f, 0.7f ) );
+					MinecartStationAutomationButton.ButtonMode.Resume,
+					new Vector3( 0f, 1.35f, 0.7f ) );
+				EnsureAutomationButton(
+					root.transform,
+					stationBase,
+					"GoButton",
+					MinecartStationAutomationButton.ButtonMode.GoNext,
+					new Vector3( 0.7f, 1.35f, 0.7f ) );
 			}
 
 			PrefabUtility.SaveAsPrefabAsset( root, path );

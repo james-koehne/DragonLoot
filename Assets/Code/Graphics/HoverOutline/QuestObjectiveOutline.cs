@@ -5,7 +5,7 @@ using UnityEngine;
 /// <summary>
 /// Keeps quest / tutorial target meshes registered for the quest outline channel while TutorialHud provides roots.
 /// Tutorial override roots use tutorialOutline colour; otherwise quest cyan.
-/// Objective outlines stay visible at any distance (including buildable ghosts outside build mode).
+/// Quest / buildable outlines stay fully visible at any distance so objective targets remain readable.
 /// </summary>
 public class QuestObjectiveOutline : MonoBehaviour
 {
@@ -119,20 +119,13 @@ public class QuestObjectiveOutline : MonoBehaviour
 		ActiveRenderers.AddRange( RendererScratch );
 
 		_baseSettings = ResolveQuestSettings();
-		ApplyOutline();
-	}
-
-	void ApplyOutline()
-	{
-		if ( _baseSettings == null || ActiveRenderers.Count == 0 || ActiveRoots.Count == 0 )
+		if ( _baseSettings == null || ActiveRenderers.Count == 0 )
 		{
 			QuestOutlineRegistrar.Clear();
 			return;
 		}
 
-		HoverOutlineVisualSettings settings = _baseSettings.Clone();
-		settings.Validate();
-		QuestOutlineRegistrar.SetTargets( ActiveRenderers, settings );
+		QuestOutlineRegistrar.SetTargets( ActiveRenderers, _baseSettings );
 	}
 
 	void AppendRootRenderers( Transform root )

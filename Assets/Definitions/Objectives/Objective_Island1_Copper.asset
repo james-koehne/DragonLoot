@@ -13,16 +13,13 @@ MonoBehaviour:
   m_Name: Objective_Island1_Copper
   m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
   id: obj_island_1_copper
-  title: Dig and Display Copper
+  title: Coins
+  alwaysShow: 0
   showVolumeId: volume_island_1
   showRadius: 40
   prerequisiteObjectiveIds: []
+  prerequisiteWorldEventIds: []
   subs:
-  - id: dig_copper
-    label: Dig copper coins
-    completeType: 2
-    targetId: island1_copper_pile
-    requiredCount: 0
   - id: display_copper
     label: Display copper coins
     completeType: 1

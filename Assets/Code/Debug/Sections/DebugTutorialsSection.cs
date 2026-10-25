@@ -16,11 +16,20 @@ public class DebugTutorialsSection : DebugOverlaySection
 			return;
 		}
 
+		bool tutorialsDisabled = DebugDefinition.TutorialsDisabled;
+		if ( GUILayout.Button( tutorialsDisabled ? "Tutorials: OFF" : "Tutorials: ON" ) )
+		{
+			if ( GameMode.Instance != null && GameMode.Instance.DebugDefinition != null )
+			{
+				bool next = !tutorialsDisabled;
+				GameMode.Instance.DebugDefinition.disableTutorials = next;
+				DebugOverlay.SetLastAction( next ? "Tutorials: OFF" : "Tutorials: ON" );
+			}
+		}
+
 		TutorialCatalogDefinition catalog = system.Catalog;
 		int count = catalog != null ? catalog.Count : 0;
 		GUILayout.Label( "Catalog tutorials: " + count );
-		if ( DebugDefinition.TutorialsDisabled )
-			GUILayout.Label( "Automatic tutorials disabled (DebugDefinition)" );
 		GUILayout.Label( "Playing: " + system.IsSequencePlaying );
 		GUILayout.Label( "Last shown: " + ( string.IsNullOrEmpty( system.LastShownTutorialId ) ? "(none)" : system.LastShownTutorialId ) );
 
