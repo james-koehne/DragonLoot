@@ -13,22 +13,28 @@ MonoBehaviour:
   m_Name: Objective_Island2_Sorting
   m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
   id: obj_island_2_sorting
-  title: Sort and Display Coins
+  title: Sorting Coins
+  alwaysShow: 0
   showVolumeId: volume_island_2
   showRadius: 40
   prerequisiteObjectiveIds:
   - obj_island_1_copper
+  prerequisiteWorldEventIds: []
   subs:
   - id: display_copper
     label: Display copper coins
     completeType: 1
     targetId: island2_coin_display_copper
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   - id: display_silver
     label: Display silver coins
     completeType: 1
     targetId: island2_coin_display_silver
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   rewards:
   - type: 1
     abilityId: 

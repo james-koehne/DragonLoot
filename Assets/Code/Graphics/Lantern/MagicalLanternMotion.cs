@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Idle float for a small lantern. Travel is heading-based with a capped turn rate,
-/// so the path is always a curve — never a straight cut or a reverse.
+/// Idle float for a small lantern. Traces a figure-8 whose center and yaw/pitch are
+/// slowly Perlin-warped, so the path stays curvy and bounded near the rest pose.
 /// Add to the lantern object that should move (not a static post). Motion runs in
 /// LateUpdate so Feedbacks on the same object cannot pin the transform.
 /// </summary>
@@ -20,7 +20,7 @@ public class MagicalLanternMotion : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0f )]
-	[Tooltip( "Scales cruise speed and orbit rate. 1 = authored defaults." )]
+	[Tooltip( "Scales path rate and drift rate. 1 = authored defaults." )]
 	float speedScale = 1f;
 
 	[SerializeField]
@@ -36,48 +36,45 @@ public class MagicalLanternMotion : MonoBehaviour
 	[Min( 0.05f )]
 	float wakeDuration = 1.35f;
 
-	[Header( "Orbit" )]
+	[Header( "Figure Eight" )]
 	[SerializeField]
-	[Tooltip( "Rounded ellipse the lantern lazily traces (X and Z). No crossing, so no hard corners." )]
-	Vector2 orbitRadius = new Vector2( 0.08f, 0.07f );
+	[Tooltip( "Half-extents of the lemniscate in local X (long axis) and Z (cross axis)." )]
+	Vector2 figureEightRadius = new Vector2( 0.08f, 0.07f );
 
 	[SerializeField]
 	[Min( 0.01f )]
-	float orbitSpeed = 0.11f;
+	[Tooltip( "Figure-8 cycles per second." )]
+	float figureEightSpeed = 0.11f;
 
-	[Header( "Wander" )]
 	[SerializeField]
-	[Tooltip( "Slow Perlin drift of the orbit center, in local meters." )]
+	[Min( 0f )]
+	[Tooltip( "How quickly the lantern eases onto the path. Higher = tighter follow." )]
+	float pathFollow = 4.5f;
+
+	[Header( "Center Drift" )]
+	[SerializeField]
+	[Tooltip( "Slow Perlin drift of the figure-8 center, in local meters. Hard-capped." )]
 	Vector3 wanderRadius = new Vector3( 0.08f, 0.035f, 0.08f );
 
 	[SerializeField]
 	[Min( 0.01f )]
 	float wanderSpeed = 0.18f;
 
-	[Header( "Steering" )]
+	[Header( "Orientation Warp" )]
 	[SerializeField]
-	[Min( 0.01f )]
-	[Tooltip( "How fast the lantern glides along its heading, in meters per second." )]
-	float cruiseSpeed = 0.09f;
+	[Min( 0f )]
+	[Tooltip( "Max yaw swing of the figure-8 plane, in degrees." )]
+	float yawWarpDegrees = 40f;
 
 	[SerializeField]
-	[Min( 1f )]
-	[Tooltip( "Max heading change in degrees per second. Lower = wider, softer curves." )]
-	float maxTurnRate = 48f;
-
-	[SerializeField]
-	[Min( 1f )]
-	[Tooltip( "How quickly turn rate can ramp up. Stops curvature from snapping on." )]
-	float turnAccel = 70f;
-
-	[SerializeField]
-	[Min( 0.05f )]
-	[Tooltip( "Seconds of attractor motion to chase ahead, so the lantern arcs into the path." )]
-	float lookAhead = 0.45f;
+	[Min( 0f )]
+	[Tooltip( "Max pitch tip of the figure-8 plane, in degrees." )]
+	float pitchWarpDegrees = 12f;
 
 	[SerializeField]
 	[Min( 0.01f )]
-	float speedAccel = 0.14f;
+	[Tooltip( "How fast orientation noise evolves." )]
+	float warpSpeed = 0.12f;
 
 	[Header( "Bob" )]
 	[SerializeField]
@@ -91,7 +88,7 @@ public class MagicalLanternMotion : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0f )]
-	[Tooltip( "Rare extra lift when the slow noise crests — like the spell tugs upward." )]
+	[Tooltip( "Rare extra lift when the slow noise crests - like the spell tugs upward." )]
 	float liftAmplitude = 0.04f;
 
 	[SerializeField]
@@ -152,22 +149,14 @@ public class MagicalLanternMotion : MonoBehaviour
 	[HideInInspector]
 	bool hasRestPose;
 
-	const float ArriveDistance = 0.025f;
-	const float MinHeadingSqr = 0.0001f;
-	const float ReverseDot = -0.15f;
-
 	LanternActivator _activator;
 	Vector3 _offset;
-	Vector3 _heading;
-	Vector3 _prevAttractor;
-	Vector3 _steerSide;
+	Vector3 _prevPath;
 	Quaternion _tilt = Quaternion.identity;
-	float _speed;
-	float _turnRate;
 	float _noiseSeed;
 	float _wakeElapsed;
 	bool _appliedPose;
-	bool _hasAttractor;
+	bool _hasPrevPath;
 
 	public bool PlayInEditMode
 	{
@@ -219,13 +208,12 @@ public class MagicalLanternMotion : MonoBehaviour
 		speedScale = Mathf.Max( 0f, speedScale );
 		unlitMotionScale = Mathf.Clamp01( unlitMotionScale );
 		wakeDuration = Mathf.Max( 0.05f, wakeDuration );
-		orbitSpeed = Mathf.Max( 0.01f, orbitSpeed );
+		figureEightSpeed = Mathf.Max( 0.01f, figureEightSpeed );
+		pathFollow = Mathf.Max( 0f, pathFollow );
 		wanderSpeed = Mathf.Max( 0.01f, wanderSpeed );
-		cruiseSpeed = Mathf.Max( 0.01f, cruiseSpeed );
-		maxTurnRate = Mathf.Max( 1f, maxTurnRate );
-		turnAccel = Mathf.Max( 1f, turnAccel );
-		lookAhead = Mathf.Max( 0.05f, lookAhead );
-		speedAccel = Mathf.Max( 0.01f, speedAccel );
+		yawWarpDegrees = Mathf.Max( 0f, yawWarpDegrees );
+		pitchWarpDegrees = Mathf.Max( 0f, pitchWarpDegrees );
+		warpSpeed = Mathf.Max( 0.01f, warpSpeed );
 		bobSpeed = Mathf.Max( 0.01f, bobSpeed );
 		liftSpeed = Mathf.Max( 0.01f, liftSpeed );
 		flutterSpeed = Mathf.Max( 0.01f, flutterSpeed );
@@ -284,14 +272,10 @@ public class MagicalLanternMotion : MonoBehaviour
 	void ResetMotionState()
 	{
 		_offset = Vector3.zero;
-		_heading = Vector3.zero;
-		_prevAttractor = Vector3.zero;
-		_steerSide = Vector3.zero;
+		_prevPath = Vector3.zero;
 		_tilt = Quaternion.identity;
-		_speed = 0f;
-		_turnRate = 0f;
 		_wakeElapsed = 0f;
-		_hasAttractor = false;
+		_hasPrevPath = false;
 	}
 
 	void CaptureRestPose()
@@ -322,23 +306,22 @@ public class MagicalLanternMotion : MonoBehaviour
 		float dt = GetDeltaTime();
 		float time = GetMotionTime();
 		float amount = ResolveMotionAmount( dt, immediate );
-		Vector3 attractor = EvaluateAttractor( time ) * amount;
-		Vector3 tangent = EvaluateOrbitTangent( time );
-		EnsureHeading( tangent );
+		Vector3 path = EvaluatePath( time ) * amount;
 
-		if ( immediate )
-		{
-			_offset = attractor;
-			_heading = tangent.sqrMagnitude > MinHeadingSqr ? tangent.normalized : _heading;
-			_speed = cruiseSpeed * Mathf.Max( speedScale, 0.01f ) * amount;
-			_turnRate = 0f;
-			_prevAttractor = attractor;
-			_hasAttractor = true;
-		}
+		if ( immediate || pathFollow <= 0.0001f || dt <= 0.0001f )
+			_offset = path;
 		else
-			SteerAlongCurve( attractor, tangent, amount, dt );
+		{
+			float t = 1f - Mathf.Exp( -pathFollow * dt );
+			_offset = Vector3.Lerp( _offset, path, t );
+		}
 
-		Vector3 velocity = _heading * _speed;
+		Vector3 velocity = Vector3.zero;
+		if ( _hasPrevPath && dt > 0.0001f )
+			velocity = ( path - _prevPath ) / dt;
+		_prevPath = path;
+		_hasPrevPath = true;
+
 		Vector3 offset = _offset;
 		offset.y += EvaluateBob( time ) * amount;
 		offset.y += EvaluateLift( time ) * amount;
@@ -349,8 +332,8 @@ public class MagicalLanternMotion : MonoBehaviour
 			_tilt = desiredTilt;
 		else
 		{
-			float t = 1f - Mathf.Exp( -tiltLerp * dt );
-			_tilt = Quaternion.Slerp( _tilt, desiredTilt, t );
+			float tiltT = 1f - Mathf.Exp( -tiltLerp * dt );
+			_tilt = Quaternion.Slerp( _tilt, desiredTilt, tiltT );
 		}
 
 		Vector3 localPosition = restLocalPosition + offset;
@@ -383,101 +366,6 @@ public class MagicalLanternMotion : MonoBehaviour
 			transform.localRotation = restLocalRotation;
 	}
 
-	void SteerAlongCurve( Vector3 attractor, Vector3 tangent, float amount, float dt )
-	{
-		Vector3 seekPoint = attractor;
-		if ( _hasAttractor && dt > 0.0001f )
-		{
-			Vector3 attractorVel = ( attractor - _prevAttractor ) / dt;
-			seekPoint += attractorVel * lookAhead;
-		}
-
-		_prevAttractor = attractor;
-		_hasAttractor = true;
-
-		Vector3 toSeek = seekPoint - _offset;
-		Vector3 desiredHeading;
-		if ( toSeek.sqrMagnitude < ArriveDistance * ArriveDistance )
-			desiredHeading = tangent.sqrMagnitude > MinHeadingSqr ? tangent.normalized : _heading;
-		else
-			desiredHeading = toSeek.normalized;
-
-		desiredHeading = KeepInsideRadius( desiredHeading );
-		desiredHeading = AvoidReversal( desiredHeading, tangent );
-		if ( desiredHeading.sqrMagnitude < MinHeadingSqr )
-			desiredHeading = _heading;
-
-		float angle = Vector3.Angle( _heading, desiredHeading );
-		float desiredTurnRate = angle > 0.35f ? maxTurnRate : 0f;
-		_turnRate = Mathf.MoveTowards( _turnRate, desiredTurnRate, turnAccel * dt );
-		float maxRadians = _turnRate * Mathf.Deg2Rad * dt;
-		_heading = Vector3.RotateTowards( _heading, desiredHeading, maxRadians, 0f );
-		if ( _heading.sqrMagnitude < MinHeadingSqr )
-			_heading = desiredHeading;
-		else
-			_heading.Normalize();
-
-		float align = Vector3.Dot( _heading, desiredHeading );
-		float align01 = Mathf.Clamp01( align * 0.5f + 0.5f );
-		float targetSpeed = cruiseSpeed * Mathf.Max( speedScale, 0.01f ) * amount * Mathf.Lerp( 0.62f, 1f, align01 );
-		if ( amount > 0.02f )
-			targetSpeed = Mathf.Max( targetSpeed, cruiseSpeed * 0.35f * amount );
-		_speed = Mathf.MoveTowards( _speed, targetSpeed, speedAccel * dt );
-		_offset += _heading * _speed * dt;
-	}
-
-	Vector3 KeepInsideRadius( Vector3 desiredHeading )
-	{
-		float maxRadius = MaxTravelRadius();
-		float dist = _offset.magnitude;
-		float inner = maxRadius * 0.82f;
-		if ( dist <= inner || maxRadius <= 0.0001f )
-			return desiredHeading;
-
-		Vector3 home = -_offset;
-		if ( home.sqrMagnitude < MinHeadingSqr )
-			return desiredHeading;
-
-		home.Normalize();
-		float over = Mathf.Clamp01( ( dist - inner ) / Mathf.Max( maxRadius * 0.35f, 0.01f ) );
-		return Vector3.Slerp( desiredHeading, home, over ).normalized;
-	}
-
-	Vector3 AvoidReversal( Vector3 desiredHeading, Vector3 tangent )
-	{
-		if ( _heading.sqrMagnitude < MinHeadingSqr )
-			return desiredHeading;
-		if ( Vector3.Dot( _heading, desiredHeading ) >= ReverseDot )
-			return desiredHeading;
-
-		Vector3 side = Vector3.Cross( _heading, Vector3.up );
-		if ( side.sqrMagnitude < MinHeadingSqr )
-			side = Vector3.Cross( _heading, Vector3.right );
-		side.Normalize();
-
-		if ( _steerSide.sqrMagnitude < MinHeadingSqr )
-		{
-			if ( tangent.sqrMagnitude > MinHeadingSqr && Vector3.Dot( side, tangent ) < 0f )
-				side = -side;
-			_steerSide = side;
-		}
-		else if ( Vector3.Dot( side, _steerSide ) < 0f )
-			side = -side;
-
-		return ( desiredHeading + side * 1.15f ).normalized;
-	}
-
-	void EnsureHeading( Vector3 tangent )
-	{
-		if ( _heading.sqrMagnitude >= MinHeadingSqr )
-			return;
-
-		if ( tangent.sqrMagnitude >= MinHeadingSqr )
-			_heading = tangent.normalized;
-		else
-			_heading = Vector3.forward;
-	}
-
 	float ResolveMotionAmount( float dt, bool immediate )
 	{
 		float amount = motionScale;
@@ -498,9 +386,9 @@ public class MagicalLanternMotion : MonoBehaviour
 		return amount * wake;
 	}
 
-	Vector3 EvaluateAttractor( float time )
+	Vector3 EvaluatePath( float time )
 	{
-		return EvaluateWander( time ) + EvaluateOrbit( time );
+		return EvaluateWander( time ) + EvaluateFigureEight( time );
 	}
 
 	Vector3 EvaluateWander( float time )
@@ -512,36 +400,32 @@ public class MagicalLanternMotion : MonoBehaviour
 		return new Vector3( nx * wanderRadius.x, ny * wanderRadius.y, nz * wanderRadius.z );
 	}
 
-	Vector3 EvaluateOrbit( float time )
+	Vector3 EvaluateFigureEight( float time )
 	{
-		float phase = OrbitPhase( time );
-		return new Vector3(
-			Mathf.Cos( phase ) * orbitRadius.x,
-			Mathf.Sin( phase * 0.5f + 0.7f ) * orbitRadius.y * 0.28f,
-			Mathf.Sin( phase ) * orbitRadius.y );
+		float phase = FigureEightPhase( time );
+		float sinP = Mathf.Sin( phase );
+		float cosP = Mathf.Cos( phase );
+
+		// Lemniscate in XZ: x = rx * sin, z = rz * sin*cos*2 so both axes hit their authored amplitude.
+		Vector3 local = new Vector3(
+			figureEightRadius.x * sinP,
+			0f,
+			figureEightRadius.y * sinP * cosP * 2f );
+
+		return EvaluateOrientation( time ) * local;
 	}
 
-	Vector3 EvaluateOrbitTangent( float time )
+	Quaternion EvaluateOrientation( float time )
 	{
-		float phase = OrbitPhase( time );
-		Vector3 tangent = new Vector3(
-			-Mathf.Sin( phase ) * orbitRadius.x,
-			Mathf.Cos( phase * 0.5f + 0.7f ) * orbitRadius.y * 0.14f,
-			Mathf.Cos( phase ) * orbitRadius.y );
-		if ( tangent.sqrMagnitude < MinHeadingSqr )
-			return Vector3.forward;
-		return tangent.normalized;
+		float speed = warpSpeed * speedScale;
+		float yaw = SignedNoise( time * speed, _noiseSeed + 71.2f ) * yawWarpDegrees;
+		float pitch = SignedNoise( time * speed * 0.91f, _noiseSeed + 103.5f ) * pitchWarpDegrees;
+		return Quaternion.Euler( pitch, yaw, 0f );
 	}
 
-	float OrbitPhase( float time )
+	float FigureEightPhase( float time )
 	{
-		return time * orbitSpeed * speedScale * Mathf.PI * 2f + _noiseSeed;
-	}
-
-	float MaxTravelRadius()
-	{
-		float orbit = Mathf.Max( orbitRadius.x, orbitRadius.y );
-		return wanderRadius.magnitude + orbit;
+		return time * figureEightSpeed * speedScale * Mathf.PI * 2f + _noiseSeed;
 	}
 
 	float EvaluateBob( float time )
@@ -663,10 +547,11 @@ public class MagicalLanternMotion : MonoBehaviour
 			restWorldRot = transform.rotation;
 		}
 
+		float figureExtent = Mathf.Max( figureEightRadius.x, figureEightRadius.y );
 		Vector3 radius = wanderRadius;
-		radius.x += orbitRadius.x + flutterAmplitude;
-		radius.y += bobAmplitude + liftAmplitude + orbitRadius.y * 0.28f + flutterAmplitude;
-		radius.z += orbitRadius.y + flutterAmplitude;
+		radius.x += figureExtent + flutterAmplitude;
+		radius.y += bobAmplitude + liftAmplitude + flutterAmplitude;
+		radius.z += figureExtent + flutterAmplitude;
 		radius *= Mathf.Max( motionScale, 0.01f );
 		if ( radius.sqrMagnitude < 0.0001f )
 			return;
@@ -677,5 +562,33 @@ public class MagicalLanternMotion : MonoBehaviour
 		Gizmos.matrix = Matrix4x4.TRS( restWorld, restWorldRot, radius );
 		Gizmos.DrawWireSphere( Vector3.zero, 1f );
 		Gizmos.matrix = prev;
+
+		DrawFigureEightGizmo( restWorld, restWorldRot );
+	}
+
+	void DrawFigureEightGizmo( Vector3 restWorld, Quaternion restWorldRot )
+	{
+		const int Segments = 48;
+		float amount = Mathf.Max( motionScale, 0.01f );
+		Vector3 prev = Vector3.zero;
+		bool hasPrev = false;
+		Gizmos.color = new Color( 0.7f, 0.95f, 1f, 0.9f );
+
+		for ( int i = 0; i <= Segments; i++ )
+		{
+			float u = i / (float)Segments;
+			float phase = u * Mathf.PI * 2f + _noiseSeed;
+			float sinP = Mathf.Sin( phase );
+			float cosP = Mathf.Cos( phase );
+			Vector3 local = new Vector3(
+				figureEightRadius.x * sinP,
+				0f,
+				figureEightRadius.y * sinP * cosP * 2f ) * amount;
+			Vector3 world = restWorld + restWorldRot * local;
+			if ( hasPrev )
+				Gizmos.DrawLine( prev, world );
+			prev = world;
+			hasPrev = true;
+		}
 	}
 }

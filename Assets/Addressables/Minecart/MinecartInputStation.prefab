@@ -49,6 +49,40 @@ MonoBehaviour:
   references:
     version: 2
     RefIds: []
+--- !u!1 &1200395414851124630
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 96692443813184304}
+  m_Layer: 0
+  m_Name: ButtonMount
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &96692443813184304
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1200395414851124630}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 8.333334, y: 0.9090909, z: 8.333334}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7023279062621733808}
+  - {fileID: 1508065203109504001}
+  - {fileID: 8224116152181210437}
+  m_Father: {fileID: 5048822065031445237}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2100259406765847620
 GameObject:
   m_ObjectHideFlags: 0
@@ -129,7 +163,7 @@ Transform:
   m_LocalScale: {x: 0.12, y: 1.1, z: 0.12}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 3826965288076370312}
+  - {fileID: 96692443813184304}
   m_Father: {fileID: 244013777054169665}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &2855734735567753176
@@ -233,40 +267,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f69f85553409ace44a8ae0771be036aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FeedbackSystem.Runtime::FeedbackSystem.Feedbacks
-  _feedbacks:
-  - rid: 535442824922137337
+  _feedbacks: []
   _useUnscaledTime: 0
   references:
     version: 2
-    RefIds:
-    - rid: 535442824922137337
-      type: {class: PlaySFXFeedback, ns: FeedbackSystem, asm: FeedbackSystem.Runtime}
-      data:
-        _enabled: 1
-        Clip: {fileID: 8300000, guid: 06676f922dd3ed84a94839e60cc87272, type: 3}
-        Playback:
-          VolumeMin: 0.85
-          VolumeMax: 1
-          PitchMin: 1
-          PitchMax: 1
-          SpatialBlend: 1
-          MinDistance: 1
-          MaxDistance: 18
-          DopplerLevel: 0
-          RolloffMode: 1
-          FollowCallerTransform: 1
-          OutputMixerGroup: {fileID: 0}
-          AudioSource: {fileID: 0}
-        _migrateVolumeMin: 1
-        _migrateVolumeMax: 1
-        _migratePitchMin: 1
-        _migratePitchMax: 1
-        _migrateSpatialBlend: 0
-        _migrateMinDistance: 1
-        _migrateMaxDistance: 20
-        _migrateFollowCallerTransform: 0
-        _migrateAudioSource: {fileID: 0}
-        _serializedPlaybackMerged: 1
+    RefIds: []
 --- !u!1 &4047248493328515997
 GameObject:
   m_ObjectHideFlags: 0
@@ -293,12 +298,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4047248493328515997}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.0454545, z: 0}
-  m_LocalScale: {x: 2.3333335, y: 0.16363637, z: 2.3333335}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 2.25, z: 0}
+  m_LocalScale: {x: 0.28, y: 0.18, z: 0.28}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 5048822065031445237}
+  m_Father: {fileID: 244013777054169665}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &3347780055779578433
 MeshFilter:
@@ -386,11 +391,11 @@ Transform:
   m_GameObject: {fileID: 4435104699851104949}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.35, z: 0.7}
+  m_LocalPosition: {x: 0, y: 0, z: 0.1}
   m_LocalScale: {x: 0.22, y: 0.22, z: 0.12}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 244013777054169665}
+  m_Father: {fileID: 96692443813184304}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &3597694916464023349
 MeshFilter:
@@ -514,11 +519,11 @@ Transform:
   m_GameObject: {fileID: 5050882001772617970}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.7, y: 1.35, z: 0.7}
+  m_LocalPosition: {x: 0, y: -0.3, z: 0.1}
   m_LocalScale: {x: 0.22, y: 0.22, z: 0.12}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 244013777054169665}
+  m_Father: {fileID: 96692443813184304}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &3963060378854047223
 MeshFilter:
@@ -642,11 +647,11 @@ Transform:
   m_GameObject: {fileID: 6259669587614623426}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.7, y: 1.35, z: 0.7}
+  m_LocalPosition: {x: 0, y: 0.3, z: 0.1}
   m_LocalScale: {x: 0.28, y: 0.26, z: 0.12}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 244013777054169665}
+  m_Father: {fileID: 96692443813184304}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &1656692905870628480
 MeshFilter:
@@ -738,7 +743,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a727b3c4d5e64f1a9b0c1d2e3f405162, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MinecartStationAutomationButton
-  interactionName: Send to Next Station
+  interactionName: Call Cart
   mode: 2
   station: {fileID: 3794740190720334783}
 --- !u!1 &6859916495188368238
@@ -773,14 +778,12 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 5048822065031445237}
+  - {fileID: 3826965288076370312}
   - {fileID: 4093163546905474411}
   - {fileID: 4848567920848586096}
   - {fileID: 649897218785635995}
   - {fileID: 8956765342246903339}
   - {fileID: 2710180237532166086}
-  - {fileID: 8224116152181210437}
-  - {fileID: 1508065203109504001}
-  - {fileID: 7023279062621733808}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &64789511331550766
@@ -802,7 +805,7 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.15, y: 2.2, z: 0.15}
+  m_Size: {x: 1.2, y: 2.2, z: 1.2}
   m_Center: {x: 0, y: 1.1, z: 0}
 --- !u!114 &3794740190720334783
 MonoBehaviour:
@@ -941,6 +944,10 @@ PrefabInstance:
     - target: {fileID: 100002, guid: b6c0e81f3d2a5139d0b4c897f2a5e136, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 100004, guid: b6c0e81f3d2a5139d0b4c897f2a5e136, type: 3}
+      propertyPath: storageKind
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

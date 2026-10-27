@@ -27,14 +27,14 @@ Material:
     m_Floats:
     - _Alpha: 1
     - _AreaGlow: 0
-    - _AreaGlowMul: 0.55
-    - _BandMul: 1.25
+    - _AreaGlowMul: 1
+    - _BandMul: 1.75
     - _BandSoftness: 0.04
     - _BandWidth: 0.08
     - _Cull: 2
     - _DstBlend: 1
     - _EdgeFade: 0.08
-    - _Exposure: 1.75
+    - _Exposure: 1
     - _FogInfluence: 0.25
     - _GleamSpan: 10
     - _GleamT: 0

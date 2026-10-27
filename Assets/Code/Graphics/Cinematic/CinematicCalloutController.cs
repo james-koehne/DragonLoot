@@ -6,11 +6,20 @@ using UnityEngine;
 /// <summary>
 /// Dialogue callout: letterbox bars, FOV zoom, input lock, and either first-person look-at
 /// or an authored third-person camera frame (when <see cref="_cameraFrame"/> is set).
+/// Third-person callouts look up at the dragon first, hold, then pull out to the frame.
 /// </summary>
 public class CinematicCalloutController : MonoBehaviour
 {
 	public const string MainCaveEntranceCalloutId = "main_cave_entrance_callout";
 	public const string TalkToDragonCalloutId = "talk_to_dragon_callout";
+
+	enum CameraPhase
+	{
+		None = 0,
+		LookUp = 1,
+		HoldLook = 2,
+		ThirdPerson = 3
+	}
 
 	static readonly Dictionary<string, CinematicCalloutController> Controllers =
 		new Dictionary<string, CinematicCalloutController>();
@@ -23,7 +32,7 @@ public class CinematicCalloutController : MonoBehaviour
 	Transform _lookTarget;
 
 	[SerializeField]
-	[Tooltip( "Preferred look source — aims at the dragon head bone when set." )]
+	[Tooltip( "Preferred look source - aims at the dragon head bone when set." )]
 	DragonController _dragon;
 
 	[Header( "Third Person Frame" )]
@@ -32,7 +41,7 @@ public class CinematicCalloutController : MonoBehaviour
 	Transform _cameraFrame;
 
 	[SerializeField]
-	[Tooltip( "Optional stand pose. Player snaps here when the third-person frame begins." )]
+	[Tooltip( "Optional stand pose. Player snaps here when the callout begins." )]
 	Transform _standPose;
 
 	[SerializeField]
@@ -48,6 +57,11 @@ public class CinematicCalloutController : MonoBehaviour
 	[Min( 0f )]
 	[Tooltip( "Seconds to rise (begin) and lower (end)." )]
 	float _floatDuration = 0.85f;
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "After the first-person look reaches the dragon, hold this long before pulling out to the third-person frame." )]
+	float _thirdPersonHoldAfterLook = 0.5f;
 
 	[Header( "Envelope" )]
 	[SerializeField]
@@ -103,11 +117,14 @@ public class CinematicCalloutController : MonoBehaviour
 	bool _detachedLookActive;
 	bool _floatActive;
 	bool _returningToMount;
+	bool _dragonLookActive;
+	CameraPhase _cameraPhase;
 	float _envelope;
 	float _targetEnvelope;
 	float _lookBlend;
 	float _returnBlend;
 	float _floatWeight;
+	float _lookHoldElapsed;
 	float _currentBodyYaw;
 	float _currentPitch;
 	float _yawVelocity;
@@ -123,6 +140,7 @@ public class CinematicCalloutController : MonoBehaviour
 	FirstPersonCameraController _camera;
 	CameraController _cameraRig;
 	PlayerController _player;
+	DragonController _lookDragon;
 	CinematicLetterboxUI _letterbox;
 	Action _onEnded;
 
@@ -202,7 +220,7 @@ public class CinematicCalloutController : MonoBehaviour
 		ResolveRefs();
 		if ( _player == null || _camera == null )
 		{
-			Debug.LogWarning( "CinematicCalloutController: missing player or camera — skipping callout." );
+			Debug.LogWarning( "CinematicCalloutController: missing player or camera - skipping callout." );
 			return;
 		}
 
@@ -214,24 +232,31 @@ public class CinematicCalloutController : MonoBehaviour
 		_returnBlend = 0f;
 		_returningToMount = false;
 		_floatWeight = 0f;
+		_lookHoldElapsed = 0f;
 		_swayTime = 0f;
 		_yawVelocity = 0f;
 		_pitchVelocity = 0f;
 		_currentBodyYaw = _player.transform.eulerAngles.y;
 		_currentPitch = _camera.Pitch;
 		_restorePitch = _camera.Pitch;
+		_cameraPhase = CameraPhase.None;
 
 		_baseFov = _camera.Camera != null ? _camera.Camera.fieldOfView : 60f;
 		_camera.SetFieldOfViewOverride( true );
 		_player.SetCinematicInputLock( true );
-		SetCrosshairHidden( true );
+		CinematicHudVisibility.SetGameplayHudHidden( true );
 
 		BeginPlatformFloat();
+		BeginDragonLookAtPlayer();
+		AttachPlayerToStandPose( lockYaw: true );
 
 		if ( IsThirdPersonFrame )
-			BeginThirdPersonFrame();
-		else
-			AttachPlayerToStandPose();
+		{
+			if ( TryGetLookPoint( out _ ) )
+				_cameraPhase = CameraPhase.LookUp;
+			else
+				BeginThirdPersonFrame();
+		}
 
 		_letterbox = CinematicLetterboxUI.EnsureExists();
 		ApplyEnvelope( _envelope );
@@ -268,12 +293,7 @@ public class CinematicCalloutController : MonoBehaviour
 		_envelope = Mathf.MoveTowards( _envelope, _targetEnvelope, step );
 
 		if ( !_ending )
-		{
-			if ( _lookBlendDuration > 0.0001f )
-				_lookBlend = Mathf.MoveTowards( _lookBlend, 1f, dt / _lookBlendDuration );
-			else
-				_lookBlend = 1f;
-		}
+			TickCameraPhase( dt );
 		else if ( _returningToMount )
 		{
 			if ( _cameraBlendOutDuration > 0.0001f )
@@ -285,15 +305,57 @@ public class CinematicCalloutController : MonoBehaviour
 		_swayTime += dt;
 		ApplyEnvelope( _envelope );
 		UpdatePlatformFloat( dt );
-		AttachPlayerToStandPose();
 
-		if ( IsThirdPersonFrame && _cameraDetached )
-			ApplyThirdPersonFrame();
+		if ( _cameraPhase == CameraPhase.ThirdPerson || ( IsThirdPersonFrame && _cameraDetached ) )
+			AttachPlayerToStandPose( lockYaw: true );
+		else if ( IsThirdPersonFrame )
+			AttachPlayerStandPosition();
 		else
+			AttachPlayerToStandPose( lockYaw: true );
+
+		if ( _cameraPhase == CameraPhase.ThirdPerson && _cameraDetached )
+			ApplyThirdPersonFrame();
+		else if ( !_cameraDetached )
 			ApplyLook( dt );
 
 		if ( _ending && _envelope <= 0.0001f && !_floatActive && IsCameraReturnComplete() )
 			FinishEnd();
+	}
+
+	void TickCameraPhase( float dt )
+	{
+		if ( _cameraPhase == CameraPhase.LookUp || _cameraPhase == CameraPhase.HoldLook )
+		{
+			if ( _lookBlendDuration > 0.0001f )
+				_lookBlend = Mathf.MoveTowards( _lookBlend, 1f, dt / _lookBlendDuration );
+			else
+				_lookBlend = 1f;
+
+			if ( _lookBlend < 0.999f )
+				return;
+
+			_cameraPhase = CameraPhase.HoldLook;
+			_lookHoldElapsed += dt;
+			if ( _lookHoldElapsed < Mathf.Max( 0f, _thirdPersonHoldAfterLook ) )
+				return;
+
+			BeginThirdPersonFrame();
+			return;
+		}
+
+		if ( _cameraPhase == CameraPhase.ThirdPerson )
+		{
+			if ( _lookBlendDuration > 0.0001f )
+				_lookBlend = Mathf.MoveTowards( _lookBlend, 1f, dt / _lookBlendDuration );
+			else
+				_lookBlend = 1f;
+			return;
+		}
+
+		if ( _lookBlendDuration > 0.0001f )
+			_lookBlend = Mathf.MoveTowards( _lookBlend, 1f, dt / _lookBlendDuration );
+		else
+			_lookBlend = 1f;
 	}
 
 	void BeginReturnToMount()
@@ -361,13 +423,24 @@ public class CinematicCalloutController : MonoBehaviour
 		_floatRoot.position = pos;
 	}
 
-	void AttachPlayerToStandPose()
+	void AttachPlayerToStandPose( bool lockYaw )
 	{
 		if ( _player == null || _standPose == null )
 			return;
 
-		_player.SnapToWorldPose( _standPose.position, _standPose.rotation );
-		_currentBodyYaw = _standPose.eulerAngles.y;
+		if ( lockYaw )
+		{
+			_player.SnapToWorldPose( _standPose.position, _standPose.rotation );
+			_currentBodyYaw = _standPose.eulerAngles.y;
+			return;
+		}
+
+		_player.SnapToWorldPose( _standPose.position, Quaternion.Euler( 0f, _currentBodyYaw, 0f ) );
+	}
+
+	void AttachPlayerStandPosition()
+	{
+		AttachPlayerToStandPose( lockYaw: false );
 	}
 
 	static float EaseInOut( float t )
@@ -378,10 +451,13 @@ public class CinematicCalloutController : MonoBehaviour
 
 	void BeginThirdPersonFrame()
 	{
-		AttachPlayerToStandPose();
+		AttachPlayerToStandPose( lockYaw: true );
 
 		if ( _cameraRig == null )
+		{
+			_cameraPhase = CameraPhase.ThirdPerson;
 			return;
+		}
 
 		if ( _camera.Camera != null )
 		{
@@ -393,6 +469,9 @@ public class CinematicCalloutController : MonoBehaviour
 			_frameBlendStartPos = _cameraRig.transform.position;
 			_frameBlendStartRot = _cameraRig.transform.rotation;
 		}
+
+		_lookBlend = 0f;
+		_cameraPhase = CameraPhase.ThirdPerson;
 
 		DetachCamera();
 		_camera.BeginCinematicDetachedLook();
@@ -501,6 +580,36 @@ public class CinematicCalloutController : MonoBehaviour
 		}
 	}
 
+	void BeginDragonLookAtPlayer()
+	{
+		ClearDragonLookAtPlayer();
+		DragonController dragon = _dragon;
+		if ( dragon == null )
+			return;
+
+		Transform aim = _player != null && _player.CameraMount != null
+			? _player.CameraMount
+			: ( _player != null ? _player.transform : null );
+		if ( aim == null )
+			return;
+
+		dragon.SetLookTarget( aim, suppressSideEye: true );
+		_lookDragon = dragon;
+		_dragonLookActive = true;
+	}
+
+	void ClearDragonLookAtPlayer()
+	{
+		if ( !_dragonLookActive )
+			return;
+
+		if ( _lookDragon != null )
+			_lookDragon.ClearLookTarget();
+
+		_lookDragon = null;
+		_dragonLookActive = false;
+	}
+
 	bool TryGetLookPoint( out Vector3 lookPoint )
 	{
 		lookPoint = Vector3.zero;
@@ -589,7 +698,8 @@ public class CinematicCalloutController : MonoBehaviour
 			_floatActive = false;
 		}
 
-		AttachPlayerToStandPose();
+		AttachPlayerToStandPose( lockYaw: true );
+		ClearDragonLookAtPlayer();
 
 		if ( _cameraDetached && _cameraRig != null && _player != null )
 			ReparentCameraToMount();
@@ -615,25 +725,21 @@ public class CinematicCalloutController : MonoBehaviour
 			_player.SetCinematicInputLock( false );
 		}
 
-		SetCrosshairHidden( false );
+		CinematicHudVisibility.SetGameplayHudHidden( false );
 
 		_active = false;
 		_ending = false;
 		_cameraDetached = false;
+		_cameraPhase = CameraPhase.None;
 		_envelope = 0f;
 		_targetEnvelope = 0f;
 		_lookBlend = 0f;
 		_returnBlend = 0f;
+		_lookHoldElapsed = 0f;
 		_returningToMount = false;
 		_floatWeight = 0f;
 		_yawVelocity = 0f;
 		_pitchVelocity = 0f;
-	}
-
-	static void SetCrosshairHidden( bool hidden )
-	{
-		if ( CrosshairUI.Instance != null )
-			CrosshairUI.Instance.SetCinematicHidden( hidden );
 	}
 
 	static float NormalizePitch( float eulerX )

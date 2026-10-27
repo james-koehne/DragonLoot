@@ -188,7 +188,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			return;
 		}
 
-		if ( _player.IsInBuildMode )
+		PlayerBuildMode buildMode = _player.BuildMode;
+		if ( buildMode != null && buildMode.OwnsInteractInput )
 		{
 			CancelCharge();
 			return;
@@ -475,9 +476,9 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 			InputActionSlotPressed( input, 0, CarryBucketKind.Coin, carry );
 			InputActionSlotPressed( input, 1, CarryBucketKind.Gem, carry );
 			InputActionSlotPressed( input, 2, CarryBucketKind.Artifact, carry );
-			InputActionSlotPressed( input, 3, CarryBucketKind.Resource, carry );
-			InputActionSlotPressed( input, 4, CarryBucketKind.General, carry );
-			InputActionSlotPressed( input, 5, CarryBucketKind.Junk, carry );
+			InputActionSlotPressed( input, 3, CarryBucketKind.General, carry );
+			InputActionSlotPressed( input, 4, CarryBucketKind.Junk, carry );
+			InputActionSlotPressed( input, 5, CarryBucketKind.Resource, carry );
 		}
 
 		if ( input.CyclePouch != null && input.CyclePouch.WasPressedThisFrame() )
@@ -499,6 +500,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 	void TickPickupCharge()
 	{
+		ExitBuildModeForWorldAction();
+
 		if ( !ResolvePickupTarget(
 			out GroundCoinStack stack,
 			out GroundGoldBarStack barStack,
@@ -550,6 +553,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 	void TickRecyclingPlaceCharge()
 	{
+		ExitBuildModeForWorldAction();
+
 		if ( !TryResolveRecyclingDump( out Vector3 pos, out Quaternion rot, out bool valid ) )
 		{
 			CancelCharge();
@@ -666,6 +671,8 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 
 	void TickPlaceCharge()
 	{
+		ExitBuildModeForWorldAction();
+
 		if ( !TryResolveWholePlace(
 			out Vector3 pos,
 			out Quaternion rot,
@@ -2135,6 +2142,16 @@ public class PlayerWholeStackInteraction : MonoBehaviour
 				focusBehaviour.GetComponentInChildren<Collider>() );
 
 		return null;
+	}
+
+	void ExitBuildModeForWorldAction()
+	{
+		if ( _player == null || !_player.IsInBuildMode )
+			return;
+
+		PlayerBuildMode buildMode = _player.BuildMode;
+		if ( buildMode != null )
+			buildMode.RequestExit();
 	}
 
 	void CancelCharge()

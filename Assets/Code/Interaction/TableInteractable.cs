@@ -138,6 +138,8 @@ public class TableInteractable : InteractableBase, ITreasureOwner, ITreasurePlac
 		if ( definition == null && cluster[ 0 ] != null )
 			definition = cluster[ 0 ].Definition;
 
+		TreasureInteractSfx.PlayPlace( definition, placePos );
+
 		EventBus.Publish( new TreasurePlacedOnSortingTableEvent
 		{
 			Treasure = definition,

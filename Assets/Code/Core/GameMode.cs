@@ -150,6 +150,26 @@ public class GameMode : MonoBehaviour, IGameMode
 				contextUi = interfacePrefab.AddComponent<InteractionContextUI>();
 			contextUi.Setup();
 
+			RightContextUI rightContextUi = interfacePrefab.GetComponentInChildren<RightContextUI>( true );
+			if ( rightContextUi == null )
+			{
+				Transform parent = contextUi != null ? contextUi.transform.parent : interfacePrefab.transform;
+				Transform existingRight = parent != null ? parent.Find( "RightContext" ) : null;
+				if ( existingRight == null && parent != null )
+					existingRight = parent.Find( "BuildModeContext" );
+				GameObject rightGo = existingRight != null
+					? existingRight.gameObject
+					: new GameObject( "RightContext", typeof( RectTransform ), typeof( RightContextUI ) );
+				if ( existingRight == null && parent != null )
+					rightGo.transform.SetParent( parent, false );
+				if ( rightGo.name == "BuildModeContext" )
+					rightGo.name = "RightContext";
+				rightContextUi = rightGo.GetComponent<RightContextUI>();
+				if ( rightContextUi == null )
+					rightContextUi = rightGo.AddComponent<RightContextUI>();
+			}
+			rightContextUi.Setup();
+
 			BuildableHoverUI buildableHover = ResolveUniqueInterfaceChild<BuildableHoverUI>( interfacePrefab, "BuildableHoverPopup" );
 			if ( buildableHover != null )
 				buildableHover.Setup();

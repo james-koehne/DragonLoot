@@ -413,9 +413,15 @@ public class TreasureCreationWindow : EditorWindow
 		_request.ActiveHeldLocalEuler = EditorGUILayout.Vector3Field(
 			"Active Held Euler",
 			_request.ActiveHeldLocalEuler );
+		_request.ActiveHeldLocalOffset = EditorGUILayout.Vector3Field(
+			"Active Held Offset",
+			_request.ActiveHeldLocalOffset );
 		_request.HeldStackLocalEuler = EditorGUILayout.Vector3Field(
 			"Held Stack Euler",
 			_request.HeldStackLocalEuler );
+		_request.HeldStackLocalOffset = EditorGUILayout.Vector3Field(
+			"Held Stack Offset",
+			_request.HeldStackLocalOffset );
 		EditorGUI.indentLevel--;
 	}
 

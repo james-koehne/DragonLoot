@@ -39,6 +39,7 @@ public static class DragonLootMenus
 	public const string GraphicsCompleteGlowRebuildAll = Root + "/Graphics/Complete Glow/Rebuild All In Open Scenes";
 	public const string GraphicsCompleteGlowEnsurePresets = Root + "/Graphics/Complete Glow/Ensure Presets";
 	public const string GraphicsCompleteGlowEnsureRevealParticles = Root + "/Graphics/Complete Glow/Ensure Reveal Particle Prefabs";
+	public const string GraphicsFloorGleamEnsureSparkles = Root + "/Graphics/Floor Gleam/Ensure Sparkles Prefab";
 	public const string GameObjectBuildCompleteGlow = "GameObject/DragonLoot/Build Complete Glow";
 
 	// --- Coin Stack ---
@@ -107,6 +108,7 @@ public static class DragonLootMenus
 	// --- Tools ---
 	public const string ToolsProjectTasks = Root + "/Tools/Project Tasks";
 	public const string ToolsHeightmapToProBuilder = Root + "/Tools/Heightmap To ProBuilder";
+	public const string ToolsGameTextSpreadsheet = Root + "/Tools/Game Text Spreadsheet";
 
 	// --- UI ---
 	public const string UiInstallPausePouch = Root + "/UI/Install Pause & Pouch Summary On Interface";

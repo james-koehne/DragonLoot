@@ -17,10 +17,11 @@ MonoBehaviour:
   tags:
   - gems
   - constellations
-  disabled: 1
+  disabled: 0
   trigger: 9
   holdingCategory: 1
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -34,13 +35,15 @@ MonoBehaviour:
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
   prerequisiteVolumeId: 
-  prerequisiteTutorialIds: []
+  prerequisiteTutorialIds:
+  - tut_pouches
   highlightMapLabel: 
   mapMarkerId: 
-  outlineTargetIds: []
+  outlineTargetIds:
+  - island3_constellation
   completeAllTasksOnVolumeEnter: 0
-  body: Find constellations around the level and fill them with gems to reveal their secrets.
-  keybindHint: '[{SecondaryInteract}] Place gem  [M] Open map'
+  body: Find constellations and fill them with gems to reveal their secrets.
+  keybindHint: '[{SecondaryInteract}] Place gem'
   tasks:
   - id: place_gem_constellation
     label: Put a gem in a constellation

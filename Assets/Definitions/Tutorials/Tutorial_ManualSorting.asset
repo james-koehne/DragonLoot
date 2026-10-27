@@ -21,6 +21,7 @@ MonoBehaviour:
   trigger: 9
   holdingCategory: 0
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 1
@@ -40,18 +41,18 @@ MonoBehaviour:
   mapMarkerId: 
   outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Put down a big stack and then pick coins off the stack to sort them.
+  body: Sort the coins and make beautiful stacks
   keybindHint: 
   tasks:
-  - id: place_whole_stack
-    label: Put down a stack
-    keybindHint: 'Hold [{ContextualInteract}]'
-    completeTrigger: 6
-    completeVolumeId: 
-    requiredCount: 0
   - id: take_from_stack
     label: Pick coins from the stack
     keybindHint: '[{Interact}]'
     completeTrigger: 25
     completeVolumeId: 
     requiredCount: 10
+  - id: place_whole_stack
+    label: Put down sorted stack
+    keybindHint: 'Hold [{ContextualInteract}]'
+    completeTrigger: 6
+    completeVolumeId: 
+    requiredCount: 0

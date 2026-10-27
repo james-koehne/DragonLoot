@@ -131,7 +131,6 @@ public class CompleteGlowVolumeEditor : Editor
 
 	static void SaveSettingsToNewPreset( CompleteGlowVolume volume )
 	{
-		CompleteGlowMenu.EnsurePresets();
 		string path = EditorUtility.SaveFilePanelInProject( "Save Complete Glow Preset", "CompleteGlow_Custom", "asset", "Choose a location for the new preset.", CompleteGlowMenu.PresetFolder );
 		if ( string.IsNullOrEmpty( path ) )
 			return;
@@ -167,37 +166,79 @@ public class CompleteGlowVolumeEditor : Editor
 		if ( volume == null || volume.Settings == null )
 			return;
 
+		float height = Mathf.Max( 0.01f, volume.Settings.Height );
+		float flare = Mathf.Tan( volume.Settings.FlareAngleDegrees * Mathf.Deg2Rad ) * height;
+		Matrix4x4 matrix = volume.transform.localToWorldMatrix;
+		Gizmos.color = new Color( 1f, 0.85f, 0.3f, 0.85f );
+
+		Vector2[] ring = null;
+		if ( volume.Settings.FootprintSource == CompleteGlowFootprintSource.SourceMesh )
+			ring = volume.ResolveSourceMeshFootprintRing();
+
+		if ( ring != null && ring.Length >= 3 )
+		{
+			for ( int i = 0; i < ring.Length; i++ )
+			{
+				int next = ( i + 1 ) % ring.Length;
+				Vector2 a = ring[ i ];
+				Vector2 b = ring[ next ];
+				Vector2 aTop = ExpandFromCentroid( ring, a, flare );
+				Vector2 bTop = ExpandFromCentroid( ring, b, flare );
+				Vector3 b0 = matrix.MultiplyPoint3x4( new Vector3( a.x, 0f, a.y ) );
+				Vector3 b1 = matrix.MultiplyPoint3x4( new Vector3( b.x, 0f, b.y ) );
+				Vector3 t0 = matrix.MultiplyPoint3x4( new Vector3( aTop.x, height, aTop.y ) );
+				Vector3 t1 = matrix.MultiplyPoint3x4( new Vector3( bTop.x, height, bTop.y ) );
+				Gizmos.DrawLine( b0, b1 );
+				Gizmos.DrawLine( t0, t1 );
+				Gizmos.DrawLine( b0, t0 );
+			}
+
+			return;
+		}
+
 		Vector2 footprint = volume.ResolveFootprintWorld();
 		float halfX = footprint.x * 0.5f;
 		float halfZ = footprint.y * 0.5f;
-		float height = Mathf.Max( 0.01f, volume.Settings.Height );
-		float flare = Mathf.Tan( volume.Settings.FlareAngleDegrees * Mathf.Deg2Rad ) * height;
 		float topX = halfX + flare;
 		float topZ = halfZ + flare;
 
-		Matrix4x4 matrix = volume.transform.localToWorldMatrix;
-		Gizmos.color = new Color( 1f, 0.85f, 0.3f, 0.85f );
-		Vector3 b0 = matrix.MultiplyPoint3x4( new Vector3( -halfX, 0f, -halfZ ) );
-		Vector3 b1 = matrix.MultiplyPoint3x4( new Vector3( halfX, 0f, -halfZ ) );
-		Vector3 b2 = matrix.MultiplyPoint3x4( new Vector3( halfX, 0f, halfZ ) );
-		Vector3 b3 = matrix.MultiplyPoint3x4( new Vector3( -halfX, 0f, halfZ ) );
-		Vector3 t0 = matrix.MultiplyPoint3x4( new Vector3( -topX, height, -topZ ) );
-		Vector3 t1 = matrix.MultiplyPoint3x4( new Vector3( topX, height, -topZ ) );
-		Vector3 t2 = matrix.MultiplyPoint3x4( new Vector3( topX, height, topZ ) );
-		Vector3 t3 = matrix.MultiplyPoint3x4( new Vector3( -topX, height, topZ ) );
+		Vector3 c0 = matrix.MultiplyPoint3x4( new Vector3( -halfX, 0f, -halfZ ) );
+		Vector3 c1 = matrix.MultiplyPoint3x4( new Vector3( halfX, 0f, -halfZ ) );
+		Vector3 c2 = matrix.MultiplyPoint3x4( new Vector3( halfX, 0f, halfZ ) );
+		Vector3 c3 = matrix.MultiplyPoint3x4( new Vector3( -halfX, 0f, halfZ ) );
+		Vector3 u0 = matrix.MultiplyPoint3x4( new Vector3( -topX, height, -topZ ) );
+		Vector3 u1 = matrix.MultiplyPoint3x4( new Vector3( topX, height, -topZ ) );
+		Vector3 u2 = matrix.MultiplyPoint3x4( new Vector3( topX, height, topZ ) );
+		Vector3 u3 = matrix.MultiplyPoint3x4( new Vector3( -topX, height, topZ ) );
 
-		Gizmos.DrawLine( b0, b1 );
-		Gizmos.DrawLine( b1, b2 );
-		Gizmos.DrawLine( b2, b3 );
-		Gizmos.DrawLine( b3, b0 );
-		Gizmos.DrawLine( t0, t1 );
-		Gizmos.DrawLine( t1, t2 );
-		Gizmos.DrawLine( t2, t3 );
-		Gizmos.DrawLine( t3, t0 );
-		Gizmos.DrawLine( b0, t0 );
-		Gizmos.DrawLine( b1, t1 );
-		Gizmos.DrawLine( b2, t2 );
-		Gizmos.DrawLine( b3, t3 );
+		Gizmos.DrawLine( c0, c1 );
+		Gizmos.DrawLine( c1, c2 );
+		Gizmos.DrawLine( c2, c3 );
+		Gizmos.DrawLine( c3, c0 );
+		Gizmos.DrawLine( u0, u1 );
+		Gizmos.DrawLine( u1, u2 );
+		Gizmos.DrawLine( u2, u3 );
+		Gizmos.DrawLine( u3, u0 );
+		Gizmos.DrawLine( c0, u0 );
+		Gizmos.DrawLine( c1, u1 );
+		Gizmos.DrawLine( c2, u2 );
+		Gizmos.DrawLine( c3, u3 );
+	}
+
+	static Vector2 ExpandFromCentroid( Vector2[] ring, Vector2 point, float outward )
+	{
+		if ( outward <= 0.0001f || ring == null || ring.Length == 0 )
+			return point;
+
+		Vector2 centroid = Vector2.zero;
+		for ( int i = 0; i < ring.Length; i++ )
+			centroid += ring[ i ];
+		centroid /= ring.Length;
+
+		Vector2 fromCenter = point - centroid;
+		float len = fromCenter.magnitude;
+		Vector2 dir = len > 0.0001f ? fromCenter / len : Vector2.right;
+		return centroid + dir * ( len + outward );
 	}
 }
 #endif

@@ -53,6 +53,8 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: 
     playerBrakeDuration: 0.5
+    fairySpeechLine: 
+    fairyArrivalSpeechLine: 
   - type: 8
     delayBefore: 0
     onlyDelayThisAction: 0
@@ -61,13 +63,12 @@ MonoBehaviour:
     - speaker: Dragon
       text: Well done with the islands, little Hoardkeeper.
       pauseAfter: 0
-      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+      sfx: {fileID: 8300000, guid: 2e550f1b77600864197bcd1410237943, type: 3}
       sfxVol: 0.5
     - speaker: Dragon
-      text: Come see me and take the minecart. Far less fuss than walking the whole
-        way.
+      text: Come see me and take the minecart. Far less fuss than walking the whole way.
       pauseAfter: 0
-      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
+      sfx: {fileID: 8300000, guid: cbc4534d57c0c6643bd64230f0e78b81, type: 3}
       sfxVol: 0.5
     addressableKey: 
     spawnPointId: 
@@ -92,5 +93,7 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: main_cave_entrance_callout
     playerBrakeDuration: 1
+    fairySpeechLine: 
+    fairyArrivalSpeechLine: 
   sessionOnly: 0
   manualOnly: 0

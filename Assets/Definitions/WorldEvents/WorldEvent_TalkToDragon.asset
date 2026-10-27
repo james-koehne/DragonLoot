@@ -62,6 +62,8 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: 
     playerBrakeDuration: 0.4
+    fairySpeechLine: 
+    fairyArrivalSpeechLine: 
   - type: 8
     delayBefore: 0
     onlyDelayThisAction: 0
@@ -75,23 +77,22 @@ MonoBehaviour:
     - speaker: Dragon
       text: I've spent a lifetime collecting this treasure. I'm ready to retire.
       pauseAfter: 0
-      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfx: {fileID: 8300000, guid: 1500440cf0c3c744ab95f203dbed073a, type: 3}
       sfxVol: 0.5
     - speaker: Dragon
       text: "Unfortunately, the hoard has become\u2026 completely disorganized."
       pauseAfter: 0
-      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfx: {fileID: 8300000, guid: 7a7c1a177462ce6479a797508c17e5ca, type: 3}
       sfxVol: 0.5
     - speaker: Dragon
       text: I need someone to take care of it. That someone is you.
       pauseAfter: 0
-      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfx: {fileID: 8300000, guid: cbc4534d57c0c6643bd64230f0e78b81, type: 3}
       sfxVol: 0.5
     - speaker: Dragon
-      text: 'Your first task: get the Workshop operational. Clear the entrance, then
-        clear out the mess inside.'
+      text: 'Your first task: get the Workshop operational. Clear the entrance, then clear out the mess inside.'
       pauseAfter: 0
-      sfx: {fileID: 8300000, guid: c7e351ef36d20aa4bbde63d18e45e05f, type: 3}
+      sfx: {fileID: 8300000, guid: 466dd3dd2508c3447a4f704570c2ae91, type: 3}
       sfxVol: 0.5
     addressableKey: 
     spawnPointId: 
@@ -116,6 +117,8 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: talk_to_dragon_callout
     playerBrakeDuration: 1
+    fairySpeechLine: 
+    fairyArrivalSpeechLine: 
   - type: 9
     delayBefore: 0.5
     onlyDelayThisAction: 0
@@ -144,5 +147,7 @@ MonoBehaviour:
     lanternIgniteFadeDuration: 0
     cinematicPresentationId: 
     playerBrakeDuration: 1
+    fairySpeechLine: Hello, follow me to the workshop entrance
+    fairyArrivalSpeechLine: Here's the workshop door, clear the way
   sessionOnly: 0
   manualOnly: 0

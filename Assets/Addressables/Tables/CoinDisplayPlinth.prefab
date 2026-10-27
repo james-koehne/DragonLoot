@@ -259,9 +259,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DisplayCompleteEffect
   litRenderer: {fileID: 7579077851459944310}
   softShaftRenderer: {fileID: 1289027761598906805}
-  glowVolume: {fileID: 0}
+  glowVolume: {fileID: 2327342038030852379}
   revealFeedbacks: {fileID: 0}
   defaultColor: {r: 1, g: 0.72, b: 0.28, a: 1}
+  litEmissionMult: 0.9
+  fadeOutAfterShow: 0
+  fadeInDuration: 0.1
+  fadeOutDuration: 1.5
 --- !u!1 &2247220907642651462
 GameObject:
   m_ObjectHideFlags: 0
@@ -527,6 +531,8 @@ MonoBehaviour:
     Anchor: 0
     AnchorOffsetY: 0
     CompensateParentScale: 1
+    PreserveAuthoredRotation: 0
+    AuthoredLocalEuler: {x: 0, y: 0, z: 0}
     Height: 1.5
     FlareAngleDegrees: 10
     FlareCurve:
@@ -602,7 +608,7 @@ MonoBehaviour:
     EdgeSoftness: 0.12
     MaterialOverride: {fileID: 0}
     Color: {r: 1, g: 0.72, b: 0.28, a: 1}
-    Exposure: 0.3
+    Exposure: 0.15
     AlphaMultiplier: 1
     NoiseStrength: 0.3
     NoiseScrollSpeed: 0.15

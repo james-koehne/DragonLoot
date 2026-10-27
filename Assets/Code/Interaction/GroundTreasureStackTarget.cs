@@ -213,6 +213,9 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 		}
 
 		bool flipCoin = CoinFlipMotion.IsCoin( item );
+		float duration = flipCoin ? CoinFlipMotion.DefaultDuration : CoinFlipMotion.DefaultItemArcDuration;
+		if ( !flipCoin && item != null )
+			duration = item.ScalePlacementDuration( duration );
 		TreasureMotionHost.Run( CoinFlipGroundStackRoutine(
 			cluster,
 			ends,
@@ -220,7 +223,7 @@ public sealed class GroundTreasureStackTarget : ITreasurePlacementTarget
 			baseItem,
 			columnBottom,
 			reservedHeight,
-			flipCoin ? CoinFlipMotion.DefaultDuration : CoinFlipMotion.DefaultItemArcDuration,
+			duration,
 			flipCoin ? CoinFlipMotion.DefaultArcHeight : CoinFlipMotion.DefaultItemArcHeight,
 			flipCoin ? CoinFlipMotion.DefaultSpins : 0f ) );
 		return true;

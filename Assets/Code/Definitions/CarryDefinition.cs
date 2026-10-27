@@ -225,17 +225,17 @@ public class CarryDefinition : ScriptableObject
 	[Min( 0.05f )]
 	public float wholeStackAbsorbTweenDuration = 0.28f;
 
-	[Tooltip( "How quickly the next item pulls from left-hand bottom into the right hand." )]
-	[Min( 0.05f )]
-	public float activeRefillTweenDuration = 0.22f;
+	[Tooltip( "Minimum duration for left→right Active refill (place/throw promote). Kept short so spam place can keep up." )]
+	[Min( 0.02f )]
+	public float activeRefillTweenDuration = 0.04f;
 
 	[Tooltip( "World meters per second for hand-transfer arcs (cycle / promote / demote). Duration is max(minDuration, distance / speed)." )]
 	[Min( 0.05f )]
-	public float handTransferSpeed = 1.35f;
+	public float handTransferSpeed = 8f;
 
 	[Tooltip( "Hard cap on distance-scaled hand-transfer duration." )]
-	[Min( 0.05f )]
-	public float handTransferMaxDuration = 0.85f;
+	[Min( 0.02f )]
+	public float handTransferMaxDuration = 0.12f;
 
 	[Tooltip( "Delay between starting each gold-pile multi-steal coin flight." )]
 	[Min( 0f )]
@@ -438,9 +438,9 @@ public class CarryDefinition : ScriptableObject
 		wholeStackHoldMaxSeconds = Mathf.Max( 0.1f, wholeStackHoldMaxSeconds );
 		wholeStackProgressRingSize = Mathf.Max( 8f, wholeStackProgressRingSize );
 		wholeStackAbsorbTweenDuration = Mathf.Max( 0.05f, wholeStackAbsorbTweenDuration );
-		activeRefillTweenDuration = Mathf.Max( 0.05f, activeRefillTweenDuration );
+		activeRefillTweenDuration = Mathf.Max( 0.02f, activeRefillTweenDuration );
 		handTransferSpeed = Mathf.Max( 0.05f, handTransferSpeed );
-		handTransferMaxDuration = Mathf.Max( 0.05f, handTransferMaxDuration );
+		handTransferMaxDuration = Mathf.Max( 0.02f, handTransferMaxDuration );
 		pileStealStaggerSeconds = Mathf.Max( 0f, pileStealStaggerSeconds );
 		coinVisualPoolSize = Mathf.Max( 4, coinVisualPoolSize );
 		stackHandLandPickupMaxCount = Mathf.Max( 1, stackHandLandPickupMaxCount );

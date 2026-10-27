@@ -2,8 +2,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Simple world-space arrow for indirect ground-stack join aim (aim beside a pile).
-/// Points from above the aim/ghost contact toward the top of the stack that will be joined.
+/// World-space join arrow for ground-stack place aim.
+/// Beside-aim: points from the floor ghost toward the stack top.
+/// Direct-aim: hangs above the stack top and points straight down onto it.
 /// </summary>
 public sealed class StackJoinAimArrow
 {
@@ -23,6 +24,10 @@ public sealed class StackJoinAimArrow
 	const float Lift = 0.28f;
 	/// <summary>Keep the tip short of the stack top so it does not bury into the pile.</summary>
 	const float TipClearance = 0.14f;
+	/// <summary>How high above the join slot the direct-aim arrow starts.</summary>
+	const float DirectHover = 0.38f;
+	/// <summary>Fixed visual length when pointing straight down onto a stack.</summary>
+	const float DirectLength = 0.26f;
 
 	public StackJoinAimArrow()
 	{
@@ -150,6 +155,18 @@ public sealed class StackJoinAimArrow
 
 		_rootTransform.localScale = new Vector3( 1f, 1f, lengthScale );
 		_rootTransform.SetPositionAndRotation( origin, Quaternion.LookRotation( dir, Vector3.up ) );
+		SetVisible( true );
+	}
+
+	/// <summary>Arrow above <paramref name="toward"/> pointing straight down onto the join slot.</summary>
+	public void ShowPointingDown( Vector3 toward, Color color )
+	{
+		SetColor( color );
+
+		float lengthScale = Mathf.Clamp( DirectLength / DefaultTotalLength, 0.2f, 1f );
+		Vector3 origin = toward + Vector3.up * DirectHover;
+		_rootTransform.localScale = new Vector3( 1f, 1f, lengthScale );
+		_rootTransform.SetPositionAndRotation( origin, Quaternion.LookRotation( Vector3.down, Vector3.forward ) );
 		SetVisible( true );
 	}
 

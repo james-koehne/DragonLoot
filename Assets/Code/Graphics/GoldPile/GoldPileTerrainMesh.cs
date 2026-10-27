@@ -28,8 +28,8 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	/// <summary>Max tiles to schedule async PhysX bakes per LateUpdate.</summary>
 	const int MaxAsyncCooksPerFrame = 8;
 	const HideFlags RuntimeMeshHideFlags = HideFlags.HideAndDontSave;
-	/// <summary>Emit a visual triangle only when all three corners are above ground (no ~0-height faces).</summary>
-	const int MinAboveCornersPerTriangle = 3;
+	/// <summary>Emit a visual triangle when at least this many corners are above ground.</summary>
+	const int MinAboveCornersPerTriangle = 1;
 	/// <summary>
 	/// Drop only micro noise islands. Larger detached lobes stay visible so loot densify can
 	/// emit their last coin — a high threshold was silently eating multi-coin edge rings.
@@ -651,7 +651,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 	}
 
 	/// <summary>
-	/// Rebuilds visual indices. Emits only triangles with all three corners above ground,
+	/// Rebuilds visual indices. Emits triangles with at least one corner above ground,
 	/// and drops small disconnected islands. Shader clips any remaining at/below-ground pixels.
 	/// </summary>
 	void RebuildVisualTriangles()
@@ -692,7 +692,7 @@ public class GoldPileTerrainMesh : MonoBehaviour, TreasureSparkleMaskRegistrar.I
 				int i01 = i00 + resX;
 				int i11 = i01 + 1;
 
-				// Two triangles of the quad — keep only when every corner is above ground.
+				// Two triangles of the quad — keep when at least one corner is above ground.
 				if ( CountAboveCorners( above, i00, i01, i10 ) >= MinAboveCornersPerTriangle )
 				{
 					_tris[ t++ ] = i00;

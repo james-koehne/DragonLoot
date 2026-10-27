@@ -14,13 +14,19 @@ public static class CompleteGlowMeshBuilder
 		public float EdgeT;
 	}
 
-	public static Mesh Build( CompleteGlowSettings settings, Vector2 footprintWorld, Mesh reuse = null )
+	/// <param name="footprintRing">
+	/// Optional glow-local XZ silhouette (x,z). When null, uses CrossSection shaped from footprintWorld.
+	/// </param>
+	public static Mesh Build( CompleteGlowSettings settings, Vector2 footprintWorld, Mesh reuse = null, Vector2[] footprintRing = null )
 	{
 		if ( settings == null )
 			settings = CompleteGlowSettings.CreateDefault();
 
 		float halfX = Mathf.Max( 0.005f, footprintWorld.x * 0.5f );
 		float halfZ = Mathf.Max( 0.005f, footprintWorld.y * 0.5f );
+		RingPoint[] customBase = footprintRing != null && footprintRing.Length >= 3
+			? BuildRingFromPositions( footprintRing )
+			: null;
 
 		List<Vector3> positions = new List<Vector3>( 512 );
 		List<Vector3> normals = new List<Vector3>( 512 );
@@ -35,16 +41,21 @@ public static class CompleteGlowMeshBuilder
 			float heightScale = 1f + layer * Mathf.Max( 0f, settings.LayerHeightScaleStep );
 			float flare = settings.FlareAngleDegrees + layer * settings.LayerFlareStep;
 			float alpha = Mathf.Pow( Mathf.Clamp( settings.LayerAlphaFalloff, 0.05f, 1f ), layer );
-			AddShell( positions, normals, uvs, colors, triangles, settings, halfX + outward, halfZ + outward, settings.Height * heightScale, flare, new Color( 1f, 1f, 1f, alpha ), false );
+			if ( customBase != null )
+				AddShellFromRing( positions, normals, uvs, colors, triangles, settings, customBase, outward, settings.Height * heightScale, flare, new Color( 1f, 1f, 1f, alpha ), false );
+			else
+				AddShell( positions, normals, uvs, colors, triangles, settings, halfX + outward, halfZ + outward, settings.Height * heightScale, flare, new Color( 1f, 1f, 1f, alpha ), false );
 		}
 
 		if ( settings.InnerCore )
 		{
-			float coreHalfX = halfX * Mathf.Clamp( settings.CoreScale, 0.05f, 1f );
-			float coreHalfZ = halfZ * Mathf.Clamp( settings.CoreScale, 0.05f, 1f );
+			float coreScale = Mathf.Clamp( settings.CoreScale, 0.05f, 1f );
 			float coreHeight = settings.Height * Mathf.Clamp( settings.CoreHeightScale, 0.1f, 1f );
 			float intensity = Mathf.Max( 0f, settings.CoreIntensity );
-			AddShell( positions, normals, uvs, colors, triangles, settings, coreHalfX, coreHalfZ, coreHeight, settings.FlareAngleDegrees * 0.5f, new Color( intensity, intensity, intensity, 1f ), false );
+			if ( customBase != null )
+				AddShellFromRing( positions, normals, uvs, colors, triangles, settings, ScaleRing( customBase, coreScale ), 0f, coreHeight, settings.FlareAngleDegrees * 0.5f, new Color( intensity, intensity, intensity, 1f ), false );
+			else
+				AddShell( positions, normals, uvs, colors, triangles, settings, halfX * coreScale, halfZ * coreScale, coreHeight, settings.FlareAngleDegrees * 0.5f, new Color( intensity, intensity, intensity, 1f ), false );
 		}
 
 		if ( settings.RayCardCount > 0 )
@@ -64,12 +75,19 @@ public static class CompleteGlowMeshBuilder
 
 	static void AddShell( List<Vector3> positions, List<Vector3> normals, List<Vector2> uvs, List<Color> colors, List<int> triangles, CompleteGlowSettings settings, float halfX, float halfZ, float height, float flareDegrees, Color tint, bool forceCap )
 	{
+		RingPoint[] baseRing = BuildRing( settings, halfX, halfZ );
+		AddShellFromRing( positions, normals, uvs, colors, triangles, settings, baseRing, 0f, height, flareDegrees, tint, forceCap );
+	}
+
+	static void AddShellFromRing( List<Vector3> positions, List<Vector3> normals, List<Vector2> uvs, List<Color> colors, List<int> triangles, CompleteGlowSettings settings, RingPoint[] baseRing, float outward, float height, float flareDegrees, Color tint, bool forceCap )
+	{
+		if ( baseRing == null || baseRing.Length < 3 )
+			return;
+
 		height = Mathf.Max( 0.01f, height );
 		int heightSegments = Mathf.Clamp( settings.HeightSegments, 1, 32 );
-		RingPoint[] baseRing = BuildRing( settings, halfX, halfZ );
 		int ringCount = baseRing.Length;
-		if ( ringCount < 3 )
-			return;
+		Vector2 centroid = ResolveRingCentroid( baseRing );
 
 		float flareRadians = flareDegrees * Mathf.Deg2Rad;
 		float flareTan = Mathf.Tan( flareRadians );
@@ -80,13 +98,11 @@ public static class CompleteGlowMeshBuilder
 			float t1 = (float)( h + 1 ) / heightSegments;
 			float y0 = t0 * height;
 			float y1 = t1 * height;
-			float flare0 = EvaluateFlare( settings, t0 ) * flareTan * y0;
-			float flare1 = EvaluateFlare( settings, t1 ) * flareTan * y1;
+			float flare0 = EvaluateFlare( settings, t0 ) * flareTan * y0 + outward;
+			float flare1 = EvaluateFlare( settings, t1 ) * flareTan * y1 + outward;
 
-			RingPoint[] ring0 = BuildRing( settings, halfX + flare0, halfZ + flare0 );
-			RingPoint[] ring1 = BuildRing( settings, halfX + flare1, halfZ + flare1 );
-			if ( ring0.Length != ringCount || ring1.Length != ringCount )
-				continue;
+			RingPoint[] ring0 = ExpandRing( baseRing, centroid, flare0 );
+			RingPoint[] ring1 = ExpandRing( baseRing, centroid, flare1 );
 
 			for ( int i = 0; i < ringCount; i++ )
 			{
@@ -103,7 +119,7 @@ public static class CompleteGlowMeshBuilder
 
 				Vector3 faceNormal = Vector3.Cross( p10 - p00, p01 - p00 );
 				if ( faceNormal.sqrMagnitude < 1e-10f )
-					faceNormal = new Vector3( a0r.Position.x, 0f, a0r.Position.y );
+					faceNormal = new Vector3( a0r.Position.x - centroid.x, 0f, a0r.Position.y - centroid.y );
 				faceNormal.Normalize();
 
 				float alpha00 = EvaluateVertexAlpha( settings, t0, a0r.EdgeT, y0, tint.a );
@@ -125,7 +141,7 @@ public static class CompleteGlowMeshBuilder
 		}
 
 		if ( settings.BottomCap || forceCap )
-			AddBottomCap( positions, normals, uvs, colors, triangles, baseRing, tint, settings );
+			AddBottomCap( positions, normals, uvs, colors, triangles, ExpandRing( baseRing, centroid, outward ), tint, settings );
 	}
 
 	static void AddBottomCap( List<Vector3> positions, List<Vector3> normals, List<Vector2> uvs, List<Color> colors, List<int> triangles, RingPoint[] ring, Color tint, CompleteGlowSettings settings )
@@ -270,6 +286,77 @@ public static class CompleteGlowMeshBuilder
 			default:
 				return BuildSquareRing( halfX, halfZ );
 		}
+	}
+
+	static RingPoint[] BuildRingFromPositions( Vector2[] positions )
+	{
+		if ( positions == null || positions.Length < 3 )
+			return null;
+
+		RingPoint[] ring = new RingPoint[ positions.Length ];
+		float perimeter = 0f;
+		for ( int i = 0; i < positions.Length; i++ )
+		{
+			if ( i > 0 )
+				perimeter += Vector2.Distance( positions[ i - 1 ], positions[ i ] );
+			ring[ i ] = new RingPoint { Position = positions[ i ], PerimeterU = perimeter, EdgeT = 0f };
+		}
+
+		return ring;
+	}
+
+	static Vector2 ResolveRingCentroid( RingPoint[] ring )
+	{
+		Vector2 sum = Vector2.zero;
+		for ( int i = 0; i < ring.Length; i++ )
+			sum += ring[ i ].Position;
+		return sum / ring.Length;
+	}
+
+	static RingPoint[] ExpandRing( RingPoint[] ring, Vector2 centroid, float outward )
+	{
+		if ( ring == null || ring.Length == 0 )
+			return ring;
+		if ( Mathf.Abs( outward ) < 0.00001f )
+			return ring;
+
+		RingPoint[] expanded = new RingPoint[ ring.Length ];
+		float perimeter = 0f;
+		Vector2 prev = Vector2.zero;
+		for ( int i = 0; i < ring.Length; i++ )
+		{
+			Vector2 fromCenter = ring[ i ].Position - centroid;
+			float len = fromCenter.magnitude;
+			Vector2 dir = len > 0.0001f ? fromCenter / len : Vector2.right;
+			Vector2 p = centroid + dir * ( len + outward );
+			if ( i > 0 )
+				perimeter += Vector2.Distance( prev, p );
+			expanded[ i ] = new RingPoint { Position = p, PerimeterU = perimeter, EdgeT = ring[ i ].EdgeT };
+			prev = p;
+		}
+
+		return expanded;
+	}
+
+	static RingPoint[] ScaleRing( RingPoint[] ring, float scale )
+	{
+		if ( ring == null || ring.Length == 0 )
+			return ring;
+
+		Vector2 centroid = ResolveRingCentroid( ring );
+		RingPoint[] scaled = new RingPoint[ ring.Length ];
+		float perimeter = 0f;
+		Vector2 prev = Vector2.zero;
+		for ( int i = 0; i < ring.Length; i++ )
+		{
+			Vector2 p = centroid + ( ring[ i ].Position - centroid ) * scale;
+			if ( i > 0 )
+				perimeter += Vector2.Distance( prev, p );
+			scaled[ i ] = new RingPoint { Position = p, PerimeterU = perimeter, EdgeT = ring[ i ].EdgeT };
+			prev = p;
+		}
+
+		return scaled;
 	}
 
 	static RingPoint[] BuildSquareRing( float halfX, float halfZ )

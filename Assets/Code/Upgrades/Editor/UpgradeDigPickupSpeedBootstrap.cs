@@ -38,7 +38,7 @@ public static class UpgradeDigPickupSpeedBootstrap
 			upgrade.name = "Upgrade_DigPickupSpeed";
 			upgrade.id = UpgradeDefinition.DigPickupSpeedId;
 			upgrade.displayName = "Swift Hands";
-			upgrade.description = "Dig and pick up treasure 1.5x faster.";
+			upgrade.description = "Dig and pick up treasure 1.1x faster.";
 			upgrade.maxLevel = 1;
 			upgrade.enabled = true;
 			upgrade.digPickupSpeedMultiplier = PlayerDigPickupSpeed.DefaultMultiplier;

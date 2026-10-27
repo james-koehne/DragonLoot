@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: Tutorial_BuildAutoMinecarts
   m_EditorClassIdentifier: Assembly-CSharp::TutorialDefinition
   id: tut_build_auto_minecarts
-  title: Auto Minecarts
+  title: Setup Auto Minecarts
   tags:
   - minecart
   - workshop
   - build
-  disabled: 0
+  disabled: 1
   trigger: 25
   holdingCategory: 0
   volumeId: 
@@ -38,30 +38,33 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0
   walkSecondsToShow: 5
-  prerequisiteVolumeId:
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
-  outlineTargetIds: []
+  outlineTargetIds:
+  - minecart_input_station
+  - minecart_output_station
+  - minecart_track
   completeAllTasksOnVolumeEnter: 0
-  body: Build the input station, output station, and track to set up auto minecarts.
+  body: Build stations and track to setup your first auto minecart loop.
   keybindHint: '[{BuildModeToggle}]'
   tasks:
   - id: build_input_station
     label: Build input station
-    keybindHint: 
+    keybindHint: 'Hold [LMB]'
     completeTrigger: 34
     completeVolumeId: minecart_input_station
     requiredCount: 0
   - id: build_output_station
     label: Build output station
-    keybindHint: 
+    keybindHint: 'Hold [LMB]'
     completeTrigger: 34
     completeVolumeId: minecart_output_station
     requiredCount: 0
   - id: build_track
     label: Build minecart track
-    keybindHint: 
+    keybindHint: 'Hold [LMB]'
     completeTrigger: 34
     completeVolumeId: minecart_track
     requiredCount: 0

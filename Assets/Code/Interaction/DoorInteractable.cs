@@ -71,10 +71,17 @@ public class DoorInteractable : InteractableBase
 	[SerializeField]
 	Feedbacks onLockedFeedback;
 
+	[Header( "Unlock FX" )]
+	[Tooltip( "Optional CompleteGlow / DisplayCompleteEffect roots (e.g. one per double-door leaf). On fresh unlock: activates (bright flash), then hides. Not shown when restoring an already-unlocked door." )]
+	[SerializeField]
+	GameObject[] unlockGlowRoots;
+
 	[SerializeField]
 	DoorState state = DoorState.Locked;
 
 	Feedbacks _activeTransitionFeedback;
+	bool _unlockGlowPlaying;
+	float _unlockGlowHideAt;
 
 	public string DoorId => doorId;
 	public DoorState State => state;
@@ -87,6 +94,7 @@ public class DoorInteractable : InteractableBase
 	void Awake()
 	{
 		EnsureLockedFeedback();
+		SetUnlockGlowRootsActive( false );
 		RefreshInteractionName();
 	}
 
@@ -105,10 +113,14 @@ public class DoorInteractable : InteractableBase
 		EventBus.Unsubscribe<ObjectiveCompletedEvent>( OnObjectiveCompleted );
 		StopActiveTransitionFeedback();
 		StopLockedFeedback();
+		StopUnlockGlow( true );
 	}
 
 	void Update()
 	{
+		if ( _unlockGlowPlaying )
+			TickUnlockGlowHide();
+
 		if ( !IsTransitioning )
 			return;
 
@@ -249,11 +261,13 @@ public class DoorInteractable : InteractableBase
 				state = DoorState.Locked;
 				ApplyClosedPose();
 			}
+			StopUnlockGlow( true );
 			RefreshInteractionName();
 			return;
 		}
 
-		if ( state == DoorState.Locked )
+		bool freshlyUnlocked = state == DoorState.Locked;
+		if ( freshlyUnlocked )
 		{
 			if ( !string.IsNullOrEmpty( doorId ) && DoorProgress.IsOpen( doorId ) )
 			{
@@ -265,10 +279,147 @@ public class DoorInteractable : InteractableBase
 				state = DoorState.UnlockedClosed;
 				ApplyClosedPose();
 			}
+
+			PlayUnlockGlowBurst();
 		}
 
 		RefreshInteractionName();
 	}
+
+	void PlayUnlockGlowBurst()
+	{
+		if ( !Application.isPlaying || !HasUnlockGlowRoots() )
+			return;
+
+		StopUnlockGlow( true );
+		SetUnlockGlowRootsActive( true );
+
+		_unlockGlowPlaying = true;
+		// Safety timeout if a volume never reports fade complete.
+		_unlockGlowHideAt = Time.time + ResolveUnlockGlowDuration() + 0.35f;
+	}
+
+	void TickUnlockGlowHide()
+	{
+		if ( AnyUnlockGlowStillFading() && Time.time < _unlockGlowHideAt )
+			return;
+
+		StopUnlockGlow( false );
+	}
+
+	bool AnyUnlockGlowStillFading()
+	{
+		if ( unlockGlowRoots == null )
+			return false;
+
+		for ( int i = 0; i < unlockGlowRoots.Length; i++ )
+		{
+			GameObject root = unlockGlowRoots[ i ];
+			if ( root == null || !root.activeInHierarchy )
+				continue;
+
+			CompleteGlowVolume volume = root.GetComponentInChildren<CompleteGlowVolume>( true );
+			if ( volume != null && volume.IsRevealFadePlaying )
+				return true;
+		}
+
+		return false;
+	}
+
+	float ResolveUnlockGlowDuration()
+	{
+		const float FallbackDuration = 1.75f;
+		float longest = 0f;
+		if ( unlockGlowRoots == null )
+			return FallbackDuration;
+
+		for ( int i = 0; i < unlockGlowRoots.Length; i++ )
+		{
+			GameObject root = unlockGlowRoots[ i ];
+			if ( root == null )
+				continue;
+
+			DisplayCompleteEffect effect = root.GetComponent<DisplayCompleteEffect>();
+			if ( effect != null )
+			{
+				longest = Mathf.Max( longest, effect.ResolveShowDuration() );
+				continue;
+			}
+
+			CompleteGlowVolume volume = root.GetComponentInChildren<CompleteGlowVolume>( true );
+			if ( volume == null || volume.Settings == null )
+				continue;
+
+			longest = Mathf.Max( longest, Mathf.Max( 0.05f, volume.Settings.FlashDuration ) + 0.15f );
+		}
+
+		if ( longest <= 0f )
+			return FallbackDuration;
+		return longest;
+	}
+
+	void StopUnlockGlow( bool cancelFlash )
+	{
+		_unlockGlowPlaying = false;
+		_unlockGlowHideAt = 0f;
+
+		if ( unlockGlowRoots == null )
+			return;
+
+		if ( cancelFlash )
+		{
+			for ( int i = 0; i < unlockGlowRoots.Length; i++ )
+			{
+				GameObject root = unlockGlowRoots[ i ];
+				if ( root == null )
+					continue;
+
+				CompleteGlowVolume volume = root.GetComponentInChildren<CompleteGlowVolume>( true );
+				if ( volume == null )
+					continue;
+
+				volume.CancelExposureFlash();
+				volume.CancelRevealFadeOut( false );
+			}
+		}
+
+		SetUnlockGlowRootsActive( false );
+	}
+
+	bool HasUnlockGlowRoots()
+	{
+		if ( unlockGlowRoots == null )
+			return false;
+
+		for ( int i = 0; i < unlockGlowRoots.Length; i++ )
+		{
+			if ( unlockGlowRoots[ i ] != null )
+				return true;
+		}
+
+		return false;
+	}
+
+	void SetUnlockGlowRootsActive( bool active )
+	{
+		if ( unlockGlowRoots == null )
+			return;
+
+		for ( int i = 0; i < unlockGlowRoots.Length; i++ )
+		{
+			GameObject root = unlockGlowRoots[ i ];
+			if ( root == null || root.activeSelf == active )
+				continue;
+			root.SetActive( active );
+		}
+	}
+
+#if UNITY_EDITOR
+	public void EditorAssignUnlockGlowRoots( GameObject[] roots )
+	{
+		unlockGlowRoots = roots;
+	}
+#endif
 
 	bool IsPermanentlyUnlocked()
 	{
@@ -302,6 +453,8 @@ public class DoorInteractable : InteractableBase
 		RefreshInteractionName();
 		StopLockedFeedback();
 		StopActiveTransitionFeedback();
+		if ( !string.IsNullOrEmpty( doorId ) )
+			EventBus.Publish( new DoorOpenedEvent { DoorId = doorId } );
 		PlayTransitionFeedback( onOpenFeedback, FinishOpenInstant );
 	}
 

@@ -78,7 +78,7 @@ public enum TutorialTaskCompleteType
 	DriveMinecartBrake = 27,
 	/// <summary>Hop out of a drive minecart.</summary>
 	ExitDriveMinecart = 28,
-	/// <summary>Selected pouch matches the tutorial's holdingCategory.</summary>
+	/// <summary>Selected pouch matches the task completeVolumeId category, or the tutorial holdingCategory when empty.</summary>
 	SelectHoldingCategory = 29,
 	/// <summary>Player is aiming at a coin sorting station (hopper, crank, body, or chute).</summary>
 	AimCoinSorter = 30,
@@ -105,7 +105,9 @@ public enum TutorialTaskCompleteType
 	/// <summary>Player picked up a filled coffee cup from the machine.</summary>
 	CoffeePickupCup = 41,
 	/// <summary>Player sipped a held coffee cup.</summary>
-	CoffeeSip = 42
+	CoffeeSip = 42,
+	/// <summary>Player cycled pouches via CyclePouch (not a direct category slot or auto-switch).</summary>
+	CyclePouch = 43
 }
 
 [Serializable]
@@ -120,7 +122,7 @@ public class TutorialTask
 
 	public TutorialTaskCompleteType completeTrigger;
 
-	[Tooltip( "When completeTrigger is EnterVolume: volume id. When PlaceMixedStorageOnTarget: mixed table persistence id. When CompleteBuildable: buildable persistence id (empty = any)." )]
+	[Tooltip( "When completeTrigger is EnterVolume: volume id. When PlaceMixedStorageOnTarget: mixed table persistence id. When CompleteBuildable: buildable persistence id (empty = any). When SelectHoldingCategory: TreasureCategory name (e.g. Gem, Coin); empty = tutorial holdingCategory." )]
 	public string completeVolumeId;
 
 	[Tooltip( "When > 1, this task needs this many matching actions. Label shows current/required (e.g. 3/10). 0 or 1 = complete on the first match." )]

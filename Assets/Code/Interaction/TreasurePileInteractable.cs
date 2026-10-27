@@ -748,6 +748,9 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 				duration = Mathf.Max( 0.05f, duration / Mathf.Max( 0.1f, placement.CoinFlipSpeed ) );
 		}
 
+		if ( !flipCoin )
+			duration = item.ScalePlacementDuration( duration );
+
 		Quaternion endRot = Quaternion.identity;
 		float elapsed = 0f;
 		while ( elapsed < duration )
@@ -770,6 +773,7 @@ public class TreasurePileInteractable : StackInteractable, ITreasurePlacementTar
 
 		t.position = targetPos;
 		t.rotation = endRot;
+		TreasureInteractSfx.PlayPlace( def, targetPos );
 
 		if ( GoldPileArtifactProps.IsLargeProp( def ) )
 		{

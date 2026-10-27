@@ -332,7 +332,7 @@ public class StaggeredClipSfxFeedback : Feedback, IFeedbackTick
 		{
 			CoinSortingStation station = ResolveStation();
 			float lo = def != null ? def.crankPitchMin : 0.85f;
-			float hi = def != null ? def.crankPitchMax : 1.25f;
+			float hi = def != null ? def.crankPitchMax : 1.45f;
 			float t = station != null ? station.ReserveNormalized : 0f;
 			float pitch = Mathf.Lerp( lo, hi, t );
 			float warning = def != null ? def.gaugeEmptyWarningNormalized : 0.15f;

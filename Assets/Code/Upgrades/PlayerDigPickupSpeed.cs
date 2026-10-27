@@ -5,14 +5,14 @@ using UnityEngine;
 /// </summary>
 public static class PlayerDigPickupSpeed
 {
-	public const float DefaultMultiplier = 1.5f;
+	public const float DefaultMultiplier = 1.1f;
 
 	public static bool IsActive()
 	{
 		return ResolveMultiplier() > 1.0001f;
 	}
 
-	/// <summary>1 when locked, disabled, or missing. Otherwise the catalog multiplier (typically 1.5).</summary>
+	/// <summary>1 when locked, disabled, or missing. Otherwise the catalog multiplier (typically 1.1).</summary>
 	public static float ResolveMultiplier()
 	{
 		UpgradeSystem system = UpgradeSystem.Instance;

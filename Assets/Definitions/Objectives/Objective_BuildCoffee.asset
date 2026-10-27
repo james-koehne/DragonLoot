@@ -21,6 +21,11 @@ MonoBehaviour:
   - obj_workshop_access
   prerequisiteWorldEventIds: []
   subs:
+  - id: enter_workshop
+    label: Enter the Workshop
+    completeType: 4
+    targetId: volume_workshop
+    requiredCount: 0
   - id: build_coffee
     label: Build the coffee machine
     completeType: 7

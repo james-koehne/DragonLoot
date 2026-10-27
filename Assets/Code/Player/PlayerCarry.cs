@@ -3,15 +3,15 @@ using System.Collections.Generic;
 
 using UnityEngine;
 
-/// <summary>Hand rig a treasure is carried in. Resource is materials; General covers keys/tools/coffee; Junk is separate.</summary>
+/// <summary>Hand rig a treasure is carried in. General covers keys/tools/coffee; Junk is separate; Resource is materials (hotkey 6).</summary>
 public enum CarryBucketKind
 {
 	Coin = 0,
 	Gem = 1,
 	Artifact = 2,
-	Resource = 3,
-	General = 4,
-	Junk = 5
+	General = 3,
+	Junk = 4,
+	Resource = 5
 }
 
 public class PlayerCarry : MonoBehaviour, ITreasureOwner
@@ -27,6 +27,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		public int ClusterId;
 		public bool IsClusterAnchor;
 		public bool PoseSettled;
+		/// <summary>When true, coin demote flights aim at held bottom even if the slot index shifts.</summary>
+		public bool PreferHeldBottomMerge;
 	}
 
 	/// <summary>One category rig: left-hand held stack plus the right-hand active item.</summary>
@@ -295,7 +297,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			if ( GetBucketCount( next ) <= 0 )
 				continue;
 
-			return TrySetSelectedBucket( next );
+			return TrySetSelectedBucket( next, PouchChangeReason.Cycled );
 		}
 
 		return false;
@@ -764,6 +766,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( demoted.Item != null && demoted.Token != newActive.Token )
 		{
 			demoted.PoseSettled = false;
+			// Bottom demote merges at stack base; top demote (scroll) keeps its slot pose.
+			demoted.PreferHeldBottomMerge = promoteFromHeldTop;
 			if ( demotedHeldIndex >= 0 && demotedHeldIndex < bucket.Held.Count )
 				bucket.Held[ demotedHeldIndex ] = demoted;
 
@@ -1214,8 +1218,9 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		if ( flightInProgress )
 		{
 			// Keep the live mesh + token so HoldTweenRoutine finishes its locked leg,
-			// then chains a follow-up flight into HoldRoot instead of cutting off.
+			// then chains a follow-up flight into HoldRoot bottom instead of cutting off.
 			active.PoseSettled = false;
+			active.PreferHeldBottomMerge = true;
 			InsertEntry( bucket, active, 0, allowActive: false );
 			return;
 		}
@@ -1228,6 +1233,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 		active.Item = null;
 		active.PoseSettled = true;
+		active.PreferHeldBottomMerge = true;
 		InsertEntry( bucket, active, 0, allowActive: false );
 	}
 
@@ -1770,6 +1776,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		}
 
 		active.PoseSettled = false;
+		active.PreferHeldBottomMerge = bucket.Kind == CarryBucketKind.Coin;
 		InsertEntry( bucket, active, 0, allowActive: false );
 
 		if ( active.Item == null )
@@ -2196,7 +2203,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	/// <summary>
 	/// True when Active has a bound mesh and is not mid hand-transfer / hold tween.
-	/// Place and throw wait for this so left→right refill completes first.
+	/// Place and throw wait for the full left→right transfer to finish.
 	/// </summary>
 	public bool IsActiveHoldReady
 	{
@@ -2264,8 +2271,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	/// <param name="snapToHand">
 	/// When true, abort any in-flight hold tween / pose ease and snap to the right-hand
-	/// Active pose before detaching. Refilling Active cannot be consumed — wait for
-	/// <see cref="IsActiveHoldReady"/> (place/throw peek already gates on that).
+	/// Active pose before detaching. Place/throw wait for <see cref="IsActiveHoldReady"/>
+	/// so the left→right transfer plays fully (just quickly).
 	/// </param>
 	public bool TryConsumeActive( out TreasureItem item, bool snapToHand )
 	{
@@ -2701,19 +2708,48 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			return;
 
 		CarryDefinition def = Definition;
-		float minDuration = def != null ? def.activeRefillTweenDuration : 0.22f;
+		float minDuration = def != null ? def.activeRefillTweenDuration : 0.04f;
 		Transform parent = GetItemParent( bucket, active );
-		Vector3 endLocal = GetLocalPose( bucket, active, heldIndex );
+		Vector3 endLocal = ResolveHandTransferEndLocal( bucket, active, heldIndex );
 		float duration = ResolveHandTransferDuration( item, parent, endLocal, minDuration );
 		StartHoldTween( item, token, duration );
+	}
+
+	Vector3 ResolveHandTransferEndLocal( CategoryBucket bucket, bool active, int heldIndex )
+	{
+		if ( active )
+			return GetLocalPose( bucket, active: true, heldIndex: -1 );
+
+		if ( bucket.Kind == CarryBucketKind.Coin && ShouldMergeCoinToHeldBottom( bucket, heldIndex ) )
+			return GetCoinHeldMergeLocalPose( bucket );
+
+		return GetLocalPose( bucket, active: false, heldIndex );
+	}
+
+	bool ShouldMergeCoinToHeldBottom( CategoryBucket bucket, int heldIndex )
+	{
+		if ( bucket == null || heldIndex < 0 || heldIndex >= bucket.Held.Count )
+			return heldIndex <= 0;
+
+		CarriedEntry entry = bucket.Held[ heldIndex ];
+		if ( entry.PreferHeldBottomMerge )
+			return true;
+
+		return heldIndex <= 0;
+	}
+
+	/// <summary>Visual merge target for coin demotes — always the left-hand stack base.</summary>
+	Vector3 GetCoinHeldMergeLocalPose( CategoryBucket bucket )
+	{
+		return GetLocalPose( bucket, active: false, heldIndex: 0 );
 	}
 
 	float ResolveHandTransferDuration( TreasureItem item, Transform parent, Vector3 endLocalPos, float minDuration )
 	{
 		CarryDefinition def = Definition;
-		minDuration = Mathf.Max( 0.05f, minDuration );
-		float speed = def != null ? def.handTransferSpeed : 1.35f;
-		float maxDuration = def != null ? def.handTransferMaxDuration : 0.85f;
+		minDuration = Mathf.Max( 0.02f, minDuration );
+		float speed = def != null ? def.handTransferSpeed : 8f;
+		float maxDuration = def != null ? def.handTransferMaxDuration : 0.12f;
 		maxDuration = Mathf.Max( minDuration, maxDuration );
 
 		if ( item == null || parent == null || speed < 0.05f )
@@ -2849,7 +2885,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		// Lock this leg's destination — role changes queue a follow-up leg after arrival.
 		Vector3 lockedEndLocalPos = crossPouch
 			? ( def != null ? def.crossPouchPickupOffset : new Vector3( 0f, -0.05f, 0.55f ) )
-			: GetLocalPose( bucket, isActive, heldIndex );
+			: ResolveHandTransferEndLocal( bucket, isActive, heldIndex );
 		Quaternion lockedEndLocalRot = crossPouch
 			? Quaternion.identity
 			: item.GetHeldLocalRotation( isActive );
@@ -2887,8 +2923,15 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		else
 		{
 			float configured = hasOverride ? durationOverride : ( def != null ? def.holdTweenDuration : 0.2f );
-			duration = Mathf.Max( 0.05f, configured );
+			// Hand-transfer overrides may be very short (place spam refill); pickups keep a 0.05 floor.
+			duration = Mathf.Max( hasOverride ? 0.02f : 0.05f, configured );
 			arcHeight = def != null ? def.itemArcHeight : CoinFlipMotion.DefaultItemArcHeight;
+
+			if ( playPickupFeedback && item != null && item.Definition != null )
+			{
+				float extent = TreasureDefinition.MaxExtentMeters( item.GetRendererWorldBounds() );
+				duration *= item.Definition.ResolveHandlingSizeMultiplier( extent );
+			}
 		}
 
 		if ( playPickupFeedback )
@@ -2949,7 +2992,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			yield break;
 		}
 
-		Vector3 desiredEndLocal = GetLocalPose( bucket, isActive, heldIndex );
+		Vector3 desiredEndLocal = ResolveHandTransferEndLocal( bucket, isActive, heldIndex );
 		bool parentMismatch = !crossPouch && desiredParent != lockedParent;
 		bool poseMismatch = !crossPouch
 			&& ( desiredEndLocal - lockedEndLocalPos ).sqrMagnitude > 0.0004f;
@@ -2958,7 +3001,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 		// Finish the locked path first; only then fly toward the new hand / slot.
 		if ( parentMismatch || poseMismatch || roleMismatch )
 		{
-			float minDuration = def != null ? def.activeRefillTweenDuration : 0.22f;
+			float minDuration = def != null ? def.activeRefillTweenDuration : 0.04f;
 			float nextDuration = ResolveHandTransferDuration( item, desiredParent, desiredEndLocal, minDuration );
 			StartHoldTween( item, token, nextDuration, playPickupFeedback: false );
 			yield break;
@@ -2978,10 +3021,12 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				CarriedEntry held = bucket.Held[ heldIndex ];
 				held.Item = null;
 				held.PoseSettled = true;
+				held.PreferHeldBottomMerge = false;
 				bucket.Held[ heldIndex ] = held;
 			}
 
 			RestackPoses();
+			RefreshHeldCoinCylinder();
 			yield break;
 		}
 
@@ -3120,7 +3165,7 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				&& !bucket.Active.PoseSettled
 				&& !_holdTweens.ContainsKey( bucket.Active.Token ) )
 			{
-				SmoothItemTowardPose( bucket, bucket.Active.Item, active: true, heldIndex: -1, Vector3.zero, t );
+				SmoothItemTowardPose( bucket, bucket.Active.Item, active: true, heldIndex: -1, GetLocalPose( bucket, active: true, heldIndex: -1 ), t );
 			}
 
 			// Single pass: accumulate stack height while easing each anchor (O(n)).
@@ -3136,6 +3181,8 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 				if ( !_holdTweens.ContainsKey( entry.Token ) && !entry.PoseSettled )
 				{
 					Vector3 targetPos = heldBase + GetHeldStackHorizontalOffset( bucket, i ) + new Vector3( 0f, y, 0f );
+					if ( entry.Definition != null )
+						targetPos += entry.Definition.GetHeldLocalOffset( active: false );
 					SmoothItemTowardPose( bucket, entry.Item, active: false, heldIndex: i, targetPos, t );
 				}
 
@@ -3220,9 +3267,12 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 
 	Vector3 GetLocalPose( CategoryBucket bucket, bool active, int heldIndex )
 	{
-		// Active sits at ActiveRoot origin (root is already screen-centered).
+		// Active sits at ActiveRoot origin (root is already screen-centered), plus per-treasure offset.
 		if ( active )
-			return Vector3.zero;
+		{
+			TreasureDefinition activeDef = bucket.HasActive ? bucket.Active.Definition : null;
+			return activeDef != null ? activeDef.GetHeldLocalOffset( active: true ) : Vector3.zero;
+		}
 
 		CarryDefinition def = Definition;
 		Vector3 heldBase = def != null ? def.heldStackOffset : Vector3.zero;
@@ -3236,7 +3286,11 @@ public class PlayerCarry : MonoBehaviour, ITreasureOwner
 			y += GetHeldStackStep( entry.Definition, def );
 		}
 
-		return heldBase + GetHeldStackHorizontalOffset( bucket, heldIndex ) + new Vector3( 0f, y, 0f );
+		Vector3 itemOffset = Vector3.zero;
+		if ( heldIndex >= 0 && heldIndex < bucket.Held.Count && bucket.Held[ heldIndex ].Definition != null )
+			itemOffset = bucket.Held[ heldIndex ].Definition.GetHeldLocalOffset( active: false );
+
+		return heldBase + GetHeldStackHorizontalOffset( bucket, heldIndex ) + new Vector3( 0f, y, 0f ) + itemOffset;
 	}
 
 	Vector3 GetHeldStackHorizontalOffset( CategoryBucket bucket, int heldIndex )

@@ -26,6 +26,15 @@ MonoBehaviour:
     completeType: 2
     targetId: workshop_entrance_pile
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
+  - id: place_door_gems
+    label: Place gems around the doorway
+    completeType: 3
+    targetId: workshop_entrance_constellation
+    requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   rewards: []
   rewardLabel: Workshop Access
   showReward: 1

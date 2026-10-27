@@ -1,8 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// While driving a minecart, dollies the GameCamera rig from first person to a cart-orbit chase cam
-/// and back on exit. Keeps the rig parented under CameraMount; owns world pose via CameraController.
+/// While driving a minecart, optionally dollies the GameCamera rig from first person to a cart-orbit chase cam
+/// and back. Default is first person; third person is driven by <see cref="MinecartDefinition.driveThirdPerson"/>
+/// (keybind toggle later). Keeps the rig parented under CameraMount; owns world pose via CameraController.
 /// Orbit yaw is stored relative to the cart so rail turns do not spin the framing.
 /// </summary>
 [DefaultExecutionOrder( 200 )]
@@ -37,13 +38,22 @@ public class MinecartOrbitCamera : MonoBehaviour
 	float _lastCartYaw;
 	bool _hasLastCartYaw;
 	int _collisionMask = -1;
+	bool _driving;
+	bool? _thirdPersonOverride;
 
 	/// <summary>Cart yaw jumps larger than this in one frame are treated as discontinuities (e.g. junction handoff).</summary>
 	const float CartYawDiscontinuityDegrees = 60f;
 
 	CameraDefinition Definition => RuntimeDefinition.Resolve( ref _definition );
 
+	/// <summary>True while the orbit rig is blending or fully in third person (not plain first-person drive).</summary>
 	public bool IsActive => _phase != Phase.Idle;
+
+	/// <summary>True while a drive session is active, regardless of first/third person.</summary>
+	public bool IsDriving => _driving;
+
+	/// <summary>Resolved third-person preference (override, else cart definition, default first person).</summary>
+	public bool WantsThirdPerson => ResolveWantThirdPerson();
 
 	float OrbitDistance => RuntimeDefinition.Get( Definition, d => d.minecartOrbitDistance, 4.5f );
 	float OrbitHeight => RuntimeDefinition.Get( Definition, d => d.minecartOrbitHeight, 1.6f );
@@ -79,8 +89,30 @@ public class MinecartOrbitCamera : MonoBehaviour
 		ForceRestoreImmediate();
 	}
 
+	/// <summary>Flip between first and third person while driving. Intended for a future keybind.</summary>
+	public void TogglePerspective()
+	{
+		SetThirdPerson( !ResolveWantThirdPerson() );
+	}
+
+	/// <summary>Force first/third person while driving. Pass null to clear override and follow the cart definition again.</summary>
+	public void SetThirdPerson( bool? thirdPerson )
+	{
+		_thirdPersonOverride = thirdPerson;
+		if ( _driving )
+			SyncPerspectiveToDesired();
+	}
+
+	public void SetThirdPerson( bool thirdPerson )
+	{
+		SetThirdPerson( (bool?)thirdPerson );
+	}
+
 	void Update()
 	{
+		if ( _driving )
+			SyncPerspectiveToDesired();
+
 		if ( _phase == Phase.Idle )
 			return;
 
@@ -115,6 +147,61 @@ public class MinecartOrbitCamera : MonoBehaviour
 		EnsureRefs();
 		_cart = evt.Cart;
 		_player = ResolvePlayer();
+		_driving = true;
+		_thirdPersonOverride = null;
+		_idleLookSeconds = 0f;
+		_hasLastCartYaw = false;
+
+		if ( ResolveWantThirdPerson() )
+			BeginOrbitEnter();
+		else
+			StayFirstPersonWhileDriving();
+	}
+
+	void OnDriveExited( MinecartDriveExitedEvent evt )
+	{
+		_driving = false;
+		_thirdPersonOverride = null;
+
+		if ( _phase == Phase.Idle )
+		{
+			_cart = null;
+			_hasLastCartYaw = false;
+			return;
+		}
+
+		if ( _phase == Phase.Exiting )
+			return;
+
+		_phase = Phase.Exiting;
+		_idleLookSeconds = 0f;
+	}
+
+	void SyncPerspectiveToDesired()
+	{
+		bool wantThird = ResolveWantThirdPerson();
+		bool inOrbit = _phase == Phase.Entering || _phase == Phase.Orbiting;
+		bool exiting = _phase == Phase.Exiting;
+
+		if ( wantThird && !inOrbit && !exiting )
+			BeginOrbitEnter();
+		else if ( wantThird && exiting )
+		{
+			// Cancel return-to-FP and climb back toward orbit.
+			_phase = Phase.Entering;
+			_enterSeedYawOffset = _yawOffsetFromCart;
+			_enterSeedPitch = _orbitPitch;
+			_idleLookSeconds = 0f;
+			EnsureLookLocked();
+			SetFillLightForOrbit( true );
+			SetCarryHidden( true );
+		}
+		else if ( !wantThird && inOrbit )
+			BeginOrbitExitWhileDriving();
+	}
+
+	void BeginOrbitEnter()
+	{
 		SeedOrbitFromFirstPerson();
 		_enterSeedYawOffset = _yawOffsetFromCart;
 		_enterSeedPitch = _orbitPitch;
@@ -127,16 +214,40 @@ public class MinecartOrbitCamera : MonoBehaviour
 		SetCarryHidden( true );
 	}
 
-	void OnDriveExited( MinecartDriveExitedEvent evt )
+	void BeginOrbitExitWhileDriving()
 	{
-		if ( _phase == Phase.Idle )
-			return;
-
-		if ( _phase == Phase.Exiting )
+		if ( _phase == Phase.Idle || _phase == Phase.Exiting )
 			return;
 
 		_phase = Phase.Exiting;
 		_idleLookSeconds = 0f;
+	}
+
+	void StayFirstPersonWhileDriving()
+	{
+		_phase = Phase.Idle;
+		_blend = 0f;
+		if ( _firstPerson != null )
+		{
+			_firstPerson.SetLookLocked( false );
+			_firstPerson.SetSoftFillLightForcedOff( false );
+		}
+
+		ApplyCrosshairAlpha( 1f );
+		SetCarryHidden( false );
+		if ( _rig != null )
+			_rig.ResetLocalPose();
+	}
+
+	bool ResolveWantThirdPerson()
+	{
+		if ( _thirdPersonOverride.HasValue )
+			return _thirdPersonOverride.Value;
+
+		if ( _cart != null && _cart.Definition != null )
+			return _cart.Definition.driveThirdPerson;
+
+		return false;
 	}
 
 	void TickBlend( float dt )
@@ -422,16 +533,25 @@ public class MinecartOrbitCamera : MonoBehaviour
 
 		ApplyCrosshairAlpha( 1f );
 		SetCarryHidden( false );
-		_cart = null;
 		_hasLastCartYaw = false;
 		_phase = Phase.Idle;
 		_blend = 0f;
+
+		if ( !_driving )
+			_cart = null;
 	}
 
 	void ForceRestoreImmediate()
 	{
+		_driving = false;
+		_thirdPersonOverride = null;
+
 		if ( _phase == Phase.Idle )
+		{
+			_cart = null;
+			_hasLastCartYaw = false;
 			return;
+		}
 
 		EnsureRefs();
 		if ( _rig != null )

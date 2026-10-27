@@ -1223,6 +1223,8 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 
 		float scale = speedScale > 0.0001f ? speedScale : 1f;
 		float duration = flipCoin ? Mathf.Max( snapDuration, CoinFlipMotion.DefaultDuration ) : Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
+		if ( !flipCoin )
+			duration = item.ScalePlacementDuration( duration );
 		duration = Mathf.Max( 0.04f, duration / scale );
 		float arcHeight = arcHeightOverride > 0f
 			? arcHeightOverride
@@ -2014,6 +2016,7 @@ public abstract class TypedDisplayTableInteractable : InteractableBase, ITreasur
 		if ( completeEffect == null )
 			return;
 
+		// Setup while inactive so OnEnable flash / ApplyAppearance already use the resolved tint.
 		if ( completed && TryResolveCompleteEffectColor( out Color color ) )
 			completeEffect.Setup( color );
 

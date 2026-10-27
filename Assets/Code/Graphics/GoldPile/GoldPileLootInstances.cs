@@ -1733,6 +1733,19 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			return 0;
 
 		int spawned = FlushEntirePileRemainingAsWorldLoot( localCenter );
+		// #region agent log
+		try
+		{
+			long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+			string line = "{\"sessionId\":\"82c704\",\"hypothesisId\":\"H5\",\"location\":\"GoldPileLootInstances.TryClearPileWhenCoinsBelowThreshold\",\"message\":\"pile_clear_spawn\",\"data\":{\"coinsBefore\":"
+				+ coins + ",\"spawned\":" + spawned + ",\"threshold\":" + _pileClearRemainingCoins
+				+ "},\"timestamp\":" + ts + "}\n";
+			System.IO.File.AppendAllText( @"c:\GameDevelopment\FunkGames\DragonLoot\DragonLoot\.cursor\debug-82c704.log", line );
+		}
+		catch
+		{
+		}
+		// #endregion
 		// Inventory was zeroed even if a spawn failed — ensure emptied sync runs.
 		if ( _owner != null )
 			_owner.NotifyInventoryChangedFromSpill();
@@ -2686,7 +2699,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 						CoinMinSurfaceHeightFraction,
 						slot.Scale * 0.5f,
 						out Vector3 placeLocal,
-						out float surface ) )
+						out float surface,
+						_pileRoot ) )
 					{
 						slot.LocalPos = placeLocal;
 						slot.PlaceSurfaceHeight = surface;
@@ -3293,6 +3307,7 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 		claim.SearchRadius = searchRadius;
 		claim.BridsonAttempts = bridsonAttempts;
 		claim.OccupancyEnabled = ResolveEnforceCoinOverlap() && _coinOccupancy != null;
+		claim.PileRoot = _pileRoot;
 		return claim;
 	}
 
@@ -6479,6 +6494,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			float radius = usable * Mathf.Sqrt( GoldPileTreasurePlacement.Hash01( _pileLootSeed, salt + 1 ) );
 			float lx = Mathf.Cos( angle ) * radius;
 			float lz = Mathf.Sin( angle ) * radius;
+			if ( TreasureSurfaceBlocker.BlocksLocalXZ( _pileRoot, lx, lz ) )
+				continue;
 			float minSurface = Mathf.Max( _heightfield.GetLootFloorLocal( lx, lz ), minSurfaceFromHeight );
 			if ( !GoldPileTreasurePlacement.IsCoinFootprintSupported(
 				_heightfield,
@@ -6620,7 +6637,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			CoinMinSurfaceHeightFraction,
 			slot.Scale * 0.5f,
 			out Vector3 pos,
-			out float surface ) )
+			out float surface,
+			_pileRoot ) )
 		{
 			if ( !TrySampleCoinFootprintFallback( slotIndex, slot.Scale * 0.5f, out pos, out surface ) )
 				return false;
@@ -7301,7 +7319,8 @@ public class GoldPileLootInstances : MonoBehaviour, TreasureSparkleMaskRegistrar
 			CoinMinSurfaceHeightFraction,
 			slot.Scale * 0.5f,
 			out Vector3 candidate,
-			out float surface ) )
+			out float surface,
+			_pileRoot ) )
 		{
 			if ( !TrySampleCoinFootprintFallback( slotIndex, slot.Scale * 0.5f, out candidate, out surface ) )
 				return;

@@ -182,6 +182,31 @@ public class CoinSortingStation : MonoBehaviour
 
 	public int RemainingCapacity => Mathf.Max( 0, HopperCapacity - BufferedCount - _pendingStoragePullCount );
 
+	public float HopperFillNormalized
+	{
+		get
+		{
+			int capacity = HopperCapacity;
+			if ( capacity <= 0 )
+				return 0f;
+			return Mathf.Clamp01( ( BufferedCount + _pendingStoragePullCount ) / (float)capacity );
+		}
+	}
+
+	public float OutputFillNormalized
+	{
+		get
+		{
+			if ( !TryGetOutputOccupancy( out int used, out int capacity ) )
+				return IsOutputBlocked ? 1f : 0f;
+			if ( capacity <= 0 )
+				return IsOutputBlocked ? 1f : 0f;
+			return Mathf.Clamp01( used / (float)capacity );
+		}
+	}
+
+	public float OutputRemainingNormalized => 1f - OutputFillNormalized;
+
 	public bool IsCrankActive => Time.time <= _crankActiveUntil;
 
 	public float ReserveSeconds => _reserveSeconds;
@@ -497,14 +522,13 @@ public class CoinSortingStation : MonoBehaviour
 		return def != null && def.AllowsCrankBoost( HasAutomatic );
 	}
 
-	/// <summary>True when the sorter cannot emit (output storage full / unavailable).</summary>
+	/// <summary>True when the sorter cannot emit (output storage / chute full or unavailable).</summary>
 	public bool IsOutputBlocked => !CanEmitToOutput();
 
 	bool CanEmitToOutput()
 	{
-		if ( outputStorage == null )
-			return true;
-		if ( !outputStorage.isActiveAndEnabled || !outputStorage.IsStationStorage )
+		if ( outputStorage != null
+			&& ( !outputStorage.isActiveAndEnabled || !outputStorage.IsStationStorage ) )
 			return false;
 
 		GroundCoinStack hopperStack = _hopperStack != null ? _hopperStack : EnsureHopperStack();
@@ -520,11 +544,101 @@ public class CoinSortingStation : MonoBehaviour
 	{
 		if ( definition == null )
 			return false;
-		if ( outputStorage == null )
-			return true;
-		if ( !outputStorage.isActiveAndEnabled )
+
+		if ( outputStorage != null )
+		{
+			if ( !outputStorage.isActiveAndEnabled )
+				return false;
+			return outputStorage.CanAcceptSortedCoin( definition );
+		}
+
+		Transform chute = FindChute( definition );
+		if ( chute == null )
 			return false;
-		return outputStorage.CanAcceptSortedCoin( definition );
+
+		return GetChuteLogicalCount( definition, chute ) < ResolveChuteMaxCoinsPerType();
+	}
+
+	int ResolveChuteMaxCoinsPerType()
+	{
+		CoinSortingStationDefinition def = ResolveDefinition();
+		return def != null ? Mathf.Max( 1, def.chuteMaxCoinsPerType ) : 100;
+	}
+
+	bool TryGetOutputOccupancy( out int used, out int capacity )
+	{
+		used = 0;
+		capacity = 0;
+
+		if ( outputStorage != null )
+		{
+			capacity = outputStorage.Capacity;
+			if ( capacity <= 0 )
+				return false;
+			used = outputStorage.ItemCount + _pendingOutputStorageCount;
+			return true;
+		}
+
+		if ( chutes == null || chutes.Count == 0 )
+			return false;
+
+		int maxPerType = ResolveChuteMaxCoinsPerType();
+		int bindingCount = 0;
+		for ( int i = 0; i < chutes.Count; i++ )
+		{
+			ChuteBinding binding = chutes[ i ];
+			if ( binding.coin == null || binding.chute == null )
+				continue;
+
+			bindingCount++;
+			TreasureDefinition key = ResolveOutputKey( binding.coin );
+			if ( key == null )
+				key = binding.coin;
+
+			CollectChuteOutputStacks( binding.chute, key, BindStackScratch );
+			for ( int s = 0; s < BindStackScratch.Count; s++ )
+			{
+				GroundCoinStack stack = BindStackScratch[ s ];
+				if ( stack != null )
+					used += stack.Count;
+			}
+
+			if ( key != null && _pendingOutputByType.TryGetValue( key, out int pending ) )
+				used += pending;
+		}
+
+		if ( bindingCount <= 0 )
+			return false;
+
+		capacity = bindingCount * maxPerType;
+		return true;
+	}
+
+	int GetChuteLogicalCount( TreasureDefinition definition, Transform chute )
+	{
+		TreasureDefinition key = ResolveOutputKey( definition );
+		if ( key == null )
+			key = definition;
+
+		int count = 0;
+		CollectChuteOutputStacks( chute, key, BindStackScratch );
+		for ( int i = 0; i < BindStackScratch.Count; i++ )
+		{
+			GroundCoinStack stack = BindStackScratch[ i ];
+			if ( stack != null )
+				count += stack.Count;
+		}
+
+		if ( key != null && _pendingOutputByType.TryGetValue( key, out int pending ) )
+			count += pending;
+		return count;
+	}
+
+	void ApplyChuteStackCapacity( GroundCoinStack stack )
+	{
+		if ( stack == null )
+			return;
+		stack.SetMaxCountOverride( ResolveChuteMaxCoinsPerType() );
 	}
 
 	public void BeginRepositioning()
@@ -580,6 +694,7 @@ public class CoinSortingStation : MonoBehaviour
 				GroundCoinStack stack = BindStackScratch[ s ];
 				if ( stack == null )
 					continue;
+				ApplyChuteStackCapacity( stack );
 				if ( preferred == null )
 					preferred = stack;
 				if ( !stack.IsFull )
@@ -2009,6 +2124,9 @@ public class CoinSortingStation : MonoBehaviour
 			return false;
 		}
 
+		if ( GetChuteLogicalCount( definition, chute ) >= ResolveChuteMaxCoinsPerType() )
+			return false;
+
 		GroundCoinStack stack = GetOrCreateOutputStack( definition, chute );
 		if ( stack == null )
 			return false;
@@ -2020,20 +2138,7 @@ public class CoinSortingStation : MonoBehaviour
 
 		int logicalCount = stack.Count + pending;
 		if ( stack.IsFull || logicalCount >= stack.MaxHeight )
-		{
-			BumpFullStackIndex( definition );
-			stack = GetOrCreateOutputStack( definition, chute );
-			if ( stack == null )
-				return false;
-
-			pending = 0;
-			key = ResolveOutputKey( definition );
-			if ( key != null && _pendingOutputByType.TryGetValue( key, out pendingStored ) )
-				pending = pendingStored;
-			logicalCount = stack.Count + pending;
-			if ( stack.IsFull || logicalCount >= stack.MaxHeight )
-				return false;
-		}
+			return false;
 
 		if ( key != null )
 			_pendingOutputByType[ key ] = pending + 1;
@@ -2251,10 +2356,16 @@ public class CoinSortingStation : MonoBehaviour
 			return null;
 
 		CollectChuteOutputStacks( chute, key, BindStackScratch );
+		bool hadExisting = false;
 		for ( int i = 0; i < BindStackScratch.Count; i++ )
 		{
 			GroundCoinStack existing = BindStackScratch[ i ];
-			if ( !IsUsableOutputStack( existing ) || existing.IsFull )
+			if ( !IsUsableOutputStack( existing ) )
+				continue;
+
+			hadExisting = true;
+			ApplyChuteStackCapacity( existing );
+			if ( existing.IsFull )
 				continue;
 
 			_activeOutputByType[ definition ] = existing;
@@ -2263,26 +2374,31 @@ public class CoinSortingStation : MonoBehaviour
 		}
 
 		if ( TryGetActiveOutput( key, definition, out GroundCoinStack active )
-			&& IsUsableOutputStack( active )
-			&& !active.IsFull )
+			&& IsUsableOutputStack( active ) )
 		{
-			return active;
+			hadExisting = true;
+			ApplyChuteStackCapacity( active );
+			if ( !active.IsFull )
+				return active;
 		}
 
-		int index = BindStackScratch.Count;
-		CoinSortingStationDefinition def = ResolveDefinition();
-		float lateral = def != null ? def.fullStackLateralOffset : 0.35f;
-		Vector3 pos = ResolveChuteStackContact( chute, lateral * index );
+		// One stack per coin type; never spawn a new stack when one already exists (even if full).
+		if ( hadExisting )
+			return null;
+
+		// One stack per coin type; do not spawn lateral spill stacks when full.
+		Vector3 pos = ResolveChuteStackContact( chute, 0f );
 		Quaternion rot = TreasureOrientation.FlattenUpright( chute.rotation );
 
 		GroundCoinStack created = GroundCoinStack.CreateAt( pos, rot );
 		created.ConfigureAsChuteOutput( key, this );
+		ApplyChuteStackCapacity( created );
 		created.transform.SetParent( chute, true );
 		created.name = "ChuteCoinStack_" + key.name;
 
 		_activeOutputByType[ definition ] = created;
 		_activeOutputByType[ key ] = created;
-		_fullStackIndexByType[ key ] = index;
+		_fullStackIndexByType[ key ] = 0;
 		return created;
 	}
 
@@ -2303,22 +2419,6 @@ public class CoinSortingStation : MonoBehaviour
 		if ( IsHopperStack( stack ) || stack.IsMachineBuffer )
 			return false;
 		return stack.IsChuteOutput;
-	}
-
-	void BumpFullStackIndex( TreasureDefinition definition )
-	{
-		TreasureDefinition key = ResolveOutputKey( definition );
-		if ( key == null )
-			key = definition;
-		if ( key == null )
-			return;
-
-		int index = 0;
-		if ( _fullStackIndexByType.TryGetValue( key, out int stored ) )
-			index = stored;
-		_fullStackIndexByType[ key ] = index + 1;
-		_activeOutputByType.Remove( definition );
-		_activeOutputByType.Remove( key );
 	}
 
 	static bool SameCoinType( TreasureDefinition a, TreasureDefinition b )

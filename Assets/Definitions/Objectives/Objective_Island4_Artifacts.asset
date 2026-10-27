@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Objective_Island4_Artifacts
   m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
   id: obj_island_4_artifacts
-  title: Display the Artifacts
+  title: Display Artifacts
   alwaysShow: 0
   showVolumeId: volume_island_4
   showRadius: 40
@@ -21,26 +21,41 @@ MonoBehaviour:
   - obj_island_3_constellation
   prerequisiteWorldEventIds: []
   subs:
+  - id: place_statue
+    label: Place statue
+    completeType: 1
+    targetId: island4_artifact_presentation
+    requiredCount: 1
+    displaySlotStart: 0
+    displaySlotCount: 1
   - id: present_artifacts
     label: Display artifacts
     completeType: 1
     targetId: island4_artifact_presentation
-    requiredCount: 0
+    requiredCount: 3
+    displaySlotStart: 1
+    displaySlotCount: 3
   - id: fill_display_copper
     label: Display copper coins
     completeType: 1
     targetId: island4_coin_display_copper
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   - id: fill_display_silver
     label: Display silver coins
     completeType: 1
     targetId: island4_coin_display_silver
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   - id: fill_display_gold
     label: Display gold coins
     completeType: 1
     targetId: island4_coin_display_gold
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   rewards: []
   rewardLabel: 
   showReward: 0

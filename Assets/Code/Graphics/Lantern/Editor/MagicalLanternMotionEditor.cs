@@ -12,7 +12,7 @@ public class MagicalLanternMotionEditor : Editor
 	{
 		EditorGUILayout.HelpBox(
 			"Drop this on the lantern that should float, not a static post. " +
-			"It glides on a heading with a capped turn rate, so every path is a curve — never a straight cut or reverse. " +
+			"It traces a figure-8 whose center and orientation are slowly Perlin-warped, so motion stays curvy and near the rest pose. " +
 			"Disable the component (or turn off Play In Edit Mode) before repositioning.",
 			MessageType.Info );
 

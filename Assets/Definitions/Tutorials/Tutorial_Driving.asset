@@ -22,6 +22,7 @@ MonoBehaviour:
   trigger: 20
   holdingCategory: 0
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -39,28 +40,26 @@ MonoBehaviour:
   - tut_movement
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Look at the side of a drive cart and interact to sit. Move forward to speed
-    up the way you're looking. Move back to brake, then reverse. Interact or jump
-    to hop out.
-  keybindHint: '[{ContextualInteract}] Sit  [WASD] Drive  [{ContextualInteract}] / [{Jump}]
-    Hop out'
+  body: Look at the side of a minecart and [{ContextualInteract}] to sit
+  keybindHint: '[{ContextualInteract}] Sit  [WASD] Drive  [{ContextualInteract}] / [{Jump}] Hop out'
   tasks:
   - id: sit_drive
-    label: Sit in a drive cart
-    keybindHint: '[{ContextualInteract}] look at the side'
+    label: Enter Minecart
+    keybindHint: '[{ContextualInteract}] from the side'
     completeTrigger: 23
     completeVolumeId: 
     requiredCount: 0
   - id: accelerate
     label: Speed up
-    keybindHint: '[WASD] forward'
+    keybindHint: '[W]'
     completeTrigger: 26
     completeVolumeId: 
     requiredCount: 0
   - id: brake_reverse
     label: Brake or reverse
-    keybindHint: '[WASD] back'
+    keybindHint: '[S]'
     completeTrigger: 27
     completeVolumeId: 
     requiredCount: 0

@@ -17,9 +17,11 @@ MonoBehaviour:
   tags:
   - coins
   - displays
+  disabled: 1
   trigger: 1
   holdingCategory: 0
   volumeId: volume_coin_hall
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -32,10 +34,12 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds:
   - tut_find_coin_hall
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
   body: Welcome to the Coin Hall. Add your coins to the platforms to sort the hoard.
   keybindHint: '[{SecondaryInteract}] Place on display'
@@ -45,3 +49,4 @@ MonoBehaviour:
     keybindHint: '[{SecondaryInteract}]'
     completeTrigger: 7
     completeVolumeId: 
+    requiredCount: 0

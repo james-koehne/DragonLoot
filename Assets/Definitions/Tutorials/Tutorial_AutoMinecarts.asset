@@ -34,7 +34,7 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
-  prerequisiteVolumeId: volume_workshop
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds:
   - tut_build_auto_minecarts
   highlightMapLabel: 

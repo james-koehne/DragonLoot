@@ -4,7 +4,9 @@ public enum PouchChangeReason
 {
 	Switched,
 	Reselected,
-	ContentsAdded
+	ContentsAdded,
+	/// <summary>Player cycled pouches via CyclePouch (not a direct category slot).</summary>
+	Cycled
 }
 
 public struct PouchChangedEvent

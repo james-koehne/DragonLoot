@@ -14,20 +14,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileCoinSeatBake
   authoredLayoutSeed: 122792
   effectivePileSeed: -152310106
-  heightFingerprint: -702869951
+  heightFingerprint: 391012403
   contentsFingerprint: -1108052608
   placementFingerprint: 244014156
   maxVisibleTotal: 32
   steadyVisibleBudget: 28
   sourceDefinitionName: TreasurePile_Island2_CopperSilver
   seats:
-  - definition: {fileID: 11400000, guid: 2d45890f133226b41ad167d0cecd5936, type: 2}
+  - definition: {fileID: 11400000, guid: 8ccf8c170d439a34c8b75a83758d5da0, type: 2}
     entryIndex: 0
-    localPos: {x: -2.144898, y: 0.23583151, z: -0.5645368}
-    localRot: {x: -0.31149027, y: 0.68240494, z: 0.21270485, w: 0.62614214}
+    localPos: {x: -2.144898, y: 0.78415513, z: -0.5645368}
+    localRot: {x: -0.2818614, y: 0.6942149, z: -0.115858786, w: 0.652071}
     scale: 0.2589553
-    embedDepth: 0.041432843
-    placeSurfaceHeight: 0.27726436
+    embedDepth: 0.041432858
+    placeSurfaceHeight: 0.825588
     probeRadius: 0.13120484
     fixedVolumePose: 0
     coinVisual: 1

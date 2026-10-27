@@ -13,12 +13,14 @@ public enum SideEyeSideMode
 /// Elder dragon gameplay hook: look at a target (explicit or auto player in range),
 /// swap to Idle_Looking via Animator bool <c>Looking</c>, and aim spine/neck/head in LateUpdate.
 /// Head locks onto the player; spine/neck contribute supporting rotations.
+/// Dialogue drives Animator bool <c>Talking</c> on a head-masked layer (Emote_Ground_Talk_Head).
 /// </summary>
 [DisallowMultipleComponent]
 public class DragonController : MonoBehaviour
 {
 	public const string LookingParam = "Looking";
 	public const string CastingParam = "Casting";
+	public const string TalkingParam = "Talking";
 	public const string IdleLookingState = "Idle_Looking";
 
 	const int SupportBoneCount = 5;
@@ -26,6 +28,7 @@ public class DragonController : MonoBehaviour
 
 	static readonly int LookingHash = Animator.StringToHash( LookingParam );
 	static readonly int CastingHash = Animator.StringToHash( CastingParam );
+	static readonly int TalkingHash = Animator.StringToHash( TalkingParam );
 	static readonly int IdleLookingHash = Animator.StringToHash( IdleLookingState );
 
 	[Header( "References" )]
@@ -113,22 +116,40 @@ public class DragonController : MonoBehaviour
 	bool _lookStartDelayArmed;
 	int _sideEyeSign = 1;
 	bool _lookPoseReady;
+	bool _sideEyeSuppressed;
+	bool _talking;
+	bool _hasTalkingParam;
 
 	public bool IsLooking => _looking;
 	public bool IsCasting => _casting;
+	public bool IsTalking => _talking;
 	public bool IsPlayerInLookTrigger => _activeLookTriggers.Count > 0;
 	public Transform HeadBone => _head;
 	public Transform FireBreathRoot => _fireBreathRoot != null ? _fireBreathRoot : _head;
 	public DragonFireBreathVFX FireBreath => _fireBreath;
 
-	public void SetLookTarget( Transform target )
+	public void SetLookTarget( Transform target, bool suppressSideEye = false )
 	{
 		_lookTargetOverride = target;
+		_sideEyeSuppressed = suppressSideEye && target != null;
 	}
 
 	public void ClearLookTarget()
 	{
 		_lookTargetOverride = null;
+		_sideEyeSuppressed = false;
+	}
+
+	public void SetTalking( bool talking )
+	{
+		if ( _talking == talking )
+			return;
+
+		_talking = talking;
+		ApplyTalkingParam( _talking );
+		// Talking should play at full animator speed even while look-aim damps idle.
+		if ( _talking )
+			RestoreAnimatorSpeed();
 	}
 
 	public void NotifyLookTriggerEnter( DragonLookTrigger trigger )
@@ -182,21 +203,42 @@ public class DragonController : MonoBehaviour
 		CalibrateHeadLookAxis();
 		CacheLookingParam();
 		CacheCastingParam();
+		CacheTalkingParam();
 		StoreBaseAnimatorSpeed();
+	}
+
+	void OnEnable()
+	{
+		EventBus.Subscribe<DragonDialogueChangedEvent>( OnDragonDialogueChanged );
 	}
 
 	void OnDisable()
 	{
+		EventBus.Unsubscribe<DragonDialogueChangedEvent>( OnDragonDialogueChanged );
+
 		if ( _casting )
 		{
 			_casting = false;
 			ApplyCastingParam( false );
 		}
+
+		if ( _talking )
+		{
+			_talking = false;
+			ApplyTalkingParam( false );
+		}
+
+		_sideEyeSuppressed = false;
 		_activeLookTriggers.Clear();
 		_lookStartDelayArmed = false;
 		_lookStartDelayRemaining = 0f;
 		_lookPoseReady = false;
 		RestoreAnimatorSpeed();
+	}
+
+	void OnDragonDialogueChanged( DragonDialogueChangedEvent evt )
+	{
+		SetTalking( evt.Visible );
 	}
 
 	void Update()
@@ -238,10 +280,10 @@ public class DragonController : MonoBehaviour
 		float targetWeight = aimActive ? 1f : 0f;
 		float blendSpeed = aimActive ? _lookBlendSpeedEnter : _lookBlendSpeedExit;
 		_lookWeight = Mathf.MoveTowards( _lookWeight, targetWeight, Mathf.Max( 0.01f, blendSpeed ) * Time.deltaTime );
-		if ( !_casting )
-			ApplyAnimatorSpeedDamp( _lookWeight );
-		else
+		if ( _casting || _talking )
 			RestoreAnimatorSpeed();
+		else
+			ApplyAnimatorSpeedDamp( _lookWeight );
 
 		if ( _lookWeight <= 0.0001f || _bones == null )
 		{
@@ -256,6 +298,13 @@ public class DragonController : MonoBehaviour
 		UpdateSmoothedAimPoint( _rawAimPoint );
 		// Spine/neck arc toward the player first; head locks on afterward.
 		ApplySupportLookArc( _lookWeight );
+		// Talk layer owns reduced head bob + jaw while dialogue plays.
+		if ( _talking )
+		{
+			_headRotationInitialized = false;
+			return;
+		}
+
 		ApplyHeadLook( _lookWeight, rateLimit: true );
 		ApplyHeadLook( _lookWeight, rateLimit: false );
 	}
@@ -271,8 +320,15 @@ public class DragonController : MonoBehaviour
 			_lookStartDelayArmed = false;
 			_lookStartDelayRemaining = 0f;
 			shouldLook = true;
-			UpdateSideEyeSign( _lookTargetOverride.position );
-			aimPoint = GetSideEyeAimPoint( _lookTargetOverride.position );
+			if ( _sideEyeSuppressed )
+			{
+				aimPoint = _lookTargetOverride.position;
+			}
+			else
+			{
+				UpdateSideEyeSign( _lookTargetOverride.position );
+				aimPoint = GetSideEyeAimPoint( _lookTargetOverride.position );
+			}
 			return;
 		}
 
@@ -440,6 +496,14 @@ public class DragonController : MonoBehaviour
 			return;
 
 		_animator.SetBool( CastingHash, casting );
+	}
+
+	void ApplyTalkingParam( bool talking )
+	{
+		if ( _animator == null || !_hasTalkingParam )
+			return;
+
+		_animator.SetBool( TalkingHash, talking );
 	}
 
 	void StoreBaseAnimatorSpeed()
@@ -829,6 +893,24 @@ public class DragonController : MonoBehaviour
 			if ( param.nameHash == CastingHash && param.type == AnimatorControllerParameterType.Bool )
 			{
 				_hasCastingParam = true;
+				return;
+			}
+		}
+	}
+
+	void CacheTalkingParam()
+	{
+		_hasTalkingParam = false;
+		if ( _animator == null )
+			return;
+
+		int count = _animator.parameterCount;
+		for ( int i = 0; i < count; i++ )
+		{
+			AnimatorControllerParameter param = _animator.GetParameter( i );
+			if ( param.nameHash == TalkingHash && param.type == AnimatorControllerParameterType.Bool )
+			{
+				_hasTalkingParam = true;
 				return;
 			}
 		}

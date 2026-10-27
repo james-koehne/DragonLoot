@@ -64,7 +64,7 @@ Material:
     - _DirtMetallicLoss: 0.85
     - _DirtSmoothnessLoss: 0.75
     - _DirtStrength: 0
-    - _FresnelIntensity: 0.25
+    - _FresnelIntensity: 0.025
     - _FresnelPower: 4
     - _MatCapIntensity: 0.45
     - _MatCapPower: 8

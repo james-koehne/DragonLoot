@@ -41,6 +41,7 @@ public class TutorialManager : MonoBehaviour
 	readonly List<TutorialDefinition> _openTutorials = new List<TutorialDefinition>( 8 );
 	readonly List<string> _minimizedTitleScratch = new List<string>( 8 );
 	readonly List<Transform> _outlineRootScratch = new List<Transform>( 8 );
+	readonly List<BuildableObject> _tutorialOutlineBuildables = new List<BuildableObject>( 8 );
 
 	TutorialCatalogDefinition _catalog;
 	TutorialPopupUI _popup;
@@ -1202,8 +1203,15 @@ public class TutorialManager : MonoBehaviour
 
 	void OnPouchChanged( PouchChangedEvent evt )
 	{
-		TreasureCategory selected = PlayerCarry.MapBucketToCategory( evt.Bucket );
-		TryCompleteSelectHoldingCategory( selected );
+		// Auto-switch / pickup ContentsAdded must not complete pouch-switch tutorial tasks.
+		if ( evt.Reason == PouchChangeReason.Switched || evt.Reason == PouchChangeReason.Cycled )
+		{
+			TreasureCategory selected = PlayerCarry.MapBucketToCategory( evt.Bucket );
+			TryCompleteSelectHoldingCategory( selected );
+			if ( evt.Reason == PouchChangeReason.Cycled )
+				TryCompleteTask( TutorialTaskCompleteType.CyclePouch );
+		}
+
 		NoteActivationForUnselectedHolding();
 		EvaluateContext( force: true );
 	}
@@ -2387,6 +2395,7 @@ public class TutorialManager : MonoBehaviour
 	void ApplyTutorialOutlineOverride( TutorialDefinition def )
 	{
 		_outlineRootScratch.Clear();
+		_tutorialOutlineBuildableScratch.Clear();
 		if ( def != null && def.outlineTargetIds != null )
 		{
 			for ( int i = 0; i < def.outlineTargetIds.Length; i++ )
@@ -2397,7 +2406,8 @@ public class TutorialManager : MonoBehaviour
 
 				// Prefer BuildableObject meshes (ghost/built) over empty QuestTarget markers.
 				Transform root = null;
-				if ( BuildableObject.TryFindByPersistenceId( id, out BuildableObject buildable ) && buildable != null )
+				BuildableObject buildable = null;
+				if ( BuildableObject.TryFindByPersistenceId( id, out buildable ) && buildable != null )
 					root = buildable.transform;
 				else if ( EventTargetRegistry.TryGetTarget( id, out QuestTarget target ) && target != null )
 					root = target.ResolveOutlineRoot();
@@ -2407,8 +2417,20 @@ public class TutorialManager : MonoBehaviour
 				if ( _outlineRootScratch.Contains( root ) )
 					continue;
 				_outlineRootScratch.Add( root );
+
+				if ( buildable == null )
+				{
+					buildable = root.GetComponent<BuildableObject>();
+					if ( buildable == null )
+						buildable = root.GetComponentInParent<BuildableObject>();
+				}
+
+				if ( buildable != null && !buildable.IsBuilt && !_tutorialOutlineBuildableScratch.Contains( buildable ) )
+					_tutorialOutlineBuildableScratch.Add( buildable );
 			}
 		}
+
+		SyncTutorialOutlineBuildables( _tutorialOutlineBuildableScratch );
 
 		if ( _outlineRootScratch.Count > 0 )
 			TutorialHud.SetTutorialOverrideOutlineRoots( _outlineRootScratch );
@@ -2416,8 +2438,39 @@ public class TutorialManager : MonoBehaviour
 			TutorialHud.ClearTutorialOverrideOutlineRoots();
 	}
 
+	readonly List<BuildableObject> _tutorialOutlineBuildableScratch = new List<BuildableObject>( 8 );
+
+	void SyncTutorialOutlineBuildables( List<BuildableObject> requested )
+	{
+		for ( int i = 0; i < _tutorialOutlineBuildables.Count; i++ )
+		{
+			BuildableObject previous = _tutorialOutlineBuildables[ i ];
+			if ( previous == null )
+				continue;
+			if ( requested != null && requested.Contains( previous ) )
+				continue;
+			previous.SetTutorialOutlineRequested( false );
+		}
+
+		_tutorialOutlineBuildables.Clear();
+		if ( requested == null )
+			return;
+
+		for ( int i = 0; i < requested.Count; i++ )
+		{
+			BuildableObject buildable = requested[ i ];
+			if ( buildable == null || buildable.IsBuilt )
+				continue;
+
+			buildable.SetTutorialOutlineRequested( true );
+			if ( !_tutorialOutlineBuildables.Contains( buildable ) )
+				_tutorialOutlineBuildables.Add( buildable );
+		}
+	}
+
 	void ClearTutorialOutlineOverride()
 	{
+		SyncTutorialOutlineBuildables( null );
 		TutorialHud.ClearTutorialOverrideOutlineRoots();
 	}
 
@@ -2622,7 +2675,12 @@ public class TutorialManager : MonoBehaviour
 
 			// Sticky post-build tutorials must be open/showing before any task progress counts —
 			// otherwise actions during/after the build can pre-complete them.
-			if ( ( def.trigger == TutorialTriggerType.ObjectiveCompleted || def.trigger == TutorialTriggerType.BuildableCompleted )
+			// Pouch select/cycle tasks also require the tutorial to be open so auto-switch
+			// before the card shows cannot skip them.
+			if ( ( def.trigger == TutorialTriggerType.ObjectiveCompleted
+			       || def.trigger == TutorialTriggerType.BuildableCompleted
+			       || completeType == TutorialTaskCompleteType.SelectHoldingCategory
+			       || completeType == TutorialTaskCompleteType.CyclePouch )
 				&& !IsTutorialOpen( def ) )
 				continue;
 
@@ -2690,8 +2748,15 @@ public class TutorialManager : MonoBehaviour
 
 			if ( completeType == TutorialTaskCompleteType.SelectHoldingCategory )
 			{
-				if ( !_hasPendingSelectHoldingCategory
-				     || !CategoriesMatchForHold( def.holdingCategory, _pendingSelectHoldingCategory ) )
+				if ( !_hasPendingSelectHoldingCategory )
+					continue;
+
+				TreasureCategory required = def.holdingCategory;
+				if ( !string.IsNullOrEmpty( task.completeVolumeId )
+				     && System.Enum.TryParse( task.completeVolumeId, true, out TreasureCategory parsed ) )
+					required = parsed;
+
+				if ( !CategoriesMatchForHold( required, _pendingSelectHoldingCategory ) )
 					continue;
 			}
 

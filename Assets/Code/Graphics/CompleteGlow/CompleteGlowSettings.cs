@@ -3,8 +3,13 @@ using UnityEngine;
 
 public enum CompleteGlowFootprintSource
 {
+	/// <summary>Source mesh local X × Z (table / floor footprint).</summary>
 	MeshBounds = 0,
-	Custom = 1
+	Custom = 1,
+	/// <summary>Source mesh local X × Y AABB (door / vertical face; growth still along volume local +Y).</summary>
+	MeshBoundsXY = 2,
+	/// <summary>Project source mesh verts into the glow footprint plane and extrude from that silhouette (convex hull).</summary>
+	SourceMesh = 3
 }
 
 public enum CompleteGlowAnchor
@@ -34,6 +39,10 @@ public class CompleteGlowSettings
 	public CompleteGlowAnchor Anchor = CompleteGlowAnchor.BoundsTop;
 	public float AnchorOffsetY;
 	public bool CompensateParentScale = true;
+	[Tooltip( "When true, rebuild keeps Authored Local Rotation instead of forcing identity (door / oriented glows)." )]
+	public bool PreserveAuthoredRotation;
+	[Tooltip( "Local rotation applied after rebuild when Preserve Authored Rotation is on." )]
+	public Vector3 AuthoredLocalEuler;
 
 	[Header( "Shape" )]
 	[Min( 0.01f )]
@@ -164,6 +173,8 @@ public class CompleteGlowSettings
 		Anchor = other.Anchor;
 		AnchorOffsetY = other.AnchorOffsetY;
 		CompensateParentScale = other.CompensateParentScale;
+		PreserveAuthoredRotation = other.PreserveAuthoredRotation;
+		AuthoredLocalEuler = other.AuthoredLocalEuler;
 		Height = other.Height;
 		FlareAngleDegrees = other.FlareAngleDegrees;
 		FlareCurve = other.FlareCurve != null ? new AnimationCurve( other.FlareCurve.keys ) : AnimationCurve.Linear( 0f, 0f, 1f, 1f );

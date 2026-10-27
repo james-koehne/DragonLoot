@@ -3,10 +3,10 @@ using FeedbackSystem;
 using UnityEngine;
 
 /// <summary>
-/// Plays pick/place SFX from <see cref="TreasureDefinition"/> clip lists via FeedbackSystem.
+/// Plays pick/place/throw SFX from <see cref="TreasureDefinition"/> clip lists via FeedbackSystem.
 /// Uses a dedicated host so visual interact feedbacks are not interrupted.
-/// Place SFX are 3D at the destination / landing point (e.g. coin stack top).
-/// Pickup stays 2D. Coins optionally layer an obtain ding with a rapid-collect pitch combo.
+/// Place and throw-land SFX are 3D at the destination / landing point.
+/// Pickup and throw release stay 2D. Coins optionally layer an obtain ding with a rapid-collect pitch combo.
 /// </summary>
 public static class TreasureInteractSfx
 {
@@ -66,6 +66,83 @@ public static class TreasureInteractSfx
 		bool advanceCombo )
 	{
 		Play( definition, pickup: true, position, physicalOnly: true, volumeScale, advanceCombo );
+	}
+
+	/// <summary>2D whoosh when the player throws this treasure into empty space.</summary>
+	public static void PlayThrow( TreasureDefinition definition, Vector3 position )
+	{
+		if ( definition == null )
+			return;
+
+		PlayClips(
+			definition.throwClips,
+			position,
+			definition.throwVolumeMin,
+			definition.throwVolumeMax,
+			definition.throwPitchMin,
+			definition.throwPitchMax,
+			spatialBlend: 0f );
+	}
+
+	/// <summary>
+	/// 3D impact when a thrown item lands. Prefers <see cref="TreasureDefinition.throwLandClips"/>,
+	/// then falls back to <see cref="TreasureDefinition.placeClips"/>.
+	/// </summary>
+	public static void PlayThrowLand( TreasureDefinition definition, Vector3 position )
+	{
+		if ( definition == null )
+			return;
+
+		AudioClip[] landClips = definition.throwLandClips;
+		if ( landClips != null && landClips.Length > 0 )
+		{
+			PlayClips(
+				landClips,
+				position,
+				definition.throwLandVolumeMin,
+				definition.throwLandVolumeMax,
+				definition.throwLandPitchMin,
+				definition.throwLandPitchMax,
+				spatialBlend: 1f );
+			return;
+		}
+
+		PlayPlace( definition, position );
+	}
+
+	static void PlayClips(
+		AudioClip[] clips,
+		Vector3 position,
+		float volumeMin,
+		float volumeMax,
+		float pitchMin,
+		float pitchMax,
+		float spatialBlend )
+	{
+		if ( clips == null || clips.Length == 0 )
+			return;
+
+		EnsureHost();
+		if ( _host == null || _sfx == null )
+			return;
+
+		_sfx.Clips = clips;
+		_sfx.Playback.VolumeMin = volumeMin;
+		_sfx.Playback.VolumeMax = volumeMax;
+		_sfx.Playback.PitchMin = pitchMin;
+		_sfx.Playback.PitchMax = pitchMax;
+		_sfx.Playback.SpatialBlend = spatialBlend;
+		if ( spatialBlend > 0.01f )
+		{
+			_sfx.Playback.MinDistance = PlaceMinDistance;
+			_sfx.Playback.MaxDistance = PlaceMaxDistance;
+		}
+
+		_host.transform.position = position;
+
+		FeedbackContext context = new FeedbackContext();
+		context.Position = position;
+		_host.Play( context );
 	}
 
 	static void Play(

@@ -72,6 +72,7 @@ public class BuildableObject : MonoBehaviour
 	bool _hasCachedWorldBounds;
 
 	bool _objectiveOutlineRequested;
+	bool _tutorialOutlineRequested;
 	bool _pileBlockedCached;
 	float _pileBlockedCheckedAt = -999f;
 
@@ -82,6 +83,9 @@ public class BuildableObject : MonoBehaviour
 	public bool IsCompleting => _completing;
 	public bool IsGhostVisible => _ghostVisible;
 	public bool ObjectiveOutlineRequested => _objectiveOutlineRequested;
+	public bool TutorialOutlineRequested => _tutorialOutlineRequested;
+	/// <summary>True when an objective or tutorial is forcing this ghost visible for outlining.</summary>
+	public bool OutlineVisibilityRequested => _objectiveOutlineRequested || _tutorialOutlineRequested;
 	public Transform BuiltRoot => _builtRoot;
 	public Transform GhostRoot => _ghostRoot;
 	public BuildableObject[] RequiredBuildables => _requiredBuildables;
@@ -95,12 +99,27 @@ public class BuildableObject : MonoBehaviour
 	{
 		_objectiveOutlineRequested = requested;
 		if ( _isBuilt || _completing )
-		{
 			_objectiveOutlineRequested = false;
-			return;
-		}
 
-		if ( !requested )
+		RefreshOutlineVisibilityRequest();
+	}
+
+	/// <summary>
+	/// Keeps the ghost visible for an active tutorial outline even outside build mode / fade distance.
+	/// Independent of objective outline requests so the two systems do not clear each other.
+	/// </summary>
+	public void SetTutorialOutlineRequested( bool requested )
+	{
+		_tutorialOutlineRequested = requested;
+		if ( _isBuilt || _completing )
+			_tutorialOutlineRequested = false;
+
+		RefreshOutlineVisibilityRequest();
+	}
+
+	void RefreshOutlineVisibilityRequest()
+	{
+		if ( !OutlineVisibilityRequested )
 			return;
 
 		SetGhostVisible( true );
@@ -538,7 +557,7 @@ public class BuildableObject : MonoBehaviour
 		if ( !_ghostVisible || _completing )
 			return;
 
-		if ( _objectiveOutlineRequested )
+		if ( OutlineVisibilityRequested )
 		{
 			EnsureObjectiveGhostLook();
 			return;
@@ -615,6 +634,8 @@ public class BuildableObject : MonoBehaviour
 
 		_isBuilt = true;
 		_completing = true;
+		_objectiveOutlineRequested = false;
+		_tutorialOutlineRequested = false;
 		_builtActivatedDuringReveal = false;
 		_completeT = 0f;
 		_completeGlow = 0f;

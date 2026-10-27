@@ -86,15 +86,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 0}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 1
-        PitchMax: 1
-        SpatialBlend: 1
-        MinDistance: 1
-        MaxDistance: 18
-        FollowCallerTransform: 1
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 1
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 1
+        _migratePitchMax: 1
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 18
+        _migrateFollowCallerTransform: 1
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &1260741759231390510
 GameObject:
   m_ObjectHideFlags: 0
@@ -305,15 +319,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: 1d44f605665d4ec40ae118edb68a00f2, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 1
-        PitchMax: 1
-        SpatialBlend: 1
-        MinDistance: 1
-        MaxDistance: 18
-        FollowCallerTransform: 1
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 1
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 1
+        _migratePitchMax: 1
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 18
+        _migrateFollowCallerTransform: 1
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &3007195000942298779
 GameObject:
   m_ObjectHideFlags: 0
@@ -400,15 +428,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 8300000, guid: baa6d8efc163ebe4e8ea878e97802890, type: 3}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 1
-        PitchMax: 1
-        SpatialBlend: 1
-        MinDistance: 1
-        MaxDistance: 18
-        FollowCallerTransform: 1
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 1
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 1
+        _migratePitchMax: 1
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 18
+        _migrateFollowCallerTransform: 1
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1 &4219776316957107399
 GameObject:
   m_ObjectHideFlags: 0
@@ -556,7 +598,7 @@ GameObject:
   - component: {fileID: 8060615244259416990}
   - component: {fileID: 6373390957276124219}
   - component: {fileID: 9193573103810224369}
-  - component: {fileID: 2152574796679944385}
+  - component: {fileID: 6615830225845202624}
   - component: {fileID: 6665900448093310695}
   m_Layer: 0
   m_Name: Cafe_Coffee_Machine_1
@@ -647,8 +689,8 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!64 &2152574796679944385
-MeshCollider:
+--- !u!65 &6615830225845202624
+BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -665,10 +707,9 @@ MeshCollider:
   m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 5
-  m_Convex: 1
-  m_CookingOptions: 30
-  m_Mesh: {fileID: 6760370294020652310, guid: 2145d774897be454984bb09e2e4c5a9f, type: 3}
+  serializedVersion: 3
+  m_Size: {x: 1.9, y: 0.83066314, z: 0.579817}
+  m_Center: {x: 0.09, y: 0.41533157, z: 0}
 --- !u!114 &6665900448093310695
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -827,15 +868,29 @@ MonoBehaviour:
       data:
         _enabled: 1
         Clip: {fileID: 0}
-        VolumeMin: 0.85
-        VolumeMax: 1
-        PitchMin: 1
-        PitchMax: 1
-        SpatialBlend: 1
-        MinDistance: 1
-        MaxDistance: 18
-        FollowCallerTransform: 1
-        AudioSource: {fileID: 0}
+        Playback:
+          VolumeMin: 0.85
+          VolumeMax: 1
+          PitchMin: 1
+          PitchMax: 1
+          SpatialBlend: 1
+          MinDistance: 1
+          MaxDistance: 18
+          DopplerLevel: 0
+          RolloffMode: 1
+          FollowCallerTransform: 1
+          OutputMixerGroup: {fileID: 0}
+          AudioSource: {fileID: 0}
+        _migrateVolumeMin: 0.85
+        _migrateVolumeMax: 1
+        _migratePitchMin: 1
+        _migratePitchMax: 1
+        _migrateSpatialBlend: 1
+        _migrateMinDistance: 1
+        _migrateMaxDistance: 18
+        _migrateFollowCallerTransform: 1
+        _migrateAudioSource: {fileID: 0}
+        _serializedPlaybackMerged: 1
 --- !u!1001 &1160751455903633058
 PrefabInstance:
   m_ObjectHideFlags: 0

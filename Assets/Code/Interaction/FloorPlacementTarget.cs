@@ -120,6 +120,9 @@ public sealed class FloorPlacementTarget : ITreasurePlacementTarget
 			duration = 0.05f;
 		}
 
+		if ( item != null && !flipCoin )
+			duration = item.ScalePlacementDuration( duration );
+
 		TreasureMotionHost.Run( CoinFlipFloorRoutine( cluster, ends, rots, duration, arcHeight, spins ) );
 		return true;
 	}

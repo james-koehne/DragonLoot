@@ -140,7 +140,7 @@ public class QuestObjectiveOutline : MonoBehaviour
 		ActiveRoots.Add( root );
 
 		BuildableObject buildable = root.GetComponentInParent<BuildableObject>();
-		if ( buildable != null && buildable.ObjectiveOutlineRequested && !buildable.IsBuilt )
+		if ( buildable != null && buildable.OutlineVisibilityRequested && !buildable.IsBuilt )
 		{
 			IReadOnlyList<Renderer> ghostRenderers = buildable.GetGhostOutlineRenderers();
 			for ( int i = 0; i < ghostRenderers.Count; i++ )

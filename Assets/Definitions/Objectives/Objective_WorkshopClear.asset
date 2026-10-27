@@ -18,7 +18,7 @@ MonoBehaviour:
   showVolumeId: volume_workshop
   showRadius: 40
   prerequisiteObjectiveIds:
-  - obj_workshop_access
+  - obj_build_coffee
   prerequisiteWorldEventIds: []
   subs:
   - id: clear_interior
@@ -26,11 +26,43 @@ MonoBehaviour:
     completeType: 2
     targetId: workshop_pile
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   - id: fill_displays
     label: Complete displays
     completeType: 1
     targetId: 
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
+  - id: build_coin_sorter
+    label: Build coin sorter
+    completeType: 7
+    targetId: coin_sorting_station
+    requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
+  - id: build_output_station
+    label: Build minecart station
+    completeType: 7
+    targetId: minecart_output_station
+    requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
+  - id: build_track
+    label: Build minecart track
+    completeType: 7
+    targetId: minecart_track
+    requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
+  - id: build_input_station
+    label: Build outside minecart station
+    completeType: 7
+    targetId: minecart_input_station
+    requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   rewards:
   - type: 1
     abilityId: 

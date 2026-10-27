@@ -1,10 +1,14 @@
 using System.Collections.Generic;
+using System.IO;
 
 using UnityEngine;
 
 public static class HoverOutlineTargetUtility
 {
 	static readonly List<Renderer> Buffer = new List<Renderer>( 8 );
+	// #region agent log
+	static float _agentOrphanLogAt;
+	// #endregion
 
 	/// <summary>
 	/// Focus eligible for hover outline without requiring pickup capacity (works while hands are full).
@@ -62,6 +66,10 @@ public static class HoverOutlineTargetUtility
 		if ( fairy != null )
 			return fairy.CanInteract( player );
 
+		CoffeeMachineInteractable coffee = interactable as CoffeeMachineInteractable;
+		if ( coffee != null )
+			return coffee.CanInteract( player );
+
 		return false;
 	}
 
@@ -102,7 +110,39 @@ public static class HoverOutlineTargetUtility
 		if ( item.State == TreasureItemState.Held
 			|| item.State == TreasureItemState.Stacked
 			|| item.IsReclaiming )
+		{
+			// #region agent log
+			if ( item.State == TreasureItemState.Stacked && Time.unscaledTime - _agentOrphanLogAt > 0.5f )
+			{
+				GroundCoinStack stackOwner = item.Owner as GroundCoinStack;
+				bool badOwner = stackOwner == null
+					|| !stackOwner.isActiveAndEnabled
+					|| stackOwner.IsReturningToPool
+					|| stackOwner.Count <= 0;
+				if ( badOwner )
+				{
+					_agentOrphanLogAt = Time.unscaledTime;
+					try
+					{
+						long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+						string line = "{\"sessionId\":\"82c704\",\"hypothesisId\":\"H3\",\"location\":\"HoverOutlineTargetUtility.CanOutlineTreasureItem\",\"message\":\"orphan_stacked_coin\",\"data\":{\"itemInFlight\":"
+							+ ( item.IsInFlight ? "true" : "false" )
+							+ ",\"worldLoose\":" + ( item.IsWorldLoose ? "true" : "false" )
+							+ ",\"ownerNull\":" + ( stackOwner == null ? "true" : "false" )
+							+ ",\"ownerActive\":" + ( stackOwner != null && stackOwner.isActiveAndEnabled ? "true" : "false" )
+							+ ",\"ownerReturning\":" + ( stackOwner != null && stackOwner.IsReturningToPool ? "true" : "false" )
+							+ ",\"ownerCount\":" + ( stackOwner != null ? stackOwner.Count : -1 )
+							+ "},\"timestamp\":" + ts + "}\n";
+						File.AppendAllText( @"c:\GameDevelopment\FunkGames\DragonLoot\DragonLoot\.cursor\debug-82c704.log", line );
+					}
+					catch
+					{
+					}
+				}
+			}
+			// #endregion
 			return false;
+		}
 
 		if ( item.State == TreasureItemState.InPile )
 			return false;
@@ -192,6 +232,10 @@ public static class HoverOutlineTargetUtility
 		FairyInteractable fairy = focus as FairyInteractable;
 		if ( fairy != null )
 			return CollectFromBehaviour( fairy );
+
+		CoffeeMachineInteractable coffee = focus as CoffeeMachineInteractable;
+		if ( coffee != null )
+			return CollectFromBehaviour( coffee );
 
 		return Buffer;
 	}

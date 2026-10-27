@@ -21,6 +21,7 @@ MonoBehaviour:
   trigger: 9
   holdingCategory: 0
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 1
@@ -37,17 +38,11 @@ MonoBehaviour:
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Hold on a stack to pick it all up. Aim next to a stack and hold to add your
-    whole stack to it.
+  body: Stacking helps organise coins.
   keybindHint: Hold [{ContextualInteract}] Pick up or add to stack
   tasks:
-  - id: aim_next_to_stack
-    label: Aim next to another stack on the ground
-    keybindHint: 'Hold [{ContextualInteract}]'
-    completeTrigger: 32
-    completeVolumeId: 
-    requiredCount: 0
   - id: whole_stack_place
     label: Hold E to place a stack
     keybindHint: 'Hold [{ContextualInteract}]'
@@ -58,5 +53,11 @@ MonoBehaviour:
     label: Hold E to pick up a stack
     keybindHint: 'Hold [{ContextualInteract}]'
     completeTrigger: 5
+    completeVolumeId: 
+    requiredCount: 0
+  - id: aim_next_to_stack
+    label: Aim next to another stack to combine stacks
+    keybindHint: 'Hold [{ContextualInteract}]'
+    completeTrigger: 32
     completeVolumeId: 
     requiredCount: 0

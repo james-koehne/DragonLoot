@@ -114,8 +114,14 @@ public class TreasureDefinition : ScriptableObject
 	[FormerlySerializedAs( "heldLocalEuler" )]
 	public Vector3 activeHeldLocalEuler = Vector3.zero;
 
+	[Tooltip( "Local position offset for the Active Item (screen-center held treasure)." )]
+	public Vector3 activeHeldLocalOffset = Vector3.zero;
+
 	[Tooltip( "Local euler degrees for items in the Held Stack (hand pile). Identity when zero." )]
 	public Vector3 heldStackLocalEuler = Vector3.zero;
+
+	[Tooltip( "Local position offset for items in the Held Stack (hand pile)." )]
+	public Vector3 heldStackLocalOffset = Vector3.zero;
 
 	[Header( "Cleaning" )]
 	[Tooltip( "Auto: Artifacts require cleaning. Required / NotRequired override the category default." )]
@@ -175,6 +181,36 @@ public class TreasureDefinition : ScriptableObject
 	[Range( -3f, 3f )]
 	public float placePitchMax = 1f;
 
+	[Tooltip( "Whoosh / release one-shots when this treasure is thrown into empty space. Soft drops skip this." )]
+	public AudioClip[] throwClips;
+
+	[Range( 0f, 1f )]
+	public float throwVolumeMin = 0.7f;
+
+	[Range( 0f, 1f )]
+	public float throwVolumeMax = 0.9f;
+
+	[Range( -3f, 3f )]
+	public float throwPitchMin = 0.95f;
+
+	[Range( -3f, 3f )]
+	public float throwPitchMax = 1.05f;
+
+	[Tooltip( "Impact one-shots when a thrown instance of this treasure lands. Empty falls back to placeClips." )]
+	public AudioClip[] throwLandClips;
+
+	[Range( 0f, 1f )]
+	public float throwLandVolumeMin = 0.85f;
+
+	[Range( 0f, 1f )]
+	public float throwLandVolumeMax = 1f;
+
+	[Range( -3f, 3f )]
+	public float throwLandPitchMin = 0.92f;
+
+	[Range( -3f, 3f )]
+	public float throwLandPitchMax = 1.08f;
+
 	/// <summary>
 	/// True when this treasure opens or bashes like a chest (has a <see cref="ChestDefinition"/>).
 	/// </summary>
@@ -228,6 +264,62 @@ public class TreasureDefinition : ScriptableObject
 		return Mathf.Max( 0f, globalDefault );
 	}
 
+	const float MinHandlingSizeMultiplier = 1f;
+	const float MaxHandlingSizeMultiplier = 3f;
+	const float SmallHandlingExtentMeters = 0.4f;
+	const float LargeHandlingExtentMeters = 1.2f;
+	const float LightHandlingMass = 0.15f;
+	const float HeavyHandlingMass = 50f;
+	const float MinPlantSquashScale = 0.12f;
+
+	/// <summary>
+	/// 1 = small props, 3 = huge pile-blocking statues.
+	/// Prefer <paramref name="worldExtentMeters"/> from live renderer AABB max extent when available.
+	/// </summary>
+	public float ResolveHandlingSizeMultiplier( float worldExtentMeters = -1f )
+	{
+		if ( collideWithPlayerOnPile && worldExtentMeters < 0.0001f )
+			return MaxHandlingSizeMultiplier;
+
+		float sizeT;
+		if ( worldExtentMeters > 0.0001f )
+		{
+			sizeT = Mathf.InverseLerp( SmallHandlingExtentMeters, LargeHandlingExtentMeters, worldExtentMeters );
+		}
+		else
+		{
+			float logMass = Mathf.Log10( Mathf.Max( 0.01f, rigidbodyMass ) );
+			sizeT = Mathf.InverseLerp( Mathf.Log10( LightHandlingMass ), Mathf.Log10( HeavyHandlingMass ), logMass );
+		}
+
+		return Mathf.Lerp( MinHandlingSizeMultiplier, MaxHandlingSizeMultiplier, Mathf.Clamp01( sizeT ) );
+	}
+
+	/// <summary>
+	/// Plant squash amplitude scale: 1 for small props, down to <see cref="MinPlantSquashScale"/> for huge items.
+	/// </summary>
+	public float ResolvePlantSquashScale( float worldExtentMeters = -1f )
+	{
+		float mul = ResolveHandlingSizeMultiplier( worldExtentMeters );
+		float sizeT = Mathf.InverseLerp( MinHandlingSizeMultiplier, MaxHandlingSizeMultiplier, mul );
+		return Mathf.Lerp( 1f, MinPlantSquashScale, Mathf.Clamp01( sizeT ) );
+	}
+
+	/// <summary>
+	/// Scales place-flight duration by handling size (up to 3x for huge props).
+	/// </summary>
+	public float ScalePlacementDuration( float duration, float worldExtentMeters = -1f )
+	{
+		return Mathf.Max( 0.05f, duration * ResolveHandlingSizeMultiplier( worldExtentMeters ) );
+	}
+
+	/// <summary>Max axis of a world AABB; used as live size input for handling feel.</summary>
+	public static float MaxExtentMeters( Bounds worldBounds )
+	{
+		Vector3 size = worldBounds.size;
+		return Mathf.Max( size.x, Mathf.Max( size.y, size.z ) );
+	}
+
 	public Vector2Int GetStorageGridSize()
 	{
 		return new Vector2Int( Mathf.Max( 1, storageGridSize.x ), Mathf.Max( 1, storageGridSize.y ) );
@@ -275,6 +367,11 @@ public class TreasureDefinition : ScriptableObject
 			return Quaternion.identity;
 
 		return Quaternion.Euler( euler );
+	}
+
+	public Vector3 GetHeldLocalOffset( bool active )
+	{
+		return active ? activeHeldLocalOffset : heldStackLocalOffset;
 	}
 
 	public Vector3 GetFallbackPlacedScale()

@@ -45,15 +45,15 @@ public class FairyInteractable : InteractableBase
 			return;
 
 		_nextTalkAllowedAt = Time.unscaledTime + talkCooldownSeconds;
-		helper.NotifyTalkStarted();
-		helper.PlayInteractFeedback();
+		CancelInvoke( nameof( EndTalk ) );
 
 		string line = helper.ResolveTalkLine();
-		if ( !string.IsNullOrEmpty( line ) )
-			helper.Say( line );
+		if ( string.IsNullOrEmpty( line ) )
+			line = "Need a hand?";
 
-		CancelInvoke( nameof( EndTalk ) );
-		Invoke( nameof( EndTalk ), 2.2f );
+		bool awaitingContinue = helper.BeginOptionalAttentionTalk( line, null );
+		if ( !awaitingContinue )
+			Invoke( nameof( EndTalk ), 2.2f );
 	}
 
 	public string ResolvePromptLabel()
@@ -63,7 +63,7 @@ public class FairyInteractable : InteractableBase
 
 	void EndTalk()
 	{
-		if ( helper != null )
+		if ( helper != null && !helper.IsAttentionTalkActive )
 			helper.NotifyTalkEnded();
 	}
 }

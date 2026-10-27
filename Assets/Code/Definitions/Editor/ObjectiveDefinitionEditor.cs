@@ -79,6 +79,8 @@ public class ObjectiveSubDefinitionDrawer : PropertyDrawer
 			height += line;
 		if ( ObjectiveProgress.HasCountProgress( type ) )
 			height += line;
+		if ( type == ObjectiveSubCompleteType.DisplayComplete )
+			height += line * 2f;
 
 		return height + 4f;
 	}
@@ -104,7 +106,12 @@ public class ObjectiveSubDefinitionDrawer : PropertyDrawer
 		if ( type != ObjectiveSubCompleteType.None )
 			row = DrawRelative( row, property, "targetId" );
 		if ( ObjectiveProgress.HasCountProgress( type ) )
-			DrawRelative( row, property, "requiredCount" );
+			row = DrawRelative( row, property, "requiredCount" );
+		if ( type == ObjectiveSubCompleteType.DisplayComplete )
+		{
+			row = DrawRelative( row, property, "displaySlotStart" );
+			DrawRelative( row, property, "displaySlotCount" );
+		}
 
 		EditorGUI.indentLevel--;
 		EditorGUI.EndProperty();

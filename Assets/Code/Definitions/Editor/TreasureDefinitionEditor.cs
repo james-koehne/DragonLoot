@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 
+[CanEditMultipleObjects]
 [CustomEditor( typeof( TreasureDefinition ) )]
 public class TreasureDefinitionEditor : Editor
 {
@@ -13,8 +14,20 @@ public class TreasureDefinitionEditor : Editor
 
 	public override void OnInspectorGUI()
 	{
-		DrawPrefabPreview();
-		EditorGUILayout.Space( 8f );
+		if ( targets.Length == 1 )
+		{
+			DrawPrefabPreview();
+			EditorGUILayout.Space( 8f );
+		}
+		else
+		{
+			DestroyPreviewEditor();
+			EditorGUILayout.HelpBox(
+				$"Editing {targets.Length} TreasureDefinitions. Shared fields below apply to all selected assets.",
+				MessageType.Info );
+			EditorGUILayout.Space( 4f );
+		}
+
 		DrawDefaultInspector();
 	}
 

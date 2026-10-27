@@ -85,6 +85,21 @@ public class TreasurePileVisualEditor : Editor
 		if ( visual.CoinSeatBake != null )
 			EditorGUILayout.LabelField( "Coin seats baked", visual.CoinSeatBake.SeatCount.ToString() );
 
+		if ( GUILayout.Button( "Reroll Loot Layout Seed + Bake" ) )
+		{
+			SerializedProperty seedProp = serializedObject.FindProperty( "lootLayoutSeed" );
+			if ( seedProp != null )
+			{
+				Undo.RecordObject( visual, "Reroll Loot Layout Seed" );
+				seedProp.intValue = seedProp.intValue + 1;
+				serializedObject.ApplyModifiedProperties();
+				EditorUtility.SetDirty( visual );
+			}
+
+			BakeLatentsForVisual( visual );
+			serializedObject.Update();
+		}
+
 		if ( GUILayout.Button( "Bake Latents For This Pile" ) )
 		{
 			BakeLatentsForVisual( visual );
@@ -229,14 +244,22 @@ public class TreasurePileVisualEditor : Editor
 			EditorGUILayout.LabelField( "Committed (stroke end)", "(none — sculpt once to write)" );
 		}
 
-		if ( def != null
-			&& ( def.FindCoinByVariant( "Gold" ) == null
-				|| def.FindCoinByVariant( "Silver" ) == null
-				|| def.FindCoinByVariant( "Copper" ) == null ) )
+		if ( def != null && !def.HasAnyMetalCoinContents() )
 		{
 			EditorGUILayout.HelpBox(
-				"Definition is missing Gold, Silver, or Copper in coinContents — add those type refs so runtime can seed metals.",
+				"Definition has no Gold/Silver/Copper in coinContents — add at least one coin type so runtime can seed inventory.",
 				MessageType.Warning );
+		}
+		else if ( def != null )
+		{
+			string metals = string.Empty;
+			if ( def.FindCoinByVariant( "Gold" ) != null )
+				metals += "Gold ";
+			if ( def.FindCoinByVariant( "Silver" ) != null )
+				metals += "Silver ";
+			if ( def.FindCoinByVariant( "Copper" ) != null )
+				metals += "Copper";
+			EditorGUILayout.LabelField( "Definition metals", metals.Trim() );
 		}
 	}
 
@@ -253,34 +276,32 @@ public class TreasurePileVisualEditor : Editor
 		LatentSceneBakeResult result = TryBakeLatentsForVisual( visual, saveAssets: true );
 		if ( !result.Ran )
 		{
-			EditorUtility.DisplayDialog( "Bake Latents", result.Error, "OK" );
+			Debug.LogError( $"Bake Latents: {result.Error}", visual );
 			return;
 		}
 
 		string coinLine = result.CoinBakeRan
-			? $"\nWrote {result.CoinSeatCount} coin seats to {result.CoinBakeName}."
-			: "\n(No coin contents — skipped coin seat bake.)";
+			? $" Wrote {result.CoinSeatCount} coin seats to {result.CoinBakeName}."
+			: " (No coin contents — skipped coin seat bake.)";
 
 		if ( !result.Complete )
 		{
-			string perType = string.IsNullOrEmpty( result.PerType ) ? "" : "\n" + result.PerType;
-			EditorUtility.DisplayDialog(
-				"Bake Latents",
-				$"Wrote {result.PoseCount} of {result.Expected} remainder poses to {result.BakeName} for pile '{result.PileName}' "
-				+ $"(+ {result.Authored} curated authored).\n"
+			string perType = string.IsNullOrEmpty( result.PerType ) ? "" : " " + result.PerType;
+			Debug.LogWarning(
+				$"Bake Latents: Wrote {result.PoseCount} of {result.Expected} remainder poses to {result.BakeName} "
+				+ $"for pile '{result.PileName}' (+ {result.Authored} curated authored). "
 				+ $"Missing {Mathf.Max( 0, result.Expected - result.Placed )} — all treasure needs to spawn.{perType}"
 				+ coinLine
-				+ "\nCheck Treasure surface paint under the sculpted footprint, neighborhood radius, and loot ground height.",
-				"OK" );
+				+ " Check Treasure surface paint under the sculpted footprint, neighborhood radius, and loot ground height.",
+				visual );
 			return;
 		}
 
-		EditorUtility.DisplayDialog(
-			"Bake Latents",
-			$"Wrote {result.PoseCount} remainder poses to {result.BakeName} for pile '{result.PileName}' "
+		Debug.Log(
+			$"Bake Latents: Wrote {result.PoseCount} remainder poses to {result.BakeName} for pile '{result.PileName}' "
 			+ $"(+ {result.Authored} curated authored)."
 			+ coinLine,
-			"OK" );
+			visual );
 	}
 
 	static void BakeLatentsForAllPilesInScene()
@@ -620,6 +641,8 @@ public class TreasurePileVisualEditor : Editor
 			if ( pose.definition == null )
 				continue;
 			if ( !GoldPileTreasurePlacement.HasTreasureSurfaceBelow( visual.transform, pose.localPos, neighborhood ) )
+				continue;
+			if ( TreasureSurfaceBlocker.BlocksLocalPoint( visual.transform, pose.localPos ) )
 				continue;
 
 			Vector3 worldPos = visual.transform.TransformPoint( pose.localPos );

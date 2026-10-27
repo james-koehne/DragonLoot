@@ -21,6 +21,7 @@ MonoBehaviour:
   trigger: 18
   holdingCategory: 0
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -38,13 +39,14 @@ MonoBehaviour:
   - tut_sprinting
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
   body: Look down a steep slope, then hold Sprint and move downhill to start sliding.
   keybindHint: Look down  Hold [{Sprint}] + move downhill
   tasks:
   - id: slide
     label: Slide
-    keybindHint: Look down  Hold [{Sprint}] + move downhill
+    keybindHint: Hold [{Sprint}] down slopes
     completeTrigger: 24
     completeVolumeId: 
     requiredCount: 0

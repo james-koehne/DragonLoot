@@ -12,7 +12,8 @@ public enum WorldEventConditionType
 	TutorialCompleted = 5,
 	WorldEventCompleted = 6,
 	ObjectiveCompleted = 7,
-	BuildableCompleted = 8
+	BuildableCompleted = 8,
+	DoorOpened = 9
 }
 
 public enum WorldEventActionType
@@ -54,7 +55,7 @@ public class WorldEventCondition
 {
 	public WorldEventConditionType type;
 
-	[Tooltip( "EventVolume id for EnterVolume, tutorial id for TutorialCompleted (e.g. tut_movement), world event id for WorldEventCompleted, objective id for ObjectiveCompleted, or BuildableObject persistence id for BuildableCompleted. Ignored by other types." )]
+	[Tooltip( "EventVolume id for EnterVolume, tutorial id for TutorialCompleted (e.g. tut_movement), world event id for WorldEventCompleted, objective id for ObjectiveCompleted, BuildableObject persistence id for BuildableCompleted, or DoorInteractable doorId for DoorOpened. Ignored by other types." )]
 	public string targetId;
 
 	[Tooltip( "Optional treasure filter for PickupTreasure. Null = any treasure." )]
@@ -168,6 +169,10 @@ public class WorldEventAction
 	[TextArea( 1, 4 )]
 	[Tooltip( "Optional fairy bubble line when type is StartFairyDelivery (offer) or StartFairyGuide (follow). Empty = prefab default." )]
 	public string fairySpeechLine;
+
+	[TextArea( 1, 4 )]
+	[Tooltip( "Optional fairy bubble line when type is StartFairyGuide and the fairy arrives at the destination. Empty = prefab default." )]
+	public string fairyArrivalSpeechLine;
 }
 
 /// <summary>

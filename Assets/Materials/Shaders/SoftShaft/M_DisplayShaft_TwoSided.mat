@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_DisplayShaft_TwoSided
+  m_Shader: {fileID: 4800000, guid: 804c83f1b22d4fb8858a91a9ec962ffa, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 1
+  m_CustomRenderQueue: 3000
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _Alpha: 0.59
+    - _CameraFadeEnd: 0
+    - _CameraFadeStart: 0
+    - _Cull: 0
+    - _DepthFade: 0
+    - _DepthFadeDistance: 0.25
+    - _DstBlend: 1
+    - _Exposure: 0.2
+    - _FogInfluence: 0.5
+    - _FresnelPower: 0.1
+    - _FresnelStrength: 0
+    - _HeightMax: 1.5
+    - _HeightMin: 0
+    - _HeightPower: 1.84
+    - _MeshMask: 0
+    - _NoiseScrollSpeed: 0.15
+    - _NoiseStreaks: 0
+    - _NoiseStrength: 0.35
+    - _NoiseTiling: 4
+    - _Pulse: 0
+    - _PulseAmount: 0.15
+    - _PulseSpeed: 0.4
+    - _RadialPower: 1.25
+    - _RadialRadius: 3.39
+    - _RadialSoftness: 1
+    - _SrcBlend: 1
+    m_Colors:
+    - _Color: {r: 0.0016601563, g: 0.0017578125, b: 0.001953125, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

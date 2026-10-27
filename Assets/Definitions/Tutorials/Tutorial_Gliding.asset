@@ -17,9 +17,11 @@ MonoBehaviour:
   tags:
   - movement
   - glide
+  disabled: 0
   trigger: 19
   holdingCategory: 0
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -32,16 +34,18 @@ MonoBehaviour:
   cinematicPresentationId: 
   showDelaySeconds: 0.75
   walkSecondsToShow: 5
+  prerequisiteVolumeId: 
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Try getting up high, then jump again in the air to start gliding. Press jump
-    while gliding to cancel, then again to re-enter.
-  keybindHint: 'Get high  [{Jump}] then [{Jump}] in air to glide'
+  body: Jump again in the air to start gliding. Press jump while gliding to cancel, then again to re-enter.
+  keybindHint: 
   tasks:
   - id: glide
     label: Glide
     keybindHint: '[{Jump}] then [{Jump}] in air'
     completeTrigger: 15
     completeVolumeId: 
+    requiredCount: 0

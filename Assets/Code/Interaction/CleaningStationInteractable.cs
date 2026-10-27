@@ -162,6 +162,7 @@ public class CleaningStationInteractable : InteractableBase, ITreasureOwner, ITr
 		}
 
 		BeginProcessing( removed, fromHand: true );
+		TreasureInteractSfx.PlayPlace( removed.Definition, removed.transform.position );
 		return true;
 	}
 

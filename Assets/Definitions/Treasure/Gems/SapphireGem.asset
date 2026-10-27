@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: SapphireGem
   category: 1
   variant: Sapphire
+  suppressDiscoveryPopup: 0
   value: 50
-  weight: 1
   exclusiveCarry: 0
   usesHeavyThrow: 0
   cannotThrow: 0
@@ -32,11 +32,13 @@ MonoBehaviour:
   maxUprightAngle: 35
   physicsStabilizationDelay: 0.35
   pickupRadius: 0.35
+  nonCoinPickupHoldDelayOverride: -1
   collideWithPlayerOnPile: 0
   keyType: 0
   isSkeletonKey: 0
   chestDefinition: {fileID: 0}
   icon: {fileID: 0}
+  uiColorHint: {r: 1, g: 1, b: 1, a: 1}
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
   prefab:
@@ -53,7 +55,7 @@ MonoBehaviour:
   canStack: 0
   usesInterleavedBarStack: 0
   coinThickness: 0.26
-  cartGridSize: {x: 1, y: 1}
+  storageGridSize: {x: 1, y: 1}
   pickupClips:
   - {fileID: 8300000, guid: 982ccf5a4b865f347b80f17fdf574a6e, type: 3}
   - {fileID: 8300000, guid: f6b8bba9c5e405e4dae9007d88163f3c, type: 3}
@@ -64,6 +66,9 @@ MonoBehaviour:
   pickupVolumeMax: 0.5
   pickupPitchMin: 0.95
   pickupPitchMax: 1.05
+  pickupRewardClips: []
+  pickupRewardVolumeMin: 0.45
+  pickupRewardVolumeMax: 0.6
   placeClips:
   - {fileID: 8300000, guid: 982ccf5a4b865f347b80f17fdf574a6e, type: 3}
   - {fileID: 8300000, guid: f6b8bba9c5e405e4dae9007d88163f3c, type: 3}
@@ -74,3 +79,15 @@ MonoBehaviour:
   placeVolumeMax: 0.5
   placePitchMin: 0.95
   placePitchMax: 1.05
+  throwClips:
+  - {fileID: 8300000, guid: 58b1fb46060a8df4c9c45ee1f66a6ac4, type: 3}
+  throwVolumeMin: 0.7
+  throwVolumeMax: 0.9
+  throwPitchMin: 0.95
+  throwPitchMax: 1.05
+  throwLandClips:
+  - {fileID: 8300000, guid: 643f5073cf7ed3c42a684a8d8ab2398b, type: 3}
+  throwLandVolumeMin: 0.85
+  throwLandVolumeMax: 1
+  throwLandPitchMin: 0.92
+  throwLandPitchMax: 1.08

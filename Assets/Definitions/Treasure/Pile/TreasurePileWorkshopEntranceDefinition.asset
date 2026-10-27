@@ -29,14 +29,6 @@ MonoBehaviour:
     count: 3
   - treasure: {fileID: 11400000, guid: d9f3247046fc48c4c842d7efc665c62d, type: 2}
     count: 3
-  - treasure: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
-    count: 2
-  - treasure: {fileID: 11400000, guid: 9d83555ba26b5f34c91ce87d8bed7657, type: 2}
-    count: 1
-  - treasure: {fileID: 11400000, guid: 2c15bfa856325ef41afef1fea6904e64, type: 2}
-    count: 2
-  - treasure: {fileID: 11400000, guid: b42e58a72036e8245a4a33f1fdeea89e, type: 2}
-    count: 1
   maxVisibleTotal: 32
   coinVisibleBufferFraction: 0.1
   cellSize: 0.125

@@ -280,16 +280,69 @@ public class TreasurePileDefinition : ScriptableObject
 	}
 
 	/// <summary>
+	/// Split <paramref name="totalCoins"/> equally among metals present in coinContents
+	/// (largest-remainder). Missing variants get 0 — copper-only / copper+silver piles stay correct.
+	/// </summary>
+	public void SplitAuthoredCoinsByPresentMetals( int totalCoins, out int gold, out int silver, out int copper )
+	{
+		bool hasGold = FindCoinByVariant( "Gold" ) != null;
+		bool hasSilver = FindCoinByVariant( "Silver" ) != null;
+		bool hasCopper = FindCoinByVariant( "Copper" ) != null;
+		SplitAmongPresentMetals( totalCoins, hasGold, hasSilver, hasCopper, out gold, out silver, out copper );
+	}
+
+	/// <summary>
 	/// Split <paramref name="totalCoins"/> into gold/silver/copper with largest-remainder (sums exactly).
+	/// Prefer <see cref="SplitAuthoredCoinsByPresentMetals"/> when a definition may omit metals.
 	/// </summary>
 	public static void SplitEqualMetalThirds( int totalCoins, out int gold, out int silver, out int copper )
 	{
+		SplitAmongPresentMetals( totalCoins, true, true, true, out gold, out silver, out copper );
+	}
+
+	public static void SplitAmongPresentMetals(
+		int totalCoins,
+		bool hasGold,
+		bool hasSilver,
+		bool hasCopper,
+		out int gold,
+		out int silver,
+		out int copper )
+	{
+		gold = 0;
+		silver = 0;
+		copper = 0;
 		totalCoins = Mathf.Max( 0, totalCoins );
-		int baseEach = totalCoins / 3;
-		int remainder = totalCoins - baseEach * 3;
-		gold = baseEach + ( remainder > 0 ? 1 : 0 );
-		silver = baseEach + ( remainder > 1 ? 1 : 0 );
-		copper = baseEach;
+		int metalCount = ( hasGold ? 1 : 0 ) + ( hasSilver ? 1 : 0 ) + ( hasCopper ? 1 : 0 );
+		if ( metalCount <= 0 || totalCoins <= 0 )
+			return;
+
+		int baseEach = totalCoins / metalCount;
+		int remainder = totalCoins - baseEach * metalCount;
+		if ( hasGold )
+		{
+			gold = baseEach + ( remainder > 0 ? 1 : 0 );
+			if ( remainder > 0 )
+				remainder--;
+		}
+
+		if ( hasSilver )
+		{
+			silver = baseEach + ( remainder > 0 ? 1 : 0 );
+			if ( remainder > 0 )
+				remainder--;
+		}
+
+		if ( hasCopper )
+			copper = baseEach + ( remainder > 0 ? 1 : 0 );
+	}
+
+	/// <summary>True when coinContents includes at least one Gold/Silver/Copper coin type.</summary>
+	public bool HasAnyMetalCoinContents()
+	{
+		return FindCoinByVariant( "Gold" ) != null
+			|| FindCoinByVariant( "Silver" ) != null
+			|| FindCoinByVariant( "Copper" ) != null;
 	}
 
 	/// <summary>First coinContents entry whose treasure variant matches (case-insensitive).</summary>

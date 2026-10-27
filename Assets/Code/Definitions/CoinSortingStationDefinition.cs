@@ -97,7 +97,7 @@ public class CoinSortingStationDefinition : ScriptableObject
 	public float crankPitchMin = 0.85f;
 
 	[Range( -3f, 3f )]
-	public float crankPitchMax = 1.25f;
+	public float crankPitchMax = 1.45f;
 
 	[Tooltip( "Minimum seconds between crank click one-shots (safety gap)." )]
 	[Min( 0.05f )]
@@ -153,7 +153,11 @@ public class CoinSortingStationDefinition : ScriptableObject
 	}
 
 	[Header( "Output" )]
-	[Tooltip( "World-space lateral step when starting a new stack beside a full chute stack." )]
+	[Tooltip( "Max coins per coin-type chute stack. When full, sorting that type stops until the stack is cleared." )]
+	[Min( 1 )]
+	public int chuteMaxCoinsPerType = 100;
+
+	[Tooltip( "World-space lateral step when starting a new stack beside a full chute stack (legacy; spill stacks disabled)." )]
 	[Min( 0.05f )]
 	public float fullStackLateralOffset = 0.35f;
 

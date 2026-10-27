@@ -6,6 +6,7 @@ using UnityEngine;
 /// Complete-display FX root: tints an EnvironmentLit mesh (emission) and a SoftShaft mesh (color).
 /// Place on the CompleteEffect object under a coin or artifact display.
 /// On show (play mode): flashes CompleteGlow exposure and plays reveal Feedbacks (burst + looping motes).
+/// Optional one-shot mode: quick alpha-in at peak glow, then slow fade-out (door unlock, etc.).
 /// </summary>
 [DisallowMultipleComponent]
 public class DisplayCompleteEffect : MonoBehaviour
@@ -33,35 +34,90 @@ public class DisplayCompleteEffect : MonoBehaviour
 	[ColorUsage( true, true )]
 	Color defaultColor = new Color( 1f, 0.72f, 0.28f, 1f );
 
+	[Tooltip( "Scales lit-mesh emission only. SoftShaft / CompleteGlow use the full Setup color." )]
+	[SerializeField]
+	[Min( 0f )]
+	float litEmissionMult = 1f;
+
+	[Header( "One-Shot Fade" )]
+	[Tooltip( "If true, alpha fades in quickly at peak glow, then fades out slowly and ends at 0. Coin displays leave this off so the glow stays." )]
+	[SerializeField]
+	bool fadeOutAfterShow;
+
+	[SerializeField]
+	[Min( 0.01f )]
+	float fadeInDuration = 0.1f;
+
+	[SerializeField]
+	[Min( 0.01f )]
+	float fadeOutDuration = 1.5f;
+
 	MaterialPropertyBlock _block;
+	Color _appliedColor;
+	bool _hasAppliedColor;
 
 	public MeshRenderer LitRenderer => litRenderer;
 	public MeshRenderer SoftShaftRenderer => softShaftRenderer;
 	public CompleteGlowVolume GlowVolume => glowVolume;
 	public Feedbacks RevealFeedbacks => revealFeedbacks;
 	public Color DefaultColor => defaultColor;
+	public bool FadeOutAfterShow => fadeOutAfterShow;
 
-	/// <summary>Applies <paramref name="color"/> to both mesh materials via MaterialPropertyBlock.</summary>
+	/// <summary>Applies <paramref name="color"/> to lit emission and CompleteGlow / SoftShaft tint.</summary>
 	public void Setup( Color color )
 	{
-		EnsureBlock();
-		ApplyEmission( litRenderer, color );
-		ApplyShaftColor( softShaftRenderer, color );
+		_appliedColor = color;
+		_hasAppliedColor = true;
+		ApplyColor( color );
 	}
+
+	public float ResolveShowDuration()
+	{
+		CompleteGlowVolume volume = ResolveGlowVolume();
+		if ( fadeOutAfterShow )
+		{
+			if ( volume != null )
+				return volume.ResolveRevealFadeTotalDuration( fadeInDuration, fadeOutDuration );
+			return Mathf.Max( 0.01f, fadeInDuration ) + Mathf.Max( 0.01f, fadeOutDuration );
+		}
+
+		if ( volume != null && volume.Settings != null )
+			return Mathf.Max( 0.05f, volume.Settings.FlashDuration ) + 0.15f;
+
+		return 0.75f;
+	}
+
+#if UNITY_EDITOR
+	public void EditorSetFadeOutAfterShow( bool enabled, float fadeIn = 0.1f, float fadeOut = 1.5f )
+	{
+		fadeOutAfterShow = enabled;
+		fadeInDuration = Mathf.Max( 0.01f, fadeIn );
+		fadeOutDuration = Mathf.Max( 0.01f, fadeOut );
+	}
+#endif
 
 	void Awake()
 	{
-		Setup( defaultColor );
+		if ( !_hasAppliedColor )
+			Setup( defaultColor );
 	}
 
 	void OnEnable()
 	{
+		if ( _hasAppliedColor )
+			ApplyColor( _appliedColor );
+
 		if ( !Application.isPlaying )
 			return;
 
 		CompleteGlowVolume volume = ResolveGlowVolume();
 		if ( volume != null )
-			volume.PlayExposureFlash();
+		{
+			if ( fadeOutAfterShow )
+				volume.PlayRevealFadeOut( fadeInDuration, fadeOutDuration );
+			else
+				volume.PlayExposureFlash();
+		}
 
 		if ( revealFeedbacks != null )
 			revealFeedbacks.Play();
@@ -77,12 +133,22 @@ public class DisplayCompleteEffect : MonoBehaviour
 
 		CompleteGlowVolume volume = ResolveGlowVolume();
 		if ( volume != null )
+		{
 			volume.CancelExposureFlash();
+			// Keep alpha at 0 — restoring resting appearance would flash full brightness on hide.
+			volume.CancelRevealFadeOut( false );
+		}
 	}
 
 	void OnValidate()
 	{
-		Setup( defaultColor );
+		litEmissionMult = Mathf.Max( 0f, litEmissionMult );
+		fadeInDuration = Mathf.Max( 0.01f, fadeInDuration );
+		fadeOutDuration = Mathf.Max( 0.01f, fadeOutDuration );
+		if ( _hasAppliedColor )
+			ApplyColor( _appliedColor );
+		else
+			ApplyColor( defaultColor );
 	}
 
 	CompleteGlowVolume ResolveGlowVolume()
@@ -100,6 +166,21 @@ public class DisplayCompleteEffect : MonoBehaviour
 	{
 		if ( _block == null )
 			_block = new MaterialPropertyBlock();
+	}
+
+	void ApplyColor( Color color )
+	{
+		EnsureBlock();
+
+		float litMult = Mathf.Max( 0f, litEmissionMult );
+		Color litColor = new Color( color.r * litMult, color.g * litMult, color.b * litMult, color.a );
+		ApplyEmission( litRenderer, litColor );
+
+		CompleteGlowVolume volume = ResolveGlowVolume();
+		if ( volume != null )
+			volume.SetColor( color );
+		else
+			ApplyShaftColor( softShaftRenderer, color );
 	}
 
 	void ApplyEmission( MeshRenderer renderer, Color color )

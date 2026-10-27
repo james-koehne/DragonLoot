@@ -12,13 +12,16 @@ using UnityEngine;
 [FeedbackInfo( "Treasure/Artifact Plant" )]
 public class ArtifactPlantFeedback : Feedback, IFeedbackTick
 {
+	static readonly Vector3 DefaultSquash = new Vector3( 0.22f, -0.32f, 0.22f );
+	static readonly Vector3 DefaultStretch = new Vector3( -0.06f, 0.12f, -0.06f );
+
 	public Transform Target;
 
 	[Tooltip( "Peak scale offset at impact (positive XZ / negative Y reads as a squat plant)." )]
-	public Vector3 Squash = new Vector3( 0.22f, -0.32f, 0.22f );
+	public Vector3 Squash = DefaultSquash;
 
 	[Tooltip( "Brief stretch overshoot after the squash before returning to base scale." )]
-	public Vector3 Stretch = new Vector3( -0.06f, 0.12f, -0.06f );
+	public Vector3 Stretch = DefaultStretch;
 
 	[Min( 0.05f )]
 	public float Duration = 0.28f;
@@ -39,6 +42,7 @@ public class ArtifactPlantFeedback : Feedback, IFeedbackTick
 
 	/// <summary>
 	/// Ensures a Feedbacks chain on the item and plays an Artifact Plant scale punch.
+	/// Large items use a reduced squash so statues do not over-compress on plant.
 	/// </summary>
 	public static void PlayOn( TreasureItem item )
 	{
@@ -49,11 +53,35 @@ public class ArtifactPlantFeedback : Feedback, IFeedbackTick
 		if ( feedbacks == null )
 			return;
 
+		float extent = -1f;
+		if ( item.Definition != null )
+			extent = TreasureDefinition.MaxExtentMeters( item.GetRendererWorldBounds() );
+		float squashScale = item.Definition != null
+			? item.Definition.ResolvePlantSquashScale( extent )
+			: 1f;
+		ApplySquashScale( feedbacks, squashScale );
+
 		FeedbackContext context = new FeedbackContext();
 		context.Source = item.gameObject;
 		context.Target = item.gameObject;
 		context.Position = item.transform.position;
 		feedbacks.Play( context );
+	}
+
+	static void ApplySquashScale( Feedbacks feedbacks, float squashScale )
+	{
+		if ( feedbacks == null || feedbacks.FeedbackList == null )
+			return;
+
+		for ( int i = 0; i < feedbacks.FeedbackList.Count; i++ )
+		{
+			ArtifactPlantFeedback plant = feedbacks.FeedbackList[ i ] as ArtifactPlantFeedback;
+			if ( plant == null )
+				continue;
+
+			plant.Squash = DefaultSquash * squashScale;
+			plant.Stretch = DefaultStretch * squashScale;
+		}
 	}
 
 	static Feedbacks EnsureFeedbacks( TreasureItem item )
@@ -69,7 +97,9 @@ public class ArtifactPlantFeedback : Feedback, IFeedbackTick
 
 		feedbacks.AddFeedback( new ArtifactPlantFeedback
 		{
-			Target = item.transform
+			Target = item.transform,
+			Squash = DefaultSquash,
+			Stretch = DefaultStretch
 		} );
 		return feedbacks;
 	}

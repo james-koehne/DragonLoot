@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bbf87695acde00b418d09e6f33dc495e, type: 3}
   m_Name: CoinPile_Island4_LatentBake
   m_EditorClassIdentifier: Assembly-CSharp::TreasurePileLatentBake
-  authoredLayoutSeed: 116686
-  effectivePileSeed: -337377207
-  heightFingerprint: 117676507
+  authoredLayoutSeed: 121401
+  effectivePileSeed: -1385487654
+  heightFingerprint: 1561008159
   contentsFingerprint: 629109949
   sourceDefinitionName: TreasurePile_Island4_Artifacts
   volumeMaxAttempts: 24
@@ -24,26 +24,26 @@ MonoBehaviour:
   authoredFingerprint: 0
   poses:
   - definition: {fileID: 11400000, guid: acd587c172bbea34f8051248ca703cc7, type: 2}
-    localPos: {x: -0.91247636, y: 0.9998657, z: 1.6213616}
-    localRot: {x: -0.21266529, y: 0.11690385, z: -0.06804043, w: 0.9677177}
+    localPos: {x: 0.3334729, y: 0.42128968, z: -0.42534333}
+    localRot: {x: -0.040764466, y: 0.8706523, z: -0.0073027983, w: -0.49015242}
     scale: 0.5
-    boundsCenter: {x: -0.91247636, y: 0.9998657, z: 1.6213616}
-    boundsSize: {x: 0.19130726, y: 0.20898901, z: 0.21195424}
+    boundsCenter: {x: 0.27486616, y: 1.1687171, z: -0.40490943}
+    boundsSize: {x: 0.9386656, y: 1.5647563, z: 0.86496454}
   - definition: {fileID: 11400000, guid: 3cdfe2e3a59549b48aa853eded989ac7, type: 2}
-    localPos: {x: 0.55086404, y: 0.8960613, z: 1.4578012}
-    localRot: {x: 0.0836907, y: 0.18440358, z: -0.21873412, w: 0.95453995}
+    localPos: {x: -1.576236, y: 1.1867914, z: -0.029336426}
+    localRot: {x: -0.19850692, y: 0.8742813, z: -0.1065049, w: -0.42998117}
     scale: 2
-    boundsCenter: {x: 0.55086404, y: 0.8960613, z: 1.4578012}
-    boundsSize: {x: 0.88507086, y: 0.85198426, z: 0.7992949}
+    boundsCenter: {x: -1.576236, y: 1.1867914, z: -0.029336426}
+    boundsSize: {x: 0.9248717, y: 0.84938157, z: 0.8118802}
   - definition: {fileID: 11400000, guid: 708909205ca41f6458d828ac46dd70d6, type: 2}
-    localPos: {x: -1.2123069, y: 1.2595341, z: -0.026487429}
-    localRot: {x: -0.14378214, y: 0.22190256, z: 0.1022182, w: 0.9589772}
+    localPos: {x: 2.8120096, y: 0.5056924, z: -0.82960206}
+    localRot: {x: 0.021263551, y: 0.70428634, z: -0.013892331, w: 0.70946157}
     scale: 2
-    boundsCenter: {x: -1.2123069, y: 1.2595341, z: -0.026487429}
-    boundsSize: {x: 0.8596749, y: 0.80145097, z: 0.8632271}
+    boundsCenter: {x: 2.8120096, y: 0.5056924, z: -0.82960206}
+    boundsSize: {x: 0.6673905, y: 0.6684754, z: 0.65203166}
   - definition: {fileID: 11400000, guid: 24a987b32945df74897fe318bdf5ec63, type: 2}
-    localPos: {x: 2.1199367, y: 0.5394899, z: 0.47453943}
-    localRot: {x: -0.14343168, y: 0.007192882, z: -0.19932629, w: 0.96935266}
+    localPos: {x: -0.0046672486, y: 0.5164198, z: 1.5641148}
+    localRot: {x: 0.091930285, y: 0.75320315, z: 0.029550588, w: 0.65066165}
     scale: 2
-    boundsCenter: {x: 2.1199367, y: 0.5394899, z: 0.47453943}
-    boundsSize: {x: 0.7953722, y: 0.86223817, z: 0.75817}
+    boundsCenter: {x: -0.0046672486, y: 0.5164198, z: 1.5641148}
+    boundsSize: {x: 0.7338, y: 0.7383625, z: 0.76116246}

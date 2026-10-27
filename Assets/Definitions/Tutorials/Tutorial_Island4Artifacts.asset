@@ -21,6 +21,7 @@ MonoBehaviour:
   trigger: 9
   holdingCategory: 5
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -40,11 +41,11 @@ MonoBehaviour:
   outlineTargetIds:
   - island4_artifact_presentation
   completeAllTasksOnVolumeEnter: 0
-  body: Aim at the presentation stand on this island to display the artifact.
+  body: Aim at the presentation stand on this island to display the statue.
   keybindHint: '[{Interact}] or [{SecondaryInteract}] Place'
   tasks:
   - id: place_artifact
-    label: Place an artifact on the display
+    label: Place statue
     keybindHint: '[{Interact}] or [{SecondaryInteract}]'
     completeTrigger: 8
     completeVolumeId: 

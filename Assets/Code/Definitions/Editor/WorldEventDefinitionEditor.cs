@@ -211,10 +211,11 @@ public class WorldEventActionDrawer : PropertyDrawer
 			case WorldEventActionType.StartFairyGuide:
 				height += line;
 				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "fairySpeechLine" ), true ) + 2f;
+				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "fairyArrivalSpeechLine" ), true ) + 2f;
 				height += EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
 			case WorldEventActionType.StartFairyDelivery:
-				height += line;
+				height += line * 4f;
 				height += EditorGUI.GetPropertyHeight( property.FindPropertyRelative( "fairySpeechLine" ), true ) + 2f;
 				height += EditorGUIUtility.singleLineHeight * 2f + 4f;
 				break;
@@ -324,21 +325,26 @@ public class WorldEventActionDrawer : PropertyDrawer
 			case WorldEventActionType.StartFairyGuide:
 				row = DrawRelative( row, property, "markerTargetId" );
 				row = DrawRelative( row, property, "fairySpeechLine", true );
+				row = DrawRelative( row, property, "fairyArrivalSpeechLine", true );
 				{
 					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
 					EditorGUI.HelpBox( help,
-						"Spawns a guide fairy near the player that leads to this marker/volume id (e.g. minecart_input_station). Optional fairySpeechLine overrides the prefab follow bubble.",
+						"Spawns a guide fairy near the player that leads to this marker/volume id (e.g. minecart_input_station). Optional fairySpeechLine / fairyArrivalSpeechLine override the prefab follow and arrival bubbles.",
 						MessageType.Info );
 					row.y += help.height + 2f;
 				}
 				break;
 			case WorldEventActionType.StartFairyDelivery:
 				row = DrawRelative( row, property, "addressableKey" );
+				row = DrawRelative( row, property, "spawnAtPlayer" );
+				row = DrawRelative( row, property, "spawnPointId" );
+				row = DrawRelative( row, property, "useWorldPosition" );
+				row = DrawRelative( row, property, "spawnWorldPosition" );
 				row = DrawRelative( row, property, "fairySpeechLine", true );
 				{
 					Rect help = new Rect( row.x, row.y, row.width, EditorGUIUtility.singleLineHeight * 2f );
 					EditorGUI.HelpBox( help,
-						"Spawns a fairy near the player with this Addressable takeable item underneath (e.g. Assets/Prefabs/Build/WorldHammer.prefab). Optional fairySpeechLine overrides the prefab offer bubble.",
+						"Spawns a delivery fairy with this Addressable takeable item. Empty spawn fields = player-relative. Optional fairySpeechLine overrides the prefab offer bubble.",
 						MessageType.Info );
 					row.y += help.height + 2f;
 				}

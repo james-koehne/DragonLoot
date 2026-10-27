@@ -21,6 +21,7 @@ MonoBehaviour:
   trigger: 22
   holdingCategory: 0
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -39,8 +40,7 @@ MonoBehaviour:
   mapMarkerId: 
   outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Press {BuildModeToggle} to enter build mode. Nearby structures appear as
-    ghosts. Aim at a ghost and hold {ContextualInteract} to build it.
+  body: Nearby buildable structures appear as ghosts.
   keybindHint: 
   tasks:
   - id: enter_build_mode

@@ -18,7 +18,6 @@ MonoBehaviour:
   variant: Bone
   suppressDiscoveryPopup: 0
   value: 0
-  weight: 1
   exclusiveCarry: 0
   usesHeavyThrow: 0
   cannotThrow: 0
@@ -56,7 +55,7 @@ MonoBehaviour:
   canStack: 0
   usesInterleavedBarStack: 0
   coinThickness: 0.6
-  cartGridSize: {x: 5, y: 1}
+  storageGridSize: {x: 5, y: 1}
   pickupClips:
   - {fileID: 8300000, guid: 3b74e986ac757be419261cf0f2a574f1, type: 3}
   - {fileID: 8300000, guid: 9750093213bce704695afa89263921cd, type: 3}
@@ -76,3 +75,17 @@ MonoBehaviour:
   placeVolumeMax: 0.5
   placePitchMin: 0.95
   placePitchMax: 1.05
+  throwClips:
+  - {fileID: 8300000, guid: 10697a1cf0a7c7c498d6348d2882cee4, type: 3}
+  throwVolumeMin: 0.7
+  throwVolumeMax: 0.9
+  throwPitchMin: 0.95
+  throwPitchMax: 1.05
+  throwLandClips:
+  - {fileID: 8300000, guid: 3b74e986ac757be419261cf0f2a574f1, type: 3}
+  - {fileID: 8300000, guid: 9750093213bce704695afa89263921cd, type: 3}
+  - {fileID: 8300000, guid: 10bcc3b38f47b2647ac03e81d5a14b45, type: 3}
+  throwLandVolumeMin: 0.85
+  throwLandVolumeMax: 1
+  throwLandPitchMin: 0.92
+  throwLandPitchMax: 1.08

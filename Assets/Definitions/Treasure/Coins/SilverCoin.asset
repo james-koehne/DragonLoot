@@ -18,7 +18,6 @@ MonoBehaviour:
   variant: Silver
   suppressDiscoveryPopup: 0
   value: 2
-  weight: 1
   exclusiveCarry: 0
   usesHeavyThrow: 0
   cannotThrow: 0
@@ -56,7 +55,7 @@ MonoBehaviour:
   canStack: 1
   usesInterleavedBarStack: 0
   coinThickness: 0.055
-  cartGridSize: {x: 1, y: 1}
+  storageGridSize: {x: 1, y: 1}
   pickupClips:
   - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}
   - {fileID: 8300000, guid: 449644be6cb6b8a43886fef376fec4e6, type: 3}
@@ -84,3 +83,25 @@ MonoBehaviour:
   placeVolumeMax: 0.8
   placePitchMin: 0.9
   placePitchMax: 1.1
+  throwClips:
+  - {fileID: 8300000, guid: 814a59306afa9fc43b61d75720d831d7, type: 3}
+  - {fileID: 8300000, guid: d8dbfa6d87e813a409ce9b6a04b1a37a, type: 3}
+  throwVolumeMin: 0.7
+  throwVolumeMax: 0.9
+  throwPitchMin: 0.95
+  throwPitchMax: 1.05
+  throwLandClips:
+  - {fileID: 8300000, guid: 0b8074d57f539a94484341c86bebb338, type: 3}
+  - {fileID: 8300000, guid: 449644be6cb6b8a43886fef376fec4e6, type: 3}
+  - {fileID: 8300000, guid: 28f2c21490ba0cc40843a1a97722c7ef, type: 3}
+  - {fileID: 8300000, guid: faa2798ac5e8c014fa5d4d6f87a8ed06, type: 3}
+  - {fileID: 8300000, guid: cb8c543b3a2d90844b9b1c746598bca9, type: 3}
+  - {fileID: 8300000, guid: 8864f521ef8c4064b87be3ddedb035cb, type: 3}
+  - {fileID: 8300000, guid: 3aaa4c9a5551771448d943bfde51b178, type: 3}
+  - {fileID: 8300000, guid: 0d205f7e56d7b914d9f4e55adc916957, type: 3}
+  - {fileID: 8300000, guid: 0e14a86851c6b7c498e2e14cd36c0b54, type: 3}
+  - {fileID: 8300000, guid: ed39b02063c6a124bac103dbddc777c5, type: 3}
+  throwLandVolumeMin: 0.85
+  throwLandVolumeMax: 1
+  throwLandPitchMin: 0.92
+  throwLandPitchMax: 1.08

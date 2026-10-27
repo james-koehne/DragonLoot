@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Simple on/off fill indicator for hopper-has-coins or output-full on the coin sorter.
+/// Continuous fill indicator for hopper fullness or output remaining room on the coin sorter.
 /// </summary>
 public class CoinSortingBooleanIndicator : MonoBehaviour
 {
@@ -91,21 +91,21 @@ public class CoinSortingBooleanIndicator : MonoBehaviour
 		if ( !show )
 			return;
 
-		bool active = ResolveActive();
-		ApplyFillHeight( active ? 1f : 0f );
-		ApplyColor( active );
+		float fill01 = ResolveFillNormalized();
+		ApplyFillHeight( fill01 );
+		ApplyColor( fill01 );
 	}
 
-	bool ResolveActive()
+	float ResolveFillNormalized()
 	{
 		switch ( mode )
 		{
 			case Mode.HopperHasCoins:
-				return station.BufferedCount > 0;
+				return station.HopperFillNormalized;
 			case Mode.OutputFull:
-				return station.IsOutputBlocked;
+				return station.OutputRemainingNormalized;
 			default:
-				return false;
+				return 0f;
 		}
 	}
 
@@ -123,7 +123,7 @@ public class CoinSortingBooleanIndicator : MonoBehaviour
 		fill.localPosition = pos;
 	}
 
-	void ApplyColor( bool active )
+	void ApplyColor( float fill01 )
 	{
 		if ( fillRenderer == null )
 			return;
@@ -131,12 +131,9 @@ public class CoinSortingBooleanIndicator : MonoBehaviour
 		CoinSortingStationDefinition def = station != null ? station.Definition : null;
 		Color empty = def != null ? def.gaugeEmptyColor : new Color( 0.92f, 0.12f, 0.1f, 1f );
 		Color full = def != null ? def.gaugeFullColor : new Color( 0.18f, 0.92f, 0.28f, 1f );
-		// Hopper: green when has coins. Output full: red when blocked, green when clear.
-		Color color;
-		if ( mode == Mode.OutputFull )
-			color = active ? empty : full;
-		else
-			color = active ? full : empty;
+		// Hopper: height = fullness (red empty → green full).
+		// Output: height = remaining room (green empty → red full).
+		Color color = Color.Lerp( empty, full, Mathf.Clamp01( fill01 ) );
 
 		if ( _block == null )
 			_block = new MaterialPropertyBlock();

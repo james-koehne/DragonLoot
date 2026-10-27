@@ -1,7 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Station control button: stop all automation, resume automation, or send docked cart to next loop station.
+/// Station control button: stop all automation, resume automation, or go/call (send docked cart / call cart).
+/// Blocked presses show a mid-screen hint via <see cref="PouchFullHintUI"/> (same as pouch-full).
 /// </summary>
 [RequireComponent( typeof( Collider ) )]
 public class MinecartStationAutomationButton : InteractableBase
@@ -24,9 +25,6 @@ public class MinecartStationAutomationButton : InteractableBase
 	const float ActiveEmissionIntensity = 1.25f;
 	const float HoverEmissionIntensity = 1.55f;
 	const float HoverBrightness = 1.18f;
-	const float PulseSpeed = 2.4f;
-	const float PulseMin = 0.85f;
-	const float PulseMax = 1.45f;
 
 	[SerializeField]
 	ButtonMode mode = ButtonMode.Stop;
@@ -38,13 +36,14 @@ public class MinecartStationAutomationButton : InteractableBase
 	MaterialPropertyBlock _block;
 	bool _hovered;
 	bool _lastAutomationEnabled = true;
-	bool _lastCanGo;
+	bool _lastActionReady;
+	string _lastPrompt;
 
 	public ButtonMode Mode => mode;
 
 	void Reset()
 	{
-		ApplyModeDefaults();
+		RefreshInteractionPrompt();
 	}
 
 	void Awake()
@@ -53,44 +52,62 @@ public class MinecartStationAutomationButton : InteractableBase
 			station = GetComponentInParent<MinecartStationBase>();
 
 		_renderer = GetComponent<Renderer>();
-		ApplyModeDefaults();
+		RefreshInteractionPrompt();
 		_lastAutomationEnabled = MinecartStationBase.AutomationEnabled;
-		_lastCanGo = CanGoNext();
+		_lastActionReady = IsActionReady();
+		_lastPrompt = InteractionName;
 		ApplyButtonVisual( false );
 	}
 
 	void OnValidate()
 	{
-		ApplyModeDefaults();
+		RefreshInteractionPrompt();
 	}
 
 	void Update()
 	{
+		RefreshInteractionPrompt();
+
 		bool hovered = IsHoveredByPlayer();
 		bool automationEnabled = MinecartStationBase.AutomationEnabled;
-		bool canGo = CanGoNext();
-		bool needsPulse = mode == ButtonMode.Resume && !automationEnabled;
+		bool actionReady = IsActionReady();
+		string prompt = InteractionName;
 
 		if ( hovered == _hovered
 		     && automationEnabled == _lastAutomationEnabled
-		     && canGo == _lastCanGo
-		     && !needsPulse )
+		     && actionReady == _lastActionReady
+		     && prompt == _lastPrompt )
 			return;
 
 		_hovered = hovered;
 		_lastAutomationEnabled = automationEnabled;
-		_lastCanGo = canGo;
+		_lastActionReady = actionReady;
+		_lastPrompt = prompt;
 		ApplyButtonVisual( _hovered );
 	}
 
-	void ApplyModeDefaults()
+	void RefreshInteractionPrompt()
 	{
 		if ( mode == ButtonMode.Stop )
+		{
 			SetInteractionName( "Stop Automation" );
-		else if ( mode == ButtonMode.Resume )
+			return;
+		}
+
+		if ( mode == ButtonMode.Resume )
+		{
 			SetInteractionName( "Resume Automation" );
-		else
+			return;
+		}
+
+		if ( station == null )
+		{
 			SetInteractionName( "Send to Next Station" );
+			return;
+		}
+
+		// Always show the intended action on hover; blocked reasons appear mid-screen on press.
+		SetInteractionName( station.IsCartDocked ? "Send to Next Station" : "Call Cart" );
 	}
 
 	bool IsHoveredByPlayer()
@@ -105,6 +122,17 @@ public class MinecartStationAutomationButton : InteractableBase
 		return interaction.Current == (IInteractable)this;
 	}
 
+	bool IsActionReady()
+	{
+		if ( mode == ButtonMode.Stop )
+			return MinecartStationBase.AutomationEnabled;
+		if ( mode == ButtonMode.Resume )
+			return !MinecartStationBase.AutomationEnabled;
+		if ( station == null )
+			return false;
+		return station.TryGetGoCallState( out _, out _ );
+	}
+
 	bool IsStatusActive()
 	{
 		bool automationEnabled = MinecartStationBase.AutomationEnabled;
@@ -112,21 +140,7 @@ public class MinecartStationAutomationButton : InteractableBase
 			return !automationEnabled;
 		if ( mode == ButtonMode.Resume )
 			return automationEnabled;
-		return CanGoNext();
-	}
-
-	bool CanGoNext()
-	{
-		return station != null && station.CanDispatchDockedToNextInLoop();
-	}
-
-	bool CanInteractForMode()
-	{
-		if ( mode == ButtonMode.Stop )
-			return MinecartStationBase.AutomationEnabled;
-		if ( mode == ButtonMode.Resume )
-			return !MinecartStationBase.AutomationEnabled;
-		return CanGoNext();
+		return IsActionReady();
 	}
 
 	void ApplyButtonVisual( bool hovered )
@@ -139,7 +153,7 @@ public class MinecartStationAutomationButton : InteractableBase
 		if ( _block == null )
 			_block = new MaterialPropertyBlock();
 
-		bool canInteract = CanInteractForMode();
+		bool actionReady = IsActionReady();
 		bool statusActive = IsStatusActive();
 
 		Color color = ResolveModeColor();
@@ -147,13 +161,8 @@ public class MinecartStationAutomationButton : InteractableBase
 
 		if ( hovered )
 		{
-			color = Color.Lerp( color, Color.white, canInteract ? 0.35f : 0.18f ) * HoverBrightness;
-			intensity = canInteract ? HoverEmissionIntensity : ActiveEmissionIntensity;
-		}
-		else if ( mode == ButtonMode.Resume && !MinecartStationBase.AutomationEnabled )
-		{
-			float pulse = Mathf.Lerp( PulseMin, PulseMax, 0.5f + 0.5f * Mathf.Sin( Time.time * PulseSpeed ) );
-			intensity = pulse;
+			color = Color.Lerp( color, Color.white, actionReady ? 0.35f : 0.18f ) * HoverBrightness;
+			intensity = actionReady ? HoverEmissionIntensity : ActiveEmissionIntensity;
 		}
 		else if ( statusActive )
 		{
@@ -186,10 +195,8 @@ public class MinecartStationAutomationButton : InteractableBase
 
 	public override bool CanInteract( PlayerController player )
 	{
-		if ( !IsAvailable || player == null || station == null )
-			return false;
-
-		return CanInteractForMode();
+		// Always allow press so blocked actions can show a mid-screen error hint.
+		return IsAvailable && player != null && station != null;
 	}
 
 	public override void Interact( PlayerController player )
@@ -201,23 +208,44 @@ public class MinecartStationAutomationButton : InteractableBase
 
 		if ( mode == ButtonMode.Stop )
 		{
+			if ( !MinecartStationBase.AutomationEnabled )
+			{
+				NotifyBlocked( "Automation already stopped" );
+				return;
+			}
+
 			MinecartStationBase.StopAllAutomation();
 			return;
 		}
 
 		if ( mode == ButtonMode.Resume )
 		{
+			if ( MinecartStationBase.AutomationEnabled )
+			{
+				NotifyBlocked( "Automation already running" );
+				return;
+			}
+
 			MinecartStationBase.ResumeAutomation();
 			return;
 		}
 
-		station.TryDispatchDockedToNextInLoop();
+		string failurePrompt;
+		if ( station.TryPerformGoCallAction( out failurePrompt ) )
+			return;
+
+		NotifyBlocked( string.IsNullOrEmpty( failurePrompt ) ? "Cannot use station control" : failurePrompt );
+	}
+
+	static void NotifyBlocked( string message )
+	{
+		PouchFullHintUI.Notify( message );
 	}
 
 	public void EditorSetMode( ButtonMode value )
 	{
 		mode = value;
-		ApplyModeDefaults();
+		RefreshInteractionPrompt();
 	}
 
 	public void EditorSetStation( MinecartStationBase value )

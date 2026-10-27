@@ -92,7 +92,7 @@ public class DebugToastsSection : DebugOverlaySection
 			return;
 		}
 
-		UnlockRewardToastUI.NotifyMessage( "Unlocked: Swift Hands", null, ToastStackUI.ToastTier.Unlock, "Dig and pick up treasure 1.5x faster." );
+		UnlockRewardToastUI.NotifyMessage( "Unlocked: Swift Hands", null, ToastStackUI.ToastTier.Unlock, "Dig and pick up treasure 1.1x faster." );
 	}
 
 	static UpgradeDefinition ResolveSwiftHandsUpgrade()

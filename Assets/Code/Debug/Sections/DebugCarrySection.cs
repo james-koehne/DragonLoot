@@ -32,7 +32,7 @@ public class DebugCarrySection : DebugOverlaySection
 		GUILayout.Label( $"Selected: {carry.SelectedBucket}  Total: {carry.TotalCount}" );
 		GUILayout.Label( $"Count: {carry.Count}  Held: {carry.HeldCount}" );
 		GUILayout.Label( $"Has Active: {carry.HasActive}" );
-		GUILayout.Label( $"Slots C/G/A/R/N/J: {FormatBucketSlots( carry, CarryBucketKind.Coin )}/{FormatBucketSlots( carry, CarryBucketKind.Gem )}/{FormatBucketSlots( carry, CarryBucketKind.Artifact )}/{FormatBucketSlots( carry, CarryBucketKind.Resource )}/{FormatBucketSlots( carry, CarryBucketKind.General )}/{FormatBucketSlots( carry, CarryBucketKind.Junk )}" );
+		GUILayout.Label( $"Slots C/G/A/N/J/R: {FormatBucketSlots( carry, CarryBucketKind.Coin )}/{FormatBucketSlots( carry, CarryBucketKind.Gem )}/{FormatBucketSlots( carry, CarryBucketKind.Artifact )}/{FormatBucketSlots( carry, CarryBucketKind.General )}/{FormatBucketSlots( carry, CarryBucketKind.Junk )}/{FormatBucketSlots( carry, CarryBucketKind.Resource )}" );
 
 		if ( carry.TryPeekActive( out TreasureDefinition def ) && def != null )
 			GUILayout.Label( $"Active: {def.name}" );
@@ -46,12 +46,12 @@ public class DebugCarrySection : DebugOverlaySection
 			carry.TrySetSelectedBucket( CarryBucketKind.Artifact );
 		GUILayout.EndHorizontal();
 		GUILayout.BeginHorizontal();
-		if ( GUILayout.Button( "Resources" ) )
-			carry.TrySetSelectedBucket( CarryBucketKind.Resource );
 		if ( GUILayout.Button( "General" ) )
 			carry.TrySetSelectedBucket( CarryBucketKind.General );
 		if ( GUILayout.Button( "Junk" ) )
 			carry.TrySetSelectedBucket( CarryBucketKind.Junk );
+		if ( GUILayout.Button( "Resources" ) )
+			carry.TrySetSelectedBucket( CarryBucketKind.Resource );
 		GUILayout.EndHorizontal();
 
 		GUILayout.BeginHorizontal();

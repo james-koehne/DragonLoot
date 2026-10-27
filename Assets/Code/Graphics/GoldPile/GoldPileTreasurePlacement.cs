@@ -50,6 +50,7 @@ public static class GoldPileTreasurePlacement
 		public float SearchRadius;
 		public int BridsonAttempts;
 		public bool OccupancyEnabled;
+		public Transform PileRoot;
 	}
 
 	struct VolumeCandidate
@@ -653,6 +654,8 @@ public static class GoldPileTreasurePlacement
 
 			if ( !HasTreasureSurfaceBelow( pileRoot, candidatePose.LocalPos, surfaceNeighborhood ) )
 				continue;
+			if ( TreasureSurfaceBlocker.BlocksLocalPoint( pileRoot, candidatePose.LocalPos ) )
+				continue;
 
 			Bounds candidateBounds = LocalAabbFromPose(
 				candidatePose.LocalPos,
@@ -690,6 +693,9 @@ public static class GoldPileTreasurePlacement
 			ClampMaxProtrusion( heightfield, ref candidatePose.LocalPos, ref candidateBounds );
 			if ( nearSurface )
 				LiftUntilTouchesOutside( heightfield, ref candidatePose.LocalPos, ref candidateBounds );
+
+			if ( TreasureSurfaceBlocker.OverlapsLocalBoundsXZ( pileRoot, candidateBounds ) )
+				continue;
 
 			float overlap = occupancyGrid != null
 				? occupancyGrid.OverlapScore( candidateBounds )
@@ -809,6 +815,8 @@ public static class GoldPileTreasurePlacement
 					continue;
 				if ( !HasTreasureSurfaceBelow( pileRoot, new Vector3( lx, 0f, lz ), surfaceNeighborhood ) )
 					continue;
+				if ( TreasureSurfaceBlocker.BlocksLocalXZ( pileRoot, lx, lz ) )
+					continue;
 
 				float lootGround = heightfield.GetLootFloorLocal( lx, lz );
 				float surface = heightfield.SampleNormalized( lx, lz ) * maxH;
@@ -848,6 +856,8 @@ public static class GoldPileTreasurePlacement
 				ClampMaxProtrusion( heightfield, ref candidate.LocalPos, ref bounds );
 				if ( nearSurface )
 					LiftUntilTouchesOutside( heightfield, ref candidate.LocalPos, ref bounds );
+				if ( TreasureSurfaceBlocker.OverlapsLocalBoundsXZ( pileRoot, bounds ) )
+					continue;
 
 				float score = Hash01( pileSeed, salt + 7 ) + surface / Mathf.Max( 0.01f, maxH );
 				if ( score >= bestScore )
@@ -1354,7 +1364,8 @@ public static class GoldPileTreasurePlacement
 		float coinSurfaceHeightFraction,
 		float coinRadius,
 		out Vector3 localPos,
-		out float surfaceHeight )
+		out float surfaceHeight,
+		Transform pileRoot = null )
 	{
 		localPos = nearLocal;
 		surfaceHeight = 0f;
@@ -1387,6 +1398,9 @@ public static class GoldPileTreasurePlacement
 				{
 					continue;
 				}
+
+				if ( TreasureSurfaceBlocker.BlocksLocalXZ( pileRoot, candidate.x, candidate.z ) )
+					continue;
 
 				if ( nearOnly )
 				{
@@ -1512,7 +1526,8 @@ public static class GoldPileTreasurePlacement
 				claim.PreferNear,
 				claim.SearchRadius,
 				out lx,
-				out lz ) )
+				out lz )
+				&& !TreasureSurfaceBlocker.BlocksLocalXZ( claim.PileRoot, lx, lz ) )
 			{
 				return true;
 			}
@@ -1756,6 +1771,8 @@ public static class GoldPileTreasurePlacement
 
 			if ( Mathf.Abs( px ) > halfX || Mathf.Abs( pz ) > halfZ )
 				continue;
+			if ( TreasureSurfaceBlocker.BlocksLocalXZ( claim.PileRoot, px, pz ) )
+				continue;
 			float minSurface = Mathf.Max( heightfield.GetLootFloorLocal( px, pz ), minSurfaceFromHeight );
 			if ( !CoinColumnAcceptsSeat( heightfield, px, pz, minSurface ) )
 				continue;
@@ -1801,6 +1818,8 @@ public static class GoldPileTreasurePlacement
 				continue;
 			}
 
+			if ( TreasureSurfaceBlocker.BlocksLocalXZ( claim.PileRoot, px, pz ) )
+				continue;
 			if ( occupancy.IsTooClose( px, pz ) )
 				continue;
 			if ( !occupancy.TryAdd( claim.OccupyId, px, pz ) )
@@ -2401,11 +2420,86 @@ public static class GoldPileTreasurePlacement
 
 	public static Bounds LocalAabbFromPose( Vector3 localPos, Quaternion localRot, float scale, Mesh mesh )
 	{
-		Bounds meshBounds = mesh != null ? mesh.bounds : new Bounds( Vector3.zero, Vector3.one * 0.2f );
+		return LocalAabbFromPose( localPos, localRot, scale, mesh, null );
+	}
+
+	/// <summary>
+	/// Local AABB for a latent pose. When <paramref name="mesh"/> is null, uses
+	/// <see cref="TreasureDefinition.meshOverride"/> or a tall Artifact stand-in — the old
+	/// 0.2m cube made statues fail expose (Statue_03 bake sizeY≈0.17 under a 1m+ surface).
+	/// </summary>
+	public static Bounds LocalAabbFromPose(
+		Vector3 localPos,
+		Quaternion localRot,
+		float scale,
+		Mesh mesh,
+		TreasureDefinition definition )
+	{
+		Bounds meshBounds = ResolveMeshBoundsForPose( mesh, definition );
 		Vector3 extents = meshBounds.extents * Mathf.Max( 0.01f, scale );
 		// Conservative axis-aligned box after rotation.
 		Vector3 e = AbsRotateExtents( localRot, extents );
 		return new Bounds( localPos + localRot * ( meshBounds.center * scale ), e * 2f );
+	}
+
+	/// <summary>
+	/// If <paramref name="baked"/> looks like the null-mesh 0.2m placeholder cube on a
+	/// large pile obstacle (collideWithPlayerOnPile), replace with a pose-aligned estimate.
+	/// Small artifacts (crowns/scrolls) keep bake AABBs — a tall stand-in would false-trigger release.
+	/// </summary>
+	public static Bounds RepairUndersizedLatentBounds(
+		TreasureDefinition definition,
+		Vector3 localPos,
+		Quaternion localRot,
+		float scale,
+		Bounds baked )
+	{
+		if ( definition == null || !definition.collideWithPlayerOnPile )
+			return baked;
+
+		if ( baked.size.sqrMagnitude < 1e-8f )
+		{
+			return LocalAabbFromPose(
+				localPos,
+				localRot,
+				scale,
+				definition.meshOverride,
+				definition );
+		}
+
+		// LocalAabbFromPose(null) uses a 0.2m cube × scale. Probe expand can nudge it a bit.
+		float placeholderAxis = 0.2f * Mathf.Max( 0.01f, scale );
+		const float PlaceholderSlack = 2.25f;
+		float limit = placeholderAxis * PlaceholderSlack;
+		bool looksLikePlaceholder =
+			baked.size.x <= limit
+			&& baked.size.y <= limit
+			&& baked.size.z <= limit;
+		if ( !looksLikePlaceholder )
+			return baked;
+
+		return LocalAabbFromPose(
+			localPos,
+			localRot,
+			scale,
+			definition.meshOverride,
+			definition );
+	}
+
+	static Bounds ResolveMeshBoundsForPose( Mesh mesh, TreasureDefinition definition )
+	{
+		if ( mesh != null && mesh.bounds.size.sqrMagnitude > 1e-6f )
+			return mesh.bounds;
+
+		if ( definition != null && definition.meshOverride != null
+			&& definition.meshOverride.bounds.size.sqrMagnitude > 1e-6f )
+			return definition.meshOverride.bounds;
+
+		// Large pile obstacles (statues) are often multi-meter unscaled; others stay compact.
+		if ( definition != null && definition.collideWithPlayerOnPile )
+			return new Bounds( new Vector3( 0f, 1.5f, 0f ), new Vector3( 1.2f, 3f, 1.2f ) );
+
+		return new Bounds( Vector3.zero, Vector3.one * 0.2f );
 	}
 
 	/// <summary>

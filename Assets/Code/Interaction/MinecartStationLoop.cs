@@ -7,10 +7,25 @@ using UnityEngine;
 /// </summary>
 public class MinecartStationLoop : MonoBehaviour
 {
+	static readonly List<MinecartStationLoop> All = new List<MinecartStationLoop>( 4 );
+
 	[SerializeField]
 	List<MinecartStationBase> stations = new List<MinecartStationBase>();
 
 	public IReadOnlyList<MinecartStationBase> Stations => stations;
+
+	public static IReadOnlyList<MinecartStationLoop> ActiveLoops => All;
+
+	void OnEnable()
+	{
+		if ( !All.Contains( this ) )
+			All.Add( this );
+	}
+
+	void OnDisable()
+	{
+		All.Remove( this );
+	}
 
 	public bool TryGetNext( MinecartStationBase current, out MinecartStationBase next )
 	{
@@ -56,5 +71,21 @@ public class MinecartStationLoop : MonoBehaviour
 		}
 
 		return false;
+	}
+
+	/// <summary>First active loop that lists <paramref name="station"/>.</summary>
+	public static MinecartStationLoop FindContaining( MinecartStationBase station )
+	{
+		if ( station == null )
+			return null;
+
+		for ( int i = 0; i < All.Count; i++ )
+		{
+			MinecartStationLoop loop = All[ i ];
+			if ( loop != null && loop.isActiveAndEnabled && loop.Contains( station ) )
+				return loop;
+		}
+
+		return null;
 	}
 }

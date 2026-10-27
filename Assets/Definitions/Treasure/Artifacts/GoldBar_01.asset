@@ -71,3 +71,15 @@ MonoBehaviour:
   placeVolumeMax: 0.5
   placePitchMin: 0.95
   placePitchMax: 1.05
+  throwClips:
+  - {fileID: 8300000, guid: 10697a1cf0a7c7c498d6348d2882cee4, type: 3}
+  throwVolumeMin: 0.7
+  throwVolumeMax: 0.9
+  throwPitchMin: 0.95
+  throwPitchMax: 1.05
+  throwLandClips:
+  - {fileID: 8300000, guid: ce801f3abe5731040a4d0e4a986e4dbc, type: 3}
+  throwLandVolumeMin: 0.85
+  throwLandVolumeMax: 1
+  throwLandPitchMin: 0.92
+  throwLandPitchMax: 1.08

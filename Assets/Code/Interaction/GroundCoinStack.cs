@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 
 using FeedbackSystem;
 
@@ -55,6 +56,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	bool _preferImperfectLod = true;
 	bool _streamingHidden;
 	bool _returningToPool;
+	// #region agent log
+	float _agentInFlightSince = -1f;
+	bool _agentStuckLogged;
+	// #endregion
 
 	[SerializeField]
 	Feedbacks onLandFeedback;
@@ -380,7 +385,78 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		}
 
 		FlushJoinPass();
+
+		// #region agent log
+		AgentDebugTrackInFlightStuck();
+		// #endregion
 	}
+
+	// #region agent log
+	static void AgentDebugLog( string hypothesisId, string location, string message, string dataJson )
+	{
+		try
+		{
+			long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+			string line = "{\"sessionId\":\"82c704\",\"hypothesisId\":\"" + hypothesisId
+				+ "\",\"location\":\"" + location + "\",\"message\":\"" + message
+				+ "\",\"data\":" + dataJson + ",\"timestamp\":" + ts + "}\n";
+			File.AppendAllText( @"c:\GameDevelopment\FunkGames\DragonLoot\DragonLoot\.cursor\debug-82c704.log", line );
+		}
+		catch
+		{
+		}
+	}
+
+	void AgentDebugTrackInFlightStuck()
+	{
+		if ( _destroying || Count <= 0 )
+		{
+			_agentInFlightSince = -1f;
+			_agentStuckLogged = false;
+			return;
+		}
+
+		if ( !HasInFlight )
+		{
+			_agentInFlightSince = -1f;
+			_agentStuckLogged = false;
+			return;
+		}
+
+		if ( _agentInFlightSince < 0f )
+			_agentInFlightSince = Time.unscaledTime;
+
+		if ( _agentStuckLogged || Time.unscaledTime - _agentInFlightSince < 2f )
+			return;
+
+		_agentStuckLogged = true;
+		EnsureCollider();
+		int liveNulls = 0;
+		int livePresent = 0;
+		for ( int i = 0; i < _settledLive.Count; i++ )
+		{
+			if ( _settledLive[ i ] == null )
+				liveNulls++;
+			else
+				livePresent++;
+		}
+
+		AgentDebugLog(
+			"H1",
+			"GroundCoinStack.LateUpdate",
+			"stuck_has_in_flight",
+			"{\"id\":" + GetEntityId().GetHashCode()
+			+ ",\"count\":" + Count
+			+ ",\"inFlight\":" + _inFlight.Count
+			+ ",\"blockMerge\":" + ( _blockMergeAsTarget ? "true" : "false" )
+			+ ",\"taking\":" + ( _taking ? "true" : "false" )
+			+ ",\"capsuleOn\":" + ( _capsule != null && _capsule.enabled ? "true" : "false" )
+			+ ",\"streamingHidden\":" + ( _streamingHidden ? "true" : "false" )
+			+ ",\"liveNulls\":" + liveNulls
+			+ ",\"livePresent\":" + livePresent
+			+ ",\"pos\":\"" + ContactPosition.x.ToString( "F2" ) + "," + ContactPosition.y.ToString( "F2" ) + "," + ContactPosition.z.ToString( "F2" ) + "\"}" );
+	}
+	// #endregion
 
 	bool EvaluatePreferImperfectLod( bool forceNear )
 	{
@@ -783,11 +859,36 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			apexOffset );
 
 		if ( item == null || _destroying )
+		{
+			// #region agent log
+			AgentDebugLog(
+				"H4",
+				"GroundCoinStack.AppendFlightRoutine",
+				"abort_null_or_destroying",
+				"{\"id\":" + GetEntityId().GetHashCode()
+				+ ",\"itemNull\":" + ( item == null ? "true" : "false" )
+				+ ",\"destroying\":" + ( _destroying ? "true" : "false" )
+				+ ",\"inFlightLeft\":" + _inFlight.Count
+				+ ",\"returning\":" + ( _returningToPool ? "true" : "false" ) + "}" );
+			// #endregion
 			yield break;
+		}
 
 		int flightIndex = _inFlight.IndexOf( item );
 		if ( flightIndex < 0 )
+		{
+			// #region agent log
+			AgentDebugLog(
+				"H4",
+				"GroundCoinStack.AppendFlightRoutine",
+				"abort_missing_inflight",
+				"{\"id\":" + GetEntityId().GetHashCode()
+				+ ",\"inFlightLeft\":" + _inFlight.Count
+				+ ",\"itemInFlight\":" + ( item.IsInFlight ? "true" : "false" )
+				+ ",\"itemState\":\"" + item.State + "\"}" );
+			// #endregion
 			yield break;
+		}
 
 		int slotIndex = flightIndex < _inFlightSlotIndices.Count
 			? _inFlightSlotIndices[ flightIndex ]
@@ -1331,7 +1432,29 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 	public override bool CanInteract( PlayerController player )
 	{
 		if ( !IsAvailable || player == null || _taking || HasInFlight || Count <= 0 )
+		{
+			// #region agent log
+			if ( Count > 0 && player != null
+				&& ( _taking || !IsAvailable || ( HasInFlight && _agentInFlightSince >= 0f && Time.unscaledTime - _agentInFlightSince >= 1f ) ) )
+			{
+				AgentDebugLog(
+					"H1",
+					"GroundCoinStack.CanInteract",
+					"blocked",
+					"{\"id\":" + GetEntityId().GetHashCode()
+					+ ",\"count\":" + Count
+					+ ",\"available\":" + ( IsAvailable ? "true" : "false" )
+					+ ",\"taking\":" + ( _taking ? "true" : "false" )
+					+ ",\"inFlight\":" + _inFlight.Count
+					+ ",\"blockMerge\":" + ( _blockMergeAsTarget ? "true" : "false" )
+					+ ",\"capsuleOn\":" + ( _capsule != null && _capsule.enabled ? "true" : "false" )
+					+ ",\"streamingHidden\":" + ( _streamingHidden ? "true" : "false" )
+					+ ",\"returning\":" + ( _returningToPool ? "true" : "false" )
+					+ ",\"destroying\":" + ( _destroying ? "true" : "false" ) + "}" );
+			}
+			// #endregion
 			return false;
+		}
 
 		return player.Carry != null;
 	}
@@ -1599,6 +1722,13 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		if ( other == null || other == this )
 			return;
 
+		// #region agent log
+		int otherInFlightBefore = other._inFlight.Count;
+		int otherSlotsBefore = other._slots.Count;
+		int thisInFlightBefore = _inFlight.Count;
+		int thisSlotsBefore = _slots.Count;
+		// #endregion
+
 		MergeSlotBuffer.Clear();
 		for ( int i = 0; i < other._slots.Count; i++ )
 			MergeSlotBuffer.Add( other._slots[ i ] );
@@ -1613,10 +1743,14 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		other.ClearAllVisuals();
 		other.DestroyStack();
 
+		int skippedFull = 0;
 		for ( int i = 0; i < MergeSlotBuffer.Count; i++ )
 		{
 			if ( IsFull )
+			{
+				skippedFull = MergeSlotBuffer.Count - i;
 				break;
+			}
 
 			TreasureDefinition def = MergeSlotBuffer[ i ];
 			TreasureItem live = i < MergeLiveBuffer.Count ? MergeLiveBuffer[ i ] : null;
@@ -1627,6 +1761,7 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		InvalidateHeightPrefix();
 
 		int posed = Mathf.Min( _slots.Count, _settledLive.Count );
+		int orphanStacked = 0;
 		for ( int i = 0; i < posed; i++ )
 		{
 			TreasureItem live = _settledLive[ i ];
@@ -1637,6 +1772,27 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			live.EnterStacked( this, transform, localPos, Quaternion.identity );
 		}
 
+		// #region agent log
+		if ( skippedFull > 0 )
+		{
+			for ( int i = MergeSlotBuffer.Count - skippedFull; i < MergeLiveBuffer.Count && i < MergeSlotBuffer.Count; i++ )
+			{
+				TreasureItem dropped = MergeLiveBuffer[ i ];
+				if ( dropped == null )
+					continue;
+				orphanStacked++;
+				AgentDebugLog(
+					"H3",
+					"GroundCoinStack.MergeFrom",
+					"orphan_skipped_full",
+					"{\"survivor\":" + GetEntityId().GetHashCode()
+					+ ",\"itemState\":\"" + dropped.State + "\""
+					+ ",\"itemInFlight\":" + ( dropped.IsInFlight ? "true" : "false" )
+					+ ",\"worldLoose\":" + ( dropped.IsWorldLoose ? "true" : "false" ) + "}" );
+			}
+		}
+		// #endregion
+
 		for ( int i = MergeSlotBuffer.Count; i < MergeLiveBuffer.Count; i++ )
 		{
 			if ( MergeLiveBuffer[ i ] != null )
@@ -1646,6 +1802,26 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 		MergeLiveBuffer.Clear();
 		RefreshVisuals( snap: true );
 		RefreshCollider();
+
+		// #region agent log
+		EnsureCollider();
+		AgentDebugLog(
+			"H5",
+			"GroundCoinStack.MergeFrom",
+			"merge_done",
+			"{\"survivor\":" + GetEntityId().GetHashCode()
+			+ ",\"otherSlots\":" + otherSlotsBefore
+			+ ",\"otherInFlight\":" + otherInFlightBefore
+			+ ",\"thisSlotsBefore\":" + thisSlotsBefore
+			+ ",\"thisInFlightBefore\":" + thisInFlightBefore
+			+ ",\"countAfter\":" + Count
+			+ ",\"inFlightAfter\":" + _inFlight.Count
+			+ ",\"blockMerge\":" + ( _blockMergeAsTarget ? "true" : "false" )
+			+ ",\"skippedFull\":" + skippedFull
+			+ ",\"orphanStacked\":" + orphanStacked
+			+ ",\"capsuleOn\":" + ( _capsule != null && _capsule.enabled ? "true" : "false" )
+			+ ",\"height\":" + TotalHeight.ToString( "F3" ) + "}" );
+		// #endregion
 	}
 
 	void RefreshVisuals( bool snap )
@@ -2255,6 +2431,10 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			}
 		}
 
+		// #region agent log
+		int reclaimCount = ReclaimBuffer.Count;
+		// #endregion
+
 		ClearAllVisuals();
 		_slots.Clear();
 		InvalidateHeightPrefix();
@@ -2273,7 +2453,33 @@ public class GroundCoinStack : InteractableBase, ITreasureOwner, ITreasurePlacem
 			Vector3 pos = orphan.transform.position;
 			Quaternion rot = TreasureOrientation.FlattenUpright( orphan.transform.rotation );
 			orphan.EnterSettledPhysics( pos, rot );
+
+			// #region agent log
+			Rigidbody body = orphan.Body;
+			AgentDebugLog(
+				"H4",
+				"GroundCoinStack.DestroyStack",
+				"reclaim_item_state",
+				"{\"stack\":" + GetEntityId().GetHashCode()
+				+ ",\"state\":\"" + orphan.State + "\""
+				+ ",\"worldLoose\":" + ( orphan.IsWorldLoose ? "true" : "false" )
+				+ ",\"itemInFlight\":" + ( orphan.IsInFlight ? "true" : "false" )
+				+ ",\"detectCol\":" + ( body != null && body.detectCollisions ? "true" : "false" )
+				+ ",\"kinematic\":" + ( body != null && body.isKinematic ? "true" : "false" ) + "}" );
+			// #endregion
 		}
+
+		// #region agent log
+		if ( reclaimCount > 0 )
+		{
+			AgentDebugLog(
+				"H4",
+				"GroundCoinStack.DestroyStack",
+				"reclaimed_inflight",
+				"{\"id\":" + GetEntityId().GetHashCode()
+				+ ",\"reclaimCount\":" + reclaimCount + "}" );
+		}
+		// #endregion
 
 		ReclaimBuffer.Clear();
 		if ( !IsStreamPinned )

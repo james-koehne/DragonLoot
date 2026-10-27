@@ -14,6 +14,11 @@ public class CoinSortingIndicatorInteractable : InteractableBase
 		Output = 2,
 	}
 
+	const string StatusPrefix = "<size=26>";
+	const string StatusSuffix = "</size>";
+	const string StaticPrefix = "\n\n<color=#D8D8D8><size=18>";
+	const string StaticSuffix = "</size></color>";
+
 	[SerializeField]
 	CoinSortingStation station;
 
@@ -86,30 +91,39 @@ public class CoinSortingIndicatorInteractable : InteractableBase
 	string BuildEnergyDescription()
 	{
 		if ( station.HasAutomatic )
-			return "Energy: automatic sorting ready";
+			return FormatLook( "Energy: automatic sorting ready", "Ready" );
 
 		string state;
 		if ( station.IsCranking )
 			state = "Charging";
-		else if ( station.ReserveNormalized >= 0.98f )
-			state = "Full";
-		else if ( station.ReserveNormalized <= 0.001f )
-			state = "Empty";
 		else
-			state = Mathf.RoundToInt( station.ReserveNormalized * 100f ) + "%";
+			state = FormatFillStatus( station.ReserveNormalized );
 
-		return "Energy: charge by cranking\n" + state;
+		return FormatLook( "Energy: charge by cranking", state );
 	}
 
 	string BuildHopperDescription()
 	{
-		string state = station.BufferedCount > 0 ? "Has coins" : "Empty";
-		return "Hopper: coins ready to sort\n" + state;
+		return FormatLook( "Hopper: coins ready to sort", FormatFillStatus( station.HopperFillNormalized ) );
 	}
 
 	string BuildOutputDescription()
 	{
-		string state = station.IsOutputBlocked ? "Full" : "Clear";
-		return "Output: room for sorted coins\n" + state;
+		return FormatLook( "Output: room for sorted coins", FormatFillStatus( station.OutputFillNormalized ) );
+	}
+
+	static string FormatFillStatus( float fill01 )
+	{
+		float t = Mathf.Clamp01( fill01 );
+		if ( t <= 0.001f )
+			return "Empty";
+		if ( t >= 0.98f )
+			return "Full";
+		return Mathf.RoundToInt( t * 100f ) + "%";
+	}
+
+	static string FormatLook( string staticLine, string status )
+	{
+		return StatusPrefix + status + StatusSuffix + StaticPrefix + staticLine + StaticSuffix;
 	}
 }

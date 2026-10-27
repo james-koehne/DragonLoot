@@ -32,7 +32,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 7fb515207cd60a14d9e09fd130384510, type: 3}
   crankVolume: 0.8
   crankPitchMin: 0.85
-  crankPitchMax: 1.25
+  crankPitchMax: 1.45
   crankPlayInterval: 0.05
   crankOverlapFadeSeconds: 0.12
   crankStopFadeSeconds: 0.15
@@ -48,6 +48,7 @@ MonoBehaviour:
   storagePullRadius: 15
   storagePullInterval: 0.2
   storagePullFlightDuration: 0.32
+  chuteMaxCoinsPerType: 100
   fullStackLateralOffset: 0.35
   sortedCoinFlightDuration: 0.28
   sortedCoinFlightArcHeight: 0.35

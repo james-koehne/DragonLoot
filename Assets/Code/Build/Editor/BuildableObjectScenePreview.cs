@@ -1,11 +1,14 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
+
 using UnityEditor;
 using UnityEngine;
 
 /// <summary>
 /// Edit-mode Scene view only: draws a ghost of each <see cref="BuildableObject"/> Built mesh
 /// when Built/Ghost are inactive. Uses <see cref="Graphics.DrawMeshNow"/> so nothing is
-/// parented into the scene, saved, or marked dirty. Clicks on the ghost select the buildable.
+/// parented into the scene, saved, or marked dirty. Clicks on the ghost select the buildable
+/// (Shift add, Ctrl/Cmd toggle for multi-select).
 /// </summary>
 [InitializeOnLoad]
 static class BuildableObjectScenePreview
@@ -103,10 +106,32 @@ static class BuildableObjectScenePreview
 			}
 		}
 
-		Selection.activeGameObject = hit.gameObject;
+		ApplyGhostSelection( hit.gameObject, e.shift, EditorGUI.actionKey );
 		GUIUtility.hotControl = controlId;
 		e.Use();
 		SceneView.RepaintAll();
+	}
+
+	static void ApplyGhostSelection( GameObject hitGo, bool additive, bool toggle )
+	{
+		if ( hitGo == null )
+			return;
+
+		if ( !additive && !toggle )
+		{
+			Selection.activeGameObject = hitGo;
+			return;
+		}
+
+		List<Object> objects = new List<Object>( Selection.objects );
+		int existingIndex = objects.IndexOf( hitGo );
+		if ( toggle && existingIndex >= 0 )
+			objects.RemoveAt( existingIndex );
+		else if ( existingIndex < 0 )
+			objects.Add( hitGo );
+
+		Selection.objects = objects.ToArray();
+		Selection.activeGameObject = hitGo;
 	}
 
 	static bool TryPickGhost( Vector2 guiPoint, out BuildableObject best, out float bestDist )

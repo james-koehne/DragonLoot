@@ -1263,32 +1263,7 @@ public class CinematicPresentationController : MonoBehaviour
 
 	static void SetTutorialObjectiveHudHidden( bool hidden )
 	{
-		if ( CrosshairUI.Instance != null )
-			CrosshairUI.Instance.SetCinematicHidden( hidden );
-
-		if ( GameMode.Instance == null || GameMode.Instance.InterfaceController == null )
-			return;
-
-		Transform root = GameMode.Instance.InterfaceController.transform;
-		QuestObjectiveUI objective = root.GetComponentInChildren<QuestObjectiveUI>( true );
-		if ( objective != null )
-			objective.SetCinematicHidden( hidden );
-
-		TutorialPopupUI tutorial = root.GetComponentInChildren<TutorialPopupUI>( true );
-		if ( tutorial != null )
-			tutorial.SetCinematicHidden( hidden );
-
-		QuestCompassUI compass = root.GetComponentInChildren<QuestCompassUI>( true );
-		if ( compass != null )
-			compass.SetCinematicHidden( hidden );
-
-		QuestWorldMarker marker = root.GetComponentInChildren<QuestWorldMarker>( true );
-		if ( marker != null )
-			marker.SetCinematicHidden( hidden );
-
-		PouchBarUI pouchBar = root.GetComponentInChildren<PouchBarUI>( true );
-		if ( pouchBar != null )
-			pouchBar.SetCinematicHidden( hidden );
+		CinematicHudVisibility.SetGameplayHudHidden( hidden );
 	}
 
 	static PlayerController ResolvePlayer()

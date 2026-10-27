@@ -323,6 +323,10 @@ public class PlayerMinecartDrive : MonoBehaviour
 		if ( _cart == null )
 			return;
 
+		// First-person drive keeps free look; third-person orbit locks body yaw to the cart.
+		if ( !IsMinecartOrbitCameraActive() )
+			return;
+
 		// Drive cart forward is local +Z (WheelFront).
 		Vector3 driveForward = _cart.transform.forward;
 		driveForward.y = 0f;
@@ -331,6 +335,15 @@ public class PlayerMinecartDrive : MonoBehaviour
 
 		float yaw = Mathf.Atan2( driveForward.x, driveForward.z ) * Mathf.Rad2Deg;
 		transform.rotation = Quaternion.Euler( 0f, yaw, 0f );
+	}
+
+	static bool IsMinecartOrbitCameraActive()
+	{
+		if ( GameMode.Instance == null || GameMode.Instance.cameraController == null )
+			return false;
+
+		MinecartOrbitCamera orbit = GameMode.Instance.cameraController.GetComponent<MinecartOrbitCamera>();
+		return orbit != null && orbit.IsActive;
 	}
 
 	int ResolveCartForwardSign()

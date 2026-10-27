@@ -3,3 +3,9 @@ public struct DoorUnlockedEvent
 {
 	public string DoorId;
 }
+
+/// <summary>Published when the player starts opening a door (BeginOpen).</summary>
+public struct DoorOpenedEvent
+{
+	public string DoorId;
+}

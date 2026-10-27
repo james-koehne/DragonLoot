@@ -136,7 +136,11 @@ public static class ObjectiveProgress
 
 			ArtifactPresentationTableInteractable artifact = ResolveOnTarget<ArtifactPresentationTableInteractable>( sub.targetId );
 			if ( artifact != null )
+			{
+				if ( HasArtifactSlotRange( sub ) )
+					return IsCountMet( objective, sub );
 				return artifact.IsComplete;
+			}
 
 			return false;
 		}
@@ -161,16 +165,69 @@ public static class ObjectiveProgress
 
 			ArtifactPresentationTableInteractable artifact = ResolveOnTarget<ArtifactPresentationTableInteractable>( sub.targetId );
 			if ( artifact != null )
-			{
-				required = sub.requiredCount > 0 ? sub.requiredCount : artifact.Capacity;
-				current = Mathf.Clamp( artifact.CurrentCount, 0, Mathf.Max( 0, required ) );
-				return required > 0;
-			}
+				return FillArtifactPresentationCounts( artifact, sub, out current, out required );
 
 			return false;
 		}
 
 		return TryGetVolumeCoinDisplayCounts( objective, sub.requiredCount, out current, out required );
+	}
+
+	/// <summary>
+	/// Slot range is active only when displaySlotCount &gt; 0 so older assets that deserialize
+	/// missing ints as 0 still mean "entire table".
+	/// </summary>
+	static bool HasArtifactSlotRange( ObjectiveSubDefinition sub )
+	{
+		return sub != null && sub.displaySlotCount > 0 && sub.displaySlotStart >= 0;
+	}
+
+	static bool TryResolveArtifactSlotRange( ArtifactPresentationTableInteractable artifact, ObjectiveSubDefinition sub, out int start, out int endExclusive )
+	{
+		start = 0;
+		endExclusive = 0;
+		if ( artifact == null || sub == null )
+			return false;
+
+		int capacity = artifact.Capacity;
+		if ( capacity <= 0 )
+			return false;
+
+		if ( !HasArtifactSlotRange( sub ) )
+		{
+			start = 0;
+			endExclusive = capacity;
+			return true;
+		}
+
+		start = Mathf.Clamp( sub.displaySlotStart, 0, capacity );
+		endExclusive = Mathf.Min( capacity, start + sub.displaySlotCount );
+		return endExclusive > start;
+	}
+
+	static bool FillArtifactPresentationCounts( ArtifactPresentationTableInteractable artifact, ObjectiveSubDefinition sub, out int current, out int required )
+	{
+		current = 0;
+		required = 0;
+		if ( artifact == null || sub == null )
+			return false;
+
+		int start;
+		int endExclusive;
+		if ( !TryResolveArtifactSlotRange( artifact, sub, out start, out endExclusive ) )
+			return false;
+
+		int capacity = endExclusive - start;
+		int filled = 0;
+		for ( int i = start; i < endExclusive; i++ )
+		{
+			if ( artifact.IsSlotOccupied( i ) )
+				filled++;
+		}
+
+		required = sub.requiredCount > 0 ? sub.requiredCount : capacity;
+		current = Mathf.Clamp( filled, 0, Mathf.Max( 0, required ) );
+		return required > 0;
 	}
 
 	static bool TryGetVolumeCoinDisplayCounts( ObjectiveDefinition objective, int requiredOverride, out int current, out int required )

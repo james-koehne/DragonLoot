@@ -553,7 +553,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( sorter != null && sorter.IsCarrying )
 			return;
 
-		if ( _player.IsInBuildMode )
+		if ( ShouldYieldInteractToBuildMode() )
 			return;
 
 		UpdatePickableIndicator();
@@ -644,18 +644,29 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
-		if ( _player.IsInBuildMode )
-		{
-			_current = null;
-			_hasLastHit = false;
-			_hasSurfaceHit = false;
-			ClearPickableIndicator();
-			return;
-		}
-
 		UpdateFocus();
-		UpdatePickableIndicator();
+		if ( !ShouldYieldInteractToBuildMode() )
+			UpdatePickableIndicator();
 		TryInteractInput();
+	}
+
+	/// <summary>
+	/// When build mode has an aimed, unblocked ghost, Interact / ContextualInteract charge the build.
+	/// </summary>
+	bool ShouldYieldInteractToBuildMode()
+	{
+		PlayerBuildMode buildMode = _player != null ? _player.BuildMode : null;
+		return buildMode != null && buildMode.OwnsInteractInput;
+	}
+
+	void ExitBuildModeForWorldAction()
+	{
+		if ( _player == null || !_player.IsInBuildMode )
+			return;
+
+		PlayerBuildMode buildMode = _player.BuildMode;
+		if ( buildMode != null )
+			buildMode.RequestExit();
 	}
 
 	void UpdateFocus()
@@ -1041,7 +1052,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( input == null || input.Interact == null )
 			return;
 
-		if ( _player != null && _player.IsInBuildMode )
+		if ( ShouldYieldInteractToBuildMode() )
 		{
 			ResetPrimaryRepeatState();
 			ClearNonCoinPickupCharge();
@@ -1079,6 +1090,7 @@ public class PlayerInteraction : MonoBehaviour
 
 			if ( chargedNonCoin )
 			{
+				ExitBuildModeForWorldAction();
 				if ( ResolveNonCoinPickupHoldDelay( _current ) <= 0f )
 				{
 					TryPickupInteractWithFocus();
@@ -1115,6 +1127,7 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( chargedNonCoin )
 		{
+			ExitBuildModeForWorldAction();
 			UpdateNonCoinPickupChargeState( true );
 			if ( !_primaryNonCoinCharging )
 				return;
@@ -1280,7 +1293,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( input == null || input.ContextualInteract == null )
 			return;
 
-		if ( _player != null && _player.IsInBuildMode )
+		if ( ShouldYieldInteractToBuildMode() )
 		{
 			ResetContextualRepeatState();
 			return;
@@ -1316,6 +1329,7 @@ public class PlayerInteraction : MonoBehaviour
 		CoffeeMachineInteractable coffee = _current as CoffeeMachineInteractable;
 		if ( coffee != null && coffee.CanChargeHold( _player ) )
 		{
+			ExitBuildModeForWorldAction();
 			coffee.TickHoldCharge( Time.deltaTime );
 			return;
 		}
@@ -1370,6 +1384,7 @@ public class PlayerInteraction : MonoBehaviour
 			return;
 		}
 
+		ExitBuildModeForWorldAction();
 		_current.Interact( _player );
 		if ( _player != null )
 			_player.CancelSlideVelocity();
@@ -1538,6 +1553,7 @@ public class PlayerInteraction : MonoBehaviour
 		if ( !( _placement.ActiveTarget is ArtifactPresentationTableInteractable ) )
 			return false;
 
+		ExitBuildModeForWorldAction();
 		if ( !_placement.TryPlaceAtAim() )
 			return false;
 
@@ -1601,6 +1617,7 @@ public class PlayerInteraction : MonoBehaviour
 
 		if ( input.SecondaryInteract.WasPressedThisFrame() )
 		{
+			ExitBuildModeForWorldAction();
 			if ( _placement.TrySecondaryPlace() && _player != null )
 				_player.CancelSlideVelocity();
 			_secondaryRepeatTimer = 0f;
@@ -1615,6 +1632,7 @@ public class PlayerInteraction : MonoBehaviour
 
 		_secondaryRepeatTimer -= wait;
 		_secondaryPastInitialDelay = true;
+		ExitBuildModeForWorldAction();
 		if ( _placement.TrySecondaryPlace() && _player != null )
 			_player.CancelSlideVelocity();
 	}
@@ -1641,9 +1659,8 @@ public class PlayerInteraction : MonoBehaviour
 
 	float ResolveNonCoinPickupHoldDelay( IInteractable focus )
 	{
-		if ( TryResolveFocusedTreasureItem( focus, out TreasureItem focusedItem )
-			&& focusedItem != null
-			&& focusedItem.IsInstantPickupEligible )
+		TryResolveFocusedTreasureItem( focus, out TreasureItem focusedItem );
+		if ( focusedItem != null && focusedItem.IsInstantPickupEligible )
 			return 0f;
 
 		// Definition-based stacks / gold-bar towers are storage — no dig hold.
@@ -1654,9 +1671,19 @@ public class PlayerInteraction : MonoBehaviour
 			return 0f;
 
 		float global = NonCoinPickupHoldDelay;
-		if ( definition != null )
-			return definition.ResolveNonCoinPickupHoldDelay( global );
-		return global;
+		float baseDelay = definition != null
+			? definition.ResolveNonCoinPickupHoldDelay( global )
+			: global;
+		if ( baseDelay <= 0.0001f )
+			return 0f;
+
+		float extent = focusedItem != null
+			? TreasureDefinition.MaxExtentMeters( focusedItem.GetRendererWorldBounds() )
+			: -1f;
+		float sizeMul = definition != null
+			? definition.ResolveHandlingSizeMultiplier( extent )
+			: 1f;
+		return baseDelay * sizeMul;
 	}
 
 	bool IsNonCoinPickup( IInteractable focus )

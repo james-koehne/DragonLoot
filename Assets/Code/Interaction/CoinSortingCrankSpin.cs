@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Spins the crank cube while charging or discharging, and fires click ticks every N degrees while charging.
+/// Spins the crank cube while the player is cranking, and fires click ticks every N degrees while charging.
 /// </summary>
 public class CoinSortingCrankSpin : MonoBehaviour
 {
@@ -39,8 +39,6 @@ public class CoinSortingCrankSpin : MonoBehaviour
 		float speed = 0f;
 		if ( station.IsCranking )
 			speed = def.crankChargeSpinDegreesPerSecond;
-		else if ( station.IsReserveDischarging )
-			speed = def.crankDischargeSpinDegreesPerSecond;
 
 		if ( speed <= 0.01f )
 			return;

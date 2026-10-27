@@ -836,11 +836,40 @@ public class TreasureItem : MonoBehaviour
 		return Vector3.one * 0.08f;
 	}
 
+	/// <summary>
+	/// Scales place-flight duration by handling size. Coins stay at the base duration.
+	/// </summary>
+	public float ScalePlacementDuration( float duration )
+	{
+		if ( definition == null || definition.category == TreasureCategory.Coin )
+			return Mathf.Max( 0.05f, duration );
+
+		float extent = TreasureDefinition.MaxExtentMeters( GetRendererWorldBounds() );
+		return definition.ScalePlacementDuration( duration, extent );
+	}
+
+	/// <summary>1 = small props, up to 3 for huge pile-blocking statues.</summary>
+	public float ResolveHandlingSizeMultiplier()
+	{
+		if ( definition == null )
+			return 1f;
+
+		float extent = TreasureDefinition.MaxExtentMeters( GetRendererWorldBounds() );
+		return definition.ResolveHandlingSizeMultiplier( extent );
+	}
+
 	public Quaternion GetHeldLocalRotation( bool active )
 	{
 		if ( definition != null )
 			return definition.GetHeldLocalRotation( active );
 		return Quaternion.identity;
+	}
+
+	public Vector3 GetHeldLocalOffset( bool active )
+	{
+		if ( definition != null )
+			return definition.GetHeldLocalOffset( active );
+		return Vector3.zero;
 	}
 
 	public void ApplyWorldScale()

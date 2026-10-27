@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Bottle
   category: 5
   variant: Bottle
+  suppressDiscoveryPopup: 0
   value: 52
-  weight: 1
   exclusiveCarry: 0
   usesHeavyThrow: 0
   cannotThrow: 0
@@ -32,11 +32,13 @@ MonoBehaviour:
   maxUprightAngle: 35
   physicsStabilizationDelay: 0.35
   pickupRadius: 0.45
+  nonCoinPickupHoldDelayOverride: -1
   collideWithPlayerOnPile: 0
   keyType: 0
   isSkeletonKey: 0
   chestDefinition: {fileID: 0}
   icon: {fileID: 0}
+  uiColorHint: {r: 1, g: 1, b: 1, a: 1}
   meshOverride: {fileID: 0}
   materialOverride: {fileID: 0}
   prefab:
@@ -53,7 +55,7 @@ MonoBehaviour:
   canStack: 0
   usesInterleavedBarStack: 0
   coinThickness: 0.16800001
-  cartGridSize: {x: 1, y: 1}
+  storageGridSize: {x: 1, y: 1}
   pickupClips:
   - {fileID: 8300000, guid: 1e3b2bd9351ce7640b9cdab919b657c0, type: 3}
   - {fileID: 8300000, guid: 753f12ade54e0ab40b08914e0969c75f, type: 3}
@@ -62,11 +64,28 @@ MonoBehaviour:
   pickupVolumeMax: 0.5
   pickupPitchMin: 0.95
   pickupPitchMax: 1.05
+  pickupRewardClips: []
+  pickupRewardVolumeMin: 0.45
+  pickupRewardVolumeMax: 0.6
   placeClips:
   - {fileID: 8300000, guid: 1e3b2bd9351ce7640b9cdab919b657c0, type: 3}
   - {fileID: 8300000, guid: 753f12ade54e0ab40b08914e0969c75f, type: 3}
   - {fileID: 8300000, guid: 17fa6cafc7d67c44bb3f94fa76eb6518, type: 3}
-  placeVolumeMin: 0.5
-  placeVolumeMax: 0.5
+  placeVolumeMin: 0.3
+  placeVolumeMax: 0.3
   placePitchMin: 0.95
   placePitchMax: 1.05
+  throwClips:
+  - {fileID: 8300000, guid: 10697a1cf0a7c7c498d6348d2882cee4, type: 3}
+  throwVolumeMin: 0.7
+  throwVolumeMax: 0.9
+  throwPitchMin: 0.95
+  throwPitchMax: 1.05
+  throwLandClips:
+  - {fileID: 8300000, guid: b401e5e60c854bb46b321bd9e020dda3, type: 3}
+  - {fileID: 8300000, guid: 34474811c89ef824496142217c6d4012, type: 3}
+  - {fileID: 8300000, guid: 7265abc5b9c2e8944bde4379ddb869ca, type: 3}
+  throwLandVolumeMin: 0.85
+  throwLandVolumeMax: 1
+  throwLandPitchMin: 0.92
+  throwLandPitchMax: 1.08

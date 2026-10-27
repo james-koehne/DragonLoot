@@ -38,6 +38,13 @@ public class ObjectiveSubDefinition
 	[Tooltip( "Count shown as label: current/required. 0 = use the target's capacity or pile size." )]
 	[Min( 0 )]
 	public int requiredCount;
+
+	[Tooltip( "Artifact presentation only. Inclusive first slot index. Used only when Display Slot Count > 0." )]
+	public int displaySlotStart = -1;
+
+	[Tooltip( "Artifact presentation only. When > 0, counts/completes only this many slots from Display Slot Start. 0 = entire table." )]
+	[Min( 0 )]
+	public int displaySlotCount;
 }
 
 [Serializable]

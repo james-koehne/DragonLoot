@@ -1869,6 +1869,7 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 
 	/// <summary>
 	/// Estimate G/S/C from current height sum without writing. Used by editor while painting.
+	/// Only metals present in the pile definition receive counts (e.g. copper-only piles).
 	/// </summary>
 	public void EstimateAuthoredCoinCountsFromHeight(
 		out int total,
@@ -1879,11 +1880,19 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		TreasurePileDefinition def = ResolveDefinitionForEditor();
 		float sum = ResolveHeightSumForCoinEstimate();
 		total = def != null ? def.EstimateCoinTotalFromHeightSum( sum ) : 0;
-		TreasurePileDefinition.SplitEqualMetalThirds( total, out gold, out silver, out copper );
+		if ( def != null )
+			def.SplitAuthoredCoinsByPresentMetals( total, out gold, out silver, out copper );
+		else
+		{
+			gold = 0;
+			silver = 0;
+			copper = 0;
+		}
 	}
 
 	/// <summary>
-	/// Writes equal-third coin inventory from the current heightfield volume onto this pile.
+	/// Writes coin inventory from the current heightfield volume onto this pile,
+	/// split equally among metals present in the definition's coinContents.
 	/// </summary>
 	public void SyncAuthoredCoinCountsFromHeightfield()
 	{
@@ -1897,17 +1906,12 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		if ( !Application.isPlaying && total > 0 )
 		{
 			TreasurePileDefinition def = ResolveDefinitionForEditor();
-			if ( def != null )
+			if ( def != null && !def.HasAnyMetalCoinContents() )
 			{
-				if ( def.FindCoinByVariant( "Gold" ) == null
-					|| def.FindCoinByVariant( "Silver" ) == null
-					|| def.FindCoinByVariant( "Copper" ) == null )
-				{
-					Debug.LogWarning(
-						$"TreasurePileVisual '{name}': definition '{def.name}' is missing Gold/Silver/Copper "
-						+ "coinContents entries; authored counts were stored but runtime seed may skip missing metals.",
-						this );
-				}
+				Debug.LogWarning(
+					$"TreasurePileVisual '{name}': definition '{def.name}' has no Gold/Silver/Copper "
+					+ "coinContents entries; authored total was stored but runtime seed has no metal types.",
+					this );
 			}
 		}
 #endif
@@ -2332,6 +2336,10 @@ public class TreasurePileVisual : MonoBehaviour, ITreasureOwner
 		WriteAuthoredFromHeightfield();
 		SyncAuthoredCoinCountsFromHeightfield();
 		RefreshEditorPreviewFromHeightfield();
+#if UNITY_EDITOR
+		UnityEditor.EditorUtility.SetDirty( this );
+		UnityEditor.SceneView.RepaintAll();
+#endif
 	}
 
 	public bool TryEditorBrushWorld( Vector3 worldPos, GoldPileEditorBrushMode mode, in GoldPileBrushParams p )

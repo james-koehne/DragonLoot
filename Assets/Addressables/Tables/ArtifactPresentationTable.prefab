@@ -315,6 +315,10 @@ MonoBehaviour:
   socketRotation: {x: 0, y: 0, z: 0}
   countLabel: {fileID: 0}
   completedHighlight: {fileID: 0}
+  activateOnComplete: []
+  completeEffect: {fileID: 0}
+  overrideCompleteEffectColor: 0
+  completeEffectColor: {r: 1, g: 0.72, b: 0.28, a: 1}
   showSlotIndicators: 1
   slotIndicators: {fileID: 6906128306887942199}
   drawGizmosAlways: 0
@@ -333,6 +337,8 @@ MonoBehaviour:
   indicatorMaterial: {fileID: 2100000, guid: e055a7ade2995bd4a81b15eaea9a7b0c, type: 2}
   fallbackMesh: {fileID: 0}
   showEditModePreviews: 1
+  fadeNearDistance: 22
+  fadeFarDistance: 25
 --- !u!1 &8024132919258810542
 GameObject:
   m_ObjectHideFlags: 0

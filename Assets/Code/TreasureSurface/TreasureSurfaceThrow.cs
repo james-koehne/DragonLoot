@@ -647,6 +647,7 @@ public static class TreasureSurfaceThrow
 			if ( TreasurePileLooseDeposit.TryAbsorbLooseItem( member, pos ) )
 			{
 				member.EndFlight();
+				TreasureInteractSfx.PlayThrowLand( member.Definition, pos );
 				continue;
 			}
 
@@ -680,10 +681,12 @@ public static class TreasureSurfaceThrow
 				member.EndFlight();
 				member.EnterSettledPhysics( pos, plantRot );
 				ArtifactPlantFeedback.PlayOn( member );
+				TreasureInteractSfx.PlayThrowLand( member.Definition, pos );
 				continue;
 			}
 
 			member.EndFlight();
+			TreasureInteractSfx.PlayThrowLand( member.Definition, pos );
 
 			if ( TreasureItem.UsesSurfaceSimulation( member.Definition ) || seatOnPileFlow )
 			{

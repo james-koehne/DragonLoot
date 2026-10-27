@@ -26,6 +26,37 @@ public class FairySpeechBubble : MonoBehaviour
 	Text body;
 
 	[SerializeField]
+	Text continuePrompt;
+
+	[SerializeField]
+	[Tooltip( "Shown under the speech line while awaiting ContextualInteract (E)." )]
+	string continuePromptText = "E to continue";
+
+	[SerializeField]
+	[Min( 0.1f )]
+	[Tooltip( "Sine speed for continue-prompt glow pulse while awaiting E." )]
+	float continuePromptPulseSpeed = 5.5f;
+
+	[SerializeField]
+	[Tooltip( "Glow color around the continue prompt (alpha is pulsed)." )]
+	Color continuePromptGlowColor = new Color( 1f, 0.95f, 0.55f, 1f );
+
+	[SerializeField]
+	[Min( 0f )]
+	[Tooltip( "Fixed outline glow radius around the continue prompt." )]
+	float continuePromptGlowDistance = 3.5f;
+
+	[SerializeField]
+	[Range( 0f, 1f )]
+	[Tooltip( "Glow alpha at the dimmest part of the pulse." )]
+	float continuePromptGlowMinAlpha = 0.25f;
+
+	[SerializeField]
+	[Range( 0f, 1f )]
+	[Tooltip( "Glow alpha at the brightest part of the pulse." )]
+	float continuePromptGlowMaxAlpha = 1f;
+
+	[SerializeField]
 	RectTransform bubbleRoot;
 
 	[SerializeField]
@@ -77,6 +108,7 @@ public class FairySpeechBubble : MonoBehaviour
 	float _lineEndsAt;
 	float _fadeOutAt = -1f;
 	bool _showing;
+	bool _awaitingContinue;
 	float _tailBaseWidth = DefaultTailWidth;
 	Vector2 _smoothedScreen;
 	Vector2 _smoothVelocity;
@@ -85,8 +117,13 @@ public class FairySpeechBubble : MonoBehaviour
 	bool _tipValid;
 	Vector2 _lastTipScreen;
 	bool _detached;
+	Color _continuePromptBaseColor = new Color( 1f, 1f, 1f, 1f );
+	bool _hasContinuePromptBaseColor;
+	Outline _continuePromptGlow;
+	Outline _continuePromptGlowSoft;
 
 	public bool IsShowing => _showing || _queue.Count > 0;
+	public bool IsAwaitingContinue => _awaitingContinue;
 
 	void Awake()
 	{
@@ -113,7 +150,9 @@ public class FairySpeechBubble : MonoBehaviour
 		}
 
 		EnsureFollowRoot();
+		EnsureContinuePrompt();
 		ConfigureOverlayCanvas();
+		SetAwaitingContinue( false );
 		SetVisible( false );
 	}
 
@@ -131,6 +170,7 @@ public class FairySpeechBubble : MonoBehaviour
 		if ( _showing )
 			UpdateScreenPosition();
 
+		TickContinuePromptPulse();
 		TickSpeech();
 	}
 
@@ -187,7 +227,187 @@ public class FairySpeechBubble : MonoBehaviour
 		_hasSmoothedScreen = false;
 		_smoothVelocity = Vector2.zero;
 		_tipVisibility = 1f;
+		SetAwaitingContinue( false );
 		SetVisible( false );
+	}
+
+	/// <summary>
+	/// Shows or hides the continue hint and pauses auto-fade while awaiting player input.
+	/// </summary>
+	public void SetAwaitingContinue( bool awaiting )
+	{
+		_awaitingContinue = awaiting;
+		EnsureContinuePrompt();
+		if ( continuePrompt != null )
+		{
+			if ( !string.IsNullOrEmpty( continuePromptText ) )
+				continuePrompt.text = continuePromptText;
+			EnsureContinuePromptGlow();
+			if ( awaiting )
+				CacheContinuePromptBaseColor();
+			else
+				RestoreContinuePromptBaseColor();
+			continuePrompt.gameObject.SetActive( awaiting );
+			SetContinuePromptGlowEnabled( awaiting );
+		}
+
+		if ( awaiting && _showing )
+			_fadeOutAt = -1f;
+
+		if ( awaiting && bubbleRoot != null )
+			LayoutRebuilder.ForceRebuildLayoutImmediate( bubbleRoot );
+	}
+
+	void CacheContinuePromptBaseColor()
+	{
+		if ( continuePrompt == null )
+			return;
+
+		_continuePromptBaseColor = continuePrompt.color;
+		_continuePromptBaseColor.a = 1f;
+		_hasContinuePromptBaseColor = true;
+	}
+
+	void RestoreContinuePromptBaseColor()
+	{
+		if ( continuePrompt == null || !_hasContinuePromptBaseColor )
+			return;
+
+		continuePrompt.color = _continuePromptBaseColor;
+		ApplyContinuePromptGlow( 0f );
+	}
+
+	void TickContinuePromptPulse()
+	{
+		if ( !_awaitingContinue || continuePrompt == null || !continuePrompt.gameObject.activeInHierarchy )
+			return;
+
+		if ( !_hasContinuePromptBaseColor )
+			CacheContinuePromptBaseColor();
+		EnsureContinuePromptGlow();
+
+		float pulse = 0.5f + 0.5f * Mathf.Sin( Time.unscaledTime * continuePromptPulseSpeed );
+		ApplyContinuePromptGlow( pulse );
+
+		Color textColor = _continuePromptBaseColor;
+		textColor.a = 1f;
+		continuePrompt.color = textColor;
+	}
+
+	void ApplyContinuePromptGlow( float pulse )
+	{
+		float minA = Mathf.Min( continuePromptGlowMinAlpha, continuePromptGlowMaxAlpha );
+		float maxA = Mathf.Max( continuePromptGlowMinAlpha, continuePromptGlowMaxAlpha );
+		float alpha = Mathf.Lerp( minA, maxA, pulse );
+		float distance = Mathf.Max( 0f, continuePromptGlowDistance );
+
+		Color glow = continuePromptGlowColor;
+		glow.a = alpha;
+		if ( _continuePromptGlow != null )
+		{
+			_continuePromptGlow.effectColor = glow;
+			_continuePromptGlow.effectDistance = new Vector2( distance, distance );
+		}
+
+		Color soft = continuePromptGlowColor;
+		soft.a = alpha * 0.55f;
+		if ( _continuePromptGlowSoft != null )
+		{
+			_continuePromptGlowSoft.effectColor = soft;
+			float softDist = distance * 1.75f;
+			_continuePromptGlowSoft.effectDistance = new Vector2( softDist, softDist );
+		}
+	}
+
+	void SetContinuePromptGlowEnabled( bool enabled )
+	{
+		if ( _continuePromptGlow != null )
+			_continuePromptGlow.enabled = enabled;
+		if ( _continuePromptGlowSoft != null )
+			_continuePromptGlowSoft.enabled = enabled;
+	}
+
+	void EnsureContinuePromptGlow()
+	{
+		if ( continuePrompt == null )
+			return;
+
+		Outline[] outlines = continuePrompt.GetComponents<Outline>();
+		if ( outlines != null && outlines.Length > 0 )
+			_continuePromptGlow = outlines[ 0 ];
+		if ( outlines != null && outlines.Length > 1 )
+			_continuePromptGlowSoft = outlines[ 1 ];
+
+		if ( _continuePromptGlow == null )
+		{
+			_continuePromptGlow = continuePrompt.gameObject.AddComponent<Outline>();
+			_continuePromptGlow.useGraphicAlpha = true;
+		}
+
+		if ( _continuePromptGlowSoft == null )
+		{
+			_continuePromptGlowSoft = continuePrompt.gameObject.AddComponent<Outline>();
+			_continuePromptGlowSoft.useGraphicAlpha = true;
+		}
+
+		ApplyContinuePromptGlow( 1f );
+	}
+
+	void EnsureContinuePrompt()
+	{
+		if ( continuePrompt != null )
+		{
+			EnsureContinuePromptGlow();
+			return;
+		}
+
+		if ( bubbleRoot == null )
+			return;
+
+		Transform existing = bubbleRoot.Find( "ContinuePrompt" );
+		if ( existing != null )
+		{
+			continuePrompt = existing.GetComponent<Text>();
+			if ( continuePrompt != null )
+			{
+				EnsureContinuePromptGlow();
+				continuePrompt.gameObject.SetActive( false );
+				return;
+			}
+		}
+
+		GameObject go = new GameObject( "ContinuePrompt", typeof( RectTransform ) );
+		go.layer = bubbleRoot.gameObject.layer;
+		RectTransform rect = go.GetComponent<RectTransform>();
+		rect.SetParent( bubbleRoot, false );
+		rect.localScale = Vector3.one;
+		rect.localRotation = Quaternion.identity;
+
+		continuePrompt = go.AddComponent<Text>();
+		continuePrompt.raycastTarget = false;
+		continuePrompt.alignment = TextAnchor.MiddleCenter;
+		continuePrompt.horizontalOverflow = HorizontalWrapMode.Overflow;
+		continuePrompt.verticalOverflow = VerticalWrapMode.Overflow;
+		continuePrompt.fontSize = body != null ? Mathf.Max( 18, body.fontSize - 4 ) : 20;
+		continuePrompt.color = new Color( 1f, 1f, 1f, 1f );
+		continuePrompt.fontStyle = FontStyle.Bold;
+		continuePrompt.text = string.IsNullOrEmpty( continuePromptText ) ? "E to continue" : continuePromptText;
+		if ( body != null && body.font != null )
+			continuePrompt.font = body.font;
+
+		ContentSizeFitter fitter = go.AddComponent<ContentSizeFitter>();
+		fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+		fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+		LayoutElement layout = go.AddComponent<LayoutElement>();
+		layout.minHeight = 22f;
+
+		VerticalLayoutGroup group = bubbleRoot.GetComponent<VerticalLayoutGroup>();
+		if ( group != null && group.spacing < 4f )
+			group.spacing = 6f;
+
+		EnsureContinuePromptGlow();
+		go.SetActive( false );
 	}
 
 	/// <summary>
@@ -480,6 +700,13 @@ public class FairySpeechBubble : MonoBehaviour
 		if ( !_showing )
 			return;
 
+		if ( _awaitingContinue )
+		{
+			_fadeOutAt = -1f;
+			_lineEndsAt = Time.unscaledTime + 1f;
+			return;
+		}
+
 		if ( _fadeOutAt > 0f )
 		{
 			float t = fadeSeconds <= 0.001f
@@ -517,7 +744,8 @@ public class FairySpeechBubble : MonoBehaviour
 		if ( _queue.Count == 0 )
 		{
 			_showing = false;
-			SetVisible( false );
+			if ( !_awaitingContinue )
+				SetVisible( false );
 			return;
 		}
 
@@ -529,6 +757,8 @@ public class FairySpeechBubble : MonoBehaviour
 		_smoothVelocity = Vector2.zero;
 		_tipVisibility = 1f;
 		SetVisible( true );
+		if ( _awaitingContinue && continuePrompt != null )
+			continuePrompt.gameObject.SetActive( true );
 		UpdateScreenPosition();
 	}
 

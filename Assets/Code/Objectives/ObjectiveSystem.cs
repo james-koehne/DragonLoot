@@ -13,7 +13,7 @@ public class ObjectiveSystem : MonoBehaviour
 	const float DefaultShowRadius = 40f;
 	const float LastTaskToCompleteDelay = 1.75f;
 	/// <summary>Breathing room after completion / unlock toasts finish before the next objective appears.</summary>
-	const float PostToastObjectiveDelay = 2f;
+	const float PostToastObjectiveDelay = 1f;
 	/// <summary>Short beat after toasts clear before the next completion-ceremony stage.</summary>
 	const float CompletionStageBeat = 0.75f;
 
@@ -21,6 +21,7 @@ public class ObjectiveSystem : MonoBehaviour
 	const string WorkshopAccessObjectiveId = "obj_workshop_access";
 	const string WorkshopClearObjectiveId = "obj_workshop_clear";
 	const string WorkshopAccessSubId = "clear_entrance";
+	const string WorkshopAccessGemsSubId = "place_door_gems";
 	const string WorkshopClearSubId = "clear_interior";
 
 	static ObjectiveSystem _instance;
@@ -200,6 +201,7 @@ public class ObjectiveSystem : MonoBehaviour
 		}
 
 		MigrateLegacyWorkshopProgress( save );
+		MigrateWorkshopAccessDoorGemsSub( save );
 	}
 
 	void MigrateLegacyWorkshopProgress( ProfileSaveData save )
@@ -211,9 +213,26 @@ public class ObjectiveSystem : MonoBehaviour
 		changed |= EnsureCompletedObjective( save, WorkshopAccessObjectiveId );
 		changed |= EnsureCompletedObjective( save, WorkshopClearObjectiveId );
 		changed |= EnsureCompletedSub( save, WorkshopAccessObjectiveId, WorkshopAccessSubId );
+		changed |= EnsureCompletedSub( save, WorkshopAccessObjectiveId, WorkshopAccessGemsSubId );
 		changed |= EnsureCompletedSub( save, WorkshopClearObjectiveId, WorkshopClearSubId );
 
 		if ( changed && ProfileManager.Instance != null )
+			ProfileManager.Instance.SaveCurrentStatsToProfile();
+	}
+
+	/// <summary>
+	/// Workshop Access gained a doorway-constellation sub after launch. Saves that already completed
+	/// the objective keep the door unlocked and get the new sub marked complete.
+	/// </summary>
+	void MigrateWorkshopAccessDoorGemsSub( ProfileSaveData save )
+	{
+		if ( save == null || !_completedObjectives.Contains( WorkshopAccessObjectiveId ) )
+			return;
+
+		if ( !EnsureCompletedSub( save, WorkshopAccessObjectiveId, WorkshopAccessGemsSubId ) )
+			return;
+
+		if ( ProfileManager.Instance != null )
 			ProfileManager.Instance.SaveCurrentStatsToProfile();
 	}
 
@@ -874,7 +893,7 @@ public class ObjectiveSystem : MonoBehaviour
 			if ( IsCompleted( definition.id ) )
 				continue;
 			// Hold completion until the delayed HUD reveal so catch-up of already-built
-			// targets (e.g. Auto Minecarts after Workshop Clear) still surfaces on the HUD.
+			// targets (e.g. workshop buildables after Clear) still surfaces on the HUD.
 			if ( IsPendingHudReveal( definition.id ) )
 				continue;
 			if ( !ArePrerequisitesMet( definition ) )
@@ -965,6 +984,7 @@ public class ObjectiveSystem : MonoBehaviour
 
 		// Hold newly unlocked objectives before world-event refreshes can publish them early.
 		EnqueueNewlyUnlockedForDelayedHud( definition.id );
+		FireWorldEvents( definition );
 
 		if ( announce )
 		{
@@ -973,7 +993,6 @@ public class ObjectiveSystem : MonoBehaviour
 		}
 
 		GrantRewards( definition );
-		FireWorldEvents( definition );
 		CatchUpBuildableSubs();
 		CompleteObjectivesWithAllSubsDone();
 		RefreshNearbyHud( force: true );
@@ -1014,7 +1033,6 @@ public class ObjectiveSystem : MonoBehaviour
 
 		yield return WaitToastsIdlePlusBeat();
 
-		FireWorldEvents( definition );
 		CatchUpBuildableSubs();
 		CompleteObjectivesWithAllSubsDone();
 		RefreshNearbyHud( force: true );
@@ -1401,6 +1419,8 @@ public class ObjectiveSystem : MonoBehaviour
 					ObjectiveSubDefinition sub = definition.subs[ s ];
 					if ( sub == null || string.IsNullOrEmpty( sub.id ) )
 						continue;
+					if ( !ShouldShowSub( definition, sub ) )
+						continue;
 
 					bool subComplete = IsSubCompleted( definition.id, sub.id );
 					string label = ObjectiveProgress.FormatLabel( definition, sub, subComplete );
@@ -1532,8 +1552,10 @@ public class ObjectiveSystem : MonoBehaviour
 				ObjectiveSubDefinition sub = candidate.Definition.subs[ s ];
 				if ( sub == null || string.IsNullOrEmpty( sub.id ) )
 					continue;
+				bool show = ShouldShowSub( candidate.Definition, sub );
+				sb.Append( show ? 'S' : 'H' );
 				sb.Append( IsSubCompleted( candidate.Definition.id, sub.id ) ? '1' : '0' );
-				if ( !ObjectiveProgress.HasCountProgress( sub.completeType ) )
+				if ( !show || !ObjectiveProgress.HasCountProgress( sub.completeType ) )
 					continue;
 				int current;
 				int required;
@@ -1685,6 +1707,8 @@ public class ObjectiveSystem : MonoBehaviour
 				continue;
 			if ( IsSubCompleted( definition.id, sub.id ) )
 				continue;
+			if ( !ShouldShowSub( definition, sub ) )
+				continue;
 
 			if ( !TryResolveSubAnchor( sub, out string id, out Vector3 pos, out _ ) )
 				continue;
@@ -1733,6 +1757,8 @@ public class ObjectiveSystem : MonoBehaviour
 				continue;
 			if ( IsSubCompleted( definition.id, sub.id ) )
 				continue;
+			if ( !ShouldShowSub( definition, sub ) )
+				continue;
 
 			// Prefer the BuildableObject root for BuildableCompleted so outline sync can force the ghost on.
 			if ( sub.completeType == ObjectiveSubCompleteType.BuildableCompleted
@@ -1754,6 +1780,31 @@ public class ObjectiveSystem : MonoBehaviour
 				continue;
 			destination.Add( outline );
 		}
+	}
+
+	/// <summary>
+	/// BuildableCompleted tasks stay hidden until the placement is actually buildable
+	/// (prerequisites met and not covered by a treasure pile). Completed tasks always show.
+	/// </summary>
+	bool ShouldShowSub( ObjectiveDefinition definition, ObjectiveSubDefinition sub )
+	{
+		if ( sub == null || string.IsNullOrEmpty( sub.id ) )
+			return false;
+		if ( definition != null && IsSubCompleted( definition.id, sub.id ) )
+			return true;
+		if ( sub.completeType != ObjectiveSubCompleteType.BuildableCompleted )
+			return true;
+		if ( string.IsNullOrEmpty( sub.targetId ) )
+			return true;
+		if ( !BuildableObject.TryFindByPersistenceId( sub.targetId, out BuildableObject buildable ) || buildable == null )
+			return true;
+		if ( buildable.IsBuilt || buildable.IsCompleting )
+			return true;
+		if ( !buildable.ArePrerequisitesMet() )
+			return false;
+		if ( buildable.IsBlockedByTreasurePile() )
+			return false;
+		return true;
 	}
 
 	static bool TryResolveSubAnchor( ObjectiveSubDefinition sub, out string markerId, out Vector3 markerPos, out Transform outlineRoot )

@@ -33,6 +33,17 @@ public class MinecartOutputStation : MinecartStationBase
 		base.RequestImmediateSend();
 	}
 
+	protected override bool CanCallCartHere( out string blockedPrompt )
+	{
+		if ( !HasActiveInputStation() )
+		{
+			blockedPrompt = "Needs input station";
+			return false;
+		}
+
+		return base.CanCallCartHere( out blockedPrompt );
+	}
+
 	/// <summary>
 	/// Definitions win when set; otherwise categories; empty both = accept all.
 	/// </summary>

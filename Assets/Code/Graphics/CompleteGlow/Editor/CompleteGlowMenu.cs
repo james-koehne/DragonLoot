@@ -18,30 +18,7 @@ public static class CompleteGlowMenu
 	public const string BurstPrefabPath = VfxFolder + "/CompleteGlowBurst.prefab";
 	public const string MotesPrefabPath = VfxFolder + "/CompleteGlowMotes.prefab";
 	public const string DustMoteMaterialPath = "Assets/Materials/Shaders/DustMote/M_DustMote.mat";
-
-	static bool _queuedRevealParticles;
-	const string RevealParticlesConfiguredPrefsKey = "DragonLoot.CompleteGlow.RevealParticlesConfigured.v1";
-
-	[InitializeOnLoadMethod]
-	static void QueueEnsureRevealParticlePrefabs()
-	{
-		if ( _queuedRevealParticles )
-			return;
-		_queuedRevealParticles = true;
-		EditorApplication.delayCall += EnsureRevealParticlePrefabsOnLoad;
-	}
-
-	static void EnsureRevealParticlePrefabsOnLoad()
-	{
-		bool missingBurst = AssetDatabase.LoadAssetAtPath<GameObject>( BurstPrefabPath ) == null;
-		bool missingMotes = AssetDatabase.LoadAssetAtPath<GameObject>( MotesPrefabPath ) == null;
-		bool needsConfigure = !EditorPrefs.GetBool( RevealParticlesConfiguredPrefsKey, false );
-		if ( !missingBurst && !missingMotes && !needsConfigure )
-			return;
-
-		EnsureRevealParticlePrefabs();
-		EditorPrefs.SetBool( RevealParticlesConfiguredPrefsKey, true );
-	}
+	public const string TwoSidedMaterialPath = "Assets/Materials/Shaders/SoftShaft/M_DisplayShaft_TwoSided.mat";
 
 	[MenuItem( DragonLootMenus.GameObjectBuildCompleteGlow, false, 20 )]
 	static void BuildFromSelection()
@@ -223,9 +200,18 @@ public static class CompleteGlowMenu
 		if ( string.IsNullOrEmpty( volume.MeshAssetId ) || IsMeshIdShared( volume ) )
 			volume.MeshAssetId = Guid.NewGuid().ToString( "N" );
 
+		// Apply placement first so SourceMesh footprint can project verts into glow-local XZ.
+		volume.transform.localPosition = volume.ResolveLocalAnchorPosition();
+		volume.transform.localRotation = volume.ResolveAuthoredLocalRotation();
+		volume.transform.localScale = volume.ResolveCompensatedLocalScale();
+
+		Vector2[] footprintRing = null;
+		if ( volume.Settings.FootprintSource == CompleteGlowFootprintSource.SourceMesh )
+			footprintRing = volume.ResolveSourceMeshFootprintRing( applyPadding: true );
+
 		Vector2 footprint = volume.ResolveFootprintWorld();
 		Mesh meshAsset = GetOrCreateMeshAsset( volume.MeshAssetId );
-		CompleteGlowMeshBuilder.Build( volume.Settings, footprint, meshAsset );
+		CompleteGlowMeshBuilder.Build( volume.Settings, footprint, meshAsset, footprintRing );
 		EditorUtility.SetDirty( meshAsset );
 
 		Undo.RecordObject( volume.MeshFilter, "Rebuild Complete Glow" );
@@ -234,9 +220,6 @@ public static class CompleteGlowMenu
 
 		Material mat = volume.Settings.MaterialOverride != null ? volume.Settings.MaterialOverride : material;
 		volume.MeshRenderer.sharedMaterial = mat;
-		volume.transform.localPosition = volume.ResolveLocalAnchorPosition();
-		volume.transform.localRotation = Quaternion.identity;
-		volume.transform.localScale = volume.ResolveCompensatedLocalScale();
 
 		SyncPointLight( volume );
 		SyncDustMotes( volume );

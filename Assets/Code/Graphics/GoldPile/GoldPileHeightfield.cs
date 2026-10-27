@@ -2646,6 +2646,9 @@ public sealed class GoldPileHeightfield
 
 	void ExpandDirtyRect( int minX, int maxX, int minZ, int maxZ )
 	{
+		// Sculpt brushes only go through here — must invalidate so SumHeights / coin sync stay correct.
+		_heightSumValid = false;
+
 		if ( !_dirty )
 		{
 			_dirty = true;

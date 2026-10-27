@@ -488,6 +488,9 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 		}
 
 		_isComplete = entry.complete || EvaluateComplete();
+		SetCompletedVisual( _isComplete );
+		if ( _isComplete )
+			BeginCompleteBreathe();
 	}
 
 	void ClearAllForSave()
@@ -1562,6 +1565,21 @@ public class GemConstellationInteractable : InteractableBase, ITreasureOwner, IT
 	{
 		if ( completedHighlight != null )
 			completedHighlight.SetActive( completed );
+
+		RefreshCompletionCollider();
+	}
+
+	void RefreshCompletionCollider()
+	{
+		Collider col = GetComponent<Collider>();
+		if ( col == null )
+			return;
+
+		bool enable = !_isComplete;
+		if ( col.enabled == enable )
+			return;
+
+		col.enabled = enable;
 	}
 
 	void PublishChanged()

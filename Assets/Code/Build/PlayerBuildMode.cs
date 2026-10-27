@@ -83,6 +83,20 @@ public class PlayerBuildMode : MonoBehaviour
 	public bool IsActive => _active;
 	public bool HasUnlockedWorldHammer => _worldHammerUnlocked;
 	public BuildableObject AimedBuildable => _active ? _aimed : null;
+
+	/// <summary>
+	/// True when build charge owns Interact / ContextualInteract (aimed ghost that is not blocked).
+	/// </summary>
+	public bool OwnsInteractInput
+	{
+		get
+		{
+			if ( !_active )
+				return false;
+			BuildableObject aimed = AimedBuildable;
+			return aimed != null && !aimed.IsBlockedByTreasurePile();
+		}
+	}
 	public float ChargeProgress01
 	{
 		get
@@ -260,6 +274,14 @@ public class PlayerBuildMode : MonoBehaviour
 		EventBus.Publish( new BuildModeEnteredEvent() );
 	}
 
+	/// <summary>
+	/// Exits build mode (holster animation by default). Used when world interact/pickup/place takes priority.
+	/// </summary>
+	public void RequestExit( bool immediate = false )
+	{
+		BeginExitBuildMode( immediate );
+	}
+
 	void BeginExitBuildMode( bool immediate = false )
 	{
 		if ( !_active && _equipPhase != EquipPhase.Drawing && _equipPhase != EquipPhase.WorldPickup && _equipPhase != EquipPhase.Held && _equipPhase != EquipPhase.Holstering )
@@ -393,9 +415,9 @@ public class PlayerBuildMode : MonoBehaviour
 				continue;
 
 			// Active when within fadeEnd of the bounds (nearest point) so long tracks show from either end.
-			// Objective-outlined buildables stay visible even outside build fade / when far, but still use normal ghost fade.
+			// Objective/tutorial-outlined buildables stay visible even outside build fade / when far.
 			bool show = buildable == _scriptedBuildable
-				|| buildable.ObjectiveOutlineRequested
+				|| buildable.OutlineVisibilityRequested
 				|| buildable.IsEligibleToShow( playerPos, fadeEnd );
 			bool wasVisible = buildable.IsGhostVisible;
 			buildable.SetGhostVisible( show );
@@ -421,8 +443,8 @@ public class PlayerBuildMode : MonoBehaviour
 			if ( buildable == null )
 				continue;
 
-			// Keep quest-objective / scripted-build ghosts visible after leaving build mode.
-			buildable.SetGhostVisible( buildable == _scriptedBuildable || buildable.ObjectiveOutlineRequested );
+			// Keep quest-objective / tutorial / scripted-build ghosts visible after leaving build mode.
+			buildable.SetGhostVisible( buildable == _scriptedBuildable || buildable.OutlineVisibilityRequested );
 		}
 	}
 

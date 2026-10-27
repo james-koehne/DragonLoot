@@ -104,6 +104,9 @@ public abstract class MinecartStationBase : InteractableBase
 
 	protected bool HasDockedCart => DockedCart != null;
 
+	/// <summary>Public docked check for station control UI (Go / Call hover prompt).</summary>
+	public bool IsCartDocked => HasDockedCart;
+
 	protected bool HasInboundCart => InboundCart != null;
 
 	protected virtual bool ShowsCallVisualization => false;
@@ -256,16 +259,98 @@ public abstract class MinecartStationBase : InteractableBase
 		OnForcedOrIdleLeave( ResolveTransferCart( DockedCart ), auto );
 	}
 
-	/// <summary>True when a docked cart can be sent to the next station in <see cref="stationLoop"/>.</summary>
+	/// <summary>True when a docked cart can be sent to the next station in the resolved loop.</summary>
 	public bool CanDispatchDockedToNextInLoop()
 	{
-		if ( DockedCart == null || stationLoop == null )
+		string prompt;
+		return TryGetGoCallState( out MinecartStationGoAction action, out prompt )
+			&& action == MinecartStationGoAction.SendToNext;
+	}
+
+	/// <summary>
+	/// Resolves the blue Go button action: send docked cart to next loop station, or call a cart here.
+	/// When false, <paramref name="prompt"/> is a blocked reason for the interaction UI.
+	/// </summary>
+	public bool TryGetGoCallState( out MinecartStationGoAction action, out string prompt )
+	{
+		action = MinecartStationGoAction.None;
+		prompt = null;
+
+		if ( HasDockedCart )
+		{
+			if ( DockedCart.ResolveAutoController() == null )
+			{
+				prompt = "Cart cannot leave";
+				return false;
+			}
+
+			MinecartStationLoop loop = ResolveStationLoop();
+			MinecartStationBase next;
+			if ( loop == null || !loop.TryGetNext( this, out next ) )
+			{
+				prompt = "No next station";
+				return false;
+			}
+
+			action = MinecartStationGoAction.SendToNext;
+			prompt = "Send to Next Station";
+			return true;
+		}
+
+		if ( HasInboundCart )
+		{
+			prompt = "Cart already inbound";
 			return false;
-		if ( DockedCart.ResolveAutoController() == null )
+		}
+
+		if ( !CanCallCartHere( out prompt ) )
 			return false;
 
-		MinecartStationBase next;
-		return stationLoop.TryGetNext( this, out next );
+		action = MinecartStationGoAction.CallCart;
+		prompt = "Call Cart";
+		return true;
+	}
+
+	/// <summary>Performs the resolved Go/Call action. Returns false when blocked or dispatch fails.</summary>
+	public bool TryPerformGoCallAction()
+	{
+		string unused;
+		return TryPerformGoCallAction( out unused );
+	}
+
+	/// <summary>
+	/// Performs the resolved Go/Call action.
+	/// When false, <paramref name="failurePrompt"/> is a blocked reason or runtime failure message.
+	/// </summary>
+	public bool TryPerformGoCallAction( out string failurePrompt )
+	{
+		failurePrompt = null;
+		if ( !TryGetGoCallState( out MinecartStationGoAction action, out string prompt ) )
+		{
+			failurePrompt = prompt;
+			return false;
+		}
+
+		if ( action == MinecartStationGoAction.SendToNext )
+		{
+			if ( TryDispatchDockedToNextInLoop() )
+				return true;
+
+			failurePrompt = "No route to next station";
+			return false;
+		}
+
+		if ( action == MinecartStationGoAction.CallCart )
+		{
+			if ( TryCallNearestCart() )
+				return true;
+
+			failurePrompt = "Could not call cart";
+			return false;
+		}
+
+		failurePrompt = "Cannot use station control";
+		return false;
 	}
 
 	/// <summary>
@@ -274,19 +359,55 @@ public abstract class MinecartStationBase : InteractableBase
 	/// </summary>
 	public bool TryDispatchDockedToNextInLoop()
 	{
-		if ( DockedCart == null || stationLoop == null )
+		if ( DockedCart == null )
+			return false;
+
+		MinecartStationLoop loop = ResolveStationLoop();
+		if ( loop == null )
 			return false;
 
 		MinecartStationBase next;
-		if ( !stationLoop.TryGetNext( this, out next ) )
+		if ( !loop.TryGetNext( this, out next ) )
 			return false;
 
 		MinecartAutoController auto = DockedCart.ResolveAutoController();
 		if ( auto == null )
 			return false;
 
-		auto.LeaveDockTo( next, requireAutomationEnabled: false );
+		return auto.LeaveDockTo( next, requireAutomationEnabled: false );
+	}
+
+	protected virtual bool CanCallCartHere( out string blockedPrompt )
+	{
+		blockedPrompt = null;
+		if ( FindNearestAvailableCart() == null )
+		{
+			blockedPrompt = "No cart available";
+			return false;
+		}
+
 		return true;
+	}
+
+	bool TryCallNearestCart()
+	{
+		if ( HasDockedCart || HasInboundCart )
+			return false;
+
+		MinecartInteractable cart = FindNearestAvailableCart();
+		if ( cart == null )
+			return false;
+
+		return TryBeginCall( cart );
+	}
+
+	MinecartStationLoop ResolveStationLoop()
+	{
+		if ( stationLoop != null )
+			return stationLoop;
+
+		stationLoop = MinecartStationLoop.FindContaining( this );
+		return stationLoop;
 	}
 
 	public void EditorSetStationLoop( MinecartStationLoop loop )
@@ -515,11 +636,22 @@ public abstract class MinecartStationBase : InteractableBase
 		_inactivityTimer += Time.deltaTime;
 
 		// After the transfer job finishes, wait inactivitySeconds before leaving.
+		// If new takeable/unloadable cargo appears while still docked, resume transferring.
 		if ( _jobCompleteWaiting )
 		{
-			if ( _inactivityTimer >= InactivitySeconds )
+			if ( CanTransferProgress( transferCart ) )
+			{
+				_jobCompleteWaiting = false;
+				_inactivityTimer = 0f;
+				_transferTimer = 0f;
+			}
+			else if ( _inactivityTimer >= InactivitySeconds )
+			{
 				OnForcedOrIdleLeave( transferCart, auto );
-			return;
+				return;
+			}
+			else
+				return;
 		}
 
 		if ( _inactivityTimer >= InactivitySeconds )

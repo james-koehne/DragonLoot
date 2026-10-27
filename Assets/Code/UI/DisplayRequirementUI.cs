@@ -277,6 +277,8 @@ public class DisplayRequirementUI
 		if ( table.IsAimFeedbackFresh && aimed >= 0 && !table.IsSlotPrerequisiteMet( aimed ) )
 		{
 			TreasureDefinition blocker = table.GetBlockingPrerequisiteArtifact( aimed );
+			if ( blocker == null )
+				blocker = table.GetAnyBlockingPrerequisiteArtifact();
 			string name = blocker != null ? RequirementLabel( blocker ) : "required artifact";
 			builder.Append( "Place " ).Append( name ).Append( " first" );
 			return true;
@@ -287,6 +289,9 @@ public class DisplayRequirementUI
 
 		for ( int i = 0; i < slotCount; i++ )
 		{
+			if ( !table.IsSlotPrerequisiteMet( i ) )
+				continue;
+
 			TreasureDefinition required = table.GetRequiredArtifact( i );
 			if ( required == null )
 				continue;

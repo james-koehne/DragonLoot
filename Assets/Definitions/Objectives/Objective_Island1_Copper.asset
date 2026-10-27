@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Objective_Island1_Copper
   m_EditorClassIdentifier: Assembly-CSharp::ObjectiveDefinition
   id: obj_island_1_copper
-  title: Coins
+  title: Gather Coins
   alwaysShow: 0
   showVolumeId: volume_island_1
   showRadius: 40
@@ -25,6 +25,8 @@ MonoBehaviour:
     completeType: 1
     targetId: island1_coin_display
     requiredCount: 0
+    displaySlotStart: -1
+    displaySlotCount: 0
   rewards: []
   rewardLabel: 
   showReward: 0

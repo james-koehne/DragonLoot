@@ -31,6 +31,7 @@ MonoBehaviour:
   driveMaxSpeed: 10
   driveAcceleration: 12
   driveBrake: 18
+  driveThirdPerson: 0
   gridColumns: 4
   gridRows: 3
   cellSpacing: 0.22

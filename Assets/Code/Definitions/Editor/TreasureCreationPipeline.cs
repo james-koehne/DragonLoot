@@ -64,7 +64,9 @@ public static class TreasureCreationPipeline
 		public Vector3 WorldScale = Vector3.one * 0.35f;
 		public Vector3 HeldScale = Vector3.one * 0.08f;
 		public Vector3 ActiveHeldLocalEuler = Vector3.zero;
+		public Vector3 ActiveHeldLocalOffset = Vector3.zero;
 		public Vector3 HeldStackLocalEuler = Vector3.zero;
+		public Vector3 HeldStackLocalOffset = Vector3.zero;
 
 		public TreasureCleaningRequirement CleaningRequirement = TreasureCleaningRequirement.Auto;
 		public bool CanStack = true;
@@ -363,7 +365,9 @@ public static class TreasureCreationPipeline
 		request.WorldScale = source.worldScale;
 		request.HeldScale = source.heldScale;
 		request.ActiveHeldLocalEuler = source.activeHeldLocalEuler;
+		request.ActiveHeldLocalOffset = source.activeHeldLocalOffset;
 		request.HeldStackLocalEuler = source.heldStackLocalEuler;
+		request.HeldStackLocalOffset = source.heldStackLocalOffset;
 		request.CleaningRequirement = source.cleaningRequirement;
 		request.CanStack = source.canStack;
 		request.CoinThickness = source.coinThickness;
@@ -581,7 +585,9 @@ public static class TreasureCreationPipeline
 		def.worldScale = request.WorldScale;
 		def.heldScale = request.HeldScale;
 		def.activeHeldLocalEuler = request.ActiveHeldLocalEuler;
+		def.activeHeldLocalOffset = request.ActiveHeldLocalOffset;
 		def.heldStackLocalEuler = request.HeldStackLocalEuler;
+		def.heldStackLocalOffset = request.HeldStackLocalOffset;
 		def.cleaningRequirement = request.CleaningRequirement;
 		def.canStack = request.CanStack;
 		def.coinThickness = request.CoinThickness;

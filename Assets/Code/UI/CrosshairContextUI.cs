@@ -380,6 +380,13 @@ public class CrosshairContextUI : MonoBehaviour
 		_lookLabel.raycastTarget = false;
 		_lookLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
 		_lookLabel.verticalOverflow = VerticalWrapMode.Overflow;
-		_lookLabel.supportRichText = false;
+		_lookLabel.supportRichText = true;
+
+		Shadow shadow = _lookLabel.GetComponent<Shadow>();
+		if ( shadow == null )
+			shadow = _lookLabel.gameObject.AddComponent<Shadow>();
+		shadow.effectColor = new Color( 0f, 0f, 0f, 0.72f );
+		shadow.effectDistance = new Vector2( 1.5f, -1.5f );
+		shadow.useGraphicAlpha = true;
 	}
 }

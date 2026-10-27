@@ -160,10 +160,14 @@ public class MinecartAutoController : MonoBehaviour
 	/// <summary>
 	/// Undock and optionally dispatch to <paramref name="continueTo"/>.
 	/// When <paramref name="requireAutomationEnabled"/> is false, manual go still dispatches while automation is paused.
+	/// Returns true when travel toward <paramref name="continueTo"/> began (or undock-only when continueTo is null).
 	/// </summary>
-	public void LeaveDockTo( MinecartStationBase continueTo, bool requireAutomationEnabled )
+	public bool LeaveDockTo( MinecartStationBase continueTo, bool requireAutomationEnabled )
 	{
 		MinecartInteractable cart = Cart;
+		MinecartStationBase wasDockedAt = _dockedStation;
+		bool wasDocked = _state == AutoState.Docked;
+
 		ClearDock( notifyStation: true );
 
 		bool automationOk = !requireAutomationEnabled || MinecartStationBase.AutomationEnabled;
@@ -171,15 +175,25 @@ public class MinecartAutoController : MonoBehaviour
 		{
 			// Prefer station claim so inbound reservation / lamps stay consistent.
 			if ( continueTo.TryDispatchCart( cart ) )
-				return;
+				return true;
 
 			if ( TryDispatchTo( continueTo ) )
-				return;
+				return true;
+
+			// Restore dock if we failed to leave toward a destination.
+			if ( wasDocked && wasDockedAt != null )
+			{
+				_dockedStation = wasDockedAt;
+				_state = AutoState.Docked;
+				wasDockedAt.NotifyCartDocked( cart );
+				return false;
+			}
 		}
 
 		_waitTimer = 0f;
 		_state = AutoState.Idle;
 		_targetStation = null;
+		return continueTo == null;
 	}
 
 	public void NotifyTravelCancelled( MinecartInteractable lead )

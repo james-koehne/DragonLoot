@@ -34,6 +34,12 @@ public static class EventSceneAutoWire
 	/// <summary>Author in Level: Workshop / coin sorter area (Coin Sorter tutorial arrive task).</summary>
 	public const string IdVolumeWorkshop = "volume_workshop";
 
+	/// <summary>Author in Level: optional inset workshop trigger (legacy; hammer delivery now uses DoorOpened).</summary>
+	public const string IdVolumeWorkshopInterior = "volume_workshop_interior";
+
+	/// <summary>Author in Level via Workshop Access doorway setup: hammer fairy spawn just inside the workshop door.</summary>
+	public const string IdSpawnWorkshopHammerFairy = "spawn_workshop_hammer_fairy";
+
 	/// <summary>Author in Level: map label text for Workshop / coin sorter (exact: "Workshop").</summary>
 	public const string MapLabelWorkshop = "Workshop";
 

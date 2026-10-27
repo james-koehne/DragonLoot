@@ -89,9 +89,9 @@ MonoBehaviour:
   wholeStackHoldMaxSeconds: 2
   wholeStackProgressRingSize: 96
   wholeStackAbsorbTweenDuration: 0.28
-  activeRefillTweenDuration: 0.22
-  handTransferSpeed: 2.7
-  handTransferMaxDuration: 0.05
+  activeRefillTweenDuration: 0.04
+  handTransferSpeed: 8
+  handTransferMaxDuration: 0.12
   pileStealStaggerSeconds: 0.06
   coinVisualPoolSize: 32
   coinStackPickupClips:

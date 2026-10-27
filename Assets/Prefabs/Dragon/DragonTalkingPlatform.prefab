@@ -265,6 +265,7 @@ MonoBehaviour:
   _floatRoot: {fileID: 2705257229952535385}
   _floatHeight: 8
   _floatDuration: 0.85
+  _thirdPersonHoldAfterLook: 0.5
   _blendIn: 0.55
   _blendOut: 0.55
   _letterboxPeak: 0.12

@@ -4,7 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// Room-complete floor FX director for <c>DragonLoot/FloorGleam</c>:
-/// whole-mesh area glow that fades, mid-fade world-space shine swipe, temporary dust motes.
+/// whole-mesh area glow that fades, mid-fade world-space shine swipe, temporary sparkle motes.
 /// Renderer stays disabled when idle so save-restored rooms do not show a stuck gleam.
 /// </summary>
 [DisallowMultipleComponent]
@@ -31,19 +31,19 @@ public class RoomFloorGleamController : MonoBehaviour
 
 	[SerializeField]
 	[Min( 0.1f )]
-	float _duration = 2.25f;
+	float _duration = 2.0f;
 
 	[SerializeField]
-	AnimationCurve _areaGlowCurve = AnimationCurve.EaseInOut( 0f, 1f, 1f, 0f );
+	AnimationCurve _areaGlowCurve = CreateDefaultAreaGlowCurve();
 
 	[Tooltip( "Normalized time (0-1 of duration) when the world swipe begins." )]
 	[SerializeField]
 	[Range( 0f, 1f )]
-	float _swipeStart = 0.4f;
+	float _swipeStart = 0.3f;
 
 	[SerializeField]
 	[Min( 0.05f )]
-	float _swipeDuration = 0.9f;
+	float _swipeDuration = 0.95f;
 
 	[SerializeField]
 	[ColorUsage( true, true )]
@@ -51,11 +51,11 @@ public class RoomFloorGleamController : MonoBehaviour
 
 	[SerializeField]
 	[Range( 0.005f, 0.4f )]
-	float _bandWidth = 0.08f;
+	float _bandWidth = 0.24f;
 
 	[SerializeField]
 	[Range( 0.001f, 0.25f )]
-	float _bandSoftness = 0.04f;
+	float _bandSoftness = 0.05f;
 
 	[SerializeField]
 	[Range( 1, 8 )]
@@ -65,30 +65,45 @@ public class RoomFloorGleamController : MonoBehaviour
 	[Range( 0f, 0.35f )]
 	float _lineSpacing = 0.07f;
 
-	[Header( "Motes" )]
+	[Tooltip( "When true, swipe axis is flattened to XZ (floor rooms). Disable for vertical wall overlays." )]
+	[SerializeField]
+	bool _flattenSweepToHorizontal = true;
+
+	[Tooltip( "When true, swipe travels along sweep reference up (wall boards). Otherwise forward." )]
+	[SerializeField]
+	bool _sweepAlongUp = false;
+
+	[Header( "Sparkles" )]
 	[SerializeField]
 	ParticleSystem _motes;
 
 	[SerializeField]
 	[Min( 0f )]
-	float _moteBaseEmission = 12f;
+	float _moteBaseEmission = 20f;
 
 	[SerializeField]
 	[Min( 0f )]
-	float _moteSwipeBoostEmission = 35f;
+	float _moteSwipeBoostEmission = 90f;
 
 	[SerializeField]
 	[Min( 0.01f )]
-	float _moteBaseSize = 0.08f;
+	float _moteBaseSize = 0.1f;
 
 	[SerializeField]
 	[Min( 0.01f )]
-	float _moteSwipeBoostSize = 0.14f;
+	float _moteSwipeBoostSize = 0.22f;
+
+	[SerializeField]
+	[Min( 0f )]
+	float _moteBaseRiseSpeed = 0.6f;
+
+	[SerializeField]
+	[Min( 0f )]
+	float _moteSwipeBoostRiseSpeed = 1.8f;
 
 	MaterialPropertyBlock _block;
 	Coroutine _routine;
 	bool _playing;
-	float _moteBaseRateOverTime;
 	bool _capturedMoteDefaults;
 
 	public bool IsPlaying => _playing;
@@ -149,11 +164,7 @@ public class RoomFloorGleamController : MonoBehaviour
 		_playing = true;
 
 		Transform reference = ResolveSweepReference();
-		Vector3 axis = reference.forward;
-		axis.y = 0f;
-		if ( axis.sqrMagnitude < 0.0001f )
-			axis = Vector3.right;
-		axis.Normalize();
+		Vector3 axis = ResolveSweepAxis( reference );
 
 		Vector3 center = renderer.bounds.center;
 		float span = MeasureSpan( renderer, center, axis );
@@ -219,10 +230,6 @@ public class RoomFloorGleamController : MonoBehaviour
 		if ( _capturedMoteDefaults || _motes == null )
 			return;
 
-		ParticleSystem.EmissionModule emission = _motes.emission;
-		_moteBaseRateOverTime = emission.rateOverTime.constant;
-		if ( _moteBaseRateOverTime < 0.01f )
-			_moteBaseRateOverTime = _moteBaseEmission;
 		_capturedMoteDefaults = true;
 	}
 
@@ -231,6 +238,7 @@ public class RoomFloorGleamController : MonoBehaviour
 		if ( _motes == null )
 			return;
 
+		FitMoteShapeToOverlay();
 		_motes.Stop( true, ParticleSystemStopBehavior.StopEmittingAndClear );
 		ApplyMoteIntensity( areaGlow: 1f, swipeBoost: 0f );
 		_motes.Play( true );
@@ -245,6 +253,47 @@ public class RoomFloorGleamController : MonoBehaviour
 			_motes.Stop( true, ParticleSystemStopBehavior.StopEmittingAndClear );
 		else
 			_motes.Stop( true, ParticleSystemStopBehavior.StopEmitting );
+	}
+
+	void FitMoteShapeToOverlay()
+	{
+		if ( _motes == null )
+			return;
+
+		MeshRenderer renderer = ResolveRenderer();
+		if ( renderer == null )
+			return;
+
+		Bounds bounds = renderer.bounds;
+		Transform moteTransform = _motes.transform;
+		moteTransform.position = bounds.center;
+		moteTransform.rotation = renderer.transform.rotation;
+
+		Vector3 localMin = new Vector3( float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity );
+		Vector3 localMax = new Vector3( float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity );
+		Vector3 ext = bounds.extents;
+		for ( int ix = -1; ix <= 1; ix += 2 )
+		{
+			for ( int iy = -1; iy <= 1; iy += 2 )
+			{
+				for ( int iz = -1; iz <= 1; iz += 2 )
+				{
+					Vector3 worldCorner = bounds.center + new Vector3( ext.x * ix, ext.y * iy, ext.z * iz );
+					Vector3 localCorner = moteTransform.InverseTransformPoint( worldCorner );
+					localMin = Vector3.Min( localMin, localCorner );
+					localMax = Vector3.Max( localMax, localCorner );
+				}
+			}
+		}
+
+		Vector3 localSize = localMax - localMin;
+		ParticleSystem.ShapeModule shape = _motes.shape;
+		shape.enabled = true;
+		shape.shapeType = ParticleSystemShapeType.Box;
+		shape.scale = new Vector3(
+			Mathf.Max( 0.5f, Mathf.Abs( localSize.x ) ),
+			Mathf.Max( 0.5f, Mathf.Abs( localSize.y ) ),
+			Mathf.Max( 0.15f, Mathf.Abs( localSize.z ) ) );
 	}
 
 	void ApplyMoteIntensity( float areaGlow, float swipeBoost )
@@ -263,8 +312,23 @@ public class RoomFloorGleamController : MonoBehaviour
 		main.startSize = Mathf.Max( 0.01f, size );
 
 		Color c = _color;
-		c.a = Mathf.Clamp01( 0.25f + areaGlow * 0.75f + swipeBoost * 0.5f );
+		float intensity = 1f + swipeBoost * 0.75f;
+		c.r *= intensity;
+		c.g *= intensity;
+		c.b *= intensity;
+		c.a = Mathf.Clamp01( 0.35f + areaGlow * 0.55f + swipeBoost * 0.65f );
 		main.startColor = c;
+
+		float riseMin = Mathf.Lerp( _moteBaseRiseSpeed * 0.65f, _moteSwipeBoostRiseSpeed * 0.7f, swipeBoost );
+		float riseMax = Mathf.Lerp( _moteBaseRiseSpeed, _moteSwipeBoostRiseSpeed, swipeBoost );
+		float scatter = Mathf.Lerp( 0.08f, 0.28f, swipeBoost );
+
+		ParticleSystem.VelocityOverLifetimeModule velocity = _motes.velocityOverLifetime;
+		velocity.enabled = true;
+		velocity.space = ParticleSystemSimulationSpace.World;
+		velocity.x = new ParticleSystem.MinMaxCurve( -scatter, scatter );
+		velocity.y = new ParticleSystem.MinMaxCurve( riseMin, riseMax );
+		velocity.z = new ParticleSystem.MinMaxCurve( -scatter, scatter );
 	}
 
 	static float MeasureSpan( MeshRenderer renderer, Vector3 origin, Vector3 axis )
@@ -314,20 +378,61 @@ public class RoomFloorGleamController : MonoBehaviour
 		return transform;
 	}
 
+	Vector3 ResolveSweepAxis( Transform reference )
+	{
+		Vector3 axis = _sweepAlongUp ? reference.up : reference.forward;
+		if ( _flattenSweepToHorizontal )
+		{
+			axis.y = 0f;
+			if ( axis.sqrMagnitude < 0.0001f )
+				axis = Vector3.right;
+		}
+
+		if ( axis.sqrMagnitude < 0.0001f )
+			axis = Vector3.up;
+
+		return axis.normalized;
+	}
+
 	void EnsureBlock()
 	{
 		if ( _block == null )
 			_block = new MaterialPropertyBlock();
 	}
 
+	static AnimationCurve CreateDefaultAreaGlowCurve()
+	{
+		return new AnimationCurve(
+			new Keyframe( 0f, 1f ),
+			new Keyframe( 0.4f, 1f ),
+			new Keyframe( 1f, 0f ) );
+	}
+
 #if UNITY_EDITOR
 	public void EditorAssign( MeshRenderer renderer, Transform sweepReference, float duration, float bandWidth, Color color )
+	{
+		EditorAssign( renderer, sweepReference, duration, bandWidth, color, flattenSweepToHorizontal: true, sweepAlongUp: false );
+	}
+
+	public void EditorAssign( MeshRenderer renderer, Transform sweepReference, float duration, float bandWidth, Color color, bool flattenSweepToHorizontal, bool sweepAlongUp )
 	{
 		_renderer = renderer;
 		_sweepReference = sweepReference;
 		_duration = Mathf.Max( 0.1f, duration );
 		_bandWidth = Mathf.Clamp( bandWidth, 0.005f, 0.4f );
 		_color = color;
+		_flattenSweepToHorizontal = flattenSweepToHorizontal;
+		_sweepAlongUp = sweepAlongUp;
+		_swipeStart = 0.3f;
+		_swipeDuration = 0.95f;
+		_bandSoftness = 0.05f;
+		_moteBaseEmission = 20f;
+		_moteSwipeBoostEmission = 90f;
+		_moteBaseSize = 0.1f;
+		_moteSwipeBoostSize = 0.22f;
+		_moteBaseRiseSpeed = 0.6f;
+		_moteSwipeBoostRiseSpeed = 1.8f;
+		_areaGlowCurve = CreateDefaultAreaGlowCurve();
 	}
 
 	public void EditorAssignMotes( ParticleSystem motes )
@@ -345,8 +450,10 @@ public class RoomFloorGleamController : MonoBehaviour
 		_bandSoftness = Mathf.Clamp( _bandSoftness, 0.001f, 0.25f );
 		_lineCount = Mathf.Clamp( _lineCount, 1, 8 );
 		_lineSpacing = Mathf.Clamp( _lineSpacing, 0f, 0.35f );
+		_moteBaseRiseSpeed = Mathf.Max( 0f, _moteBaseRiseSpeed );
+		_moteSwipeBoostRiseSpeed = Mathf.Max( 0f, _moteSwipeBoostRiseSpeed );
 		if ( _areaGlowCurve == null || _areaGlowCurve.length == 0 )
-			_areaGlowCurve = AnimationCurve.EaseInOut( 0f, 1f, 1f, 0f );
+			_areaGlowCurve = CreateDefaultAreaGlowCurve();
 	}
 
 	void OnDrawGizmosSelected()
@@ -356,12 +463,7 @@ public class RoomFloorGleamController : MonoBehaviour
 		if ( renderer == null )
 			return;
 
-		Vector3 axis = reference.forward;
-		axis.y = 0f;
-		if ( axis.sqrMagnitude < 0.0001f )
-			axis = Vector3.right;
-		axis.Normalize();
-
+		Vector3 axis = ResolveSweepAxis( reference );
 		Vector3 center = renderer.bounds.center;
 		float span = MeasureSpan( renderer, center, axis );
 		Vector3 origin = center - axis * ( span * 0.5f );

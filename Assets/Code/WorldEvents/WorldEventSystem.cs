@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using UnityEngine;
@@ -36,6 +37,7 @@ public class WorldEventSystem : MonoBehaviour
 
 	readonly DragonDialoguePlayer _dialogue = new DragonDialoguePlayer();
 	readonly HashSet<string> _enteredVolumes = new HashSet<string>();
+	readonly HashSet<string> _openedDoorsThisSession = new HashSet<string>();
 	readonly HashSet<string> _firedThisSession = new HashSet<string>();
 	readonly List<WorldEventDefinition> _pendingFire = new List<WorldEventDefinition>();
 	readonly List<RunningActionSequence> _runningSequences = new List<RunningActionSequence>();
@@ -108,6 +110,7 @@ public class WorldEventSystem : MonoBehaviour
 		LoadCatalog();
 		EventSceneAutoWire.EnsureWired();
 		_enteredVolumes.Clear();
+		_openedDoorsThisSession.Clear();
 		_firedThisSession.Clear();
 		_playerHasMadeGameplayInput = false;
 		_catalogStartUnscaledTime = Time.unscaledTime;
@@ -142,6 +145,7 @@ public class WorldEventSystem : MonoBehaviour
 		EventBus.Subscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Subscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Subscribe<BuildableCompletedEvent>( OnBuildableCompleted );
+		EventBus.Subscribe<DoorOpenedEvent>( OnDoorOpened );
 		_subscribed = true;
 	}
 
@@ -154,11 +158,19 @@ public class WorldEventSystem : MonoBehaviour
 		EventBus.Unsubscribe<TreasureCollectedEvent>( OnTreasureCollected );
 		EventBus.Unsubscribe<CinematicPresentationEndedEvent>( OnCinematicPresentationEnded );
 		EventBus.Unsubscribe<BuildableCompletedEvent>( OnBuildableCompleted );
+		EventBus.Unsubscribe<DoorOpenedEvent>( OnDoorOpened );
 		_subscribed = false;
 	}
 
 	void OnBuildableCompleted( BuildableCompletedEvent evt )
 	{
+		EvaluateAll();
+	}
+
+	void OnDoorOpened( DoorOpenedEvent evt )
+	{
+		if ( !string.IsNullOrEmpty( evt.DoorId ) )
+			_openedDoorsThisSession.Add( evt.DoorId );
 		EvaluateAll();
 	}
 
@@ -264,9 +276,20 @@ public class WorldEventSystem : MonoBehaviour
 				return IsRequiredObjectiveCompleted( condition.targetId );
 			case WorldEventConditionType.BuildableCompleted:
 				return IsRequiredBuildableCompleted( condition.targetId );
+			case WorldEventConditionType.DoorOpened:
+				return IsRequiredDoorOpened( condition.targetId );
 			default:
 				return false;
 		}
+	}
+
+	bool IsRequiredDoorOpened( string doorId )
+	{
+		if ( string.IsNullOrEmpty( doorId ) )
+			return false;
+		if ( _openedDoorsThisSession.Contains( doorId ) )
+			return true;
+		return DoorProgress.IsOpen( doorId );
 	}
 
 	static bool IsRequiredObjectiveCompleted( string objectiveId )
@@ -602,12 +625,12 @@ public class WorldEventSystem : MonoBehaviour
 
 		if ( !action.waitUntilFinished || sequence == null )
 		{
-			FairyHelper.StartGuideToMarker( action.markerTargetId, action.fairySpeechLine, null );
+			FairyHelper.StartGuideToMarker( action.markerTargetId, action.fairySpeechLine, action.fairyArrivalSpeechLine, null );
 			return;
 		}
 
 		bool completedSync = false;
-		FairyHelper.StartGuideToMarker( action.markerTargetId, action.fairySpeechLine, () =>
+		FairyHelper.StartGuideToMarker( action.markerTargetId, action.fairySpeechLine, action.fairyArrivalSpeechLine, () =>
 		{
 			completedSync = true;
 			CompleteCallbackWait( sequence );
@@ -625,21 +648,54 @@ public class WorldEventSystem : MonoBehaviour
 			return;
 		}
 
+		bool hasPose = TryResolveFairyDeliverySpawnPose( action, out Vector3 spawnPos, out Quaternion spawnRot );
 		if ( !action.waitUntilFinished || sequence == null )
 		{
-			FairyHelper.StartDelivery( action.addressableKey, action.fairySpeechLine, null );
+			if ( hasPose )
+				FairyHelper.StartDeliveryAt( action.addressableKey, spawnPos, spawnRot, action.fairySpeechLine, null );
+			else
+				FairyHelper.StartDelivery( action.addressableKey, action.fairySpeechLine, null );
 			return;
 		}
 
 		bool completedSync = false;
-		FairyHelper.StartDelivery( action.addressableKey, action.fairySpeechLine, () =>
+		Action onFinished = () =>
 		{
 			completedSync = true;
 			CompleteCallbackWait( sequence );
-		} );
+		};
+		if ( hasPose )
+			FairyHelper.StartDeliveryAt( action.addressableKey, spawnPos, spawnRot, action.fairySpeechLine, onFinished );
+		else
+			FairyHelper.StartDelivery( action.addressableKey, action.fairySpeechLine, onFinished );
 		if ( completedSync )
 			return;
 		sequence.Phase = ActionSequencePhase.WaitingCallback;
+	}
+
+	static bool TryResolveFairyDeliverySpawnPose( WorldEventAction action, out Vector3 position, out Quaternion rotation )
+	{
+		position = Vector3.zero;
+		rotation = Quaternion.identity;
+		if ( action == null || action.spawnAtPlayer )
+			return false;
+
+		if ( action.useWorldPosition )
+		{
+			position = action.spawnWorldPosition;
+			return true;
+		}
+
+		if ( string.IsNullOrEmpty( action.spawnPointId ) )
+			return false;
+		if ( !EventTargetRegistry.TryGetSpawnPoint( action.spawnPointId, out EventSpawnPoint spawnPoint ) )
+			return false;
+		if ( spawnPoint == null || spawnPoint.SpawnTransform == null )
+			return false;
+
+		position = spawnPoint.SpawnTransform.position;
+		rotation = spawnPoint.SpawnTransform.rotation;
+		return true;
 	}
 
 	void StartDialogueAction( WorldEventAction action, RunningActionSequence sequence )

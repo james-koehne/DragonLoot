@@ -905,7 +905,19 @@ public class GoldPileArtifactProps : MonoBehaviour
 				scale = def.worldScale.x > 0.01f ? def.worldScale.x : 1f;
 
 			Bounds localBounds = new Bounds( pose.boundsCenter, pose.boundsSize );
+			localBounds = GoldPileTreasurePlacement.RepairUndersizedLatentBounds(
+				def,
+				pose.localPos,
+				pose.localRot,
+				scale,
+				localBounds );
 			if ( !GoldPileTreasurePlacement.HasTreasureSurfaceBelow( _pileRoot, pose.localPos, _latentSurfaceNeighborhoodCells ) )
+			{
+				skippedSurface++;
+				continue;
+			}
+			if ( TreasureSurfaceBlocker.BlocksLocalPoint( _pileRoot, pose.localPos )
+				|| TreasureSurfaceBlocker.OverlapsLocalBoundsXZ( _pileRoot, localBounds ) )
 			{
 				skippedSurface++;
 				continue;
@@ -1348,7 +1360,8 @@ public class GoldPileArtifactProps : MonoBehaviour
 		out GoldPileTreasurePlacement.VolumePose pose,
 		out Bounds localBounds )
 	{
-		return GoldPileTreasurePlacement.TrySampleValidVolumePose(
+		Mesh mesh = def != null ? def.meshOverride : null;
+		bool placed = GoldPileTreasurePlacement.TrySampleValidVolumePose(
 			_heightfield,
 			_pileLootSeed,
 			unitIndex,
@@ -1360,7 +1373,7 @@ public class GoldPileArtifactProps : MonoBehaviour
 			def.category,
 			occupiedBounds,
 			spacing,
-			null,
+			mesh,
 			out pose,
 			out localBounds,
 			maxAttempts,
@@ -1369,6 +1382,17 @@ public class GoldPileArtifactProps : MonoBehaviour
 			_treasureXZSpread,
 			_latentSurfaceNeighborhoodCells,
 			nearSurface );
+		if ( placed && def != null )
+		{
+			localBounds = GoldPileTreasurePlacement.RepairUndersizedLatentBounds(
+				def,
+				pose.LocalPos,
+				pose.LocalRot,
+				scale,
+				localBounds );
+		}
+
+		return placed;
 	}
 
 	Task RefreshRevealAsync(
@@ -1415,12 +1439,25 @@ public class GoldPileArtifactProps : MonoBehaviour
 						continue;
 				}
 
+				Bounds exposeBounds = GoldPileTreasurePlacement.RepairUndersizedLatentBounds(
+					latent.Definition,
+					latent.LocalPos,
+					latent.LocalRot,
+					latent.Scale,
+					latent.LocalBounds );
+				if ( exposeBounds.size != latent.LocalBounds.size
+					|| exposeBounds.center != latent.LocalBounds.center )
+				{
+					latent.LocalBounds = exposeBounds;
+					_latent[ i ] = latent;
+				}
+
 				bool touchesOutside = GoldPileTreasurePlacement.TouchesOutsideAabb(
 					_heightfield,
-					latent.LocalBounds );
+					exposeBounds );
 				float outsideFraction = GoldPileTreasurePlacement.OutsideFractionAabb(
 					_heightfield,
-					latent.LocalBounds );
+					exposeBounds );
 
 				if ( latent.Spawned )
 				{

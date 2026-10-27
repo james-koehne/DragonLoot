@@ -18,9 +18,10 @@ MonoBehaviour:
   - pouches
   - gems
   disabled: 0
-  trigger: 21
+  trigger: 9
   holdingCategory: 1
   volumeId: 
+  aimBuildableIds: []
   fallbackVolumeId: 
   alsoShowWhenAimingTreasurePile: 0
   alsoShowWhenAimingCoinStack: 0
@@ -37,13 +38,26 @@ MonoBehaviour:
   prerequisiteTutorialIds: []
   highlightMapLabel: 
   mapMarkerId: 
+  outlineTargetIds: []
   completeAllTasksOnVolumeEnter: 0
-  body: Gems go in their own pouch. Switch to the gem pouch to hold them.
-  keybindHint: '[{CategorySlot2}] or [{CyclePouch}] Switch pouch'
+  body: Each treasure type has its own pouch.
+  keybindHint: 
   tasks:
   - id: switch_gem_pouch
     label: Switch to the gem pouch
-    keybindHint: '[{CategorySlot2}] or [{CyclePouch}]'
+    keybindHint: '[{CategorySlot2}]'
     completeTrigger: 29
+    completeVolumeId: Gem
+    requiredCount: 0
+  - id: switch_coin_pouch
+    label: Switch to the coin pouch
+    keybindHint: '[{CategorySlot1}]'
+    completeTrigger: 29
+    completeVolumeId: Coin
+    requiredCount: 0
+  - id: cycle_pouch
+    label: Cycle pouch
+    keybindHint: '[{CyclePouch}]'
+    completeTrigger: 43
     completeVolumeId: 
     requiredCount: 0

@@ -72,10 +72,15 @@ public class PouchBarUI : MonoBehaviour
 	}
 
 	static readonly Color CapacityNormalColor = new Color( 1f, 1f, 1f, 0.9f );
-	static readonly Color CapacityFullColor = new Color( 1f, 0.82f, 0.45f, 1f );
+	static readonly Color CapacityFullFallbackColor = new Color( 0.95f, 0.28f, 0.32f, 1f );
+	static readonly Vector2 CapacitySize = new Vector2( 120f, 22f );
+	static readonly Vector2 LabelAnchorPos = new Vector2( 0f, 28f );
+	static readonly Vector2 CapacityAnchorPos = new Vector2( 0f, 8f );
 
-	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotResource", "SlotGeneral", "SlotJunk" };
-	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "Resources", "General", "Junk" };
+	static readonly string[] SlotNames = { "SlotCoin", "SlotGem", "SlotArtifact", "SlotGeneral", "SlotJunk", "SlotResource" };
+	static readonly string[] SlotLabels = { "Coins", "Gems", "Artifacts", "General", "Junk", "Resources" };
+
+	PlayerInteractionDefinition _interactionDefinition;
 
 	public void Setup()
 	{
@@ -313,7 +318,7 @@ public class PouchBarUI : MonoBehaviour
 		ApplyNewItemBadge( slot, index, newCount );
 	}
 
-	static void ApplyCapacity( Slot slot, int held, int limit )
+	void ApplyCapacity( Slot slot, int held, int limit )
 	{
 		if ( slot == null || slot.capacity == null )
 			return;
@@ -321,7 +326,15 @@ public class PouchBarUI : MonoBehaviour
 		limit = Mathf.Max( 1, limit );
 		held = Mathf.Max( 0, held );
 		slot.capacity.text = held + "/" + limit;
-		slot.capacity.color = held >= limit ? CapacityFullColor : CapacityNormalColor;
+		slot.capacity.color = held >= limit ? ResolveCapacityFullColor() : CapacityNormalColor;
+	}
+
+	Color ResolveCapacityFullColor()
+	{
+		PlayerInteractionDefinition def = RuntimeDefinition.Resolve( ref _interactionDefinition );
+		if ( def != null )
+			return def.crosshairFullPouchColor;
+		return CapacityFullFallbackColor;
 	}
 
 	void RefreshCycle( PlayerCarry carry )
@@ -605,8 +618,8 @@ public class PouchBarUI : MonoBehaviour
 		icon.preserveAspect = true;
 
 		Text binding = CreateText( slotGo.transform, "Binding", "", new Vector2( 0.5f, 0.5f ), new Vector2( 0f, -22f ), new Vector2( 120f, 24f ), 18 );
-		Text label = CreateText( slotGo.transform, "Label", labelText, new Vector2( 0.5f, 0f ), new Vector2( 0f, 8f ), new Vector2( 120f, 24f ), 16 );
-		Text capacity = CreateText( slotGo.transform, "Capacity", "0/0", new Vector2( 0.5f, 0f ), new Vector2( 0f, 28f ), new Vector2( 120f, 22f ), 14 );
+		Text label = CreateText( slotGo.transform, "Label", labelText, new Vector2( 0.5f, 0f ), LabelAnchorPos, new Vector2( 120f, 24f ), 16 );
+		Text capacity = CreateText( slotGo.transform, "Capacity", "0/0", new Vector2( 0.5f, 0f ), CapacityAnchorPos, CapacitySize, 14 );
 		capacity.color = CapacityNormalColor;
 
 		Slot slot = new Slot
@@ -722,11 +735,38 @@ public class PouchBarUI : MonoBehaviour
 		if ( slot.capacity == null )
 			slot.capacity = FindChildText( slotT, "Capacity" );
 
-		if ( slot.capacity != null )
+		if ( slot.capacity == null )
+		{
+			slot.capacity = CreateText( slotT, "Capacity", "0/0", new Vector2( 0.5f, 0f ), CapacityAnchorPos, CapacitySize, 14 );
+			slot.capacity.color = CapacityNormalColor;
+		}
+
+		LayoutCapacityAndLabel( slot );
+	}
+
+	static void LayoutCapacityAndLabel( Slot slot )
+	{
+		if ( slot == null )
 			return;
 
-		slot.capacity = CreateText( slotT, "Capacity", "0/0", new Vector2( 0.5f, 0f ), new Vector2( 0f, 28f ), new Vector2( 120f, 22f ), 14 );
-		slot.capacity.color = CapacityNormalColor;
+		if ( slot.label != null )
+		{
+			RectTransform labelRect = slot.label.rectTransform;
+			labelRect.anchorMin = new Vector2( 0.5f, 0f );
+			labelRect.anchorMax = new Vector2( 0.5f, 0f );
+			labelRect.pivot = new Vector2( 0.5f, 0.5f );
+			labelRect.anchoredPosition = LabelAnchorPos;
+		}
+
+		if ( slot.capacity != null )
+		{
+			RectTransform capacityRect = slot.capacity.rectTransform;
+			capacityRect.anchorMin = new Vector2( 0.5f, 0f );
+			capacityRect.anchorMax = new Vector2( 0.5f, 0f );
+			capacityRect.pivot = new Vector2( 0.5f, 0.5f );
+			capacityRect.anchoredPosition = CapacityAnchorPos;
+			capacityRect.sizeDelta = CapacitySize;
+		}
 	}
 
 	void CreateCycle()

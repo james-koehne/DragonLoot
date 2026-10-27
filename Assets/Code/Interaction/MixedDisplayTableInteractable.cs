@@ -116,6 +116,9 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 
 	public int ItemCount => _itemCount;
 	public int SlotCount => DisplayTableSlotLayout.SlotCount( rows, columns );
+
+	/// <summary>Total coin slots when <see cref="maxStackPerSlot"/> is set; otherwise 0 (unlimited / unknown).</summary>
+	public int Capacity => maxStackPerSlot > 0 ? SlotCount * maxStackPerSlot : 0;
 	public IReadOnlyList<TreasureItem> DisplayedItems => _allItems;
 	public Collider TableCollider => _collider;
 
@@ -1564,6 +1567,8 @@ public class MixedDisplayTableInteractable : InteractableBase, ITreasureOwner, I
 		bool flipCoin = CoinFlipMotion.IsCoin( item );
 
 		float duration = flipCoin ? Mathf.Max( snapDuration, CoinFlipMotion.DefaultDuration ) : Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
+		if ( !flipCoin )
+			duration = item.ScalePlacementDuration( duration );
 		float arcHeight = flipCoin ? CoinFlipMotion.DefaultArcHeight : CoinFlipMotion.DefaultItemArcHeight;
 		float spins = flipCoin ? CoinFlipMotion.DefaultSpins : 0f;
 		float elapsed = 0f;

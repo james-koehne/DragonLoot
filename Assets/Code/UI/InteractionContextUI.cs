@@ -77,11 +77,12 @@ public class InteractionContextUI : MonoBehaviour
 			if ( aimed != null && aimed.IsBlockedByTreasurePile() )
 				AppendPlain( "Clear the treasure pile" );
 			else if ( aimed != null )
+			{
 				AppendDualBound( gameInput.ContextualInteract, gameInput.Interact, "Hold to build" );
-			else
-				AppendPlain( "Aim at a ghost structure" );
-			FinishRefresh();
-			return;
+				FinishRefresh();
+				return;
+			}
+			// Idle / blocked: fall through so pickup and interact prompts still show.
 		}
 
 		if ( minecartPush != null && minecartPush.IsPushing )

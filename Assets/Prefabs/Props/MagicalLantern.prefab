@@ -504,20 +504,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 805434f70a2ce4049b007d906d72f757, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MagicalLanternMotion
-  motionScale: 2
+  motionScale: 1
   speedScale: 0.2
   scaleMotionWithLit: 1
   unlitMotionScale: 0.12
   wakeDuration: 1.35
-  orbitRadius: {x: 0.08, y: 0.07}
-  orbitSpeed: 0.11
+  figureEightRadius: {x: 0.08, y: 0.07}
+  figureEightSpeed: 0.11
+  pathFollow: 4.5
   wanderRadius: {x: 0.12, y: 0.045, z: 0.12}
   wanderSpeed: 0.22
-  cruiseSpeed: 0.09
-  maxTurnRate: 48
-  turnAccel: 70
-  lookAhead: 0.45
-  speedAccel: 0.14
+  yawWarpDegrees: 40
+  pitchWarpDegrees: 12
+  warpSpeed: 0.12
   bobAmplitude: 0.055
   bobSpeed: 0.52
   liftAmplitude: 0.04
@@ -551,7 +550,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &8552590012679976731
 Transform:
   m_ObjectHideFlags: 0

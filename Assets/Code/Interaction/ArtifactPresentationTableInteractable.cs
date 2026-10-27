@@ -76,6 +76,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	Collider _collider;
 	readonly List<TreasureItem> _displayedItems = new List<TreasureItem>();
 	TreasureItem[] _occupants;
+	bool[] _slotSettled;
 	int _currentCount;
 	bool _isComplete;
 	int _aimedSlotIndex = -1;
@@ -263,6 +264,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		}
 
 		_occupants[ slotIndex ] = removed;
+		_slotSettled[ slotIndex ] = false;
 		if ( !_displayedItems.Contains( removed ) )
 			_displayedItems.Add( removed );
 		_currentCount++;
@@ -312,7 +314,8 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 	}
 
 	/// <summary>
-	/// True when this slot has no prerequisite, or the prerequisite slot is occupied.
+	/// True when this slot has no prerequisite, or the prerequisite slot is occupied and
+	/// finished its place animation (dependent holograms wait until then).
 	/// </summary>
 	public bool IsSlotPrerequisiteMet( int slotIndex )
 	{
@@ -327,7 +330,20 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( prereq < 0 || prereq == slotIndex || prereq >= slots.Count )
 			return true;
 
-		return IsSlotOccupied( prereq );
+		return IsSlotSettled( prereq );
+	}
+
+	/// <summary>
+	/// True when the slot has an occupant that has finished SnapIntoSlot (post place animation).
+	/// </summary>
+	public bool IsSlotSettled( int slotIndex )
+	{
+		if ( !IsSlotOccupied( slotIndex ) )
+			return false;
+		if ( _slotSettled == null || slotIndex < 0 || slotIndex >= _slotSettled.Length )
+			return false;
+
+		return _slotSettled[ slotIndex ];
 	}
 
 	public int GetPrerequisiteSlotIndex( int slotIndex )
@@ -353,6 +369,38 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( prereq < 0 )
 			return null;
 		return GetRequiredArtifact( prereq );
+	}
+
+	public bool HasUnmetPrerequisiteSlots()
+	{
+		if ( slots == null )
+			return false;
+
+		for ( int i = 0; i < slots.Count; i++ )
+		{
+			if ( !IsSlotPrerequisiteMet( i ) )
+				return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// First unmet prerequisite artifact label across locked slots, or null if none.
+	/// </summary>
+	public TreasureDefinition GetAnyBlockingPrerequisiteArtifact()
+	{
+		if ( slots == null )
+			return null;
+
+		for ( int i = 0; i < slots.Count; i++ )
+		{
+			TreasureDefinition blocker = GetBlockingPrerequisiteArtifact( i );
+			if ( blocker != null )
+				return blocker;
+		}
+
+		return null;
 	}
 
 	public void GetSlotWorldPose( int slotIndex, out Vector3 worldPos, out Quaternion worldRot )
@@ -455,6 +503,14 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			return true;
 		}
 
+		// Item only matches slots locked by an unmet prerequisite — keep ghost red on that seat.
+		if ( TryFindMatchingPrerequisiteBlockedSlot( item, in query, out int blockedSlot ) )
+		{
+			slotIndex = blockedSlot;
+			valid = false;
+			return true;
+		}
+
 		valid = false;
 		return true;
 	}
@@ -487,6 +543,10 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		if ( item != null && TryFindMatchingValidSlot( item, in query, out slotIndex ) )
 			return true;
 
+		// Prefer a slot this item would fill once its prerequisite is met (red ghost + Place first UI).
+		if ( item != null && TryFindMatchingPrerequisiteBlockedSlot( item, in query, out slotIndex ) )
+			return true;
+
 		return TryFindNearestEmptySlot( query.Hit.point, out slotIndex );
 	}
 
@@ -512,6 +572,39 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		for ( int i = 0; i < slots.Count; i++ )
 		{
 			if ( !EvaluateSlotForItem( i, item ) )
+				continue;
+
+			GetSlotWorldPose( i, out Vector3 slotPos, out _ );
+			float distSq = ( slotPos - reference ).sqrMagnitude;
+			if ( distSq >= bestDistSq )
+				continue;
+
+			bestDistSq = distSq;
+			slotIndex = i;
+		}
+
+		return slotIndex >= 0;
+	}
+
+	/// <summary>
+	/// Empty slot that accepts this definition but is locked by an unmet prerequisite.
+	/// </summary>
+	bool TryFindMatchingPrerequisiteBlockedSlot( TreasureItem item, in PlacementQuery query, out int slotIndex )
+	{
+		slotIndex = -1;
+		if ( item == null || slots == null || _occupants == null || !item.IsClean )
+			return false;
+
+		Vector3 reference = query.HasHit ? query.Hit.point : transform.position;
+		float bestDistSq = float.MaxValue;
+
+		for ( int i = 0; i < slots.Count; i++ )
+		{
+			if ( IsSlotOccupied( i ) )
+				continue;
+			if ( IsSlotPrerequisiteMet( i ) )
+				continue;
+			if ( !AcceptsForSlot( i, item.Definition ) )
 				continue;
 
 			GetSlotWorldPose( i, out Vector3 slotPos, out _ );
@@ -681,7 +774,7 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 		Vector3 startScale = t.lossyScale;
 		Vector3 endScale = item.GetWorldScale();
 
-		float duration = Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
+		float duration = item.ScalePlacementDuration( Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration ) );
 		float arcHeight = CoinFlipMotion.DefaultItemArcHeight;
 		float elapsed = 0f;
 
@@ -714,10 +807,12 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			item.EnterDisplayed( this, anchor, endWorldPos, endWorldRot );
 			ApplyDisplayedItemPose( item, slotIndex );
 			TreasureInteractSfx.PlayPlace( item.Definition, endWorldPos );
+			_slotSettled[ slotIndex ] = true;
 		}
 
+		// Refresh every slot so dependents unlock holograms only after the prereq settles.
 		if ( showSlotIndicators && slotIndicators != null )
-			slotIndicators.RefreshSlot( slotIndex, true );
+			slotIndicators.RefreshAimFeedback();
 
 		if ( !_isComplete && EvaluateComplete() )
 		{
@@ -769,6 +864,19 @@ public class ArtifactPresentationTableInteractable : InteractableBase, ITreasure
 			}
 
 			_occupants = next;
+		}
+
+		if ( _slotSettled == null || _slotSettled.Length != count )
+		{
+			bool[] nextSettled = new bool[ count ];
+			if ( _slotSettled != null )
+			{
+				int copy = Mathf.Min( _slotSettled.Length, count );
+				for ( int i = 0; i < copy; i++ )
+					nextSettled[ i ] = _slotSettled[ i ];
+			}
+
+			_slotSettled = nextSettled;
 		}
 	}
 

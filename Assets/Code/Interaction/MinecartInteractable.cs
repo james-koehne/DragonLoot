@@ -4055,6 +4055,8 @@ public class MinecartInteractable : InteractableBase, ITreasureOwner, ITreasureP
 		float duration = flipCoin
 			? Mathf.Max( snapDuration, CoinFlipMotion.DefaultDuration )
 			: Mathf.Max( snapDuration, CoinFlipMotion.DefaultItemArcDuration );
+		if ( !flipCoin )
+			duration = item.ScalePlacementDuration( duration );
 		float arcHeight = flipCoin ? CoinFlipMotion.DefaultArcHeight : CoinFlipMotion.DefaultItemArcHeight;
 		float spins = flipCoin ? CoinFlipMotion.DefaultSpins : 0f;
 		float elapsed = 0f;

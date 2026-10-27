@@ -83,6 +83,9 @@ public class MinecartDefinition : ScriptableObject
 	[Min( 0.1f )]
 	public float driveBrake = 18f;
 
+	[Tooltip( "When false (default), stay first person while driving. When true, use third-person orbit. Runtime toggle / keybind can flip this later." )]
+	public bool driveThirdPerson = false;
+
 	[Header( "Cargo Grid" )]
 	[Min( 1 )]
 	public int gridColumns = 4;

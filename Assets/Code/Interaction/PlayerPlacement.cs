@@ -387,7 +387,7 @@ public class PlayerPlacement : MonoBehaviour
 		{
 			UpdatePlacementTargetOutline( placeTarget, true, true );
 			_joinOutlineActive = HoverOutlineRegistrar.CurrentOwner == HoverOutlineRegistrar.Owner.StackVolume;
-			UpdateJoinArrow( join && _previewIndirectJoin, in preview, placeTarget );
+			UpdateJoinArrow( true, in preview, placeTarget, _previewIndirectJoin );
 		}
 		else
 		{
@@ -451,8 +451,8 @@ public class PlayerPlacement : MonoBehaviour
 				from = hit.point;
 			UpdateJoinArrowToward( from, target );
 		}
-		else if ( !_hasPreview || !IsIndirectStackJoin )
-			HideJoinArrow();
+		else
+			UpdateJoinArrowDirectDown( target );
 	}
 
 	static bool UsesWholeMeshPlacementOutline( ITreasurePlacementTarget target )
@@ -1075,7 +1075,7 @@ public class PlayerPlacement : MonoBehaviour
 			? interaction.GetSoftReleaseVelocity()
 			: interaction.GetReleaseVelocity( item );
 
-		// Active must finish left→right refill before throw (IsActiveHoldReady via peek/consume).
+		// Peek/consume require a finished left→right refill; leave from ActiveRoot.
 		Transform hand = carry.ActiveRoot;
 		Vector3 throwOrigin = hand != null ? hand.position : item.transform.position;
 
@@ -1101,7 +1101,7 @@ public class PlayerPlacement : MonoBehaviour
 			if ( member == null )
 				continue;
 
-			// Align to hand origin for ballistic prediction (consume only succeeds once refill settled).
+			// Align to hand origin for ballistic prediction.
 			member.transform.position = throwOrigin;
 			Vector3 start = throwOrigin;
 			Vector3 memberVelocity = throwVelocity;
@@ -1127,6 +1127,7 @@ public class PlayerPlacement : MonoBehaviour
 				if ( !world.TryResolveTraversableEntry( fallback, out landPos, out _ ) )
 				{
 					member.EnterSurface( start, member.transform.rotation, memberVelocity );
+					TreasureInteractSfx.PlayThrowLand( member.Definition, start );
 					continue;
 				}
 
@@ -1142,6 +1143,7 @@ public class PlayerPlacement : MonoBehaviour
 				if ( !world.TryResolveTraversableEntry( landPos, out landPos, out _ ) )
 				{
 					member.EnterSurface( start, member.transform.rotation, memberVelocity );
+					TreasureInteractSfx.PlayThrowLand( member.Definition, start );
 					continue;
 				}
 			}
@@ -1169,6 +1171,9 @@ public class PlayerPlacement : MonoBehaviour
 		}
 
 		TreasureSurfaceThrow.ResolveFlightSpins( item, out float spins );
+
+		if ( !useSoftVelocity )
+			TreasureInteractSfx.PlayThrow( item.Definition, throwOrigin );
 
 		TreasureMotionHost.Run( TreasureSurfaceThrow.AnimateThrowCluster(
 			cluster,
@@ -1325,7 +1330,7 @@ public class PlayerPlacement : MonoBehaviour
 			Item = item,
 			Definition = item.Definition
 		} );
-		TreasureInteractSfx.PlayPlace( item.Definition, preview.Position );
+		// Place SFX plays when append flight lands on the stack.
 		PlayPlaceLandFeedback();
 		return true;
 	}
@@ -1408,8 +1413,7 @@ public class PlayerPlacement : MonoBehaviour
 			Definition = definition
 		} );
 
-		// Destination cue (stack top / ghost pose) — 3D at where the treasure will land.
-		TreasureInteractSfx.PlayPlace( definition, preview.Position );
+		// Place SFX is owned by the target (flight land / immediate seat). Avoid double-firing here.
 		PlayPlaceLandFeedback();
 		return true;
 	}
@@ -1765,6 +1769,27 @@ public class PlayerPlacement : MonoBehaviour
 			return true;
 		}
 
+		// Focus can stay on a ground stack even when the nearer placement hit is floor
+		// (capsule sits behind the floor on glancing rays). Treat that as a direct join
+		// so the ghost sits on the pile with a down-pointing join arrow.
+		if ( coins && TryGetFocusedJoinableCoinStack( out GroundCoinStack focusedCoin ) )
+		{
+			placeTarget = focusedCoin;
+			poseQuery = aimQuery;
+			useFloorPose = false;
+			resolvedTarget = focusedCoin;
+			return true;
+		}
+
+		if ( bars && TryGetFocusedJoinableGoldBarStack( out GroundGoldBarStack focusedBars ) )
+		{
+			placeTarget = focusedBars;
+			poseQuery = aimQuery;
+			useFloorPose = false;
+			resolvedTarget = focusedBars;
+			return true;
+		}
+
 		if ( floorOk )
 		{
 			poseQuery = floorQuery;
@@ -1848,6 +1873,38 @@ public class PlayerPlacement : MonoBehaviour
 		if ( stack == null || !TryGetDirectCoinStackHit( in query, out GroundCoinStack hit ) )
 			return false;
 		return hit == stack;
+	}
+
+	bool TryGetFocusedJoinableCoinStack( out GroundCoinStack stack )
+	{
+		stack = null;
+		if ( _interaction == null )
+			return false;
+
+		stack = _interaction.Current as GroundCoinStack;
+		if ( stack == null || stack.IsFull || stack.IsMachineBuffer )
+		{
+			stack = null;
+			return false;
+		}
+
+		return true;
+	}
+
+	bool TryGetFocusedJoinableGoldBarStack( out GroundGoldBarStack stack )
+	{
+		stack = null;
+		if ( _interaction == null )
+			return false;
+
+		stack = _interaction.Current as GroundGoldBarStack;
+		if ( stack == null || stack.IsFull )
+		{
+			stack = null;
+			return false;
+		}
+
+		return true;
 	}
 
 	static bool TryGetDirectGoldBarStackHit( in PlacementQuery query, out GroundGoldBarStack stack )
@@ -2373,7 +2430,7 @@ public class PlayerPlacement : MonoBehaviour
 			_joinArrow = new StackJoinAimArrow();
 	}
 
-	void UpdateJoinArrow( bool show, in PlacementPreview preview, ITreasurePlacementTarget target )
+	void UpdateJoinArrow( bool show, in PlacementPreview preview, ITreasurePlacementTarget target, bool indirect )
 	{
 		if ( !show )
 		{
@@ -2381,7 +2438,10 @@ public class PlayerPlacement : MonoBehaviour
 			return;
 		}
 
-		UpdateJoinArrowToward( preview.Position, target );
+		if ( indirect )
+			UpdateJoinArrowToward( preview.Position, target );
+		else
+			UpdateJoinArrowDirectDown( target );
 	}
 
 	void UpdateJoinArrowToward( Vector3 from, ITreasurePlacementTarget target )
@@ -2395,6 +2455,19 @@ public class PlayerPlacement : MonoBehaviour
 		Vector3 toward = ResolveJoinArrowTarget( target );
 		EnsureJoinArrow();
 		_joinArrow.Show( from, toward, ResolveJoinGhostColor( Definition ) );
+	}
+
+	void UpdateJoinArrowDirectDown( ITreasurePlacementTarget target )
+	{
+		if ( target == null )
+		{
+			HideJoinArrow();
+			return;
+		}
+
+		Vector3 toward = ResolveJoinArrowTarget( target );
+		EnsureJoinArrow();
+		_joinArrow.ShowPointingDown( toward, ResolveJoinGhostColor( Definition ) );
 	}
 
 	static Vector3 ResolveJoinArrowTarget( ITreasurePlacementTarget target )
